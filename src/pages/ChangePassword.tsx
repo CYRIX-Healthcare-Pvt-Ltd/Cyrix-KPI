@@ -46,14 +46,14 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-ink-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-xl font-semibold text-ink-900">
             {forced ? 'Set your password' : 'Change password'}
           </h1>
           {forced && (
-            <p className="mt-1.5 text-sm text-slate-500">
+            <p className="mt-1.5 text-sm text-ink-500">
               You are signed in with your employee code as the password. Choose a
               new one to continue.
             </p>
@@ -75,7 +75,7 @@ export default function ChangePassword() {
               autoFocus
               required
             />
-            <p className="mt-1.5 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-ink-500">
               At least {MIN_LENGTH} characters.
             </p>
           </div>
@@ -102,7 +102,7 @@ export default function ChangePassword() {
             <button
               type="button"
               onClick={() => signOut().then(() => navigate('/login', { replace: true }))}
-              className="w-full text-center text-xs text-slate-500 hover:text-slate-700"
+              className="w-full text-center text-xs text-ink-500 hover:text-ink-700"
             >
               Sign out instead
             </button>
@@ -110,7 +110,7 @@ export default function ChangePassword() {
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="w-full text-center text-xs text-slate-500 hover:text-slate-700"
+              className="w-full text-center text-xs text-ink-500 hover:text-ink-700"
             >
               Cancel
             </button>

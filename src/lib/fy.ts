@@ -51,3 +51,18 @@ export function currentReportingMonth(today = new Date()): string {
 export function isMonthInFy(monthIso: string, fyCode: string): boolean {
   return fyMonths(fyCode).includes(monthIso)
 }
+
+/**
+ * A month can only be assessed once it has finished, so the current month
+ * and everything after it are closed. Used to gate the pickers, the
+ * submission screen and the Excel export alike — otherwise someone could
+ * score a month that has not happened.
+ */
+export function isMonthOpen(monthIso: string, today = new Date()): boolean {
+  return monthIso <= currentReportingMonth(today)
+}
+
+/** The months of a financial year that are actually assessable today. */
+export function openFyMonths(fyCode: string, today = new Date()): string[] {
+  return fyMonths(fyCode).filter(m => isMonthOpen(m, today))
+}

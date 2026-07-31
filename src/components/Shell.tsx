@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePendingCounts, useRemovalRequests, currentFy } from '@/lib/queries'
-import { LogoMark } from './Logo'
+import { Logo, LogoMark } from './Logo'
 
 interface NavItem {
   to: string
@@ -74,9 +74,9 @@ export default function Shell() {
 
           <div className="flex items-center gap-2.5">
             <LogoMark className="h-8 w-8" />
-            <span className="flex items-baseline text-[15px] font-bold tracking-tight text-ink-900">
-              CYRI<span className="text-cyrixRed-600">X</span>
-              <span className="ml-1.5 text-[13px] font-medium text-ink-400">KPI</span>
+            <Logo className="hidden text-[15px] sm:inline-flex" showSubtitle={false} />
+            <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
+              KPI
             </span>
           </div>
 
@@ -90,7 +90,7 @@ export default function Shell() {
                   clsx(
                     'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                     isActive
-                      ? 'bg-cyrixBlue-50 text-cyrixBlue-800'
+                      ? 'bg-ink-100 text-ink-900'
                       : 'text-ink-600 hover:bg-ink-100',
                   )
                 }
@@ -145,7 +145,7 @@ export default function Shell() {
                 className={({ isActive }) =>
                   clsx(
                     'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
-                    isActive ? 'bg-cyrixBlue-50 text-cyrixBlue-800' : 'text-ink-700',
+                    isActive ? 'bg-ink-100 text-ink-900' : 'text-ink-700',
                   )
                 }
               >
@@ -175,7 +175,7 @@ export default function Shell() {
               className={({ isActive }) =>
                 clsx(
                   'relative flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium',
-                  isActive ? 'text-cyrixBlue-800' : 'text-ink-500',
+                  isActive ? 'text-ink-900' : 'text-ink-500',
                 )
               }
             >

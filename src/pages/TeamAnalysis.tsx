@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { Trophy, TrendingDown, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyTeam, useTeamSubmissions, useWeakAreas, useKraAttainment, currentFy,
+  useMyTeam, useTeamSubmissions, useWeakAreas, currentFy,
 } from '@/lib/queries'
 import { fyMonths } from '@/lib/fy'
 import { bandFor, isWeak, trendOf } from '@/lib/bands'
 import { PageLoader, ScorePill, StatTile, EmptyState } from '@/components/ui'
-import { ScoreHeader, TrendChip, BandChip, KraBars } from '@/components/analysis'
+import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -20,7 +20,6 @@ export default function TeamAnalysis() {
   const ids = useMemo(() => (team ?? []).map(t => t.id), [team])
   const { data: subs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
   const { data: weak } = useWeakAreas(ids.length ? ids : undefined, fy)
-  const { data: attainment } = useKraAttainment(ids.length ? ids : undefined, fy)
 
   const analysis = useMemo(() => {
     if (!team || !subs) return null
@@ -160,15 +159,10 @@ export default function TeamAnalysis() {
         </div>
       )}
 
-      <div className="card p-4">
-        <h3 className="mb-1 text-sm font-semibold text-ink-800">
-          Where the team is weakest
-        </h3>
-        <p className="mb-4 text-xs text-ink-500">
-          Average attainment against each KRA's own weightage, across everyone.
-        </p>
-        <KraBars rows={attainment ?? []} />
-      </div>
+      {/* No cross-team KRA chart here on purpose: a manager's reports can
+          hold different job roles, so averaging "KRA3" across people who
+          each mean something different by it produces a number that looks
+          precise and means nothing. Weak areas are reported per person. */}
 
       <div className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
@@ -194,7 +188,7 @@ export default function TeamAnalysis() {
                     <td className="px-4 py-3">
                       <Link
                         to={`/team/${p.member.id}`}
-                        className="font-medium text-ink-900 hover:text-cyrixBlue-800 hover:underline"
+                        className="font-medium text-ink-900 hover:text-cyrixRed-700 hover:underline"
                       >
                         {p.member.full_name}
                       </Link>
@@ -243,7 +237,7 @@ function PersonRow({
       <div className="min-w-0 flex-1">
         <Link
           to={`/team/${p.member.id}`}
-          className="font-medium text-ink-900 hover:text-cyrixBlue-800 hover:underline"
+          className="font-medium text-ink-900 hover:text-cyrixRed-700 hover:underline"
         >
           {p.member.full_name}
         </Link>

@@ -7,7 +7,7 @@ import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useMyAssignment, currentFy,
 } from '@/lib/queries'
-import { monthLabel } from '@/lib/fy'
+import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
   calcKpiScore, averageCoreValueRatings, RATING_SCALE, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
@@ -144,6 +144,19 @@ export default function MonthlySubmission() {
 
   if (isLoading) return <PageLoader />
 
+  // ---- month has not finished yet ----
+  if (!isMonthOpen(month)) {
+    return (
+      <div className="space-y-4">
+        <BackLink />
+        <Alert kind="info" title={`${monthLabel(month)} is not open yet`}>
+          A month can only be assessed once it has finished. {monthLabel(month)} will
+          open at the start of the following month.
+        </Alert>
+      </div>
+    )
+  }
+
   // ---- nothing opened yet ----
   if (!submission) {
     const kpiActive = assignmentData?.assignment?.status === 'active'
@@ -183,7 +196,7 @@ export default function MonthlySubmission() {
       <div>
         <BackLink />
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-xl font-semibold text-ink-900">
             {monthLabel(month)} assessment
           </h1>
           <StatusBadge status={submission.status} />
@@ -241,23 +254,23 @@ export default function MonthlySubmission() {
 
       {/* ---- job role rows ---- */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Job Role <span className="font-normal text-slate-500">— 80%</span>
+        <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Job Role <span className="font-normal text-ink-500">— 80%</span>
           </h3>
           <ScorePill value={jobTotal} size="sm" />
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-ink-100">
           {jobRows.map(item => (
             <div key={item.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900">{item.kra}</p>
+                  <p className="font-medium text-ink-900">{item.kra}</p>
                   {item.kpi_description && (
-                    <p className="mt-0.5 text-sm text-slate-500">{item.kpi_description}</p>
+                    <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
                   )}
                 </div>
-                <span className="badge bg-slate-100 text-slate-600">
+                <span className="badge bg-ink-100 text-ink-600">
                   {item.weightage}%
                 </span>
               </div>
@@ -265,7 +278,7 @@ export default function MonthlySubmission() {
               <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 <div>
                   <label className="label text-xs">Target</label>
-                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm tabular-nums text-slate-700">
+                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
                     {item.target_value ?? '—'}{item.target_unit === '%' ? '%' : ''}
                   </p>
                 </div>
@@ -288,7 +301,7 @@ export default function MonthlySubmission() {
                   <label className="label text-xs">My score</label>
                   <div className="py-1.5">
                     <ScorePill value={liveScore(item)} />
-                    <span className="ml-1.5 text-xs text-slate-400">
+                    <span className="ml-1.5 text-xs text-ink-400">
                       / {item.weightage}
                     </span>
                   </div>
@@ -312,15 +325,15 @@ export default function MonthlySubmission() {
 
       {/* ---- core values ---- */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Alignment To Core Values <span className="font-normal text-slate-500">— 20%</span>
+        <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
           </h3>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-3 text-xs text-ink-500">
             <span>
-              mine {coreAverage === null ? '—' : `${coreAverage.toFixed(0)}/100`}
+              Mine {coreAverage === null ? '—' : `${coreAverage.toFixed(0)}/100`}
               {isScored && (
-                <> · manager {managerCoreAverage === null ? '—' : `${managerCoreAverage.toFixed(0)}/100`}</>
+                <> · Manager {managerCoreAverage === null ? '—' : `${managerCoreAverage.toFixed(0)}/100`}</>
               )}
             </span>
             <ScorePill value={coreTotal} size="sm" />
@@ -329,14 +342,14 @@ export default function MonthlySubmission() {
 
         {/* Header row so the two assessments read as columns once scored. */}
         {isScored && (
-          <div className="hidden border-b border-slate-100 bg-slate-50/60 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-slate-400 sm:flex sm:gap-4">
+          <div className="hidden border-b border-ink-100 bg-ink-50/60 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-400 sm:flex sm:gap-4">
             <span className="flex-1">Core value</span>
             <span className="w-48 text-center">My rating</span>
             <span className="w-40 text-center">Manager's rating</span>
           </div>
         )}
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-ink-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
             const differs =
@@ -347,9 +360,9 @@ export default function MonthlySubmission() {
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900">{def?.name ?? 'Core value'}</p>
+                  <p className="font-medium text-ink-900">{def?.name ?? 'Core value'}</p>
                   {def?.description && (
-                    <p className="mt-0.5 text-sm text-slate-500">{def.description}</p>
+                    <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
                   )}
                 </div>
 
@@ -373,12 +386,12 @@ export default function MonthlySubmission() {
                     the self rating, since that is the useful signal. */}
                 {isScored && (
                   <div className="mt-2 sm:mt-0 sm:w-40">
-                    <p className="mb-1 text-xs text-slate-400 sm:hidden">Manager's rating</p>
+                    <p className="mb-1 text-xs text-ink-400 sm:hidden">Manager's rating</p>
                     <div
                       className={`rounded-lg px-3 py-2 text-sm ${
                         differs
                           ? 'bg-cyrixRed-50 font-medium text-cyrixRed-800 ring-1 ring-cyrixRed-200'
-                          : 'bg-slate-50 text-slate-700'
+                          : 'bg-ink-50 text-ink-700'
                       }`}
                     >
                       {rating.manager_rating ?? 'Not rated'}
@@ -394,19 +407,28 @@ export default function MonthlySubmission() {
         </div>
 
         {isScored && (
-          <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-            <span className="text-sm font-medium text-slate-700">
+          <div className="flex items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/60 px-4 py-3">
+            <span className="text-sm font-medium text-ink-700">
               Core values score
             </span>
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-slate-500">
-                mine <ScorePill value={coreRows[0]?.self_score} size="sm" />
+            <div className="flex items-center gap-5 text-sm">
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  Mine
+                </span>
+                <ScorePill value={coreRows[0]?.self_score} size="sm" />
               </span>
-              <span className="text-slate-500">
-                manager <ScorePill value={coreRows[0]?.manager_score} size="sm" />
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  Manager
+                </span>
+                <ScorePill value={coreRows[0]?.manager_score} size="sm" />
               </span>
-              <span className="text-slate-500">
-                final <ScorePill value={coreRows[0]?.final_score} size="sm" />
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  Final
+                </span>
+                <ScorePill value={coreRows[0]?.final_score} size="sm" />
               </span>
             </div>
           </div>
@@ -426,9 +448,9 @@ export default function MonthlySubmission() {
           placeholder="Context your manager should know when scoring this month"
         />
         {submission.manager_remarks && (
-          <div className="mt-4 rounded-lg bg-slate-50 p-3">
-            <p className="text-xs font-medium text-slate-500">Manager's remarks</p>
-            <p className="mt-1 text-sm text-slate-700">{submission.manager_remarks}</p>
+          <div className="mt-4 rounded-lg bg-ink-50 p-3">
+            <p className="text-xs font-medium text-ink-500">Manager's remarks</p>
+            <p className="mt-1 text-sm text-ink-700">{submission.manager_remarks}</p>
           </div>
         )}
       </div>
@@ -450,7 +472,7 @@ export default function MonthlySubmission() {
 
 function BackLink() {
   return (
-    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
       <ArrowLeft className="h-4 w-4" /> Back to dashboard
     </Link>
   )
@@ -468,5 +490,5 @@ function RuleHint({ rule }: { rule: ScoringRule }) {
     rating_scale: 'Scored from the core value ratings.',
   }[rule]
 
-  return <p className="mt-2 text-xs text-slate-400">{hint}</p>
+  return <p className="mt-2 text-xs text-ink-400">{hint}</p>
 }

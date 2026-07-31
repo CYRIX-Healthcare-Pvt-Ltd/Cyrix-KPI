@@ -1,10 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { KeyRound, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, Spinner } from '@/components/ui'
+import { Logo, ProductMark } from '@/components/Logo'
 
+/**
+ * Split hero, matching the house style of Cyrix's other platforms: black
+ * brand panel on the left, white form on the right, uppercase
+ * letterspaced labels and underline inputs.
+ */
 export default function Login() {
   const { session, signIn, loading } = useAuth()
   const location = useLocation()
@@ -33,104 +38,170 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-700 text-xl font-bold text-white">
-            C
+    <div className="grid min-h-screen lg:grid-cols-2">
+      {/* ---------------- brand panel ---------------- */}
+      <aside className="relative hidden flex-col justify-between bg-ink-950 p-12 lg:flex">
+        <Logo className="text-lg" variant="light" />
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">
+            Performance Management Platform
+          </p>
+          <div className="mt-5">
+            <ProductMark className="text-7xl" />
           </div>
-          <h1 className="text-xl font-semibold text-slate-900">Cyrix KPI</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {mode === 'signin'
-              ? 'Sign in with your employee code'
-              : 'Reset your password'}
+          <p className="mt-7 max-w-sm text-[15px] leading-relaxed text-white/60">
+            Measure. Review. Grow.
+            <br />
+            Monthly KPI tracking and appraisal scoring across every team.
           </p>
         </div>
 
-        {mode === 'forgot' ? (
-          <ForgotPassword
-            onBack={code => {
-              setMode('signin')
-              if (code) { setEcode(code); setPassword(code); setError(null) }
-            }}
-          />
-        ) : (
-          <>
-            <form onSubmit={onSubmit} className="card space-y-4 p-6">
+        <div className="flex items-end justify-between">
+          <ul className="space-y-1.5 text-[11px] font-medium uppercase tracking-label text-white/35">
+            <li>Monthly Submission</li>
+            <li>Manager Review</li>
+            <li>Appraisal Insight</li>
+          </ul>
+          <p className="text-[11px] font-medium uppercase tracking-label text-white/35">
+            India Operations
+          </p>
+        </div>
+      </aside>
+
+      {/* ---------------- form panel ---------------- */}
+      <main className="flex flex-col justify-between bg-white px-6 py-10 sm:px-12 lg:px-16 lg:py-12">
+        {/* Brand shows here only on small screens, where the panel is hidden. */}
+        <div className="lg:hidden">
+          <Logo className="text-lg" />
+        </div>
+
+        <div className="mx-auto w-full max-w-sm py-10 lg:py-0">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
+            {mode === 'signin' ? 'Secure Access' : 'Account Recovery'}
+          </p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-ink-900">
+            {mode === 'signin' ? 'Sign in to continue.' : 'Reset your password.'}
+          </h1>
+
+          {mode === 'forgot' ? (
+            <ForgotPassword
+              onBack={code => {
+                setMode('signin')
+                if (code) { setEcode(code); setPassword(code); setError(null) }
+              }}
+            />
+          ) : (
+            <form onSubmit={onSubmit} className="mt-10 space-y-7">
               {error && <Alert kind="error">{error}</Alert>}
 
-              <div>
-                <label className="label" htmlFor="ecode">Employee code</label>
-                <input
-                  id="ecode"
-                  className="input uppercase"
-                  value={ecode}
-                  // Codes are stored in capitals, and the password is the code,
-                  // so normalise here rather than let a lowercase entry fail.
-                  onChange={e => setEcode(e.target.value.toUpperCase())}
-                  placeholder="E1042"
-                  autoComplete="username"
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  autoFocus
-                  required
-                />
-              </div>
+              <Field
+                id="ecode"
+                label="Employee Code"
+                value={ecode}
+                onChange={v => setEcode(v.toUpperCase())}
+                placeholder="E1042"
+                autoComplete="username"
+                autoFocus
+                uppercase
+              />
 
-              <div>
-                <label className="label" htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  className="input"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-                <p className="mt-1.5 text-xs text-slate-500">
-                  Your password is your employee code, in capitals.
-                </p>
-              </div>
+              <Field
+                id="password"
+                label="Password"
+                type="password"
+                value={password}
+                onChange={setPassword}
+                autoComplete="current-password"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => { setMode('forgot'); setError(null) }}
+                    className="text-[11px] font-semibold uppercase tracking-label text-ink-400 transition-colors hover:text-cyrixRed-600"
+                  >
+                    Forgot Password?
+                  </button>
+                }
+                hint="Your password is your employee code, in capitals."
+              />
 
-              <button type="submit" className="btn-primary w-full" disabled={busy}>
+              <button
+                type="submit"
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600 disabled:opacity-60"
+              >
                 {busy && <Spinner className="h-4 w-4" />}
-                {busy ? 'Signing in…' : 'Sign in'}
+                {busy ? 'Signing In' : 'Sign In'}
               </button>
-
-              {/* Fills both fields from the code already typed — this is a
-                  testing convenience and comes out before go-live. */}
-              {ecode.trim() !== '' && password === '' && (
-                <button
-                  type="button"
-                  onClick={() => setPassword(ecode.trim().toUpperCase())}
-                  className="w-full text-center text-xs text-slate-400 hover:text-slate-600"
-                >
-                  Use my employee code as the password
-                </button>
-              )}
             </form>
+          )}
+        </div>
 
-            <button
-              onClick={() => { setMode('forgot'); setError(null) }}
-              className="mx-auto mt-6 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
-            >
-              <KeyRound className="h-3.5 w-3.5" />
-              Forgotten your password?
-            </button>
-          </>
-        )}
+        <div className="flex items-center justify-between border-t border-ink-200 pt-6">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-ink-500">
+            Cyrix Healthcare
+          </p>
+          <p className="text-[11px] font-medium uppercase tracking-label text-ink-400">
+            © {new Date().getFullYear()}
+          </p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function Field({
+  id, label, value, onChange, type = 'text', placeholder, autoComplete,
+  autoFocus, uppercase, hint, action,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  placeholder?: string
+  autoComplete?: string
+  autoFocus?: boolean
+  uppercase?: boolean
+  hint?: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <label
+          htmlFor={id}
+          className="text-[11px] font-semibold uppercase tracking-label text-ink-500"
+        >
+          {label}
+        </label>
+        {action}
       </div>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        autoCapitalize={uppercase ? 'characters' : undefined}
+        autoCorrect="off"
+        spellCheck={false}
+        required
+        onChange={e => onChange(e.target.value)}
+        className={`mt-2 w-full border-0 border-b border-ink-300 bg-transparent px-0 py-2.5
+                    text-lg text-ink-900 placeholder:text-ink-300 focus:border-ink-900
+                    focus:outline-none focus:ring-0 ${uppercase ? 'uppercase' : ''}`}
+      />
+      {hint && <p className="mt-2 text-xs text-ink-400">{hint}</p>}
     </div>
   )
 }
 
 /**
- * Resets an account back to ecode-as-password. Calls request_password_reset(),
- * which is anonymous-callable by design — the person using it is locked out —
- * and gated on the self_service_password_reset setting, so turning it off
- * before go-live needs no code change here.
+ * Resets an account back to ecode-as-password. Gated server-side on the
+ * self_service_password_reset setting, so switching it off before go-live
+ * needs no change here.
  */
 function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
   const [code, setCode] = useState('')
@@ -157,56 +228,51 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
 
   if (done) {
     return (
-      <div className="card space-y-4 p-6">
+      <div className="mt-10 space-y-6">
         <Alert kind="success" title="Password reset">
-          <p>
-            Sign in as <strong>{done}</strong> with the password{' '}
-            <strong>{done}</strong>.
-          </p>
+          Sign in as <strong>{done}</strong> with the password <strong>{done}</strong>.
         </Alert>
-        <button onClick={() => onBack(done)} className="btn-primary w-full">
-          Back to sign in
+        <button
+          onClick={() => onBack(done)}
+          className="w-full bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600"
+        >
+          Back to Sign In
         </button>
       </div>
     )
   }
 
   return (
-    <>
-      <form onSubmit={submit} className="card space-y-4 p-6">
-        {error && <Alert kind="error">{error}</Alert>}
+    <form onSubmit={submit} className="mt-10 space-y-7">
+      {error && <Alert kind="error">{error}</Alert>}
 
-        <div>
-          <label className="label" htmlFor="forgot-ecode">Employee code</label>
-          <input
-            id="forgot-ecode"
-            className="input uppercase"
-            value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
-            placeholder="E1042"
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            autoFocus
-            required
-          />
-          <p className="mt-1.5 text-xs text-slate-500">
-            Your password will be set back to your employee code.
-          </p>
-        </div>
-
-        <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy && <Spinner className="h-4 w-4" />}
-          {busy ? 'Resetting…' : 'Reset my password'}
-        </button>
-      </form>
+      <Field
+        id="forgot-ecode"
+        label="Employee Code"
+        value={code}
+        onChange={v => setCode(v.toUpperCase())}
+        placeholder="E1042"
+        autoFocus
+        uppercase
+        hint="Your password will be set back to your employee code."
+      />
 
       <button
-        onClick={() => onBack()}
-        className="mx-auto mt-6 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
+        type="submit"
+        disabled={busy}
+        className="flex w-full items-center justify-center gap-2 bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600 disabled:opacity-60"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to sign in
+        {busy && <Spinner className="h-4 w-4" />}
+        {busy ? 'Resetting' : 'Reset My Password'}
       </button>
-    </>
+
+      <button
+        type="button"
+        onClick={() => onBack()}
+        className="w-full text-[11px] font-semibold uppercase tracking-label text-ink-400 transition-colors hover:text-ink-900"
+      >
+        Back to Sign In
+      </button>
+    </form>
   )
 }

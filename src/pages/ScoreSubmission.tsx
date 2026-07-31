@@ -154,16 +154,16 @@ export default function ScoreSubmission() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
           <ArrowLeft className="h-4 w-4" /> Back to my team
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-xl font-semibold text-ink-900">
             {data.employee.full_name}
           </h1>
           <StatusBadge status={submission.status} />
         </div>
-        <p className="mt-0.5 text-sm text-slate-500">
+        <p className="mt-0.5 text-sm text-ink-500">
           {data.employee.ecode} · {monthLabel(submission.period_month)}
         </p>
       </div>
@@ -181,10 +181,10 @@ export default function ScoreSubmission() {
 
       {submission.employee_remarks && (
         <div className="card p-4">
-          <p className="text-xs font-medium text-slate-500">
+          <p className="text-xs font-medium text-ink-500">
             {data.employee.full_name.split(' ')[0]}'s remarks
           </p>
-          <p className="mt-1 text-sm text-slate-700">{submission.employee_remarks}</p>
+          <p className="mt-1 text-sm text-ink-700">{submission.employee_remarks}</p>
         </div>
       )}
 
@@ -201,37 +201,37 @@ export default function ScoreSubmission() {
 
       {/* ---- job role rows, side by side ---- */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Job Role <span className="font-normal text-slate-500">— 80%</span>
+        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Job Role <span className="font-normal text-ink-500">— 80%</span>
           </h3>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-ink-100">
           {items.filter(i => i.section === 'job_role').map(item => (
             <div key={item.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900">{item.kra}</p>
+                  <p className="font-medium text-ink-900">{item.kra}</p>
                   {item.kpi_description && (
-                    <p className="mt-0.5 text-sm text-slate-500">{item.kpi_description}</p>
+                    <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
                   )}
                 </div>
-                <span className="badge bg-slate-100 text-slate-600">{item.weightage}%</span>
+                <span className="badge bg-ink-100 text-ink-600">{item.weightage}%</span>
               </div>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-5">
                 <div>
                   <label className="label text-xs">Target</label>
-                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm tabular-nums text-slate-700">
+                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
                     {item.target_value ?? '—'}
                   </p>
                 </div>
 
                 <div>
                   <label className="label text-xs">They claimed</label>
-                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm tabular-nums text-slate-700">
+                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
                     {item.self_achieved ?? '—'}
-                    <span className="ml-2 text-xs text-slate-400">
+                    <span className="ml-2 text-xs text-ink-400">
                       = {item.self_score?.toFixed(2) ?? '—'}
                     </span>
                   </p>
@@ -270,29 +270,29 @@ export default function ScoreSubmission() {
 
       {/* ---- core values ---- */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Alignment To Core Values <span className="font-normal text-slate-500">— 20%</span>
+        <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
           </h3>
           {coreAverage !== null && (
-            <span className="text-xs text-slate-500">my avg {coreAverage.toFixed(0)}/100</span>
+            <span className="text-xs text-ink-500">my avg {coreAverage.toFixed(0)}/100</span>
           )}
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-ink-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900">{def?.name}</p>
+                  <p className="font-medium text-ink-900">{def?.name}</p>
                   {def?.description && (
-                    <p className="mt-0.5 text-sm text-slate-500">{def.description}</p>
+                    <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
                   )}
                 </div>
                 <div className="mt-2 flex items-center gap-3 sm:mt-0">
                   <div className="text-right">
-                    <p className="text-xs text-slate-400">They said</p>
-                    <p className="text-sm text-slate-600">{rating.self_rating ?? '—'}</p>
+                    <p className="text-xs text-ink-400">They said</p>
+                    <p className="text-sm text-ink-600">{rating.self_rating ?? '—'}</p>
                   </div>
                   <select
                     className="input w-44"

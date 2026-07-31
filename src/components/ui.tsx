@@ -9,7 +9,7 @@ export function Spinner({ className }: { className?: string }) {
 
 export function PageLoader({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-slate-500">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-ink-500">
       <Spinner className="h-7 w-7" />
       <p className="text-sm">{label}</p>
     </div>
@@ -45,7 +45,7 @@ export function Alert({
 }
 
 const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }> = {
-  draft:     { label: 'Draft',              cls: 'bg-slate-100 text-slate-700' },
+  draft:     { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
   submitted: { label: 'Awaiting manager',   cls: 'bg-amber-100 text-amber-800' },
   returned:  { label: 'Returned to you',    cls: 'bg-orange-100 text-orange-800' },
   scored:    { label: 'Scored',             cls: 'bg-blue-100 text-blue-800' },
@@ -53,11 +53,11 @@ const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }
 }
 
 const ASSIGNMENT_BADGES: Record<AssignmentStatus, { label: string; cls: string }> = {
-  draft:            { label: 'Draft',              cls: 'bg-slate-100 text-slate-700' },
+  draft:            { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
   pending_approval: { label: 'Awaiting approval',  cls: 'bg-amber-100 text-amber-800' },
   active:           { label: 'Approved',           cls: 'bg-emerald-100 text-emerald-800' },
   rejected:         { label: 'Sent back',          cls: 'bg-red-100 text-red-800' },
-  archived:         { label: 'Archived',           cls: 'bg-slate-100 text-slate-500' },
+  archived:         { label: 'Archived',           cls: 'bg-ink-100 text-ink-500' },
 }
 
 export function StatusBadge({
@@ -68,11 +68,11 @@ export function StatusBadge({
   kind?: 'submission' | 'assignment'
 }) {
   if (!status) {
-    return <span className="badge bg-slate-100 text-slate-500">Not started</span>
+    return <span className="badge bg-ink-100 text-ink-500">Not started</span>
   }
   const map = kind === 'submission' ? SUBMISSION_BADGES : ASSIGNMENT_BADGES
   const cfg = (map as Record<string, { label: string; cls: string }>)[status]
-  if (!cfg) return <span className="badge bg-slate-100 text-slate-500">{status}</span>
+  if (!cfg) return <span className="badge bg-ink-100 text-ink-500">{status}</span>
   return <span className={clsx('badge', cfg.cls)}>{cfg.label}</span>
 }
 
@@ -85,7 +85,7 @@ export function ScorePill({
   size?: 'sm' | 'md' | 'lg'
 }) {
   if (value === null || value === undefined) {
-    return <span className="text-slate-400">—</span>
+    return <span className="text-ink-400">—</span>
   }
   const cls =
     value >= 85 ? 'bg-emerald-100 text-emerald-800'
@@ -116,9 +116,9 @@ export function EmptyState({
 }) {
   return (
     <div className="card flex flex-col items-center gap-3 p-10 text-center">
-      {Icon && <Icon className="h-9 w-9 text-slate-300" />}
-      <p className="font-medium text-slate-700">{title}</p>
-      {children && <div className="max-w-md text-sm text-slate-500">{children}</div>}
+      {Icon && <Icon className="h-9 w-9 text-ink-300" />}
+      <p className="font-medium text-ink-700">{title}</p>
+      {children && <div className="max-w-md text-sm text-ink-500">{children}</div>}
     </div>
   )
 }
@@ -135,10 +135,10 @@ export function StatTile({
   tone?: 'default' | 'brand'
 }) {
   return (
-    <div className={clsx('card p-4', tone === 'brand' && 'border-brand-200 bg-brand-50')}>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+    <div className={clsx('card p-4', tone === 'brand' && 'border-ink-300 bg-ink-100')}>
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-ink-500">{sub}</p>}
     </div>
   )
 }
@@ -154,12 +154,12 @@ export function SectionHeader({
   score?: number | null
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-      <h3 className="text-sm font-semibold text-slate-800">
-        {title} <span className="font-normal text-slate-500">— {weight}%</span>
+    <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+      <h3 className="text-sm font-semibold text-ink-800">
+        {title} <span className="font-normal text-ink-500">— {weight}%</span>
       </h3>
       {score !== undefined && (
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ink-500">
           <span>Score</span>
           <ScorePill value={score} size="sm" />
         </div>

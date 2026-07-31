@@ -206,9 +206,9 @@ export default function KpiSetup() {
         <div className="grid gap-3 sm:grid-cols-3">
           <button
             onClick={() => fileRef.current?.click()}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40"
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50"
           >
-            <Upload className="h-7 w-7 text-cyrixBlue-700" />
+            <Upload className="h-7 w-7 text-ink-800" />
             <p className="font-medium text-ink-900">Upload my Excel</p>
             <p className="text-xs text-ink-500">
               Reads your KPI sheet, including which rows penalise going over target
@@ -218,7 +218,7 @@ export default function KpiSetup() {
           <button
             onClick={loadRoleTemplate}
             disabled={!(roleTemplate?.items ?? []).some(i => i.section === 'job_role')}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40 disabled:opacity-50"
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50"
           >
             <FileSpreadsheet className="h-7 w-7 text-ink-500" />
             <p className="font-medium text-ink-900">Use my role's template</p>
@@ -229,7 +229,7 @@ export default function KpiSetup() {
 
           <button
             onClick={() => setRows([blankRow(1)])}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40"
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50"
           >
             <Plus className="h-7 w-7 text-ink-500" />
             <p className="font-medium text-ink-900">Start from blank</p>
@@ -280,7 +280,7 @@ export default function KpiSetup() {
 
             <button
               onClick={add}
-              className="flex w-full items-center justify-center gap-1.5 border-t border-ink-100 py-2.5 text-sm font-medium text-cyrixBlue-800 hover:bg-cyrixBlue-50"
+              className="flex w-full items-center justify-center gap-1.5 border-t border-ink-100 py-2.5 text-sm font-medium text-ink-900 hover:bg-ink-50"
             >
               <Plus className="h-4 w-4" /> Add a row
             </button>

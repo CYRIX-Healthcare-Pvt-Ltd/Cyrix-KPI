@@ -103,7 +103,7 @@ export default function AdminReports() {
               onClick={() => setTab(key)}
               className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === key
-                  ? 'border-cyrixBlue-800 text-cyrixBlue-800'
+                  ? 'border-ink-900 text-ink-900'
                   : 'border-transparent text-ink-500 hover:text-ink-800'
               }`}
             >
@@ -176,7 +176,7 @@ export default function AdminReports() {
                   })),
                   `Cyrix-manager-completion-${fy}.xlsx`, 'Manager completion',
                 )}
-                className="text-xs font-medium text-cyrixBlue-800 hover:underline"
+                className="text-xs font-medium text-ink-900 hover:underline"
               >
                 Export
               </button>

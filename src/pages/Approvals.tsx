@@ -26,8 +26,8 @@ export default function Approvals() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">KPI approvals</h1>
-        <p className="mt-0.5 text-sm text-slate-500">
+        <h1 className="text-xl font-semibold text-ink-900">KPI approvals</h1>
+        <p className="mt-0.5 text-sm text-ink-500">
           {data.length} waiting · FY {fy}
         </p>
       </div>
@@ -96,32 +96,32 @@ function ApprovalCard({
     <div className="card overflow-hidden">
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-50"
+        className="flex w-full items-center gap-3 p-4 text-left hover:bg-ink-50"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-200 text-xs font-semibold text-ink-700">
           {name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-slate-900">{name}</p>
-          <p className="truncate text-xs text-slate-500">
+          <p className="truncate font-medium text-ink-900">{name}</p>
+          <p className="truncate text-xs text-ink-500">
             {ecode}{designation && ` · ${designation}`}
           </p>
         </div>
-        <span className="text-xs font-medium text-brand-700">
+        <span className="text-xs font-medium text-ink-900">
           {expanded ? 'Hide' : 'Review'}
         </span>
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-100">
+        <div className="border-t border-ink-100">
           {!items ? (
-            <div className="p-6 text-center"><Spinner className="mx-auto h-5 w-5 text-slate-400" /></div>
+            <div className="p-6 text-center"><Spinner className="mx-auto h-5 w-5 text-ink-400" /></div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-ink-200 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                       <th className="px-4 py-2 font-medium">KRA</th>
                       <th className="px-4 py-2 font-medium">KPI</th>
                       <th className="px-4 py-2 text-right font-medium">Wt</th>
@@ -129,11 +129,11 @@ function ApprovalCard({
                       <th className="px-4 py-2 font-medium">Scoring</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-ink-100">
                     {(['job_role', 'core_values'] as Section[]).map(section => (
                       <Fragment key={section}>
-                        <tr className="bg-slate-50/60">
-                          <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-600">
+                        <tr className="bg-ink-50/60">
+                          <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-ink-600">
                             {section === 'job_role' ? 'Job Role — 80%' : 'Core Values — 20%'}
                             <span className={`ml-2 font-normal ${
                               total(section) === (section === 'job_role' ? 80 : 20)
@@ -145,15 +145,15 @@ function ApprovalCard({
                         </tr>
                         {items.filter(i => i.section === section).map(item => (
                           <tr key={item.id}>
-                            <td className="px-4 py-2.5 font-medium text-slate-900">{item.kra}</td>
-                            <td className="max-w-md px-4 py-2.5 text-xs text-slate-500">
+                            <td className="px-4 py-2.5 font-medium text-ink-900">{item.kra}</td>
+                            <td className="max-w-md px-4 py-2.5 text-xs text-ink-500">
                               {item.kpi_description}
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums">{item.weightage}%</td>
                             <td className="px-4 py-2.5 text-right tabular-nums">
                               {item.target_value ?? '—'}
                             </td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">
+                            <td className="px-4 py-2.5 text-xs text-ink-500">
                               {item.scoring_rule.replace(/_/g, ' ')}
                             </td>
                           </tr>
@@ -164,7 +164,7 @@ function ApprovalCard({
                 </table>
               </div>
 
-              <div className="space-y-3 border-t border-slate-100 p-4">
+              <div className="space-y-3 border-t border-ink-100 p-4">
                 {error && <Alert kind="error">{error}</Alert>}
 
                 {!rejecting ? (

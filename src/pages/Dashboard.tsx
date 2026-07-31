@@ -11,7 +11,9 @@ import {
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonths } from '@/lib/fy'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
-import { ScoreHeader, TrendChip, WeakAreas, KraBars } from '@/components/analysis'
+import {
+  ScoreHeader, TrendChip, WeakAreas, KraBars, ActionRequired,
+} from '@/components/analysis'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -64,22 +66,23 @@ export default function Dashboard() {
       </ScoreHeader>
 
       {kpiStatus === null && (
-        <Alert kind="warning" title="Your KPI for this year is not set up yet">
-          <p>Define your Job Role KRAs to get started. Your manager approves them before
-            monthly submissions can begin.</p>
-          <Link to="/my-kpi/setup" className="btn-primary mt-3">
-            Set up my KPI <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Alert>
+        <ActionRequired
+          eyebrow="KPI Not Set Up"
+          title="Your KPI for this year is not in place yet"
+          body="Define your Job Role KRAs. Your manager approves them before monthly submissions can begin."
+          to="/my-kpi/setup"
+          cta="Set Up My KPI"
+        />
       )}
 
       {kpiStatus === 'rejected' && (
-        <Alert kind="error" title="Your manager sent your KPI back">
-          <p className="italic">“{assignment?.assignment?.rejection_reason}”</p>
-          <Link to="/my-kpi/setup" className="btn-primary mt-3">
-            Make changes <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Alert>
+        <ActionRequired
+          eyebrow="Sent Back"
+          title="Your manager returned your KPI"
+          body={<span className="italic">“{assignment?.assignment?.rejection_reason}”</span>}
+          to="/my-kpi/setup"
+          cta="Make Changes"
+        />
       )}
 
       {kpiStatus === 'pending_approval' && (
@@ -89,12 +92,23 @@ export default function Dashboard() {
       )}
 
       {sub?.status === 'returned' && (
-        <Alert kind="warning" title={`${monthLabel(month)} was returned to you`}>
-          <p className="italic">“{sub.return_reason}”</p>
-          <Link to={`/submission/${month}`} className="btn-primary mt-3">
-            Review and resubmit <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Alert>
+        <ActionRequired
+          eyebrow="Returned To You"
+          title={`${monthLabel(month)} needs your attention`}
+          body={<span className="italic">“{sub.return_reason}”</span>}
+          to={`/submission/${month}`}
+          cta="Review & Resubmit"
+        />
+      )}
+
+      {kpiStatus === 'active' && (!sub || sub.status === 'draft') && (
+        <ActionRequired
+          eyebrow="Assessment Due"
+          title={`${monthLabel(month)} has not been submitted`}
+          body="Enter what you achieved so your manager can score the month."
+          to={`/submission/${month}`}
+          cta={sub ? 'Continue' : 'Start Now'}
+        />
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -235,7 +249,7 @@ function ActionCard({
   const inner = (
     <div className="flex items-start gap-3">
       <div className={`rounded-lg p-2 ${
-        highlight ? 'bg-cyrixBlue-100 text-cyrixBlue-800' : 'bg-ink-100 text-ink-500'
+        highlight ? 'bg-ink-100 text-ink-900' : 'bg-ink-100 text-ink-500'
       }`}>
         <Icon className="h-5 w-5" />
       </div>
@@ -261,8 +275,8 @@ function ActionCard({
   return (
     <Link
       to={to}
-      className={`card p-4 transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40 ${
-        highlight ? 'border-cyrixBlue-200' : ''
+      className={`card p-4 transition-colors hover:border-ink-400 hover:bg-ink-50 ${
+        highlight ? 'border-ink-300' : ''
       }`}
     >
       {inner}

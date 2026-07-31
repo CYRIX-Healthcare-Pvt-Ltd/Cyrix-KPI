@@ -43,11 +43,11 @@ export default function TeamMember() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
           <ArrowLeft className="h-4 w-4" /> Back to my team
         </Link>
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">{member.full_name}</h1>
-        <p className="mt-0.5 text-sm text-slate-500">
+        <h1 className="mt-2 text-xl font-semibold text-ink-900">{member.full_name}</h1>
+        <p className="mt-0.5 text-sm text-ink-500">
           {member.ecode}
           {member.designation && ` · ${member.designation}`}
           {member.department && ` · ${member.department}`}
@@ -67,7 +67,7 @@ export default function TeamMember() {
 
       {chartData.some(d => d.Total !== null) && (
         <div className="card p-4">
-          <h3 className="mb-4 text-sm font-semibold text-slate-800">Score trend</h3>
+          <h3 className="mb-4 text-sm font-semibold text-ink-800">Score trend</h3>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
@@ -87,13 +87,13 @@ export default function TeamMember() {
       )}
 
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-800">Month by month</h3>
+        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">Month by month</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-2.5 font-medium">Month</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
                 <th className="px-4 py-2.5 text-right font-medium">Self</th>
@@ -102,19 +102,19 @@ export default function TeamMember() {
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-ink-100">
               {fyMonths(fy).map(m => {
                 const s = byMonth.get(m)
                 return (
-                  <tr key={m} className="hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                  <tr key={m} className="hover:bg-ink-50">
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-ink-900">
                       {monthLabel(m)}
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={s?.status ?? null} /></td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
                       {s?.self_total_score?.toFixed(2) ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
                       {s?.mgr_total_score?.toFixed(2) ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -123,7 +123,7 @@ export default function TeamMember() {
                     <td className="px-4 py-3 text-right">
                       {s && (
                         <Link to={`/score/${s.id}`}
-                              className="text-xs font-medium text-brand-700 hover:underline">
+                              className="text-xs font-medium text-ink-900 hover:underline">
                           {s.status === 'submitted' ? 'Score' : 'View'}
                         </Link>
                       )}
@@ -139,29 +139,29 @@ export default function TeamMember() {
       {/* their KPI structure, for context while scoring */}
       {assignment?.items.length ? (
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-slate-800">Their KPI for FY {fy}</h3>
+          <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-ink-800">Their KPI for FY {fy}</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-ink-100">
                 {(['job_role', 'core_values'] as Section[]).map(section => (
                   <Fragment key={section}>
-                    <tr className="bg-slate-50/60">
-                      <td colSpan={3} className="px-4 py-1.5 text-xs font-semibold text-slate-600">
+                    <tr className="bg-ink-50/60">
+                      <td colSpan={3} className="px-4 py-1.5 text-xs font-semibold text-ink-600">
                         {section === 'job_role' ? 'Job Role — 80%' : 'Core Values — 20%'}
                       </td>
                     </tr>
                     {assignment.items.filter(i => i.section === section).map(i => (
                       <tr key={i.id}>
                         <td className="px-4 py-2.5">
-                          <p className="font-medium text-slate-900">{i.kra}</p>
-                          <p className="text-xs text-slate-500">{i.kpi_description}</p>
+                          <p className="font-medium text-ink-900">{i.kra}</p>
+                          <p className="text-xs text-ink-500">{i.kpi_description}</p>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
                           {i.weightage}%
                         </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-slate-500">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-ink-500">
                           target {i.target_value ?? '—'}
                         </td>
                       </tr>

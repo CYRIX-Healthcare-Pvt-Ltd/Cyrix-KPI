@@ -185,7 +185,7 @@ export default function AdminOverview() {
                     labelFormatter={(l: unknown) =>
                       slowest.find(s => s.manager_ecode === l)?.manager_name ?? String(l)}
                   />
-                  <Bar dataKey="avg_days_to_score" fill="#1e4b9b" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="avg_days_to_score" fill="#11141c" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -199,7 +199,7 @@ export default function AdminOverview() {
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             Managers with outstanding work
           </h3>
-          <Link to="/admin/reports" className="text-xs font-medium text-cyrixBlue-800 hover:underline">
+          <Link to="/admin/reports" className="text-xs font-medium text-ink-900 hover:underline">
             All reports
           </Link>
         </div>
@@ -302,7 +302,7 @@ function SummaryCard({
   to: string
 }) {
   return (
-    <Link to={to} className="card p-4 transition-colors hover:border-cyrixBlue-300">
+    <Link to={to} className="card p-4 transition-colors hover:border-ink-400">
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-ink-100 p-2 text-ink-600">
           <Icon className="h-4.5 w-4.5" />

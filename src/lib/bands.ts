@@ -30,8 +30,8 @@ export const BANDS: Band[] = [
   },
   {
     key: 'veryGood', label: 'Very Good', min: 80,
-    chip: 'bg-cyrixBlue-100 text-cyrixBlue-800',
-    accent: 'text-cyrixBlue-800', wash: 'from-cyrixBlue-50', bar: 'bg-cyrixBlue-600',
+    chip: 'bg-lime-100 text-lime-900',
+    accent: 'text-lime-800', wash: 'from-lime-50', bar: 'bg-lime-500',
   },
   {
     key: 'good', label: 'Good', min: 60,

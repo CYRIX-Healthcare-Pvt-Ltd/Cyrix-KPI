@@ -5,12 +5,12 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useTeamMonth, useTeamSubmissions, useRemovalAction, currentFy,
 } from '@/lib/queries'
-import { fyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
+import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { exportKpiScores } from '@/lib/export'
 import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
-import { ScoreHeader } from '@/components/analysis'
+import { ScoreHeader, ActionRequired } from '@/components/analysis'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -104,7 +104,8 @@ export default function Team() {
             value={month}
             onChange={e => setMonth(e.target.value)}
           >
-            {fyMonths(fy).map(m => (
+            {/* Completed months only — a month in progress cannot be assessed. */}
+            {openFyMonths(fy).reverse().map(m => (
               <option key={m} value={m}>{monthLabel(m)}</option>
             ))}
           </select>
@@ -113,6 +114,16 @@ export default function Team() {
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+
+      {awaiting > 0 && (
+        <ActionRequired
+          eyebrow="Scoring Due"
+          title={`${awaiting} assessment${awaiting === 1 ? '' : 's'} waiting for you`}
+          body={`Your team has submitted ${monthLabel(month)} and cannot be finalised until you score it.`}
+          to="/team"
+          cta="Start Scoring"
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile

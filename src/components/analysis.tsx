@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy } from 'lucide-react'
 import { bandFor, isWeak, trendOf, WEAK_THRESHOLD, type Band } from '@/lib/bands'
@@ -55,6 +56,52 @@ export function ScoreHeader({
   )
 }
 
+/**
+ * Something is waiting on the person reading this. Deliberately loud —
+ * black panel, red rule, red pulse — because the most common failure of
+ * a KPI system is nobody noticing they are the bottleneck.
+ */
+export function ActionRequired({
+  eyebrow = 'Action Required',
+  title,
+  body,
+  to,
+  cta,
+}: {
+  eyebrow?: string
+  title: string
+  body?: ReactNode
+  to: string
+  cta: string
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-ink-950 text-white">
+      <span className="absolute inset-y-0 left-0 w-1 bg-cyrixRed-600" />
+      <div className="flex flex-wrap items-center gap-5 p-5 pl-7">
+        <span className="relative flex h-2.5 w-2.5 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyrixRed-600 opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-cyrixRed-400">
+            {eyebrow}
+          </p>
+          <p className="mt-1.5 text-lg font-semibold">{title}</p>
+          {body && <div className="mt-1 text-sm text-white/60">{body}</div>}
+        </div>
+
+        <Link
+          to={to}
+          className="shrink-0 bg-white px-6 py-3 text-[12px] font-bold uppercase tracking-label text-ink-950 transition-colors hover:bg-cyrixRed-600 hover:text-white"
+        >
+          {cta}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export function BandChip({ pct }: { pct: number | null | undefined }) {
   const band = bandFor(pct)
   if (!band) return <span className="text-ink-400">—</span>
@@ -63,12 +110,12 @@ export function BandChip({ pct }: { pct: number | null | undefined }) {
 
 export function TrendChip({ scores }: { scores: Array<number | null> }) {
   const trend = trendOf(scores)
-  if (!trend) return <span className="text-xs text-ink-400">not enough months</span>
+  if (!trend) return <span className="text-xs text-ink-400">Not enough months yet</span>
 
   const cfg = {
-    up:   { Icon: TrendingUp,   cls: 'text-emerald-700',   text: `improving +${trend.delta}` },
-    down: { Icon: TrendingDown, cls: 'text-cyrixRed-700',  text: `declining ${trend.delta}` },
-    flat: { Icon: Minus,        cls: 'text-ink-500',       text: 'steady' },
+    up:   { Icon: TrendingUp,   cls: 'text-emerald-700',   text: `Improving +${trend.delta}` },
+    down: { Icon: TrendingDown, cls: 'text-cyrixRed-700',  text: `Declining ${trend.delta}` },
+    flat: { Icon: Minus,        cls: 'text-ink-500',       text: 'Steady' },
   }[trend.direction]
 
   return (
@@ -126,7 +173,7 @@ export function WeakAreas({
               <p className={clsx('text-sm font-semibold tabular-nums', band.accent)}>
                 {a.avg_attainment_pct?.toFixed(0)}%
               </p>
-              <p className="text-[11px] text-ink-400">of weightage</p>
+              <p className="text-[11px] text-ink-400">Of weightage</p>
             </div>
             <span className={clsx('badge', band.chip)}>{band.label}</span>
           </li>

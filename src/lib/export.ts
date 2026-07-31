@@ -1,5 +1,5 @@
 import type { Employee, KpiSubmission } from '@/types/db'
-import { fyMonths, monthLabel } from './fy'
+import { openFyMonths, monthLabel } from './fy'
 
 /**
  * KPI score export for managers and HR.
@@ -30,7 +30,9 @@ export async function exportKpiScores(
   filename: string,
 ) {
   const XLSX = await import('xlsx')
-  const months = fyMonths(fy)
+  // Only months that have finished. A column for a month nobody could
+  // have been assessed on is noise at best and misleading at worst.
+  const months = openFyMonths(fy)
 
   // ---- two header rows, the first merged across each month block ----
   const head1: (string | null)[] = ['Ecode', 'Name', 'Designation', 'Department']
