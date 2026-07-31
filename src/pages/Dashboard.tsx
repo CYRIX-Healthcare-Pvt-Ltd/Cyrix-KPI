@@ -1,8 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  ClipboardList, Users, AlertCircle, ArrowRight, CheckSquare, TrendingUp, Target,
-} from 'lucide-react'
+import { Users, AlertCircle, ArrowRight, CheckSquare, Target } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
@@ -167,27 +165,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ActionCard
-          to={`/submission/${month}`}
-          icon={ClipboardList}
-          title={`${monthLabel(month)} assessment`}
-          body={
-            kpiStatus !== 'active'
-              ? 'Available once your KPI is approved'
-              : sub?.status === 'draft' || !sub
-              ? 'Enter what you achieved this month'
-              : 'View your submitted assessment'
-          }
-          disabled={kpiStatus !== 'active'}
-        />
-        <ActionCard
-          to="/history"
-          icon={TrendingUp}
-          title="My history"
-          body="Month-by-month scores across the year"
-        />
-      </div>
+      {/* No assessment or history cards here: the month is already the
+          Action Required panel at the top, and History is a nav tab. A
+          third route to the same place is noise, not navigation. */}
 
       {(isManager || isHrAdmin) && (
         <div>

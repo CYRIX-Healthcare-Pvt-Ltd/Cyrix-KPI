@@ -31,7 +31,14 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: [
+          'Space Grotesk Variable',
+          'Space Grotesk',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'sans-serif',
+        ],
       },
       letterSpacing: {
         label: '0.16em',

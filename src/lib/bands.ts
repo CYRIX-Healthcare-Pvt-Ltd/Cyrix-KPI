@@ -20,6 +20,17 @@ export interface Band {
   /** Very soft page-level tint. */
   wash: string
   bar: string
+  /**
+   * Tokens for the dark score hero. Band colour reads far more strongly
+   * against black than as a pale wash on white, which is what makes the
+   * score legible at a glance rather than merely decorative.
+   */
+  onDark: {
+    text: string
+    bar: string
+    chip: string
+    glow: string
+  }
 }
 
 export const BANDS: Band[] = [
@@ -27,26 +38,51 @@ export const BANDS: Band[] = [
     key: 'excellent', label: 'Excellent', min: 90,
     chip: 'bg-emerald-100 text-emerald-800',
     accent: 'text-emerald-700', wash: 'from-emerald-50', bar: 'bg-emerald-500',
+    onDark: {
+      text: 'text-emerald-400', bar: 'bg-emerald-400',
+      chip: 'bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30',
+      glow: 'bg-emerald-500/20',
+    },
   },
   {
     key: 'veryGood', label: 'Very Good', min: 80,
     chip: 'bg-lime-100 text-lime-900',
     accent: 'text-lime-800', wash: 'from-lime-50', bar: 'bg-lime-500',
+    onDark: {
+      text: 'text-lime-400', bar: 'bg-lime-400',
+      chip: 'bg-lime-400/15 text-lime-300 ring-1 ring-lime-400/30',
+      glow: 'bg-lime-500/20',
+    },
   },
   {
     key: 'good', label: 'Good', min: 60,
     chip: 'bg-amber-100 text-amber-800',
     accent: 'text-amber-700', wash: 'from-amber-50', bar: 'bg-amber-500',
+    onDark: {
+      text: 'text-amber-400', bar: 'bg-amber-400',
+      chip: 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30',
+      glow: 'bg-amber-500/20',
+    },
   },
   {
     key: 'satisfactory', label: 'Satisfactory', min: 40,
     chip: 'bg-orange-100 text-orange-800',
     accent: 'text-orange-700', wash: 'from-orange-50', bar: 'bg-orange-500',
+    onDark: {
+      text: 'text-orange-400', bar: 'bg-orange-400',
+      chip: 'bg-orange-400/15 text-orange-300 ring-1 ring-orange-400/30',
+      glow: 'bg-orange-500/20',
+    },
   },
   {
     key: 'poor', label: 'Poor', min: -Infinity,
     chip: 'bg-cyrixRed-100 text-cyrixRed-800',
     accent: 'text-cyrixRed-700', wash: 'from-cyrixRed-50', bar: 'bg-cyrixRed-600',
+    onDark: {
+      text: 'text-cyrixRed-400', bar: 'bg-cyrixRed-600',
+      chip: 'bg-cyrixRed-600/20 text-cyrixRed-300 ring-1 ring-cyrixRed-500/40',
+      glow: 'bg-cyrixRed-600/25',
+    },
   },
 ]
 

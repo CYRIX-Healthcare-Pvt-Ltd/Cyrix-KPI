@@ -25,34 +25,98 @@ export function ScoreHeader({
   children?: ReactNode
 }) {
   const band = bandFor(score)
+  const pct = Math.max(0, Math.min(100, score ?? 0))
 
   return (
-    <div
-      className={clsx(
-        'score-wash',
-        band ? `${band.wash} border border-ink-200` : 'from-ink-100 border border-ink-200',
+    <section className="relative overflow-hidden rounded-2xl bg-ink-950 text-white">
+      {/* A wash of the band colour bleeding in from the score side. It is
+          the one place the performance colour is allowed to dominate. */}
+      {band && (
+        <div
+          className={clsx(
+            'pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl',
+            band.onDark.glow,
+          )}
+        />
       )}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-900">{title}</h1>
-          {subtitle && <p className="mt-0.5 text-sm text-ink-500">{subtitle}</p>}
+
+      <div className="relative flex flex-wrap items-end justify-between gap-6 p-6 sm:p-7">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">{title}</h1>
+          {subtitle && (
+            <p className="mt-1.5 text-sm text-white/50">{subtitle}</p>
+          )}
         </div>
 
-        {score !== null && score !== undefined && band && (
+        {score !== null && score !== undefined && band ? (
           <div className="text-right">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
+            <p className="text-[11px] font-semibold uppercase tracking-label text-white/40">
               {scoreLabel}
             </p>
-            <p className={clsx('text-3xl font-bold tabular-nums', band.accent)}>
+            <p
+              className={clsx(
+                'mt-1 text-5xl font-bold leading-none tabular-nums sm:text-6xl',
+                band.onDark.text,
+              )}
+            >
               {score.toFixed(1)}
+              <span className="ml-1 text-lg font-medium text-white/30">/100</span>
             </p>
-            <span className={clsx('badge mt-1', band.chip)}>{band.label}</span>
+            <span
+              className={clsx(
+                'mt-3 inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-label',
+                band.onDark.chip,
+              )}
+            >
+              {band.label}
+            </span>
+          </div>
+        ) : (
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-label text-white/40">
+              {scoreLabel}
+            </p>
+            <p className="mt-1 text-5xl font-bold leading-none text-white/25">—</p>
+            <span className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-label text-white/50">
+              Not Scored Yet
+            </span>
           </div>
         )}
       </div>
-      {children && <div className="mt-4">{children}</div>}
-    </div>
+
+      {/* Meter across the full width, with the band thresholds marked so
+          the number has somewhere to sit rather than floating free. */}
+      <div className="relative px-6 pb-6 sm:px-7 sm:pb-7">
+        <div className="relative h-1.5 overflow-hidden rounded-full bg-white/10">
+          {band && (
+            <div
+              className={clsx('h-full rounded-full transition-all duration-700', band.onDark.bar)}
+              style={{ width: `${pct}%` }}
+            />
+          )}
+          {[40, 60, 80, 90].map(t => (
+            <span
+              key={t}
+              className="absolute inset-y-0 w-px bg-ink-950/60"
+              style={{ left: `${t}%` }}
+            />
+          ))}
+        </div>
+        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-label text-white/25">
+          <span>Poor</span>
+          <span>Satisfactory</span>
+          <span>Good</span>
+          <span>Very Good</span>
+          <span>Excellent</span>
+        </div>
+      </div>
+
+      {children && (
+        <div className="relative border-t border-white/10 px-6 py-4 sm:px-7">
+          {children}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -183,7 +247,14 @@ export function WeakAreas({
   )
 }
 
-/** Horizontal bars of attainment per KRA — quick to scan for soft spots. */
+/**
+ * Attainment per KRA.
+ *
+ * Grouped by section rather than sorted purely by percentage: core values
+ * are not a job-role KRA and are the same row for everyone, so mixing
+ * them into the job-role ranking invites a false comparison. Job role
+ * first, weakest at the top; core values always last, on its own.
+ */
 export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
   const byKra = new Map<string, { section: string; total: number; n: number }>()
   for (const r of rows) {
@@ -194,44 +265,65 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
     byKra.set(r.kra, cur)
   }
 
-  const items = [...byKra.entries()]
-    .map(([kra, v]) => ({ kra, section: v.section, pct: v.total / v.n }))
-    .sort((a, b) => a.pct - b.pct)
+  const all = [...byKra.entries()].map(([kra, v]) => ({
+    kra, section: v.section, pct: v.total / v.n,
+  }))
+  const jobRole = all.filter(i => i.section === 'job_role').sort((a, b) => a.pct - b.pct)
+  const coreValues = all.filter(i => i.section === 'core_values')
 
-  if (items.length === 0) {
+  if (all.length === 0) {
     return <p className="text-sm text-ink-500">No scored months yet.</p>
   }
 
   return (
-    <div className="space-y-3">
-      {items.map(i => {
-        const band = bandFor(i.pct) as Band
-        return (
-          <div key={i.kra}>
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm text-ink-700">{i.kra}</span>
-              <span className={clsx('text-xs font-semibold tabular-nums', band.accent)}>
-                {i.pct.toFixed(0)}%
-              </span>
-            </div>
-            <div className="relative h-2 overflow-hidden rounded-full bg-ink-100">
-              <div
-                className={clsx('h-full rounded-full transition-all', band.bar)}
-                style={{ width: `${Math.max(0, Math.min(100, i.pct))}%` }}
-              />
-              {/* The line below which we call something weak. */}
-              <div
-                className="absolute inset-y-0 w-px bg-ink-400/50"
-                style={{ left: `${WEAK_THRESHOLD}%` }}
-                title={`Below ${WEAK_THRESHOLD}% needs attention`}
-              />
-            </div>
-          </div>
-        )
-      })}
+    <div className="space-y-4">
+      {jobRole.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
+            Job Role — 80%
+          </p>
+          {jobRole.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
+        </div>
+      )}
+
+      {coreValues.length > 0 && (
+        <div className="space-y-3 border-t border-ink-100 pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
+            Core Values — 20%
+          </p>
+          {coreValues.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
+        </div>
+      )}
+
       <p className="pt-1 text-[11px] text-ink-400">
         The marker sits at {WEAK_THRESHOLD}% — anything left of it is below Good.
       </p>
+    </div>
+  )
+}
+
+function Bar({ kra, pct }: { kra: string; pct: number }) {
+  const band = bandFor(pct) as Band
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <span className="truncate text-sm text-ink-700">{kra}</span>
+        <span className={clsx('text-xs font-semibold tabular-nums', band.accent)}>
+          {pct.toFixed(0)}%
+        </span>
+      </div>
+      <div className="relative h-2 overflow-hidden rounded-full bg-ink-100">
+        <div
+          className={clsx('h-full rounded-full transition-all', band.bar)}
+          style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+        />
+        {/* The line below which we call something weak. */}
+        <div
+          className="absolute inset-y-0 w-px bg-ink-400/50"
+          style={{ left: `${WEAK_THRESHOLD}%` }}
+          title={`Below ${WEAK_THRESHOLD}% needs attention`}
+        />
+      </div>
     </div>
   )
 }
