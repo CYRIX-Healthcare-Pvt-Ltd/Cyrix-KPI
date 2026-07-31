@@ -6,14 +6,16 @@ import { Alert, Spinner } from '@/components/ui'
 const MIN_LENGTH = 8
 
 export default function ChangePassword() {
-  const { employee, changePassword, signOut } = useAuth()
+  const { employee, changePassword, signOut, forcePasswordChange } = useAuth()
   const navigate = useNavigate()
   const [pw, setPw] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const forced = employee?.must_change_password ?? false
+  // Only a forced visit when the setting is on; otherwise this page is
+  // reached voluntarily from the header and offers a way back.
+  const forced = forcePasswordChange && (employee?.must_change_password ?? false)
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -96,13 +98,21 @@ export default function ChangePassword() {
             {busy ? 'Saving…' : 'Save password'}
           </button>
 
-          {forced && (
+          {forced ? (
             <button
               type="button"
               onClick={() => signOut().then(() => navigate('/login', { replace: true }))}
               className="w-full text-center text-xs text-slate-500 hover:text-slate-700"
             >
               Sign out instead
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="w-full text-center text-xs text-slate-500 hover:text-slate-700"
+            >
+              Cancel
             </button>
           )}
         </form>

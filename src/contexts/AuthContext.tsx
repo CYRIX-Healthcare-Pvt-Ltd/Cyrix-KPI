@@ -12,6 +12,11 @@ interface AuthState {
   isManager: boolean
   isHrAdmin: boolean
   directReportCount: number
+  /**
+   * From the force_password_change setting. False during the testing phase,
+   * so everyone signs in with ecode/ecode and goes straight to the app.
+   */
+  forcePasswordChange: boolean
   loading: boolean
   signIn: (ecode: string, password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -26,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [directReportCount, setDirectReportCount] = useState(0)
   const [isHrAdmin, setIsHrAdmin] = useState(false)
+  const [forcePasswordChange, setForcePasswordChange] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const loadProfile = useCallback(async (uid: string | undefined) => {
@@ -49,17 +55,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const [{ count }, { data: roles }] = await Promise.all([
+    const [{ count }, { data: roles }, { data: setting }] = await Promise.all([
       supabase
         .from('employees')
         .select('id', { count: 'exact', head: true })
         .eq('reporting_manager_id', emp.id)
         .eq('is_active', true),
       supabase.from('user_roles').select('role').eq('employee_id', emp.id),
+      supabase.from('app_settings').select('value')
+        .eq('key', 'force_password_change').maybeSingle(),
     ])
 
     setDirectReportCount(count ?? 0)
     setIsHrAdmin((roles ?? []).some(r => ['hr_admin', 'super_admin'].includes(r.role)))
+    setForcePasswordChange(setting?.value === true)
   }, [])
 
   useEffect(() => {
@@ -129,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isManager: directReportCount > 0,
         isHrAdmin,
         directReportCount,
+        forcePasswordChange,
         loading,
         signIn,
         signOut,

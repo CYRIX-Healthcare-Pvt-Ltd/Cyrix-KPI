@@ -19,7 +19,7 @@ const ScoreSubmission   = lazy(() => import('@/pages/ScoreSubmission'))
 const TeamMember        = lazy(() => import('@/pages/TeamMember'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { session, employee, loading } = useAuth()
+  const { session, employee, loading, forcePasswordChange } = useAuth()
   const location = useLocation()
 
   if (loading) return <PageLoader />
@@ -39,9 +39,15 @@ function RequireAuth({ children }: { children: JSX.Element }) {
     )
   }
 
-  // Initial password is the ecode itself, so force a real one before
-  // anything else becomes reachable.
-  if (employee.must_change_password && location.pathname !== '/change-password') {
+  // Normally the initial password is the ecode itself, so a real one is
+  // forced before anything else becomes reachable. Disabled during the
+  // testing phase via the force_password_change setting — flip that row
+  // to true before go-live and this gate comes back with no deploy.
+  if (
+    forcePasswordChange &&
+    employee.must_change_password &&
+    location.pathname !== '/change-password'
+  ) {
     return <Navigate to="/change-password" replace />
   }
 

@@ -7,6 +7,7 @@
  *   node scripts/user-admin.mjs pending             who has never signed in
  *   node scripts/user-admin.mjs reset E551          reset password back to the ecode
  *   node scripts/user-admin.mjs reset E551 --to "SomePass123"
+ *   node scripts/user-admin.mjs reset-all          every active account -> its ecode
  *
  * NOTE ON PASSWORDS
  * -----------------
@@ -122,6 +123,54 @@ if (cmd === 'pending') {
 }
 
 // ---------------------------------------------------------------------
+if (cmd === 'reset-all') {
+  const { rows: cfg } = await db.query(
+    `select key, value from app_settings
+     where key in ('force_password_change','self_service_password_reset')`)
+  const settings = Object.fromEntries(cfg.map(r => [r.key, r.value]))
+
+  const { rows: [{ n }] } = await db.query(
+    `select count(*)::int n from employees where is_active and auth_user_id is not null`)
+
+  console.log(`\n  About to reset ${n} active account(s) to ecode-as-password.`)
+  console.log(`  force_password_change is ${settings.force_password_change}`)
+
+  // Done in one statement rather than n API calls. pgcrypto's bcrypt
+  // output is byte-identical in format to what GoTrue writes, so the
+  // new passwords validate on the next sign-in.
+  const { rowCount } = await db.query(`
+    update auth.users u
+    set encrypted_password = extensions.crypt(
+          upper(e.ecode), extensions.gen_salt('bf', 10)),
+        updated_at = now()
+    from employees e
+    where e.auth_user_id = u.id and e.is_active`)
+
+  // Match the flag: no point forcing a change during the testing phase.
+  const forced = String(settings.force_password_change) === 'true'
+  await db.query(
+    `update employees set must_change_password = $1 where is_active`, [forced])
+
+  await db.query(`
+    insert into audit_log (entity_type, action, details)
+    values ('system', 'bulk_password_reset', $1::jsonb)`,
+    [JSON.stringify({ accounts: rowCount, via: 'user-admin.mjs' })])
+
+  console.log(`
+  Reset ${rowCount} account(s).
+
+  Everyone now signs in with their employee code as both id and password,
+  e.g. E551 / E551. must_change_password is ${forced}.
+
+  Before go-live, tighten both flags:
+    update app_settings set value = 'true'  where key = 'force_password_change';
+    update app_settings set value = 'false' where key = 'self_service_password_reset';
+`)
+  await db.end()
+  process.exit(0)
+}
+
+// ---------------------------------------------------------------------
 if (cmd === 'reset') {
   if (!target) {
     console.error('Usage: node scripts/user-admin.mjs reset <ECODE> [--to "NewPassword"]')
@@ -175,6 +224,6 @@ if (cmd === 'reset') {
   process.exit(0)
 }
 
-console.error(`Unknown command "${cmd}". Try: status | pending | reset`)
+console.error(`Unknown command "${cmd}". Try: status | pending | reset | reset-all`)
 await db.end()
 process.exit(1)

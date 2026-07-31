@@ -189,6 +189,38 @@ Ecodes map to internal Supabase Auth emails (`e1042@cyrix.local`) that never
 receive mail — this buys real JWTs and working RLS while keeping the ecode as
 the only thing anyone types.
 
+### Testing phase — currently active
+
+Two settings in `app_settings` relax login while the system is being trialled:
+
+| Setting | Now | Effect |
+|---|---|---|
+| `force_password_change` | `false` | No forced password change — sign in with ecode/ecode and go straight in |
+| `self_service_password_reset` | `true` | Anyone can reset an account back to ecode-as-password from the login screen |
+
+**Before go-live, tighten both.** No deployment needed — the app reads them at
+runtime:
+
+```sql
+update app_settings set value = 'true'  where key = 'force_password_change';
+update app_settings set value = 'false' where key = 'self_service_password_reset';
+```
+
+Self-service reset is anonymous-callable by design, since the person using it
+is locked out. That means **anyone who knows a colleague's employee code can
+reset that colleague's password**. Fine for test data, not fine once real
+appraisal and PIP records are in here — hence the flag, checked on every call
+rather than something to remember to remove.
+
+Employee codes are stored in capitals, so the password is too: `E551` / `E551`,
+`HR_ADMIN` / `HR_ADMIN`. The login form uppercases the code field automatically.
+
+Reset everyone back to ecode-as-password at any time:
+
+```bash
+node scripts/user-admin.mjs reset-all
+```
+
 ### Passwords cannot be looked up
 
 Supabase stores a bcrypt hash in `auth.users.encrypted_password`. It is

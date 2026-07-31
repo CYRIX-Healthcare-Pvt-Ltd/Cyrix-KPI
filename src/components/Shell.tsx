@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, History,
-  LogOut, Menu, X,
+  LogOut, Menu, X, KeyRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -89,6 +89,14 @@ export default function Shell() {
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
               {initials}
             </div>
+            <NavLink
+              to="/change-password"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Change password"
+              title="Change password"
+            >
+              <KeyRound className="h-4.5 w-4.5" />
+            </NavLink>
             <button
               onClick={handleSignOut}
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
