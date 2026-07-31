@@ -142,18 +142,37 @@ npm run db:push
 Import the team list — creates logins with the ecode as the initial password:
 
 ```bash
-node scripts/import-employees.mjs "team-list.xlsx" --dry-run
+node scripts/import-employees.mjs "Emp Data.xlsx" --hr-admin HR_Admin --dry-run
 ```
 
-Drop `--dry-run` once the preview looks right. Re-running is safe: existing
-ecodes are updated, never duplicated, and passwords are never reset.
+Drop `--dry-run` once the preview looks right, then check the result:
 
-Expected columns (headers matched loosely, case-insensitive):
+```bash
+node scripts/verify-import.mjs
+```
+
+Re-running the import is safe: existing ecodes are updated, never duplicated,
+and an existing password is never reset.
+
+Columns are matched loosely and case-insensitively. Recognised:
 
 ```
-Ecode | Name | Designation | Department | Location | Job Role
-| Reporting Manager Ecode | Email | Date of Joining | HR Admin
+Employee_Code / Ecode        (required)
+Employee_Name / Name         (required)
+Employee_Status / Status     leavers are skipped
+ReportingManager_Code
+Designation | Department | Location | Job Role | Email | Date of Joining | HR Admin
 ```
+
+**Leavers never get a login.** Any status matching `fnf`, `resign`, `exit`,
+`terminat`, `abscond`, `left`, `retire`, `deceas`, `separat`, `relieved` is
+treated as a leaver and skipped. Being generous here is deliberate — wrongly
+creating a login for someone who has left is far worse than missing one, which
+is a sheet edit and a re-run. `--include-inactive` imports them as
+`is_active=false` with no login, for historical continuity.
+
+Other options: `--limit n` for a trial run, `--sheet <name>` to pick a sheet,
+`--hr-admin <CODE>` to create or flag an HR administrator.
 
 Run it:
 
@@ -179,6 +198,8 @@ the only thing anyone types.
 | `npm test` | scoring + parser tests |
 | `npm run db:push` | apply pending migrations |
 | `npm run db:verify` | show pending migrations, change nothing |
+| `node scripts/verify-db.mjs` | check schema, RLS, seed and the live scoring engine |
+| `node scripts/verify-import.mjs` | check org data: logins, reporting tree, cycles |
 | `node scripts/make-icons.mjs` | regenerate PWA icons |
 
 Migrations are immutable — `db:push` warns if an already-applied file has
