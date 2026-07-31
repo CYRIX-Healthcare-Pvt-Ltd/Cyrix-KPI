@@ -72,6 +72,16 @@ export default function MonthlySubmission() {
     )
   }
 
+  // core_value_ratings has no sort column of its own, so order by the
+  // definition's — otherwise the five values appear in whatever order
+  // Postgres returns them, which changes between loads.
+  const sortedRatings = useMemo(() => {
+    const order = new Map((coreValues ?? []).map(c => [c.id, c.sort_order]))
+    return [...(data?.ratings ?? [])].sort(
+      (a, b) => (order.get(a.core_value_id) ?? 0) - (order.get(b.core_value_id) ?? 0),
+    )
+  }, [data, coreValues])
+
   const jobRows = items.filter(i => i.section === 'job_role')
   const coreRows = items.filter(i => i.section === 'core_values')
   const jobTotal = jobRows.reduce((a, i) => a + liveScore(i), 0)
@@ -305,7 +315,7 @@ export default function MonthlySubmission() {
         </div>
 
         <div className="divide-y divide-slate-100">
-          {(data?.ratings ?? []).map(rating => {
+          {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">

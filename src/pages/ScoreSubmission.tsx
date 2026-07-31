@@ -70,6 +70,14 @@ export default function ScoreSubmission() {
     )
   }
 
+  // Same fixed order as the team member sees on their own form.
+  const sortedRatings = useMemo(() => {
+    const order = new Map((coreValues ?? []).map(c => [c.id, c.sort_order]))
+    return [...(data?.ratings ?? [])].sort(
+      (a, b) => (order.get(a.core_value_id) ?? 0) - (order.get(b.core_value_id) ?? 0),
+    )
+  }, [data, coreValues])
+
   const selfTotal = items.reduce((a, i) => a + (i.self_score ?? 0), 0)
   const mgrTotal = items.reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
   const finalTotal = items.reduce(
@@ -271,7 +279,7 @@ export default function ScoreSubmission() {
           )}
         </div>
         <div className="divide-y divide-slate-100">
-          {data.ratings.map(rating => {
+          {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
