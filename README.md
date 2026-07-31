@@ -189,6 +189,23 @@ Ecodes map to internal Supabase Auth emails (`e1042@cyrix.local`) that never
 receive mail — this buys real JWTs and working RLS while keeping the ecode as
 the only thing anyone types.
 
+### Passwords cannot be looked up
+
+Supabase stores a bcrypt hash in `auth.users.encrypted_password`. It is
+one-way — there is no column, view or API that returns the plaintext, and a
+database superuser cannot read one back either. That is the point: a database
+leak does not hand over everyone's password.
+
+So the answerable questions are "have they signed in?" and "reset it for them":
+
+```bash
+node scripts/user-admin.mjs status E551    # signed in? still on the default?
+node scripts/user-admin.mjs pending        # never signed in — chase these
+node scripts/user-admin.mjs reset E551     # back to ecode, forced change re-armed
+```
+
+`reset` also accepts `--to "SomePassword"` if you need to set a specific one.
+
 ## Commands
 
 | | |
@@ -200,6 +217,7 @@ the only thing anyone types.
 | `npm run db:verify` | show pending migrations, change nothing |
 | `node scripts/verify-db.mjs` | check schema, RLS, seed and the live scoring engine |
 | `node scripts/verify-import.mjs` | check org data: logins, reporting tree, cycles |
+| `node scripts/user-admin.mjs status\|pending\|reset` | login status and password resets |
 | `node scripts/make-icons.mjs` | regenerate PWA icons |
 
 Migrations are immutable — `db:push` warns if an already-applied file has
