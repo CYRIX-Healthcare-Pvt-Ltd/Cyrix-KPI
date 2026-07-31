@@ -23,3 +23,6 @@ dist-ssr
 /tmp
 *.log
 npm-debug.log*
+
+# TS build cache
+tsconfig.tsbuildinfo
