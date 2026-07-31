@@ -82,10 +82,18 @@ export default function MonthlySubmission() {
     )
   }, [data, coreValues])
 
+  /** The manager's own core-value average, shown once they have scored. */
+  const managerCoreAverage = useMemo(
+    () => averageCoreValueRatings((data?.ratings ?? []).map(r => r.manager_rating)),
+    [data],
+  )
+
   const jobRows = items.filter(i => i.section === 'job_role')
   const coreRows = items.filter(i => i.section === 'core_values')
   const jobTotal = jobRows.reduce((a, i) => a + liveScore(i), 0)
   const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
+
+  const isScored = submission?.status === 'scored' || submission?.status === 'finalized'
 
   const save = async () => {
     setError(null)
@@ -308,15 +316,34 @@ export default function MonthlySubmission() {
           <h3 className="text-sm font-semibold text-slate-800">
             Alignment To Core Values <span className="font-normal text-slate-500">— 20%</span>
           </h3>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            {coreAverage !== null && <span>avg {coreAverage.toFixed(0)}/100</span>}
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              mine {coreAverage === null ? '—' : `${coreAverage.toFixed(0)}/100`}
+              {isScored && (
+                <> · manager {managerCoreAverage === null ? '—' : `${managerCoreAverage.toFixed(0)}/100`}</>
+              )}
+            </span>
             <ScorePill value={coreTotal} size="sm" />
           </div>
         </div>
 
+        {/* Header row so the two assessments read as columns once scored. */}
+        {isScored && (
+          <div className="hidden border-b border-slate-100 bg-slate-50/60 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-slate-400 sm:flex sm:gap-4">
+            <span className="flex-1">Core value</span>
+            <span className="w-48 text-center">My rating</span>
+            <span className="w-40 text-center">Manager's rating</span>
+          </div>
+        )}
+
         <div className="divide-y divide-slate-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
+            const differs =
+              isScored &&
+              rating.manager_rating !== null &&
+              rating.manager_rating !== rating.self_rating
+
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
                 <div className="min-w-0 flex-1">
@@ -325,6 +352,7 @@ export default function MonthlySubmission() {
                     <p className="mt-0.5 text-sm text-slate-500">{def.description}</p>
                   )}
                 </div>
+
                 <div className="mt-2 sm:mt-0 sm:w-48">
                   <select
                     className="input"
@@ -340,10 +368,49 @@ export default function MonthlySubmission() {
                     ))}
                   </select>
                 </div>
+
+                {/* The manager's verdict. Highlighted when it differs from
+                    the self rating, since that is the useful signal. */}
+                {isScored && (
+                  <div className="mt-2 sm:mt-0 sm:w-40">
+                    <p className="mb-1 text-xs text-slate-400 sm:hidden">Manager's rating</p>
+                    <div
+                      className={`rounded-lg px-3 py-2 text-sm ${
+                        differs
+                          ? 'bg-cyrixRed-50 font-medium text-cyrixRed-800 ring-1 ring-cyrixRed-200'
+                          : 'bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      {rating.manager_rating ?? 'Not rated'}
+                      {differs && (
+                        <span className="ml-1.5 text-xs font-normal">changed</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
+
+        {isScored && (
+          <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+            <span className="text-sm font-medium text-slate-700">
+              Core values score
+            </span>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-slate-500">
+                mine <ScorePill value={coreRows[0]?.self_score} size="sm" />
+              </span>
+              <span className="text-slate-500">
+                manager <ScorePill value={coreRows[0]?.manager_score} size="sm" />
+              </span>
+              <span className="text-slate-500">
+                final <ScorePill value={coreRows[0]?.final_score} size="sm" />
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ---- remarks ---- */}

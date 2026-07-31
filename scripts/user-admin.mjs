@@ -123,6 +123,67 @@ if (cmd === 'pending') {
 }
 
 // ---------------------------------------------------------------------
+// Issues a login for an employee record that has none — the case after
+// HR adds someone through the admin screen, which cannot create auth
+// users itself because that needs the service role.
+if (cmd === 'issue-login') {
+  if (!target) {
+    console.error('Usage: node scripts/user-admin.mjs issue-login <ECODE>')
+    process.exit(1)
+  }
+  if (!URL || !KEY) {
+    console.error('Set VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local')
+    process.exit(1)
+  }
+
+  const { rows } = await db.query(
+    `select id, ecode, full_name, auth_user_id, is_active
+     from employees where upper(ecode) = upper($1)`, [target])
+  if (!rows.length) {
+    console.error(`No employee with code "${target}".`)
+    process.exit(1)
+  }
+  const emp = rows[0]
+  if (emp.auth_user_id) {
+    console.log(`\n  ${emp.ecode} already has a login. Use "reset" to change the password.\n`)
+    await db.end()
+    process.exit(0)
+  }
+  if (!emp.is_active) {
+    console.error(`${emp.ecode} is not active — reactivate them first.`)
+    process.exit(1)
+  }
+
+  const ecode = emp.ecode.toUpperCase()
+  const supabase = createClient(URL, KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: `${ecode.toLowerCase()}@${DOMAIN}`,
+    password: ecode,
+    email_confirm: true,
+    user_metadata: { ecode, full_name: emp.full_name },
+  })
+  if (error) {
+    console.error(`Could not create the login: ${error.message}`)
+    process.exit(1)
+  }
+
+  await db.query(
+    `update employees set auth_user_id = $1 where id = $2`, [data.user.id, emp.id])
+
+  console.log(`
+  Login issued.
+
+  ${ecode}  ${emp.full_name}
+  signs in with   ${ecode}  /  ${ecode}
+`)
+  await db.end()
+  process.exit(0)
+}
+
+// ---------------------------------------------------------------------
 if (cmd === 'reset-all') {
   const { rows: cfg } = await db.query(
     `select key, value from app_settings

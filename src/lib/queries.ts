@@ -5,6 +5,8 @@ import type {
   Employee, KpiAssignment, KpiAssignmentItem, KpiSubmission, KpiSubmissionItem,
   CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
+  OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
+  WeakAreaRow, TmRemovalRequest,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -132,6 +134,14 @@ export function useSaveAssignmentRows() {
         args.rows.map(r => ({ ...r, assignment_id: assignmentId })),
       )
       if (ins.error) throw new Error(friendlyError(ins.error))
+
+      // Core values are identical for everyone, so the system owns that row
+      // rather than the team member. Stamped on here so a saved draft is
+      // already complete, and again server-side on submit.
+      const { error: cvError } = await supabase.rpc('apply_standard_core_values', {
+        p_assignment_id: assignmentId,
+      })
+      if (cvError) throw new Error(friendlyError(cvError))
 
       return assignmentId
     },
@@ -395,6 +405,189 @@ export function useSubmissionHistory(employeeId: string | undefined, fy: string)
           .eq('employee_id', employeeId!).eq('financial_year', fy)
           .order('period_month'),
       ),
+  })
+}
+
+/**
+ * Counts for the nav badges: KPIs awaiting approval and months awaiting
+ * scoring. One round trip each, head-only, so it is cheap to poll.
+ */
+export function usePendingCounts(managerId: string | undefined, fy: string) {
+  return useQuery({
+    enabled: !!managerId,
+    queryKey: ['pending_counts', managerId, fy],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const team = await unwrap<Array<{ id: string }>>(
+        supabase.from('employees').select('id')
+          .eq('reporting_manager_id', managerId!).eq('is_active', true),
+      )
+      if (team.length === 0) return { approvals: 0, scoring: 0 }
+      const ids = team.map(t => t.id)
+
+      const [{ count: approvals }, { count: scoring }] = await Promise.all([
+        supabase.from('kpi_assignments')
+          .select('id', { count: 'exact', head: true })
+          .in('employee_id', ids).eq('financial_year', fy).eq('status', 'pending_approval'),
+        supabase.from('kpi_submissions')
+          .select('id', { count: 'exact', head: true })
+          .in('employee_id', ids).eq('status', 'submitted'),
+      ])
+      return { approvals: approvals ?? 0, scoring: scoring ?? 0 }
+    },
+  })
+}
+
+// ---------------------------------------------------------------------
+// Analysis
+// ---------------------------------------------------------------------
+
+/** Per-KRA attainment for a set of people, used for weak-area analysis. */
+export function useKraAttainment(employeeIds: string[] | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeIds?.length,
+    queryKey: ['kra_attainment', employeeIds, fy],
+    queryFn: () =>
+      unwrap<KraAttainmentRow[]>(
+        supabase.from('v_kra_attainment').select('*')
+          .in('employee_id', employeeIds!).eq('financial_year', fy)
+          .order('period_month'),
+      ),
+  })
+}
+
+export function useWeakAreas(employeeIds: string[] | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeIds?.length,
+    queryKey: ['weak_areas', employeeIds, fy],
+    queryFn: () =>
+      unwrap<WeakAreaRow[]>(
+        supabase.from('v_employee_weak_areas').select('*')
+          .in('employee_id', employeeIds!).eq('financial_year', fy),
+      ),
+  })
+}
+
+/** Every month for a set of people — the basis for exports and trends. */
+export function useTeamSubmissions(employeeIds: string[] | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeIds?.length,
+    queryKey: ['team_submissions', employeeIds, fy],
+    queryFn: () =>
+      unwrap<KpiSubmission[]>(
+        supabase.from('kpi_submissions').select('*')
+          .in('employee_id', employeeIds!).eq('financial_year', fy)
+          .order('period_month'),
+      ),
+  })
+}
+
+// ---------------------------------------------------------------------
+// HR admin
+// ---------------------------------------------------------------------
+export function useOrgKpiStatus(enabled: boolean, fy: string) {
+  return useQuery({
+    enabled,
+    queryKey: ['org_kpi_status', fy],
+    queryFn: async () => {
+      // 1,100+ active employees, so page through rather than truncate at
+      // PostgREST's default limit and quietly under-report.
+      const all: OrgKpiStatusRow[] = []
+      for (let from = 0; ; from += 1000) {
+        const page = await unwrap<OrgKpiStatusRow[]>(
+          supabase.from('v_org_kpi_status').select('*').range(from, from + 999),
+        )
+        all.push(...page)
+        if (page.length < 1000) break
+      }
+      return all
+    },
+  })
+}
+
+export function useManagerCompletion(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['manager_completion'],
+    queryFn: () =>
+      unwrap<ManagerCompletionRow[]>(
+        supabase.from('v_manager_completion').select('*')
+          .order('team_size', { ascending: false }),
+      ),
+  })
+}
+
+export function useManagerTat(enabled: boolean, fy: string) {
+  return useQuery({
+    enabled,
+    queryKey: ['manager_tat', fy],
+    queryFn: () =>
+      unwrap<ManagerTatRow[]>(
+        supabase.from('v_manager_tat').select('*').eq('financial_year', fy),
+      ),
+  })
+}
+
+// ---------------------------------------------------------------------
+// Removal requests
+// ---------------------------------------------------------------------
+export function useRemovalRequests(status?: 'pending') {
+  return useQuery({
+    queryKey: ['removal_requests', status],
+    queryFn: async () => {
+      let q = supabase.from('tm_removal_requests').select('*')
+        .order('created_at', { ascending: false })
+      if (status) q = q.eq('status', status)
+      const rows = await unwrap<TmRemovalRequest[]>(q)
+      if (rows.length === 0) return []
+
+      const ids = [...new Set(rows.flatMap(r => [r.employee_id, r.requested_by]))]
+      const people = await unwrap<Employee[]>(
+        supabase.from('employees').select('*').in('id', ids),
+      )
+      const byId = new Map(people.map(p => [p.id, p]))
+      return rows.map(r => ({
+        request: r,
+        employee: byId.get(r.employee_id),
+        requester: byId.get(r.requested_by),
+      }))
+    },
+  })
+}
+
+export function useRemovalAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      action: 'request' | 'review'
+      employeeId?: string
+      reason?: string
+      lastWorkingDay?: string | null
+      requestId?: string
+      approve?: boolean
+      note?: string
+    }) => {
+      if (args.action === 'request') {
+        const { error } = await supabase.rpc('request_tm_removal', {
+          p_employee_id: args.employeeId,
+          p_reason: args.reason ?? '',
+          p_last_working_day: args.lastWorkingDay ?? null,
+        })
+        if (error) throw new Error(friendlyError(error))
+      } else {
+        const { error } = await supabase.rpc('review_tm_removal', {
+          p_request_id: args.requestId,
+          p_approve: args.approve ?? false,
+          p_note: args.note ?? null,
+        })
+        if (error) throw new Error(friendlyError(error))
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['removal_requests'] })
+      qc.invalidateQueries({ queryKey: ['team'] })
+      qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
+    },
   })
 }
 

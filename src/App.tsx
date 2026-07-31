@@ -14,9 +14,14 @@ const KpiSetup          = lazy(() => import('@/pages/KpiSetup'))
 const MonthlySubmission = lazy(() => import('@/pages/MonthlySubmission'))
 const MyHistory         = lazy(() => import('@/pages/MyHistory'))
 const Team              = lazy(() => import('@/pages/Team'))
+const TeamAnalysis      = lazy(() => import('@/pages/TeamAnalysis'))
 const Approvals         = lazy(() => import('@/pages/Approvals'))
 const ScoreSubmission   = lazy(() => import('@/pages/ScoreSubmission'))
 const TeamMember        = lazy(() => import('@/pages/TeamMember'))
+const AdminOverview     = lazy(() => import('@/pages/admin/AdminOverview'))
+const AdminEmployees    = lazy(() => import('@/pages/admin/AdminEmployees'))
+const AdminReports      = lazy(() => import('@/pages/admin/AdminReports'))
+const AdminRequests     = lazy(() => import('@/pages/admin/AdminRequests'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
@@ -31,7 +36,7 @@ function RequireAuth({ children }: { children: JSX.Element }) {
     return (
       <div className="mx-auto max-w-md p-8 text-center">
         <h1 className="text-lg font-semibold">Account not linked</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-ink-600">
           Your login exists but is not attached to an employee record. Please
           contact HR.
         </p>
@@ -41,8 +46,7 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
   // Normally the initial password is the ecode itself, so a real one is
   // forced before anything else becomes reachable. Disabled during the
-  // testing phase via the force_password_change setting — flip that row
-  // to true before go-live and this gate comes back with no deploy.
+  // testing phase via the force_password_change setting.
   if (
     forcePasswordChange &&
     employee.must_change_password &&
@@ -59,6 +63,23 @@ function RequireManager({ children }: { children: JSX.Element }) {
   if (loading) return <PageLoader />
   if (!isManager && !isHrAdmin) return <Navigate to="/" replace />
   return children
+}
+
+function RequireHr({ children }: { children: JSX.Element }) {
+  const { isHrAdmin, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (!isHrAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+/**
+ * HR administers the system rather than being appraised by it, so they
+ * land on the admin overview instead of a personal dashboard.
+ */
+function HomeRoute() {
+  const { isHrAdmin, loading } = useAuth()
+  if (loading) return <PageLoader />
+  return isHrAdmin ? <Navigate to="/admin" replace /> : <Dashboard />
 }
 
 export default function App() {
@@ -82,44 +103,22 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<HomeRoute />} />
           <Route path="my-kpi" element={<MyKpi />} />
           <Route path="my-kpi/setup" element={<KpiSetup />} />
           <Route path="submission/:month" element={<MonthlySubmission />} />
           <Route path="history" element={<MyHistory />} />
 
-          <Route
-            path="team"
-            element={
-              <RequireManager>
-                <Team />
-              </RequireManager>
-            }
-          />
-          <Route
-            path="team/:employeeId"
-            element={
-              <RequireManager>
-                <TeamMember />
-              </RequireManager>
-            }
-          />
-          <Route
-            path="approvals"
-            element={
-              <RequireManager>
-                <Approvals />
-              </RequireManager>
-            }
-          />
-          <Route
-            path="score/:submissionId"
-            element={
-              <RequireManager>
-                <ScoreSubmission />
-              </RequireManager>
-            }
-          />
+          <Route path="team" element={<RequireManager><Team /></RequireManager>} />
+          <Route path="team/analysis" element={<RequireManager><TeamAnalysis /></RequireManager>} />
+          <Route path="team/:employeeId" element={<RequireManager><TeamMember /></RequireManager>} />
+          <Route path="approvals" element={<RequireManager><Approvals /></RequireManager>} />
+          <Route path="score/:submissionId" element={<RequireManager><ScoreSubmission /></RequireManager>} />
+
+          <Route path="admin" element={<RequireHr><AdminOverview /></RequireHr>} />
+          <Route path="admin/employees" element={<RequireHr><AdminEmployees /></RequireHr>} />
+          <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
+          <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

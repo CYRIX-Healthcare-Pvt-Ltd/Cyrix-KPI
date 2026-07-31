@@ -1,23 +1,32 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ClipboardList, Users, AlertCircle, ArrowRight, CheckSquare, TrendingUp,
+  ClipboardList, Users, AlertCircle, ArrowRight, CheckSquare, TrendingUp, Target,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
-  usePendingApprovals, currentFy,
+  usePendingApprovals, useWeakAreas, useKraAttainment, useSubmissionHistory,
+  currentFy,
 } from '@/lib/queries'
-import { currentReportingMonth, monthLabel } from '@/lib/fy'
+import { currentReportingMonth, monthLabel, fyMonths } from '@/lib/fy'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
+import { ScoreHeader, TrendChip, WeakAreas, KraBars } from '@/components/analysis'
+
+const SCORED = new Set(['scored', 'finalized'])
 
 export default function Dashboard() {
   const { employee, isManager, isHrAdmin } = useAuth()
   const fy = currentFy()
   const month = currentReportingMonth()
+  const myIds = useMemo(() => (employee ? [employee.id] : undefined), [employee])
 
   const { data: assignment, isLoading: aLoading } = useMyAssignment(employee?.id, fy)
   const { data: submission } = useSubmission(employee?.id, month)
   const { data: annual } = useAnnualSummary(employee?.id, fy)
+  const { data: history } = useSubmissionHistory(employee?.id, fy)
+  const { data: weak } = useWeakAreas(myIds, fy)
+  const { data: attainment } = useKraAttainment(myIds, fy)
   const { data: teamData } = useTeamMonth(
     isManager || isHrAdmin ? employee?.id : undefined, month, fy,
   )
@@ -25,32 +34,38 @@ export default function Dashboard() {
     isManager || isHrAdmin ? employee?.id : undefined, fy,
   )
 
+  const series = useMemo(() => {
+    const byMonth = new Map(
+      (history ?? []).filter(s => SCORED.has(s.status)).map(s => [s.period_month, s]),
+    )
+    return fyMonths(fy).map(m => byMonth.get(m)?.final_total_score ?? null)
+  }, [history, fy])
+
   if (aLoading) return <PageLoader />
 
   const kpiStatus = assignment?.assignment?.status ?? null
   const sub = submission?.submission ?? null
 
-  const awaitingMe = (teamData?.submissions ?? []).filter(
-    s => s.status === 'submitted' || s.status === 'scored',
-  ).length
+  const awaitingMe = (teamData?.submissions ?? []).filter(s => s.status === 'submitted').length
   const notSubmitted = (teamData?.team.length ?? 0) -
     (teamData?.submissions.filter(s => s.status !== 'draft').length ?? 0)
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">
-          Hello, {employee?.full_name.split(' ')[0]}
-        </h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          FY {fy} · reporting on {monthLabel(month)}
-        </p>
-      </div>
+      <ScoreHeader
+        title={`Hello, ${employee?.full_name.split(' ')[0]}`}
+        subtitle={`FY ${fy} · reporting on ${monthLabel(month)}`}
+        score={annual?.avg_total_score}
+        scoreLabel="My year average"
+      >
+        {annual?.avg_total_score !== null && annual?.avg_total_score !== undefined && (
+          <TrendChip scores={series} />
+        )}
+      </ScoreHeader>
 
-      {/* ---- things that need action ---- */}
       {kpiStatus === null && (
         <Alert kind="warning" title="Your KPI for this year is not set up yet">
-          <p>Upload your KPI template to get started. Your manager approves it before
+          <p>Define your Job Role KRAs to get started. Your manager approves them before
             monthly submissions can begin.</p>
           <Link to="/my-kpi/setup" className="btn-primary mt-3">
             Set up my KPI <ArrowRight className="h-4 w-4" />
@@ -82,7 +97,6 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {/* ---- my numbers ---- */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label={`${monthLabel(month)} status`}
@@ -94,17 +108,16 @@ export default function Dashboard() {
           sub={sub?.final_total_score == null ? 'Self assessment only' : 'Final, out of 100'}
         />
         <StatTile
-          label={`FY ${fy} average`}
-          value={<ScorePill value={annual?.avg_total_score} size="lg" />}
-          sub={`${annual?.months_scored ?? 0} month(s) scored`}
-          tone="brand"
+          label="Months scored"
+          value={annual?.months_scored ?? 0}
+          sub="of 12"
         />
         <StatTile
           label="Job role / core values"
           value={
             <span className="text-base">
               {annual?.avg_job_role_score?.toFixed(1) ?? '—'}
-              <span className="text-slate-400"> / </span>
+              <span className="text-ink-400"> / </span>
               {annual?.avg_core_values_score?.toFixed(1) ?? '—'}
             </span>
           }
@@ -112,7 +125,34 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* ---- quick actions ---- */}
+      {/* ---- what to work on ---- */}
+      {(annual?.months_scored ?? 0) > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="card p-4">
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
+              <Target className="h-4 w-4 text-cyrixRed-600" /> What to improve
+            </h3>
+            <p className="mb-3 text-xs text-ink-500">
+              Areas averaging below Good against their own weightage.
+            </p>
+            <WeakAreas
+              areas={weak ?? []}
+              emptyMessage="Every area is at Good or better — keep it up."
+            />
+          </div>
+
+          <div className="card p-4">
+            <h3 className="mb-1 text-sm font-semibold text-ink-800">
+              My KRAs by attainment
+            </h3>
+            <p className="mb-4 text-xs text-ink-500">
+              How much of each KRA's weightage you are earning on average.
+            </p>
+            <KraBars rows={attainment ?? []} />
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <ActionCard
           to={`/submission/${month}`}
@@ -135,10 +175,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* ---- manager block ---- */}
       {(isManager || isHrAdmin) && (
         <div>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-800">
             <Users className="h-4 w-4" /> My team
           </h2>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -148,10 +187,7 @@ export default function Dashboard() {
               value={awaitingMe}
               sub={`for ${monthLabel(month)}`}
             />
-            <StatTile
-              label="KPIs to approve"
-              value={approvals?.length ?? 0}
-            />
+            <StatTile label="KPIs to approve" value={approvals?.length ?? 0} />
           </div>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -197,18 +233,18 @@ function ActionCard({
   highlight?: boolean
 }) {
   const inner = (
-    <>
-      <div className="flex items-start gap-3">
-        <div className={`rounded-lg p-2 ${highlight ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-slate-900">{title}</p>
-          <p className="mt-0.5 text-sm text-slate-500">{body}</p>
-        </div>
-        {!disabled && <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />}
+    <div className="flex items-start gap-3">
+      <div className={`rounded-lg p-2 ${
+        highlight ? 'bg-cyrixBlue-100 text-cyrixBlue-800' : 'bg-ink-100 text-ink-500'
+      }`}>
+        <Icon className="h-5 w-5" />
       </div>
-    </>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-ink-900">{title}</p>
+        <p className="mt-0.5 text-sm text-ink-500">{body}</p>
+      </div>
+      {!disabled && <ArrowRight className="h-4 w-4 shrink-0 text-ink-400" />}
+    </div>
   )
 
   if (disabled) {
@@ -225,8 +261,8 @@ function ActionCard({
   return (
     <Link
       to={to}
-      className={`card p-4 transition-colors hover:border-brand-300 hover:bg-brand-50/40 ${
-        highlight ? 'border-brand-200' : ''
+      className={`card p-4 transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40 ${
+        highlight ? 'border-cyrixBlue-200' : ''
       }`}
     >
       {inner}

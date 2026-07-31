@@ -1,27 +1,34 @@
 import { useState, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save } from 'lucide-react'
+import { Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save, Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSaveAssignmentRows, useAssignmentAction,
-  useScoringRules, useTemplatesForRole, currentFy,
+  useScoringRules, useTemplatesForRole, useCoreValues, currentFy,
 } from '@/lib/queries'
 import type { ParseResult } from '@/lib/excel'
-import type { KpiRowDefinition, Section } from '@/types/db'
+import type { KpiRowDefinition } from '@/types/db'
 import type { ScoringRule } from '@/lib/scoring'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 
+/**
+ * Team members define their Job Role rows only — the 20% core values
+ * block is identical company-wide and is attached by the system, so it is
+ * shown here for reference but is not editable.
+ */
+const JOB_ROLE_TOTAL = 80
+
 type Draft = KpiRowDefinition & { _key: string; _inferred?: boolean }
 
-const blankRow = (section: Section, sortOrder: number): Draft => ({
+const blankRow = (sortOrder: number): Draft => ({
   _key: crypto.randomUUID(),
-  section,
+  section: 'job_role',
   kra: '',
   kpi_description: '',
   weightage: 0,
   target_value: null,
   target_unit: null,
-  scoring_rule: section === 'core_values' ? 'rating_scale' : 'higher_capped',
+  scoring_rule: 'higher_capped',
   rule_params: {},
   sort_order: sortOrder,
 })
@@ -34,6 +41,7 @@ export default function KpiSetup() {
 
   const { data, isLoading } = useMyAssignment(employee?.id, fy)
   const { data: rules } = useScoringRules()
+  const { data: coreValues } = useCoreValues()
   const { data: roleTemplate } = useTemplatesForRole(employee?.job_role_id, fy)
   const saveRows = useSaveAssignmentRows()
   const action = useAssignmentAction()
@@ -46,43 +54,42 @@ export default function KpiSetup() {
   const assignment = data?.assignment ?? null
   const locked = assignment?.status === 'pending_approval' || assignment?.status === 'active'
 
-  // Server rows become the working draft the first time we see them.
+  // Only job role rows are editable; core values are filtered out entirely.
   const working: Draft[] = useMemo(() => {
     if (rows) return rows
-    return (data?.items ?? []).map(i => ({ ...i, _key: i.id }))
+    return (data?.items ?? [])
+      .filter(i => i.section === 'job_role')
+      .map(i => ({ ...i, _key: i.id }))
   }, [rows, data])
 
-  const jobTotal = working.filter(r => r.section === 'job_role')
-    .reduce((a, b) => a + (Number(b.weightage) || 0), 0)
-  const coreTotal = working.filter(r => r.section === 'core_values')
-    .reduce((a, b) => a + (Number(b.weightage) || 0), 0)
-  const valid = jobTotal === 80 && coreTotal === 20 && working.length > 0 &&
+  const jobTotal = working.reduce((a, b) => a + (Number(b.weightage) || 0), 0)
+  const valid =
+    jobTotal === JOB_ROLE_TOTAL &&
+    working.length > 0 &&
     working.every(r => r.kra.trim() !== '')
 
   const update = (key: string, patch: Partial<Draft>) =>
     setRows(working.map(r => (r._key === key ? { ...r, ...patch } : r)))
-
   const remove = (key: string) => setRows(working.filter(r => r._key !== key))
-
-  const add = (section: Section) =>
-    setRows([...working, blankRow(section, working.length + 1)])
+  const add = () => setRows([...working, blankRow(working.length + 1)])
 
   const onFile = async (file: File) => {
     setError(null); setNotice(null)
     try {
-      // Loaded on demand — the xlsx parser is large and only this screen needs it.
       const { parseKpiWorkbook } = await import('@/lib/excel')
       const buf = await file.arrayBuffer()
       const parsed = parseKpiWorkbook(buf)
       setParseInfo(parsed)
 
-      if (parsed.rows.length === 0) {
-        setError(parsed.errors[0] ?? 'No KPI rows were found in that file.')
+      const jobRows = parsed.rows.filter(r => r.section === 'job_role')
+      if (jobRows.length === 0) {
+        setError(parsed.errors[0] ?? 'No Job Role rows were found in that file.')
         return
       }
-      setRows(parsed.rows.map(r => ({
+
+      setRows(jobRows.map(r => ({
         _key: crypto.randomUUID(),
-        section: r.section,
+        section: 'job_role' as const,
         kra: r.kra,
         kpi_description: r.kpi_description,
         weightage: r.weightage,
@@ -93,22 +100,31 @@ export default function KpiSetup() {
         sort_order: r.sort_order,
         _inferred: r.rule_inferred,
       })))
-      setNotice(`Read ${parsed.rows.length} KPI rows from sheet “${parsed.sheetName}”. Check them below before saving.`)
+
+      const skipped = parsed.rows.length - jobRows.length
+      setNotice(
+        `Read ${jobRows.length} Job Role row(s) from sheet “${parsed.sheetName}”.` +
+        (skipped > 0
+          ? ` The ${skipped} core values row(s) were ignored — those are standard for everyone.`
+          : ''),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.')
     }
   }
 
   const loadRoleTemplate = () => {
-    if (!roleTemplate?.items.length) return
+    const jobRows = (roleTemplate?.items ?? []).filter(i => i.section === 'job_role')
+    if (jobRows.length === 0) return
     setParseInfo(null)
-    setRows(roleTemplate.items.map(i => ({
+    setRows(jobRows.map(i => ({
       _key: crypto.randomUUID(),
-      section: i.section, kra: i.kra, kpi_description: i.kpi_description,
+      section: 'job_role' as const,
+      kra: i.kra, kpi_description: i.kpi_description,
       weightage: i.weightage, target_value: i.target_value, target_unit: i.target_unit,
       scoring_rule: i.scoring_rule, rule_params: i.rule_params, sort_order: i.sort_order,
     })))
-    setNotice(`Loaded the standard “${roleTemplate.template?.name}” template. Adjust anything that differs for you.`)
+    setNotice(`Loaded the standard “${roleTemplate?.template?.name}” rows. Adjust anything that differs for you.`)
   }
 
   const persist = async () => {
@@ -152,7 +168,7 @@ export default function KpiSetup() {
   if (locked) {
     return (
       <div className="space-y-4">
-        <Link to="/my-kpi" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/my-kpi" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
           <ArrowLeft className="h-4 w-4" /> Back to my KPI
         </Link>
         <Alert kind="info" title={
@@ -173,55 +189,51 @@ export default function KpiSetup() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/my-kpi" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/my-kpi" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
           <ArrowLeft className="h-4 w-4" /> Back to my KPI
         </Link>
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">Set up my KPI</h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          FY {fy} · job role must total 80%, core values 20%
+        <h1 className="mt-2 text-xl font-semibold text-ink-900">Set up my KPI</h1>
+        <p className="mt-0.5 text-sm text-ink-500">
+          FY {fy} · define your Job Role KRAs, totalling {JOB_ROLE_TOTAL}%
         </p>
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+      {parseInfo?.warnings.map((w, i) => <Alert key={i} kind="warning">{w}</Alert>)}
 
-      {parseInfo?.warnings.map((w, i) => (
-        <Alert key={i} kind="warning">{w}</Alert>
-      ))}
-
-      {/* ---- starting points ---- */}
       {working.length === 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
           <button
             onClick={() => fileRef.current?.click()}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40"
           >
-            <Upload className="h-7 w-7 text-brand-600" />
-            <p className="font-medium text-slate-900">Upload my Excel</p>
-            <p className="text-xs text-slate-500">
-              Reads the KPI template, including which rows penalise going over target
+            <Upload className="h-7 w-7 text-cyrixBlue-700" />
+            <p className="font-medium text-ink-900">Upload my Excel</p>
+            <p className="text-xs text-ink-500">
+              Reads your KPI sheet, including which rows penalise going over target
             </p>
           </button>
 
           <button
             onClick={loadRoleTemplate}
-            disabled={!roleTemplate?.items.length}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40 disabled:opacity-50"
+            disabled={!(roleTemplate?.items ?? []).some(i => i.section === 'job_role')}
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40 disabled:opacity-50"
           >
-            <FileSpreadsheet className="h-7 w-7 text-slate-500" />
-            <p className="font-medium text-slate-900">Use my role's template</p>
-            <p className="text-xs text-slate-500">
+            <FileSpreadsheet className="h-7 w-7 text-ink-500" />
+            <p className="font-medium text-ink-900">Use my role's template</p>
+            <p className="text-xs text-ink-500">
               {roleTemplate?.template?.name ?? 'No template for your job role yet'}
             </p>
           </button>
 
           <button
-            onClick={() => setRows([blankRow('job_role', 1), blankRow('core_values', 2)])}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+            onClick={() => setRows([blankRow(1)])}
+            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-cyrixBlue-300 hover:bg-cyrixBlue-50/40"
           >
-            <Plus className="h-7 w-7 text-slate-500" />
-            <p className="font-medium text-slate-900">Start from blank</p>
-            <p className="text-xs text-slate-500">Build the rows by hand</p>
+            <Plus className="h-7 w-7 text-ink-500" />
+            <p className="font-medium text-ink-900">Start from blank</p>
+            <p className="text-xs text-ink-500">Build the rows by hand</p>
           </button>
         </div>
       )}
@@ -238,55 +250,74 @@ export default function KpiSetup() {
         }}
       />
 
-      {/* ---- the grid ---- */}
       {working.length > 0 && (
         <>
-          {(['job_role', 'core_values'] as Section[]).map(section => {
-            const sectionRows = working.filter(r => r.section === section)
-            const total = section === 'job_role' ? jobTotal : coreTotal
-            const expected = section === 'job_role' ? 80 : 20
+          <div className="card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+              <h3 className="text-sm font-semibold text-ink-800">
+                Job Role <span className="font-normal text-ink-500">— {JOB_ROLE_TOTAL}%</span>
+              </h3>
+              <span className={`badge ${
+                jobTotal === JOB_ROLE_TOTAL
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-cyrixRed-100 text-cyrixRed-800'
+              }`}>
+                {jobTotal}% of {JOB_ROLE_TOTAL}%
+              </span>
+            </div>
 
-            return (
-              <div key={section} className="card overflow-hidden">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-                  <h3 className="text-sm font-semibold text-slate-800">
-                    {section === 'job_role' ? 'Job Role' : 'Alignment To Core Values'}
-                    <span className="font-normal text-slate-500"> — {expected}%</span>
-                  </h3>
-                  <span className={`badge ${
-                    total === expected ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {total}% of {expected}%
-                  </span>
-                </div>
+            <div className="divide-y divide-ink-100">
+              {working.map(row => (
+                <RowEditor
+                  key={row._key}
+                  row={row}
+                  rules={(rules ?? []).filter(r => r.code !== 'rating_scale')}
+                  onChange={patch => update(row._key, patch)}
+                  onRemove={() => remove(row._key)}
+                />
+              ))}
+            </div>
 
-                <div className="divide-y divide-slate-100">
-                  {sectionRows.map(row => (
-                    <RowEditor
-                      key={row._key}
-                      row={row}
-                      rules={rules ?? []}
-                      onChange={patch => update(row._key, patch)}
-                      onRemove={() => remove(row._key)}
-                    />
-                  ))}
-                </div>
+            <button
+              onClick={add}
+              className="flex w-full items-center justify-center gap-1.5 border-t border-ink-100 py-2.5 text-sm font-medium text-cyrixBlue-800 hover:bg-cyrixBlue-50"
+            >
+              <Plus className="h-4 w-4" /> Add a row
+            </button>
+          </div>
 
-                <button
-                  onClick={() => add(section)}
-                  className="flex w-full items-center justify-center gap-1.5 border-t border-slate-100 py-2.5 text-sm font-medium text-brand-700 hover:bg-brand-50"
-                >
-                  <Plus className="h-4 w-4" /> Add a row
-                </button>
-              </div>
-            )
-          })}
+          {/* Read-only: identical for everyone, so nobody sets their own. */}
+          <div className="card overflow-hidden opacity-90">
+            <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
+                <Lock className="h-3.5 w-3.5 text-ink-400" />
+                Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
+              </h3>
+              <span className="badge bg-ink-100 text-ink-600">Standard for everyone</span>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-sm text-ink-500">
+                Rated each month against the five company core values. Nothing to set up here.
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {(coreValues ?? []).map(cv => (
+                  <li key={cv.id} className="badge bg-ink-100 text-ink-700">{cv.name}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
 
           {!valid && (
             <Alert kind="warning" title="Not ready to submit yet">
               <ul className="list-inside list-disc space-y-0.5">
-                {jobTotal !== 80 && <li>Job role weightages total {jobTotal}%, they must total 80%.</li>}
-                {coreTotal !== 20 && <li>Core values weightages total {coreTotal}%, they must total 20%.</li>}
+                {jobTotal !== JOB_ROLE_TOTAL && (
+                  <li>
+                    Job Role weightages total {jobTotal}%, they must total {JOB_ROLE_TOTAL}%
+                    {jobTotal > JOB_ROLE_TOTAL
+                      ? ` — remove ${jobTotal - JOB_ROLE_TOTAL}%.`
+                      : ` — add ${JOB_ROLE_TOTAL - jobTotal}%.`}
+                  </li>
+                )}
                 {working.some(r => !r.kra.trim()) && <li>Every row needs a KRA name.</li>}
               </ul>
             </Alert>
@@ -300,11 +331,7 @@ export default function KpiSetup() {
             <button onClick={onSaveDraft} disabled={busy} className="btn-secondary">
               <Save className="h-4 w-4" /> Save draft
             </button>
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
-              className="btn-secondary"
-            >
+            <button onClick={() => fileRef.current?.click()} disabled={busy} className="btn-secondary">
               <Upload className="h-4 w-4" /> Replace from Excel
             </button>
           </div>
@@ -373,9 +400,7 @@ function RowEditor({
           <label className="label text-xs">
             How is it scored?
             {row._inferred && (
-              <span className="ml-2 font-normal text-amber-700">
-                — guessed, please confirm
-              </span>
+              <span className="ml-2 font-normal text-amber-700">— guessed, please confirm</span>
             )}
           </label>
           <select
@@ -390,13 +415,10 @@ function RowEditor({
               <option key={r.code} value={r.code}>{r.label}</option>
             ))}
           </select>
-          {ruleMeta && (
-            <p className="mt-1 text-xs text-slate-500">{ruleMeta.description}</p>
-          )}
+          {ruleMeta && <p className="mt-1 text-xs text-ink-500">{ruleMeta.description}</p>}
         </div>
       </div>
 
-      {/* rule-specific knobs */}
       {row.scoring_rule === 'higher_uncapped' && (
         <div className="mt-3 max-w-xs">
           <label className="label text-xs">Ceiling (× weightage, blank = none)</label>
@@ -417,10 +439,10 @@ function RowEditor({
 
       {row.scoring_rule === 'lower_linear' && (
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-ink-700">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-slate-300"
+              className="h-4 w-4 rounded border-ink-300"
               checked={!!row.rule_params.allow_negative}
               onChange={e => onChange({
                 rule_params: { ...row.rule_params, allow_negative: e.target.checked },
@@ -450,7 +472,7 @@ function RowEditor({
 
       <button
         onClick={onRemove}
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
+        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-cyrixRed-700 hover:text-cyrixRed-800"
       >
         <Trash2 className="h-3.5 w-3.5" /> Remove this row
       </button>

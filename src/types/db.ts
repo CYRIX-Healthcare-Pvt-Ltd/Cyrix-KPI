@@ -167,6 +167,87 @@ export interface AnnualSummary {
   highest_month: number | null
 }
 
+export type RemovalStatus = 'pending' | 'approved' | 'rejected'
+
+export interface TmRemovalRequest {
+  id: string
+  employee_id: string
+  requested_by: string
+  reason: string
+  last_working_day: string | null
+  status: RemovalStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_note: string | null
+  created_at: string
+}
+
+export interface OrgKpiStatusRow {
+  employee_id: string
+  ecode: string
+  full_name: string
+  designation: string | null
+  department: string | null
+  location: string | null
+  reporting_manager_id: string | null
+  manager_ecode: string | null
+  manager_name: string | null
+  financial_year: string | null
+  kpi_status: AssignmentStatus | 'not_set_up'
+  approved_at: string | null
+  months_scored: number
+  months_awaiting_manager: number
+  avg_score: number | null
+}
+
+export interface ManagerCompletionRow {
+  manager_id: string
+  manager_ecode: string
+  manager_name: string
+  department: string | null
+  team_size: number
+  kpi_approved: number
+  kpi_awaiting_approval: number
+  kpi_not_set_up: number
+  months_awaiting_score: number | null
+  team_avg_score: number | null
+}
+
+export interface ManagerTatRow {
+  manager_id: string | null
+  manager_ecode: string | null
+  manager_name: string | null
+  financial_year: string
+  months_handled: number
+  avg_days_to_score: number | null
+  avg_days_to_finalize: number | null
+  still_awaiting_score: number
+  oldest_pending_days: number | null
+}
+
+export interface KraAttainmentRow {
+  employee_id: string
+  financial_year: string
+  period_month: string
+  status: SubmissionStatus
+  section: Section
+  kra: string
+  weightage: number
+  score: number | null
+  attainment_pct: number | null
+  band: string | null
+}
+
+export interface WeakAreaRow {
+  employee_id: string
+  financial_year: string
+  section: Section
+  kra: string
+  months: number
+  avg_attainment_pct: number | null
+  band: string | null
+}
+
 export interface TeamStatusRow {
   employee_id: string
   ecode: string
