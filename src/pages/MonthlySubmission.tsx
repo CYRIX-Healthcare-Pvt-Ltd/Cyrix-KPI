@@ -1,0 +1,395 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { ArrowLeft, Send, Save, Lock } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
+import {
+  useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
+  useSubmissionAction, useCoreValues, useMyAssignment, currentFy,
+} from '@/lib/queries'
+import { monthLabel } from '@/lib/fy'
+import {
+  calcKpiScore, averageCoreValueRatings, RATING_SCALE, type ScoringRule, type RuleParams,
+} from '@/lib/scoring'
+import {
+  Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
+} from '@/components/ui'
+import type { KpiSubmissionItem } from '@/types/db'
+
+export default function MonthlySubmission() {
+  const { month = '' } = useParams()
+  const { employee } = useAuth()
+  const fy = currentFy()
+
+  const { data, isLoading, refetch } = useSubmission(employee?.id, month)
+  const { data: assignmentData } = useMyAssignment(employee?.id, fy)
+  const { data: coreValues } = useCoreValues()
+  const openSub = useOpenSubmission()
+  const saveItems = useSaveItemValues()
+  const saveRatings = useSaveCoreRatings()
+  const action = useSubmissionAction()
+
+  const [achieved, setAchieved] = useState<Record<string, string>>({})
+  const [ratings, setRatings] = useState<Record<string, string>>({})
+  const [remarks, setRemarks] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const submission = data?.submission ?? null
+  const items = data?.items ?? []
+  const editable = submission?.status === 'draft' || submission?.status === 'returned'
+
+  // Seed local state once the server data lands.
+  useEffect(() => {
+    if (!data?.submission) return
+    setAchieved(Object.fromEntries(
+      data.items.map(i => [i.id, i.self_achieved?.toString() ?? '']),
+    ))
+    setRatings(Object.fromEntries(
+      data.ratings.map(r => [r.id, r.self_rating ?? '']),
+    ))
+    setRemarks(data.submission.employee_remarks ?? '')
+  }, [data])
+
+  // Core-value ratings roll into a 0–100 figure that scores the 20% row.
+  const coreAverage = useMemo(() => {
+    const list = (data?.ratings ?? []).map(r => ratings[r.id] || null)
+    return averageCoreValueRatings(list)
+  }, [ratings, data])
+
+  const liveScore = (item: KpiSubmissionItem) => {
+    const raw = item.section === 'core_values'
+      ? coreAverage
+      : achieved[item.id] === '' || achieved[item.id] === undefined
+      ? null
+      : Number(achieved[item.id])
+    return calcKpiScore(
+      item.scoring_rule as ScoringRule,
+      item.weightage,
+      item.target_value,
+      raw,
+      item.rule_params as RuleParams,
+    )
+  }
+
+  const jobRows = items.filter(i => i.section === 'job_role')
+  const coreRows = items.filter(i => i.section === 'core_values')
+  const jobTotal = jobRows.reduce((a, i) => a + liveScore(i), 0)
+  const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
+
+  const save = async () => {
+    setError(null)
+    try {
+      await saveItems.mutateAsync({
+        role: 'self',
+        updates: items
+          .filter(i => i.section !== 'core_values')
+          .map(i => ({
+            id: i.id,
+            achieved: achieved[i.id] === '' || achieved[i.id] === undefined
+              ? null : Number(achieved[i.id]),
+          })),
+      })
+      await saveRatings.mutateAsync({
+        role: 'self',
+        updates: (data?.ratings ?? []).map(r => ({
+          id: r.id, rating: ratings[r.id] || null,
+        })),
+      })
+      if (submission && remarks !== (submission.employee_remarks ?? '')) {
+        await supabase.from('kpi_submissions')
+          .update({ employee_remarks: remarks }).eq('id', submission.id)
+      }
+      await refetch()
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save.')
+      return false
+    }
+  }
+
+  const onSaveDraft = async () => {
+    if (await save()) setNotice('Saved. You can come back and finish later.')
+  }
+
+  const onSubmit = async () => {
+    if (!submission) return
+    setNotice(null)
+    if (!(await save())) return
+    try {
+      await action.mutateAsync({ action: 'submit_self', submissionId: submission.id })
+      setNotice('Submitted to your manager.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit.')
+    }
+  }
+
+  if (isLoading) return <PageLoader />
+
+  // ---- nothing opened yet ----
+  if (!submission) {
+    const kpiActive = assignmentData?.assignment?.status === 'active'
+    return (
+      <div className="space-y-4">
+        <BackLink />
+        {!kpiActive ? (
+          <Alert kind="warning" title="Your KPI is not approved yet">
+            You can start monthly assessments once your manager has approved your KPI
+            for FY {fy}. <Link to="/my-kpi" className="font-medium underline">View my KPI</Link>
+          </Alert>
+        ) : (
+          <EmptyState title={`${monthLabel(month)} has not been started`}>
+            <p>Open the month to enter what you achieved.</p>
+            <button
+              className="btn-primary mt-4"
+              disabled={openSub.isPending}
+              onClick={() =>
+                employee && openSub.mutateAsync({ employeeId: employee.id, month })
+                  .catch(e => setError(e.message))
+              }
+            >
+              {openSub.isPending && <Spinner className="h-4 w-4" />}
+              Start {monthLabel(month)}
+            </button>
+            {error && <div className="mt-3"><Alert kind="error">{error}</Alert></div>}
+          </EmptyState>
+        )}
+      </div>
+    )
+  }
+
+  const busy = saveItems.isPending || saveRatings.isPending || action.isPending
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <BackLink />
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold text-slate-900">
+            {monthLabel(month)} assessment
+          </h1>
+          <StatusBadge status={submission.status} />
+        </div>
+      </div>
+
+      {error && <Alert kind="error">{error}</Alert>}
+      {notice && <Alert kind="success">{notice}</Alert>}
+
+      {submission.status === 'returned' && (
+        <Alert kind="warning" title="Your manager sent this back">
+          <p className="italic">“{submission.return_reason}”</p>
+        </Alert>
+      )}
+
+      {!editable && submission.status !== 'returned' && (
+        <Alert kind="info" title="This month is read-only">
+          <span className="inline-flex items-center gap-1.5">
+            <Lock className="h-3.5 w-3.5" />
+            {submission.status === 'submitted'
+              ? 'It is with your manager for scoring.'
+              : submission.status === 'scored'
+              ? 'Your manager has scored it.'
+              : 'This month is final.'}
+          </span>
+        </Alert>
+      )}
+
+      {/* ---- running totals ---- */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatTile label="Job role" value={jobTotal.toFixed(2)} sub="out of 80" />
+        <StatTile label="Core values" value={coreTotal.toFixed(2)} sub="out of 20" />
+        <StatTile
+          label={editable ? 'My total so far' : 'My total'}
+          value={<ScorePill value={jobTotal + coreTotal} size="lg" />}
+          sub="out of 100"
+          tone="brand"
+        />
+      </div>
+
+      {submission.status === 'scored' || submission.status === 'finalized' ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatTile
+            label="Manager's total"
+            value={<ScorePill value={submission.mgr_total_score} size="lg" />}
+          />
+          <StatTile
+            label="Final score"
+            value={<ScorePill value={submission.final_total_score} size="lg" />}
+            sub="average of self and manager"
+            tone="brand"
+          />
+        </div>
+      ) : null}
+
+      {/* ---- job role rows ---- */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-slate-800">
+            Job Role <span className="font-normal text-slate-500">— 80%</span>
+          </h3>
+          <ScorePill value={jobTotal} size="sm" />
+        </div>
+        <div className="divide-y divide-slate-100">
+          {jobRows.map(item => (
+            <div key={item.id} className="p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900">{item.kra}</p>
+                  {item.kpi_description && (
+                    <p className="mt-0.5 text-sm text-slate-500">{item.kpi_description}</p>
+                  )}
+                </div>
+                <span className="badge bg-slate-100 text-slate-600">
+                  {item.weightage}%
+                </span>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="label text-xs">Target</label>
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm tabular-nums text-slate-700">
+                    {item.target_value ?? '—'}{item.target_unit === '%' ? '%' : ''}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="label text-xs" htmlFor={`ach-${item.id}`}>
+                    Achieved
+                  </label>
+                  <input
+                    id={`ach-${item.id}`}
+                    type="number" inputMode="decimal" step="any"
+                    className="input"
+                    disabled={!editable}
+                    value={achieved[item.id] ?? ''}
+                    onChange={e => setAchieved({ ...achieved, [item.id]: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="label text-xs">My score</label>
+                  <div className="py-1.5">
+                    <ScorePill value={liveScore(item)} />
+                    <span className="ml-1.5 text-xs text-slate-400">
+                      / {item.weightage}
+                    </span>
+                  </div>
+                </div>
+
+                {(submission.status === 'scored' || submission.status === 'finalized') && (
+                  <div>
+                    <label className="label text-xs">Manager</label>
+                    <div className="py-1.5">
+                      <ScorePill value={item.manager_score} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <RuleHint rule={item.scoring_rule as ScoringRule} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ---- core values ---- */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-slate-800">
+            Alignment To Core Values <span className="font-normal text-slate-500">— 20%</span>
+          </h3>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            {coreAverage !== null && <span>avg {coreAverage.toFixed(0)}/100</span>}
+            <ScorePill value={coreTotal} size="sm" />
+          </div>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {(data?.ratings ?? []).map(rating => {
+            const def = coreValues?.find(c => c.id === rating.core_value_id)
+            return (
+              <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900">{def?.name ?? 'Core value'}</p>
+                  {def?.description && (
+                    <p className="mt-0.5 text-sm text-slate-500">{def.description}</p>
+                  )}
+                </div>
+                <div className="mt-2 sm:mt-0 sm:w-48">
+                  <select
+                    className="input"
+                    disabled={!editable}
+                    value={ratings[rating.id] ?? ''}
+                    onChange={e => setRatings({ ...ratings, [rating.id]: e.target.value })}
+                  >
+                    <option value="">Not rated</option>
+                    {RATING_SCALE.map(r => (
+                      <option key={r.label} value={r.label}>
+                        {r.label} ({r.points})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ---- remarks ---- */}
+      <div className="card p-4">
+        <label className="label" htmlFor="remarks">Anything to add? (optional)</label>
+        <textarea
+          id="remarks"
+          rows={3}
+          className="input"
+          disabled={!editable}
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          placeholder="Context your manager should know when scoring this month"
+        />
+        {submission.manager_remarks && (
+          <div className="mt-4 rounded-lg bg-slate-50 p-3">
+            <p className="text-xs font-medium text-slate-500">Manager's remarks</p>
+            <p className="mt-1 text-sm text-slate-700">{submission.manager_remarks}</p>
+          </div>
+        )}
+      </div>
+
+      {editable && (
+        <div className="sticky bottom-16 flex flex-wrap gap-2 md:bottom-0">
+          <button onClick={onSubmit} disabled={busy} className="btn-primary">
+            {busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            Submit to manager
+          </button>
+          <button onClick={onSaveDraft} disabled={busy} className="btn-secondary">
+            <Save className="h-4 w-4" /> Save draft
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BackLink() {
+  return (
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+      <ArrowLeft className="h-4 w-4" /> Back to dashboard
+    </Link>
+  )
+}
+
+/** Tells the person entering a number which direction is good. */
+function RuleHint({ rule }: { rule: ScoringRule }) {
+  const hint = {
+    higher_capped: 'Higher is better. Hitting the target earns the full weightage; going beyond adds nothing more.',
+    higher_uncapped: 'Higher is better. Exceeding the target can earn more than the weightage.',
+    lower_penalty: 'Lower is better. Going over the target reduces this score.',
+    lower_linear: 'Lower is better. Every unit over the target cuts into this score.',
+    banded: 'Scored in bands against the target.',
+    boolean: 'Enter 1 if done, 0 if not.',
+    rating_scale: 'Scored from the core value ratings.',
+  }[rule]
+
+  return <p className="mt-2 text-xs text-slate-400">{hint}</p>
+}

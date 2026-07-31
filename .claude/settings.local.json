@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($n = \\(Get-Command node -ErrorAction SilentlyContinue\\).Source; $p = \\(Get-Command npm -ErrorAction SilentlyContinue\\).Source; $g = \\(Get-Command git -ErrorAction SilentlyContinue\\).Source; \"node: $n\"; \"npm: $p\"; \"git: $g\"; if \\($n\\) { node -v }; if \\($p\\) { npm -v })",
+      "PowerShell(Test-Path \"D:\\\\OneDrive - CYRIX HEALTH CARE\\\\Desktop\\\\KPI 26-27 Template.xlsx\"; $py = \\(Get-Command python -ErrorAction SilentlyContinue\\).Source; \"python: $py\"; if \\($py\\) { python -c \"import openpyxl; print\\('openpyxl', openpyxl.__version__\\)\" })",
+      "PowerShell($sp = \"C:\\\\Users\\\\d9sfb\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Cyrix-KPI\\\\15e5401b-6418-428a-b2ea-3341cf26dbc1\\\\scratchpad\"; node \"$sp\\\\dump.js\" \"D:\\\\OneDrive - CYRIX HEALTH CARE\\\\Desktop\\\\KPI 26-27 Template.xlsx\")",
+      "PowerShell($s = \\(Get-Command supabase -ErrorAction SilentlyContinue\\).Source; \"supabase-cli: $s\"; $gh = \\(Get-Command gh -ErrorAction SilentlyContinue\\).Source; \"gh: $gh\"; \"--- env keys ---\"; Get-ChildItem env: | Where-Object { $_.Name -match 'SUPABASE|VITE_|POSTGRES' } | Select-Object Name | Out-String)",
+      "PowerShell(Set-Location \"D:\\\\Cyrix KPI\"; npx tsc --noEmit --pretty false 2>&1 | Select-Object -First 30; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Set-Location \"D:\\\\Cyrix KPI\"; npx tsc --noEmit --pretty false 2>&1 | Select-Object -First 20; \"TSC EXIT: $LASTEXITCODE\"; npx vite build 2>&1 | Select-String -Pattern \"dist/assets|dist/index|built in|error\" | Select-Object -First 20)",
+      "PowerShell(Set-Location \"D:\\\\Cyrix KPI\"; npx tsc --noEmit --pretty false 2>&1 | Select-Object -First 15; \"TSC: $LASTEXITCODE\"; npx vitest run 2>&1 | Select-Object -Last 8)"
+    ]
+  }
+}
