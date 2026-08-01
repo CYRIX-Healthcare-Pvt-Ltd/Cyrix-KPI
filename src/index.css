@@ -125,10 +125,22 @@
            ring-1 ring-inset ring-white/20 focus:outline-none
            focus:ring-2 focus:ring-white/50;
     color-scheme: dark;
-    transition: background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+    /* Colour and press only. The focus ring is deliberately not in this
+       list: a focus indicator should be there the instant focus lands,
+       and box-shadow is painted rather than composited, so fading it
+       costs a repaint to make an accessibility affordance slower. */
+    transition:
+      background-color var(--dur-fast) ease,
+      transform var(--dur-press) var(--ease-out);
   }
   .select-on-dark:hover {
     @apply bg-white/20;
+  }
+  /* Its two neighbours in the hero are .btn and depress on press. Without
+     this the middle control of three identical-looking ones is the only
+     one that does not answer the finger. */
+  .select-on-dark:active {
+    transform: scale(0.97);
   }
 
   /** Bare icon buttons in the header and table rows. */
@@ -333,7 +345,8 @@
        change on :hover/:active still confirms the interaction. */
     .btn:active:not(:disabled),
     .btn-press:active,
-    .btn-icon:active {
+    .btn-icon:active,
+    .select-on-dark:active {
       transform: none;
     }
     .animate-score-drift,

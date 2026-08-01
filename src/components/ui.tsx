@@ -138,10 +138,8 @@ export function StatTile({
   tone?: 'default' | 'brand'
 }) {
   return (
-    // A row of these should read as one band, so the caption line is
-    // always rendered — reserved with a non-breaking space when a tile has
-    // nothing to say. Otherwise the tile carrying a sub-label stands a
-    // line taller than the ones beside it.
+    // A row of these should read as one band, so a tile carrying a caption
+    // must not stand a line taller than the ones beside it.
     <div
       className={clsx(
         'card flex flex-col p-4',
@@ -150,7 +148,10 @@ export function StatTile({
     >
       <p className="label !mb-0">{label}</p>
       <p className="mt-2 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
-      <p className="mt-0.5 text-xs text-ink-400">{sub ?? ' '}</p>
+      {/* Always rendered, so a row of tiles keeps one baseline even
+          when only some of them carry a caption. Height reserved in CSS
+          rather than with a whitespace character. */}
+      <p className="mt-0.5 min-h-4 text-xs text-ink-400">{sub}</p>
     </div>
   )
 }
