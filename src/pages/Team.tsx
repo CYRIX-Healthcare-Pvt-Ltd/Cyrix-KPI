@@ -192,7 +192,7 @@ export default function Team() {
               ) : (
                 <Link
                   to={`/team/${member.id}`}
-                  className="shrink-0 rounded-lg p-2 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+                  className="shrink-0 btn-icon"
                   aria-label={`View ${member.full_name}`}
                 >
                   <ChevronRight className="h-4 w-4" />

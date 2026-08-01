@@ -188,7 +188,7 @@ export default function TeamAnalysis() {
                     <td className="px-4 py-3">
                       <Link
                         to={`/team/${p.member.id}`}
-                        className="font-medium text-ink-900 hover:text-cyrixRed-700 hover:underline"
+                        className="link-accent text-ink-900 hover:underline"
                       >
                         {p.member.full_name}
                       </Link>
@@ -237,7 +237,7 @@ function PersonRow({
       <div className="min-w-0 flex-1">
         <Link
           to={`/team/${p.member.id}`}
-          className="font-medium text-ink-900 hover:text-cyrixRed-700 hover:underline"
+          className="link-accent text-ink-900 hover:underline"
         >
           {p.member.full_name}
         </Link>

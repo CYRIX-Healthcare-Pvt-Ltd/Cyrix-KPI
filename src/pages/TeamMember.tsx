@@ -78,8 +78,19 @@ export default function TeamMember() {
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
                   formatter={(v: unknown) => (typeof v === 'number' ? v.toFixed(2) : '—')}
                 />
-                <Line type="monotone" dataKey="Total" stroke="#0f766e" strokeWidth={2}
-                      dot={{ r: 3 }} connectNulls />
+                <Line
+                  type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
+                  dot={{ r: 3 }} connectNulls
+                  label={({ x, y, value }: { x?: number; y?: number; value?: number | null }) =>
+                    value === null || value === undefined || x === undefined || y === undefined
+                      ? <></>
+                      : (
+                        <text x={x} y={y - 12} fill="#141519" fontSize={11}
+                              fontWeight={600} textAnchor="middle">
+                          {Number(value).toFixed(1)}
+                        </text>
+                      )}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -123,7 +134,7 @@ export default function TeamMember() {
                     <td className="px-4 py-3 text-right">
                       {s && (
                         <Link to={`/score/${s.id}`}
-                              className="text-xs font-medium text-ink-900 hover:underline">
+                              className="link-accent text-xs hover:underline">
                           {s.status === 'submitted' ? 'Score' : 'View'}
                         </Link>
                       )}

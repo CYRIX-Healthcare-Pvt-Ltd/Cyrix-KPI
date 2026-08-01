@@ -31,29 +31,26 @@ export function ScoreHeader({
     <section className="relative overflow-hidden rounded-2xl bg-ink-950 text-white">
       {/* A wash of the band colour bleeding in from the score side. It is
           the one place the performance colour is allowed to dominate. */}
+      {/* Band-coloured light drifting from the top-right corner down toward
+          the bottom-left and back. Two layers on different durations so
+          they separate and rejoin, which stops the loop reading as a loop. */}
       {band && (
-        <>
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
             className={clsx(
-              'pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl',
-              'animate-score-breathe',
+              'animate-score-wave absolute -right-32 -top-40 h-[34rem] w-[34rem]',
+              'rounded-full blur-3xl',
               band.onDark.glow,
             )}
           />
-          {/* Two rings easing outward from behind the score. Outline only —
-              a filled circle reads as a bubble sitting on the panel. */}
-          {[0, 2].map(delay => (
-            <span
-              key={delay}
-              className={clsx(
-                'pointer-events-none absolute right-14 top-20 h-32 w-32 rounded-full',
-                'animate-score-ripple border border-current',
-                band.onDark.text,
-              )}
-              style={{ animationDelay: `${delay}s` }}
-            />
-          ))}
-        </>
+          <div
+            className={clsx(
+              'animate-score-wave-slow absolute -right-16 -top-56 h-[26rem] w-[26rem]',
+              'rounded-full blur-3xl opacity-70',
+              band.onDark.glow,
+            )}
+          />
+        </div>
       )}
 
       <div className="relative flex flex-wrap items-end justify-between gap-6 p-6 sm:p-7">

@@ -82,7 +82,7 @@ export default function Shell() {
       <header className="sticky top-0 z-30 border-b border-ink-200 bg-white">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
           <button
-            className="rounded-lg p-2 text-ink-600 hover:bg-ink-100 md:hidden"
+            className="btn-icon md:hidden"
             onClick={() => setMenuOpen(v => !v)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           >
@@ -127,7 +127,7 @@ export default function Shell() {
             </div>
             <NavLink
               to="/change-password"
-              className="rounded-lg p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+              className="btn-icon"
               aria-label="Change password"
               title="Change password"
             >
@@ -135,7 +135,7 @@ export default function Shell() {
             </NavLink>
             <button
               onClick={handleSignOut}
-              className="rounded-lg p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+              className="btn-icon"
               aria-label="Sign out"
               title="Sign out"
             >

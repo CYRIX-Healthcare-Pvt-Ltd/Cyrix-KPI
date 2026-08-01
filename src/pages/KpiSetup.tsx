@@ -206,7 +206,7 @@ export default function KpiSetup() {
         <div className="grid gap-3 sm:grid-cols-3">
           <button
             onClick={() => fileRef.current?.click()}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50"
+            className="card card-interactive flex flex-col items-center gap-2 p-6 text-center"
           >
             <Upload className="h-7 w-7 text-ink-800" />
             <p className="font-medium text-ink-900">Upload my Excel</p>
@@ -218,7 +218,7 @@ export default function KpiSetup() {
           <button
             onClick={loadRoleTemplate}
             disabled={!(roleTemplate?.items ?? []).some(i => i.section === 'job_role')}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50"
+            className="card card-interactive flex flex-col items-center gap-2 p-6 text-center disabled:opacity-50"
           >
             <FileSpreadsheet className="h-7 w-7 text-ink-500" />
             <p className="font-medium text-ink-900">Use my role's template</p>
@@ -229,7 +229,7 @@ export default function KpiSetup() {
 
           <button
             onClick={() => setRows([blankRow(1)])}
-            className="card flex flex-col items-center gap-2 p-6 text-center transition-colors hover:border-ink-400 hover:bg-ink-50"
+            className="card card-interactive flex flex-col items-center gap-2 p-6 text-center"
           >
             <Plus className="h-7 w-7 text-ink-500" />
             <p className="font-medium text-ink-900">Start from blank</p>

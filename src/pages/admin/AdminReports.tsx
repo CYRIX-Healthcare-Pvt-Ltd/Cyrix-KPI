@@ -176,7 +176,7 @@ export default function AdminReports() {
                   })),
                   `Cyrix-manager-completion-${fy}.xlsx`, 'Manager completion',
                 )}
-                className="text-xs font-medium text-ink-900 hover:underline"
+                className="link-accent text-xs hover:underline"
               >
                 Export
               </button>

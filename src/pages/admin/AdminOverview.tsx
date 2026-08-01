@@ -199,7 +199,7 @@ export default function AdminOverview() {
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             Managers with outstanding work
           </h3>
-          <Link to="/admin/reports" className="text-xs font-medium text-ink-900 hover:underline">
+          <Link to="/admin/reports" className="link-accent text-xs hover:underline">
             All reports
           </Link>
         </div>
@@ -302,7 +302,7 @@ function SummaryCard({
   to: string
 }) {
   return (
-    <Link to={to} className="card p-4 transition-colors hover:border-ink-400">
+    <Link to={to} className="card card-interactive p-4">
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-ink-100 p-2 text-ink-600">
           <Icon className="h-4.5 w-4.5" />

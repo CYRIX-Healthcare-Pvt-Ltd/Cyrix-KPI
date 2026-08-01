@@ -9,6 +9,38 @@ import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
 
+/**
+ * Value label for a chart point, drawn in its own series' colour.
+ * Recharts hands the renderer every point including the null ones, so
+ * blanks are skipped rather than drawn as "0".
+ */
+function ScoreLabel({
+  x, y, value, fill, dy = -10,
+}: {
+  x?: number
+  y?: number
+  value?: number | string | null
+  fill: string
+  dy?: number
+}) {
+  if (value === null || value === undefined || x === undefined || y === undefined) return null
+  const n = typeof value === 'number' ? value : Number(value)
+  if (Number.isNaN(n)) return null
+
+  return (
+    <text
+      x={x}
+      y={y + dy}
+      fill={fill}
+      fontSize={11}
+      fontWeight={600}
+      textAnchor="middle"
+    >
+      {n.toFixed(1)}
+    </text>
+  )
+}
+
 export default function MyHistory() {
   const { employee } = useAuth()
   const fy = currentFy()
@@ -74,12 +106,17 @@ export default function MyHistory() {
                   formatter={(v: unknown) => (typeof v === 'number' ? v.toFixed(2) : '—')}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
+                {/* Value labels sit above each point in their own line's
+                    colour, so the series can be read without the legend. */}
                 <Line type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
-                      dot={{ r: 3 }} connectNulls />
+                      dot={{ r: 3 }} connectNulls
+                      label={<ScoreLabel fill="#141519" dy={-12} />} />
                 <Line type="monotone" dataKey="Job role" stroke="#e30613" strokeWidth={1.5}
-                      dot={{ r: 2 }} connectNulls />
+                      dot={{ r: 2 }} connectNulls
+                      label={<ScoreLabel fill="#e30613" dy={-10} />} />
                 <Line type="monotone" dataKey="Core values" stroke="#8a8d97" strokeWidth={1.5}
-                      dot={{ r: 2 }} connectNulls />
+                      dot={{ r: 2 }} connectNulls
+                      label={<ScoreLabel fill="#6b6e79" dy={14} />} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -145,7 +182,7 @@ export default function MyHistory() {
                       {open ? (
                         <Link
                           to={`/submission/${m}`}
-                          className="text-xs font-semibold text-ink-900 hover:text-cyrixRed-600 hover:underline"
+                          className="link-accent text-xs font-semibold hover:underline"
                         >
                           {s ? 'View' : 'Start'}
                         </Link>

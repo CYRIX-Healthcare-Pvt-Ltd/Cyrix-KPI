@@ -437,7 +437,7 @@ function Panel({
     <div className="card space-y-4 p-5">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-ink-900">{title}</h2>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100">
+        <button onClick={onClose} className="btn-icon !p-1.5">
           <X className="h-4 w-4" />
         </button>
       </div>
