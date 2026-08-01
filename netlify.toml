@@ -1,0 +1,33 @@
+# Fallback host config. Vercel is the primary target (vercel.json); this
+# exists so Netlify or Cloudflare Pages work without further setup.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# React Router owns the URLs, so every path that is not a real file has to
+# fall through to index.html or a refresh on /team lands on a 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# The service worker must never be cached, or an old build pins itself.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

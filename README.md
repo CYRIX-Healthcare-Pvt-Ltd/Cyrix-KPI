@@ -140,6 +140,53 @@ client.
 
 ---
 
+## Deploying
+
+The app is a static build; Supabase is already hosted, so only the frontend
+needs somewhere to live. `vercel.json` and `netlify.toml` are both committed,
+so Vercel, Netlify and Cloudflare Pages all work with no further setup.
+
+**Before sharing the URL outside the building**, take the app out of testing
+mode:
+
+```bash
+node scripts/go-live.mjs
+```
+
+While `self_service_password_reset` is on, the login screen resets any account
+back to ecode-as-password for anyone who types that employee code — and the
+codes run `E1`, `E2`, `E3`… That is fine on a laptop and unacceptable on a
+public URL. `--check` shows the current state, `--revert` puts it back.
+
+### Vercel (recommended)
+
+1. Sign in at [vercel.com](https://vercel.com) with the GitHub account that
+   owns `Kevi47/Cyrix-KPI`.
+2. **Add New → Project**, import the repo. Framework auto-detects as Vite.
+3. Under **Environment Variables**, add these three:
+
+   | Name | Value |
+   |---|---|
+   | `VITE_SUPABASE_URL` | `https://emuvmihfbnndhbpsndvc.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | your `sb_publishable_…` key |
+   | `VITE_AUTH_EMAIL_DOMAIN` | `cyrix.local` |
+
+4. **Deploy.** You get a `*.vercel.app` URL; every push to `main` redeploys.
+
+**Only `VITE_`-prefixed variables belong here.** They are compiled into the
+JavaScript that ships to the browser, so anyone can read them — which is fine
+for the publishable key, and is why the `sb_secret_…` key and
+`SUPABASE_DB_URL` must never be added. Those stay on the machine that runs the
+admin scripts.
+
+No Supabase auth configuration is needed: sign-in uses the password grant
+directly, with no redirect URLs to allowlist.
+
+### Custom domain
+
+Add e.g. `kpi.cyrix.in` under **Settings → Domains** and point a CNAME at the
+host. HTTPS is issued automatically.
+
 ## Running it locally
 
 First time on a machine:
