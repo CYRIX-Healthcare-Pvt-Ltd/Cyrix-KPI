@@ -11,6 +11,7 @@ import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired } from '@/components/analysis'
+import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -65,6 +66,10 @@ export default function Team() {
       setBusy(false)
     }
   }
+
+  // On the team screens the chrome follows the team's average, not the
+  // manager's own score.
+  useAmbientScore(teamAvg)
 
   if (isLoading) return <PageLoader />
 

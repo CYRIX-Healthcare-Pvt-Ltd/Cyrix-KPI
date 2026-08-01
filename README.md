@@ -97,13 +97,40 @@ draft ──▶ submitted ──▶ scored ──▶ finalized
    └──────────────────┘
 ```
 
+## Roles
+
+| Role | Sees | Can do |
+|---|---|---|
+| Team member | Own record, own manager | Define Job Role KRAs, submit each month |
+| Manager | Direct reports too | Approve KPIs (and edit them in place), score months, request removals and deletions |
+| `HR_ADMIN` | Everything | Org dashboards, employees, reports, approves removals and the final deletion stage |
+| `SW_ADMIN` | Every login's state | Login administration, password resets from the CLI |
+
+`SW_ADMIN` **cannot see passwords** — nobody can. They are one-way bcrypt
+hashes; there is no column, view or API that returns the plaintext, and a
+database superuser cannot read one back either. What the screen shows is
+whether each person is still on the code we issued or has set their own.
+
+### Deleting a wrongly submitted month
+
+Two approvals, in order:
+
+```
+requested ──▶ reporting manager ──▶ HR ──▶ deleted
+                   └──▶ rejected      └──▶ rejected
+```
+
+The reporting manager knows whether the month is genuinely wrong; HR owns the
+appraisal record. Neither alone can erase a scored month, and the figures are
+written to `audit_log` before the row goes.
+
 ## Security
 
 Row-Level Security, enforced in the database rather than the UI:
 
 - **TM** — own record, own manager, own KPI and submissions
 - **Manager** — the above, plus direct reports
-- **HR admin** — everything
+- **HR admin / SW admin** — everything
 
 RLS is row-level only, so column rules (a TM may write `self_achieved` but
 never `manager_achieved`) are enforced by guard triggers in migration `0006`.
@@ -112,6 +139,45 @@ PostgREST. Scores are always recomputed server-side and never accepted from a
 client.
 
 ---
+
+## Running it locally
+
+First time on a machine:
+
+```bash
+git clone https://github.com/Kevi47/Cyrix-KPI.git
+```
+
+```bash
+cd Cyrix-KPI && npm install
+```
+
+Create `.env.local` (it is gitignored — never commit it):
+
+```
+VITE_SUPABASE_URL=https://emuvmihfbnndhbpsndvc.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+VITE_AUTH_EMAIL_DOMAIN=cyrix.local
+SUPABASE_DB_URL=postgresql://postgres.emuvmihfbnndhbpsndvc:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+```
+
+Then every time:
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:5173** and sign in with your employee code as both
+the id and the password (in capitals) while the system is in testing.
+
+Stop the server with `Ctrl+C`.
+
+> **Connection note.** The direct `db.<ref>.supabase.co` host no longer
+> resolves for this project — Supabase moved direct connections to IPv6-only.
+> Use the **pooler** host above (`aws-0-ap-northeast-1.pooler.supabase.com`,
+> port 5432, user `postgres.<project-ref>`). Percent-encode any `@` in the
+> password as `%40`.
 
 ## Setup
 

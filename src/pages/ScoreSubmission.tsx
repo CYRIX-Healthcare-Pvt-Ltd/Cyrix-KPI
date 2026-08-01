@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Undo2, Lock } from 'lucide-react'
+import { ArrowLeft, Check, Undo2, Lock, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
@@ -30,6 +30,8 @@ export default function ScoreSubmission() {
   const [remarks, setRemarks] = useState('')
   const [returnReason, setReturnReason] = useState('')
   const [showReturn, setShowReturn] = useState(false)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -143,6 +145,23 @@ export default function ScoreSubmission() {
       navigate('/team')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not return.')
+    }
+  }
+
+  const onRequestDeletion = async () => {
+    if (!submission || !deleteReason.trim()) return
+    setError(null)
+    try {
+      const { error: rpcError } = await supabase.rpc('request_record_deletion', {
+        p_submission_id: submission.id,
+        p_reason: deleteReason,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      setShowDelete(false)
+      setDeleteReason('')
+      setNotice('Deletion request sent. It needs HR approval before the record is removed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send that request.')
     }
   }
 
@@ -353,7 +372,49 @@ export default function ScoreSubmission() {
             >
               <Undo2 className="h-4 w-4" /> Send back
             </button>
+            {/* Wrongly submitted months are deleted, not corrected — but
+                only with both the manager's and HR's approval. */}
+            <button
+              onClick={() => setShowDelete(v => !v)}
+              disabled={busy}
+              className="btn-secondary !text-cyrixRed-700"
+            >
+              <Trash2 className="h-4 w-4" /> Request deletion
+            </button>
           </div>
+
+          {showDelete && (
+            <div className="card space-y-3 border-cyrixRed-200 p-4">
+              <div>
+                <p className="font-medium text-ink-900">
+                  Request deletion of {monthLabel(submission.period_month)}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  Goes to HR after you approve it. The figures are written to the
+                  audit log before the record is removed.
+                </p>
+              </div>
+              <textarea
+                rows={2}
+                className="input"
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="e.g. Submitted against the wrong month"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={onRequestDeletion}
+                  disabled={!deleteReason.trim() || busy}
+                  className="btn-danger"
+                >
+                  Send to HR for approval
+                </button>
+                <button onClick={() => setShowDelete(false)} className="btn-secondary">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {showReturn && (
             <div className="card space-y-3 p-4">

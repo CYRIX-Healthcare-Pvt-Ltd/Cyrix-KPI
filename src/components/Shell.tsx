@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, History,
   LogOut, Menu, X, KeyRound, Building2, BarChart3, UserPlus,
+  ShieldAlert, Trash2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePendingCounts, useRemovalRequests, currentFy } from '@/lib/queries'
@@ -18,7 +19,7 @@ interface NavItem {
 }
 
 export default function Shell() {
-  const { employee, isManager, isHrAdmin, signOut } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin, signOut } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const fy = currentFy()
@@ -30,15 +31,22 @@ export default function Shell() {
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.
-  const items: NavItem[] = isHrAdmin
+  const items: NavItem[] = isSwAdmin && !isHrAdmin
+    ? [
+        { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
+        { to: '/deletions', label: 'Deletions', icon: Trash2 },
+      ]
+    : isHrAdmin
     ? [
         { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
         { to: '/admin/employees', label: 'Employees', icon: Building2 },
         { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
         {
           to: '/admin/requests', label: 'Requests', icon: UserPlus,
-          badge: isHrAdmin ? removals?.length ?? 0 : 0,
+          badge: removals?.length ?? 0,
         },
+        { to: '/deletions', label: 'Deletions', icon: Trash2 },
+        ...(isSwAdmin ? [{ to: '/admin/logins', label: 'Logins', icon: ShieldAlert }] : []),
       ]
     : [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -86,14 +94,7 @@ export default function Shell() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) =>
-                  clsx(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-ink-100 text-ink-900'
-                      : 'text-ink-600 hover:bg-ink-100',
-                  )
-                }
+                className="nav-link"
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -142,12 +143,7 @@ export default function Shell() {
                 to={item.to}
                 end={item.end}
                 onClick={() => setMenuOpen(false)}
-                className={({ isActive }) =>
-                  clsx(
-                    'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
-                    isActive ? 'bg-ink-100 text-ink-900' : 'text-ink-700',
-                  )
-                }
+                className="nav-link !py-3"
               >
                 <item.icon className="h-4.5 w-4.5" />
                 {item.label}
@@ -174,8 +170,8 @@ export default function Shell() {
               end={item.end}
               className={({ isActive }) =>
                 clsx(
-                  'relative flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium',
-                  isActive ? 'text-ink-900' : 'text-ink-500',
+                  'relative flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors',
+                  isActive ? 'text-[color:var(--score-strong)]' : 'text-ink-400',
                 )
               }
             >

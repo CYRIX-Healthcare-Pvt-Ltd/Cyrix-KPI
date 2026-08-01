@@ -149,6 +149,48 @@ export function useSaveAssignmentRows() {
   })
 }
 
+/**
+ * Manager tweaks to a KPI awaiting their approval. RLS already permits a
+ * manager to edit their report's rows while the assignment is pending, so
+ * small corrections don't need a full send-back-and-resubmit round trip.
+ */
+export function useEditAssignmentItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      itemId: string
+      patch: Partial<Pick<KpiAssignmentItem,
+        'kra' | 'kpi_description' | 'weightage' | 'target_value' | 'scoring_rule'>>
+    }) => {
+      const { error } = await supabase
+        .from('kpi_assignment_items').update(args.patch).eq('id', args.itemId)
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['approval_items'] })
+      qc.invalidateQueries({ queryKey: ['assignment'] })
+    },
+  })
+}
+
+/** This month's target only — the annual KPI baseline is untouched. */
+export function useSaveMonthlyTarget() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { itemId: string; target: number | null }) => {
+      const { error } = await supabase
+        .from('kpi_submission_items')
+        .update({ target_value: args.target })
+        .eq('id', args.itemId)
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submission'] })
+      qc.invalidateQueries({ queryKey: ['submission_by_id'] })
+    },
+  })
+}
+
 export function useAssignmentAction() {
   const qc = useQueryClient()
   return useMutation({

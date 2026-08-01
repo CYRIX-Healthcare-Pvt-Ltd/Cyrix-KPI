@@ -208,9 +208,13 @@ if (cmd === 'reset-all') {
     where e.auth_user_id = u.id and e.is_active`)
 
   // Match the flag: no point forcing a change during the testing phase.
+  // password_is_default goes back to true: every account is once again on
+  // the code we issued, whatever it had been changed to.
   const forced = String(settings.force_password_change) === 'true'
   await db.query(
-    `update employees set must_change_password = $1 where is_active`, [forced])
+    `update employees
+     set must_change_password = $1, password_is_default = true
+     where is_active`, [forced])
 
   await db.query(`
     insert into audit_log (entity_type, action, details)
@@ -268,9 +272,11 @@ if (cmd === 'reset') {
     process.exit(1)
   }
 
-  // Force them to choose their own again on next sign-in.
+  // Back on an issued password, and prompted to choose their own again.
   await db.query(
-    `update employees set must_change_password = true where id = $1`, [emp.id])
+    `update employees
+     set must_change_password = true, password_is_default = true
+     where id = $1`, [emp.id])
 
   console.log(`
   Reset done.

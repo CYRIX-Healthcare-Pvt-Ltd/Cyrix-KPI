@@ -8,12 +8,19 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Overwritten at runtime by ScoreThemeProvider with the signed-in
+       person's band colour — or the team average on the team screens. */
+    --score-accent: #141519;
+    --score-soft: #eeeef0;
+    --score-strong: #000000;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-ink-50 font-sans text-ink-900 antialiased;
-    /* Respect the notch on phones running as an installed PWA. */
+    @apply bg-white font-sans text-ink-900 antialiased;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -29,45 +36,62 @@
            text-sm font-medium transition-colors disabled:cursor-not-allowed
            disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
-  /* Interactive elements take the logo's tagline blue. */
   .btn-primary {
-    @apply btn bg-ink-900 text-white hover:bg-ink-800 focus:ring-ink-900;
+    @apply btn bg-ink-950 text-white;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--score-accent);
   }
   .btn-secondary {
-    @apply btn border border-ink-300 bg-white text-ink-700
-           hover:bg-ink-50 focus:ring-ink-400;
+    @apply btn border border-ink-200 bg-white text-ink-700 hover:bg-ink-50;
   }
-  /* Red is reserved for destructive and genuinely bad, never decoration. */
   .btn-danger {
-    @apply btn bg-cyrixRed-600 text-white hover:bg-cyrixRed-700 focus:ring-cyrixRed-500;
+    @apply btn bg-cyrixRed-600 text-white hover:bg-cyrixRed-700;
   }
 
+  /* Minimal surface: a hairline, no shadow. Depth comes from whitespace
+     and type weight rather than from borders and drop shadows. */
   .card {
-    @apply rounded-xl border border-ink-200 bg-white shadow-sm;
+    @apply rounded-xl border border-ink-200/70 bg-white;
   }
 
   .input {
-    @apply w-full rounded-lg border border-ink-300 px-3 py-2 text-sm
-           placeholder:text-ink-400 focus:border-ink-900 focus:outline-none
-           focus:ring-1 focus:ring-ink-900 disabled:bg-ink-50
-           disabled:text-ink-500;
+    @apply w-full rounded-lg border border-ink-200 px-3 py-2 text-sm
+           placeholder:text-ink-300 focus:outline-none focus:ring-1
+           disabled:bg-ink-50 disabled:text-ink-400;
+  }
+  .input:focus {
+    border-color: var(--score-accent);
+    --tw-ring-color: var(--score-accent);
   }
 
   .label {
-    @apply mb-1.5 block text-sm font-medium text-ink-700;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-label text-ink-500;
   }
 
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 
-  /**
-   * Score-responsive page wash. A soft gradient behind the header of a
-   * dashboard, tinted by how the person (or team) is performing — visible
-   * enough to feel different at a glance, restrained enough that the app
-   * still reads as the Cyrix black/blue/red brand.
-   */
-  .score-wash {
-    @apply rounded-2xl bg-gradient-to-br to-white p-5;
+  /* Nav: active and hover both pick up the band colour, so the chrome
+     reflects performance without shouting about it. */
+  .nav-link {
+    @apply flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+           text-ink-500 transition-colors;
+  }
+  .nav-link:hover {
+    background-color: var(--score-soft);
+    color: var(--score-strong);
+  }
+  .nav-link[aria-current='page'] {
+    background-color: var(--score-soft);
+    color: var(--score-strong);
+  }
+
+  .link-accent {
+    @apply font-medium transition-colors;
+  }
+  .link-accent:hover {
+    color: var(--score-accent);
   }
 }

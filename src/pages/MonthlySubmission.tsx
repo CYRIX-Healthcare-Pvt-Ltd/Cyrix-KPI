@@ -5,7 +5,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
-  useSubmissionAction, useCoreValues, useMyAssignment, currentFy,
+  useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
+  currentFy,
 } from '@/lib/queries'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
@@ -27,9 +28,11 @@ export default function MonthlySubmission() {
   const openSub = useOpenSubmission()
   const saveItems = useSaveItemValues()
   const saveRatings = useSaveCoreRatings()
+  const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
+  const [targets, setTargets] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +47,9 @@ export default function MonthlySubmission() {
     if (!data?.submission) return
     setAchieved(Object.fromEntries(
       data.items.map(i => [i.id, i.self_achieved?.toString() ?? '']),
+    ))
+    setTargets(Object.fromEntries(
+      data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
     ))
     setRatings(Object.fromEntries(
       data.ratings.map(r => [r.id, r.self_rating ?? '']),
@@ -63,10 +69,14 @@ export default function MonthlySubmission() {
       : achieved[item.id] === '' || achieved[item.id] === undefined
       ? null
       : Number(achieved[item.id])
+    // Score against the target as currently typed, so editing it updates
+    // the number immediately rather than only after a save.
+    const t = targets[item.id]
+    const target = t === '' || t === undefined ? item.target_value : Number(t)
     return calcKpiScore(
       item.scoring_rule as ScoringRule,
       item.weightage,
-      item.target_value,
+      target,
       raw,
       item.rule_params as RuleParams,
     )
@@ -98,6 +108,16 @@ export default function MonthlySubmission() {
   const save = async () => {
     setError(null)
     try {
+      // Targets first: the achieved value is scored against them, and the
+      // database recomputes on each write.
+      for (const i of items.filter(i => i.section !== 'core_values')) {
+        const t = targets[i.id]
+        const next = t === '' || t === undefined ? null : Number(t)
+        if (next !== i.target_value) {
+          await saveTarget.mutateAsync({ itemId: i.id, target: next })
+        }
+      }
+
       await saveItems.mutateAsync({
         role: 'self',
         updates: items
@@ -276,11 +296,21 @@ export default function MonthlySubmission() {
               </div>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                {/* Targets legitimately move month to month — a call quota
+                    in April is not December's. Editable while the month is
+                    open; the KRA, weightage and scoring rule are not. */}
                 <div>
-                  <label className="label text-xs">Target</label>
-                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
-                    {item.target_value ?? '—'}{item.target_unit === '%' ? '%' : ''}
-                  </p>
+                  <label className="label text-xs" htmlFor={`tgt-${item.id}`}>
+                    Target
+                  </label>
+                  <input
+                    id={`tgt-${item.id}`}
+                    type="number" inputMode="decimal" step="any"
+                    className="input"
+                    disabled={!editable}
+                    value={targets[item.id] ?? ''}
+                    onChange={e => setTargets({ ...targets, [item.id]: e.target.value })}
+                  />
                 </div>
 
                 <div>

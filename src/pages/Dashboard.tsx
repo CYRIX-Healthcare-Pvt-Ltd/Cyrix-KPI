@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { Users, AlertCircle, ArrowRight, CheckSquare, Target } from 'lucide-react'
+import { Users, Target } from 'lucide-react'
+import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
@@ -40,6 +40,10 @@ export default function Dashboard() {
     )
     return fyMonths(fy).map(m => byMonth.get(m)?.final_total_score ?? null)
   }, [history, fy])
+
+  // Interactive states across the app take the colour of this person's
+  // own performance band.
+  useAmbientScore(annual?.avg_total_score)
 
   if (aLoading) return <PageLoader />
 
@@ -184,82 +188,14 @@ export default function Dashboard() {
             <StatTile label="KPIs to approve" value={approvals?.length ?? 0} />
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <ActionCard
-              to="/team"
-              icon={Users}
-              title="Score my team"
-              body={
-                awaitingMe > 0
-                  ? `${awaitingMe} assessment(s) waiting for you`
-                  : notSubmitted > 0
-                  ? `${notSubmitted} member(s) have not submitted yet`
-                  : 'Everyone is up to date'
-              }
-              highlight={awaitingMe > 0}
-            />
-            <ActionCard
-              to="/approvals"
-              icon={CheckSquare}
-              title="KPI approvals"
-              body={
-                (approvals?.length ?? 0) > 0
-                  ? `${approvals!.length} KPI(s) awaiting your approval`
-                  : 'Nothing waiting'
-              }
-              highlight={(approvals?.length ?? 0) > 0}
-            />
-          </div>
+          {notSubmitted > 0 && (
+            <p className="mt-2 text-xs text-ink-400">
+              {notSubmitted} member{notSubmitted === 1 ? '' : 's'} have not submitted{' '}
+              {monthLabel(month)} yet.
+            </p>
+          )}
         </div>
       )}
     </div>
-  )
-}
-
-function ActionCard({
-  to, icon: Icon, title, body, disabled, highlight,
-}: {
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  body: string
-  disabled?: boolean
-  highlight?: boolean
-}) {
-  const inner = (
-    <div className="flex items-start gap-3">
-      <div className={`rounded-lg p-2 ${
-        highlight ? 'bg-ink-100 text-ink-900' : 'bg-ink-100 text-ink-500'
-      }`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="font-medium text-ink-900">{title}</p>
-        <p className="mt-0.5 text-sm text-ink-500">{body}</p>
-      </div>
-      {!disabled && <ArrowRight className="h-4 w-4 shrink-0 text-ink-400" />}
-    </div>
-  )
-
-  if (disabled) {
-    return (
-      <div className="card p-4 opacity-60">
-        {inner}
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-700">
-          <AlertCircle className="h-3.5 w-3.5" /> Not available yet
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <Link
-      to={to}
-      className={`card p-4 transition-colors hover:border-ink-400 hover:bg-ink-50 ${
-        highlight ? 'border-ink-300' : ''
-      }`}
-    >
-      {inner}
-    </Link>
   )
 }

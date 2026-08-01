@@ -22,6 +22,8 @@ const AdminOverview     = lazy(() => import('@/pages/admin/AdminOverview'))
 const AdminEmployees    = lazy(() => import('@/pages/admin/AdminEmployees'))
 const AdminReports      = lazy(() => import('@/pages/admin/AdminReports'))
 const AdminRequests     = lazy(() => import('@/pages/admin/AdminRequests'))
+const SwAdmin           = lazy(() => import('@/pages/admin/SwAdmin'))
+const DeletionRequests  = lazy(() => import('@/pages/DeletionRequests'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
@@ -72,14 +74,23 @@ function RequireHr({ children }: { children: JSX.Element }) {
   return children
 }
 
+function RequireSw({ children }: { children: JSX.Element }) {
+  const { isSwAdmin, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (!isSwAdmin) return <Navigate to="/" replace />
+  return children
+}
+
 /**
  * HR administers the system rather than being appraised by it, so they
  * land on the admin overview instead of a personal dashboard.
  */
 function HomeRoute() {
-  const { isHrAdmin, loading } = useAuth()
+  const { isHrAdmin, isSwAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
-  return isHrAdmin ? <Navigate to="/admin" replace /> : <Dashboard />
+  if (isHrAdmin) return <Navigate to="/admin" replace />
+  if (isSwAdmin) return <Navigate to="/admin/logins" replace />
+  return <Dashboard />
 }
 
 export default function App() {
@@ -119,6 +130,8 @@ export default function App() {
           <Route path="admin/employees" element={<RequireHr><AdminEmployees /></RequireHr>} />
           <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
           <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
+          <Route path="admin/logins" element={<RequireSw><SwAdmin /></RequireSw>} />
+          <Route path="deletions" element={<DeletionRequests />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

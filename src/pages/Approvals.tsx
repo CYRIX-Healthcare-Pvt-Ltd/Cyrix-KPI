@@ -1,7 +1,9 @@
 import { useState, Fragment } from 'react'
-import { CheckSquare, Check, X } from 'lucide-react'
+import { CheckSquare, Check, X, Pencil } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { usePendingApprovals, useAssignmentAction, currentFy } from '@/lib/queries'
+import {
+  usePendingApprovals, useAssignmentAction, useEditAssignmentItem, currentFy,
+} from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
@@ -51,6 +53,105 @@ export default function Approvals() {
   )
 }
 
+/**
+ * A KPI row on the approval screen. The manager can nudge the wording,
+ * weightage or target in place — RLS already allows it while the
+ * assignment is pending — so a typo doesn't cost a full round trip.
+ * Saved on blur rather than with a Save button, since these are meant to
+ * be small corrections made in passing.
+ */
+function EditableRow({
+  item, editable,
+}: {
+  item: KpiAssignmentItem
+  editable: boolean
+}) {
+  const edit = useEditAssignmentItem()
+  const [draft, setDraft] = useState(item)
+
+  const commit = (patch: Partial<KpiAssignmentItem>) => {
+    const next = { ...draft, ...patch }
+    setDraft(next)
+    const changed =
+      next.kra !== item.kra ||
+      next.kpi_description !== item.kpi_description ||
+      next.weightage !== item.weightage ||
+      next.target_value !== item.target_value
+    if (changed) {
+      edit.mutate({
+        itemId: item.id,
+        patch: {
+          kra: next.kra,
+          kpi_description: next.kpi_description,
+          weightage: next.weightage,
+          target_value: next.target_value,
+        },
+      })
+    }
+  }
+
+  if (!editable) {
+    return (
+      <tr>
+        <td className="px-4 py-2.5 font-medium text-ink-900">{draft.kra}</td>
+        <td className="max-w-md px-4 py-2.5 text-xs text-ink-500">{draft.kpi_description}</td>
+        <td className="px-4 py-2.5 text-right tabular-nums">{draft.weightage}%</td>
+        <td className="px-4 py-2.5 text-right tabular-nums">{draft.target_value ?? '—'}</td>
+        <td className="px-4 py-2.5 text-xs text-ink-500">
+          {draft.scoring_rule.replace(/_/g, ' ')}
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr className="bg-amber-50/40">
+      <td className="px-2 py-1.5">
+        <input
+          className="input !py-1.5 text-sm"
+          value={draft.kra}
+          onChange={e => setDraft({ ...draft, kra: e.target.value })}
+          onBlur={e => commit({ kra: e.target.value })}
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          className="input !py-1.5 text-xs"
+          value={draft.kpi_description ?? ''}
+          onChange={e => setDraft({ ...draft, kpi_description: e.target.value })}
+          onBlur={e => commit({ kpi_description: e.target.value })}
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number" step="any"
+          className="input !py-1.5 w-20 text-right text-sm"
+          value={draft.weightage}
+          onChange={e => setDraft({ ...draft, weightage: Number(e.target.value) })}
+          onBlur={e => commit({ weightage: Number(e.target.value) })}
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="number" step="any"
+          className="input !py-1.5 w-20 text-right text-sm"
+          value={draft.target_value ?? ''}
+          onChange={e => setDraft({
+            ...draft,
+            target_value: e.target.value === '' ? null : Number(e.target.value),
+          })}
+          onBlur={e => commit({
+            target_value: e.target.value === '' ? null : Number(e.target.value),
+          })}
+        />
+      </td>
+      <td className="px-4 py-2.5 text-xs text-ink-400">
+        {draft.scoring_rule.replace(/_/g, ' ')}
+      </td>
+    </tr>
+  )
+}
+
 function ApprovalCard({
   assignmentId, name, ecode, designation, expanded, onToggle,
 }: {
@@ -63,6 +164,7 @@ function ApprovalCard({
 }) {
   const action = useAssignmentAction()
   const [rejecting, setRejecting] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -144,19 +246,11 @@ function ApprovalCard({
                           </td>
                         </tr>
                         {items.filter(i => i.section === section).map(item => (
-                          <tr key={item.id}>
-                            <td className="px-4 py-2.5 font-medium text-ink-900">{item.kra}</td>
-                            <td className="max-w-md px-4 py-2.5 text-xs text-ink-500">
-                              {item.kpi_description}
-                            </td>
-                            <td className="px-4 py-2.5 text-right tabular-nums">{item.weightage}%</td>
-                            <td className="px-4 py-2.5 text-right tabular-nums">
-                              {item.target_value ?? '—'}
-                            </td>
-                            <td className="px-4 py-2.5 text-xs text-ink-500">
-                              {item.scoring_rule.replace(/_/g, ' ')}
-                            </td>
-                          </tr>
+                          <EditableRow
+                            key={item.id}
+                            item={item}
+                            editable={editing && section === 'job_role'}
+                          />
                         ))}
                       </Fragment>
                     ))}
@@ -167,6 +261,14 @@ function ApprovalCard({
               <div className="space-y-3 border-t border-ink-100 p-4">
                 {error && <Alert kind="error">{error}</Alert>}
 
+                {editing && (
+                  <Alert kind="info">
+                    Editing directly. Small corrections are saved as you leave each
+                    field — no need to send the whole KPI back. Sending it back is
+                    still the right move for anything the team member should rethink.
+                  </Alert>
+                )}
+
                 {!rejecting ? (
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -176,6 +278,13 @@ function ApprovalCard({
                     >
                       {action.isPending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                       Approve
+                    </button>
+                    <button
+                      onClick={() => setEditing(v => !v)}
+                      className="btn-secondary"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      {editing ? 'Done editing' : 'Make small edits'}
                     </button>
                     <button onClick={() => setRejecting(true)} className="btn-secondary">
                       <X className="h-4 w-4" /> Send back

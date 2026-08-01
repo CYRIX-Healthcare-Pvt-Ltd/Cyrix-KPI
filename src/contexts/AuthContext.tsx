@@ -11,6 +11,8 @@ interface AuthState {
   /** Derived from having at least one direct report — there is no separate role. */
   isManager: boolean
   isHrAdmin: boolean
+  /** Software administrator: sees every login's state, never a password. */
+  isSwAdmin: boolean
   directReportCount: number
   /**
    * From the force_password_change setting. False during the testing phase,
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [directReportCount, setDirectReportCount] = useState(0)
   const [isHrAdmin, setIsHrAdmin] = useState(false)
+  const [isSwAdmin, setIsSwAdmin] = useState(false)
   const [forcePasswordChange, setForcePasswordChange] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -39,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmployee(null)
       setDirectReportCount(0)
       setIsHrAdmin(false)
+      setIsSwAdmin(false)
       return
     }
 
@@ -52,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!emp) {
       setDirectReportCount(0)
       setIsHrAdmin(false)
+      setIsSwAdmin(false)
       return
     }
 
@@ -66,8 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('key', 'force_password_change').maybeSingle(),
     ])
 
+    const roleNames = (roles ?? []).map(r => r.role)
     setDirectReportCount(count ?? 0)
-    setIsHrAdmin((roles ?? []).some(r => ['hr_admin', 'super_admin'].includes(r.role)))
+    setIsHrAdmin(roleNames.some(r => ['hr_admin', 'super_admin'].includes(r)))
+    setIsSwAdmin(roleNames.some(r => ['sw_admin', 'super_admin'].includes(r)))
     setForcePasswordChange(setting?.value === true)
   }, [])
 
@@ -116,14 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) throw new Error(friendlyError(error))
 
-    if (employee) {
-      const { error: e2 } = await supabase
-        .from('employees')
-        .update({ must_change_password: false })
-        .eq('id', employee.id)
-      if (e2) throw new Error(friendlyError(e2))
-      setEmployee({ ...employee, must_change_password: false })
-    }
+    // Records that the password is no longer the one we issued. An RPC
+    // rather than a direct update, so a client cannot simply claim it.
+    const { error: e2 } = await supabase.rpc('mark_password_changed')
+    if (e2) throw new Error(friendlyError(e2))
+    if (employee) setEmployee({ ...employee, must_change_password: false })
   }, [employee])
 
   const refresh = useCallback(async () => {
@@ -137,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employee,
         isManager: directReportCount > 0,
         isHrAdmin,
+        isSwAdmin,
         directReportCount,
         forcePasswordChange,
         loading,
