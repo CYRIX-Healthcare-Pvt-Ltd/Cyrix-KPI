@@ -38,9 +38,10 @@ export default function Shell() {
 
   // Set here rather than on the dashboard so the tint survives navigation —
   // every screen carries the signed-in person's band, not just the one that
-  // happens to display their score.
-  const { data: annual } = useAnnualSummary(employee?.id, fy)
-  useBaseScore(annual?.avg_total_score)
+  // happens to display their score. isSuccess distinguishes "nothing scored
+  // yet", which is neutral grey, from "not answered yet", which is nothing.
+  const { data: annual, isSuccess: annualLoaded } = useAnnualSummary(employee?.id, fy)
+  useBaseScore(employee?.id, annual?.avg_total_score, annualLoaded)
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.

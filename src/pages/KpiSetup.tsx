@@ -271,7 +271,10 @@ export default function KpiSetup() {
                 <RowEditor
                   key={row._key}
                   row={row}
-                  rules={(rules ?? []).filter(r => r.code !== 'rating_scale')}
+                  // Retired rules stay in the table so rows already using
+                  // one keep working and keep their label; they are just
+                  // not offered as a new choice.
+                  rules={(rules ?? []).filter(r => r.is_selectable)}
                   onChange={patch => update(row._key, patch)}
                   onRemove={() => remove(row._key)}
                 />
@@ -406,10 +409,24 @@ function RowEditor({
           <select
             className="input"
             value={row.scoring_rule}
-            onChange={e => onChange({
-              scoring_rule: e.target.value as ScoringRule,
-              _inferred: false,
-            })}
+            onChange={e => {
+              const rule = e.target.value as ScoringRule
+              onChange({
+                scoring_rule: rule,
+                _inferred: false,
+                // The behaviour each rule promises, set from the choice
+                // rather than asked for separately. "Can exceed weightage"
+                // means no ceiling; "can go negative" means exactly that,
+                // and the label would be a lie if a hidden default clamped
+                // it at zero.
+                rule_params: {
+                  ...row.rule_params,
+                  max_multiplier: undefined,
+                  allow_negative: rule === 'lower_linear' ? true : undefined,
+                  floor: undefined,
+                },
+              })
+            }}
           >
             {rules.map(r => (
               <option key={r.code} value={r.code}>{r.label}</option>
@@ -418,57 +435,6 @@ function RowEditor({
           {ruleMeta && <p className="mt-1 text-xs text-ink-500">{ruleMeta.description}</p>}
         </div>
       </div>
-
-      {row.scoring_rule === 'higher_uncapped' && (
-        <div className="mt-3 max-w-xs">
-          <label className="label text-xs">Ceiling (× weightage, blank = none)</label>
-          <input
-            type="number" inputMode="decimal" step="0.1" min={1}
-            className="input"
-            value={row.rule_params.max_multiplier ?? ''}
-            onChange={e => onChange({
-              rule_params: {
-                ...row.rule_params,
-                max_multiplier: e.target.value === '' ? undefined : Number(e.target.value),
-              },
-            })}
-            placeholder="e.g. 1.2 for up to 120%"
-          />
-        </div>
-      )}
-
-      {row.scoring_rule === 'lower_linear' && (
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="flex items-center gap-2 text-sm text-ink-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-ink-300"
-              checked={!!row.rule_params.allow_negative}
-              onChange={e => onChange({
-                rule_params: { ...row.rule_params, allow_negative: e.target.checked },
-              })}
-            />
-            Allow a negative score
-          </label>
-          {row.rule_params.allow_negative && (
-            <div className="w-32">
-              <label className="label text-xs">Lowest possible</label>
-              <input
-                type="number" inputMode="decimal" step="any"
-                className="input"
-                value={row.rule_params.floor ?? ''}
-                onChange={e => onChange({
-                  rule_params: {
-                    ...row.rule_params,
-                    floor: e.target.value === '' ? undefined : Number(e.target.value),
-                  },
-                })}
-                placeholder="e.g. -5"
-              />
-            </div>
-          )}
-        </div>
-      )}
 
       <button
         onClick={onRemove}

@@ -77,10 +77,12 @@ export default function Login() {
         </div>
 
         <div className="mx-auto w-full max-w-sm py-10 lg:py-0">
-          <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
-            {mode === 'signin' ? 'Secure Access' : 'Account Recovery'}
-          </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-ink-900">
+          {mode === 'forgot' && (
+            <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
+              Account Recovery
+            </p>
+          )}
+          <h1 className="text-4xl font-bold tracking-tight text-ink-900">
             {mode === 'signin' ? 'Sign in to continue.' : 'Reset your password.'}
           </h1>
 
@@ -106,6 +108,9 @@ export default function Login() {
                 uppercase
               />
 
+              {/* Forgot sits below the field's rule, right-aligned — it is
+                  what you reach for after the password fails, not before
+                  you type it. */}
               <Field
                 id="password"
                 label="Password"
@@ -113,16 +118,15 @@ export default function Login() {
                 value={password}
                 onChange={setPassword}
                 autoComplete="current-password"
-                action={
+                below={
                   <button
                     type="button"
                     onClick={() => { setMode('forgot'); setError(null) }}
-                    className="text-[11px] font-semibold uppercase tracking-label text-ink-400 transition-colors hover:text-cyrixRed-600"
+                    className="ml-auto block text-[11px] font-semibold uppercase tracking-label text-ink-400 transition-colors hover:text-cyrixRed-600"
                   >
                     Forgot Password?
                   </button>
                 }
-                hint="Your password is your employee code, in capitals."
               />
 
               <button
@@ -152,7 +156,7 @@ export default function Login() {
 
 function Field({
   id, label, value, onChange, type = 'text', placeholder, autoComplete,
-  autoFocus, uppercase, hint, action,
+  autoFocus, uppercase, hint, below,
 }: {
   id: string
   label: string
@@ -164,19 +168,17 @@ function Field({
   autoFocus?: boolean
   uppercase?: boolean
   hint?: string
-  action?: React.ReactNode
+  /** Rendered under the field's rule, e.g. the forgot-password link. */
+  below?: React.ReactNode
 }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <label
-          htmlFor={id}
-          className="text-[11px] font-semibold uppercase tracking-label text-ink-500"
-        >
-          {label}
-        </label>
-        {action}
-      </div>
+      <label
+        htmlFor={id}
+        className="block text-[11px] font-semibold uppercase tracking-label text-ink-500"
+      >
+        {label}
+      </label>
       <input
         id={id}
         type={type}
@@ -194,6 +196,7 @@ function Field({
                     focus:outline-none focus:ring-0 ${uppercase ? 'uppercase' : ''}`}
       />
       {hint && <p className="mt-2 text-xs text-ink-400">{hint}</p>}
+      {below && <div className="mt-2.5">{below}</div>}
     </div>
   )
 }

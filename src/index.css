@@ -278,12 +278,20 @@
     animation-delay: -4.5s;
   }
 
-  /* Gentle breathing, used in place of the drift when the reader has
-     asked for reduced motion. Opacity carries no vestibular risk, so the
-     panel still feels alive without anything travelling across it. */
+  /* The reduced-motion version of the drift.
+
+     It used to be opacity only, which is the safest possible answer and
+     also the reason the hero looked dead on any desktop with Windows'
+     "show animations" switched off — the phone animated, the desk did
+     not, and nothing on screen explained why.
+
+     Reduced motion means less movement, not none. This keeps the travel
+     under a tenth of the full path and stretches it over 20s, so there is
+     no fast edge and nothing large sweeping across the panel, with the
+     opacity breathe still carrying most of the life. */
   @keyframes score-breathe {
-    0%, 100% { opacity: 0.7; }
-    50%      { opacity: 1; }
+    0%, 100% { opacity: 0.72; transform: translate3d(8%, -12%, 0) scale(1); }
+    50%      { opacity: 1;    transform: translate3d(2%, -6%, 0) scale(1.05); }
   }
 
   /* Alert pulse: three rings, then done. */
@@ -330,11 +338,10 @@
     }
     .animate-score-drift,
     .animate-score-drift-slow {
-      animation: score-breathe 9s ease-in-out infinite;
-      transform: translate3d(6%, -10%, 0);
+      animation: score-breathe 20s var(--ease-in-out) infinite;
     }
     .animate-score-drift-slow {
-      animation-delay: -4.5s;
+      animation-delay: -10s;
     }
   }
 }

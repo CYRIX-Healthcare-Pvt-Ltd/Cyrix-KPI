@@ -15,26 +15,35 @@ import { ScoreHeader } from '@/components/analysis'
  * blanks are skipped rather than drawn as "0".
  */
 function ScoreLabel({
-  x, y, value, fill, dy = -10,
+  x, y, value, fill, dy = -10, index, count,
 }: {
   x?: number
   y?: number
   value?: number | string | null
   fill: string
   dy?: number
+  /** Injected by recharts when it clones this element per point. */
+  index?: number
+  count?: number
 }) {
   if (value === null || value === undefined || x === undefined || y === undefined) return null
   const n = typeof value === 'number' ? value : Number(value)
   if (Number.isNaN(n)) return null
 
+  // A centred label at the last point puts half its width past the plot
+  // area, where it is clipped — which is why March and the current month
+  // showed "90." instead of "90.7". The end points anchor inwards.
+  const isLast = count !== undefined && index === count - 1
+  const isFirst = index === 0
+
   return (
     <text
-      x={x}
+      x={x + (isLast ? 4 : isFirst ? -4 : 0)}
       y={y + dy}
       fill={fill}
       fontSize={11}
       fontWeight={600}
-      textAnchor="middle"
+      textAnchor={isLast ? 'end' : isFirst ? 'start' : 'middle'}
     >
       {n.toFixed(1)}
     </text>
@@ -97,7 +106,7 @@ export default function MyHistory() {
           <h3 className="mb-4 text-sm font-semibold text-ink-800">Score trend</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 14, right: 16, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eeeef0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b6e79' }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#6b6e79' }} />
@@ -110,13 +119,13 @@ export default function MyHistory() {
                     colour, so the series can be read without the legend. */}
                 <Line type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
                       dot={{ r: 3 }} connectNulls
-                      label={<ScoreLabel fill="#141519" dy={-12} />} />
+                      label={<ScoreLabel fill="#141519" dy={-12} count={chartData.length} />} />
                 <Line type="monotone" dataKey="Job role" stroke="#e30613" strokeWidth={1.5}
                       dot={{ r: 2 }} connectNulls
-                      label={<ScoreLabel fill="#e30613" dy={-10} />} />
+                      label={<ScoreLabel fill="#e30613" dy={-10} count={chartData.length} />} />
                 <Line type="monotone" dataKey="Core values" stroke="#8a8d97" strokeWidth={1.5}
                       dot={{ r: 2 }} connectNulls
-                      label={<ScoreLabel fill="#6b6e79" dy={14} />} />
+                      label={<ScoreLabel fill="#6b6e79" dy={14} count={chartData.length} />} />
               </LineChart>
             </ResponsiveContainer>
           </div>

@@ -45,6 +45,8 @@ export interface ScoringRuleMeta {
   direction: 'higher_better' | 'lower_better' | 'neutral'
   can_exceed: boolean
   can_be_negative: boolean
+  /** Offered when writing a KPI. Retired rules stay readable, not pickable. */
+  is_selectable: boolean
   sort_order: number
 }
 

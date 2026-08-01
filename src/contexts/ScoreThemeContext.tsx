@@ -59,18 +59,40 @@ export function useScoreTheme() {
   return ctx
 }
 
-/** The session-wide tint: the signed-in person's own average. */
-export function useBaseScore(score: number | null | undefined) {
+/**
+ * The session-wide tint: the signed-in person's own average.
+ *
+ * `subject` is whose score this is, and `loaded` says the answer has
+ * actually arrived. Both matter, because "no score" and "no score yet"
+ * are different states and this hook used to conflate them — it ignored
+ * null entirely, so the previous value simply stayed. Someone who had
+ * not started their KPI inherited the colour of whoever was signed in
+ * before them, and a green interface said they were doing well.
+ */
+export function useBaseScore(
+  subject: string | undefined,
+  score: number | null | undefined,
+  loaded: boolean,
+) {
   const { setBaseScore } = useScoreTheme()
+
+  // Back to neutral the moment the subject changes, rather than holding
+  // the last person's colour until the new figure lands.
+  useEffect(() => { setBaseScore(null) }, [subject, setBaseScore])
+
   useEffect(() => {
-    if (score === null || score === undefined) return
-    setBaseScore(score)
-  }, [score, setBaseScore])
+    if (!loaded) return
+    setBaseScore(score ?? null)
+  }, [score, loaded, setBaseScore])
 }
 
 /**
  * Screen-scoped tint. A manager on the team pages sees the team average;
  * leaving the page falls back to their own.
+ *
+ * Unlike the base tint this keeps ignoring null, because null here means
+ * the screen has nothing of its own to say — and falling through to the
+ * reader's own band is the right answer, not neutral.
  */
 export function useAmbientScore(score: number | null | undefined) {
   const { setOverride } = useScoreTheme()
