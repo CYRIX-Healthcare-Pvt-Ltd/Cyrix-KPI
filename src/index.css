@@ -85,6 +85,52 @@
     @apply btn bg-cyrixRed-600 text-white hover:bg-cyrixRed-700;
   }
 
+  /**
+   * Controls that sit on the black score hero.
+   *
+   * The page-level buttons cannot be reused there: .btn-primary is
+   * bg-ink-950, which is the panel's own colour, and .btn-secondary is
+   * solid white, which shouts louder than the score it sits beside. These
+   * are the same geometry as .btn so a row of mixed controls lines up.
+   */
+  /* nowrap and tighter padding below sm: at 375px two of these share the
+     row, and "Export to Excel" broke onto a second line, leaving one
+     button a head taller than the other. */
+  .btn-on-dark {
+    @apply btn whitespace-nowrap bg-white/10 px-3 text-[13px] text-white
+           ring-1 ring-inset ring-white/20 sm:px-4 sm:text-sm;
+  }
+  .btn-on-dark:hover:not(:disabled),
+  .btn-on-dark:focus-visible:not(:disabled) {
+    @apply bg-white/20 ring-white/40;
+  }
+
+  /* Excel's own green, not a band colour — this button means "the file
+     you are about to open", and the score palette would imply otherwise. */
+  .btn-excel {
+    @apply btn whitespace-nowrap px-3 text-[13px] text-white
+           ring-1 ring-inset ring-white/10 sm:px-4 sm:text-sm;
+    background-color: #217346;
+  }
+  .btn-excel:hover:not(:disabled),
+  .btn-excel:focus-visible:not(:disabled) {
+    background-color: #1a5c38;
+  }
+
+  /* A <select> on the hero. color-scheme dark is what makes the native
+     option list render light-on-dark; without it the popup inherits the
+     white page and the text disappears into it. */
+  .select-on-dark {
+    @apply rounded-lg bg-white/10 px-3 py-2.5 text-sm font-medium text-white
+           ring-1 ring-inset ring-white/20 focus:outline-none
+           focus:ring-2 focus:ring-white/50;
+    color-scheme: dark;
+    transition: background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+  }
+  .select-on-dark:hover {
+    @apply bg-white/20;
+  }
+
   /** Bare icon buttons in the header and table rows. */
   .btn-icon {
     @apply rounded-lg p-2 text-ink-400;
@@ -193,13 +239,20 @@
    * so there is no edge to see. A solid circle behind a blur still shows
    * its falloff as a ring, which is what made the colour sit on the right
    * half like a patch instead of blending into the black.
+   *
+   * --hero-accent is set by the header from the band of the number it is
+   * printing, and only falls back to the page-wide --score-accent when
+   * there is no local score. The two are not always the same: a manager
+   * whose own year is Excellent looking at a Satisfactory team average
+   * had a green wash behind an orange figure.
    */
   .score-aurora {
+    --aurora: var(--hero-accent, var(--score-accent));
     background: radial-gradient(
       circle at center,
-      color-mix(in srgb, var(--score-accent) 32%, transparent) 0%,
-      color-mix(in srgb, var(--score-accent) 14%, transparent) 32%,
-      color-mix(in srgb, var(--score-accent) 4%, transparent) 52%,
+      color-mix(in srgb, var(--aurora) 32%, transparent) 0%,
+      color-mix(in srgb, var(--aurora) 14%, transparent) 32%,
+      color-mix(in srgb, var(--aurora) 4%, transparent) 52%,
       transparent 70%
     );
   }

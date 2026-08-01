@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, FileSpreadsheet } from 'lucide-react'
+import { Pencil, FileSpreadsheet, PencilRuler } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useMyAssignment, useScoringRules, currentFy } from '@/lib/queries'
-import { Alert, PageLoader, StatusBadge, EmptyState } from '@/components/ui'
+import {
+  useMyAssignment, useScoringRules, useOpenRequestFor, useRequestAction, currentFy,
+} from '@/lib/queries'
+import {
+  Alert, PageLoader, StatusBadge, EmptyState, Spinner,
+} from '@/components/ui'
 import type { Section } from '@/types/db'
 
 export default function MyKpi() {
@@ -10,6 +15,9 @@ export default function MyKpi() {
   const fy = currentFy()
   const { data, isLoading } = useMyAssignment(employee?.id, fy)
   const { data: rules } = useScoringRules()
+
+  const assignmentId = data?.assignment?.id
+  const { data: openRevision } = useOpenRequestFor('revision', assignmentId)
 
   if (isLoading) return <PageLoader />
 
@@ -57,12 +65,21 @@ export default function MyKpi() {
         </Alert>
       )}
       {assignment.status === 'active' && (
-        <Alert kind="success" title="Approved">
-          This is locked for FY {fy}. Contact HR if something genuinely needs to change.
-        </Alert>
+        <>
+          <Alert kind="success" title="Approved">
+            This is locked for FY {fy} — it is the agreed basis for every month's
+            scoring.
+          </Alert>
+          <ReviseKpi
+            assignmentId={assignment.id}
+            fy={fy}
+            open={openRevision?.status ?? null}
+          />
+        </>
       )}
 
       {(['job_role', 'core_values'] as Section[]).map(section => (
+
         <div key={section} className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
             <h3 className="text-sm font-semibold text-ink-800">
@@ -100,6 +117,126 @@ export default function MyKpi() {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A KPI is locked once the manager approves it, which is right — it is the
+ * contract the year is scored against. It is wrong in exactly one case:
+ * somebody changes job role in September and is now being measured on work
+ * they no longer do.
+ *
+ * So the same two gates as a deletion. The reporting manager knows whether
+ * the change is genuine and HR owns the appraisal record, and unlocking a
+ * signed-off KPI should not be within the gift of either alone.
+ */
+function ReviseKpi({
+  assignmentId, fy, open,
+}: {
+  assignmentId: string
+  fy: string
+  open: string | null
+}) {
+  const request = useRequestAction()
+  const [showForm, setShowForm] = useState(false)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  if (open) {
+    return (
+      <div className="card flex flex-wrap items-center gap-3 p-4">
+        <PencilRuler className="h-5 w-5 shrink-0 text-ink-300" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink-900">Revision already requested</p>
+          <p className="mt-0.5 text-sm text-ink-500">
+            {open === 'pending_manager'
+              ? 'Waiting for your manager to review it. HR decides after them.'
+              : 'Your manager approved it. Waiting on HR to unlock the KPI.'}
+          </p>
+        </div>
+        <span className="badge bg-amber-100 text-amber-800">
+          {open === 'pending_manager' ? 'With manager' : 'With HR'}
+        </span>
+      </div>
+    )
+  }
+
+  if (sent) {
+    return (
+      <Alert kind="success" title="Revision requested">
+        Sent to your manager. HR unlocks the KPI after they approve.
+      </Alert>
+    )
+  }
+
+  const submit = async () => {
+    setError(null)
+    try {
+      await request.mutateAsync({
+        kind: 'revision',
+        action: 'request',
+        subjectId: assignmentId,
+        reason,
+      })
+      setShowForm(false)
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send that request.')
+    }
+  }
+
+  return (
+    <div className="card p-4">
+      {error && <div className="mb-3"><Alert kind="error">{error}</Alert></div>}
+
+      {!showForm ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink-900">Changed job role?</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Ask for this KPI to be reopened so it can be rewritten for the
+              work you actually do now.
+            </p>
+          </div>
+          <button onClick={() => setShowForm(true)} className="btn-secondary">
+            <PencilRuler className="h-4 w-4" /> Request a revision
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <p className="font-medium text-ink-900">Request a revision of your FY {fy} KPI</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Your manager reviews it first, then HR. Nothing unlocks until both
+              approve. Months you have already been scored on are not affected —
+              they keep the KPI and the scores they were given.
+            </p>
+          </div>
+          <textarea
+            rows={2}
+            className="input"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="e.g. Moved from Service Engineer to Application Specialist in August"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={submit}
+              disabled={!reason.trim() || request.isPending}
+              className="btn-primary"
+            >
+              {request.isPending && <Spinner className="h-4 w-4" />}
+              Send to my manager
+            </button>
+            <button onClick={() => setShowForm(false)} className="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

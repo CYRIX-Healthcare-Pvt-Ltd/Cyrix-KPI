@@ -8,7 +8,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  usePendingCounts, useRemovalRequests, useAnnualSummary, currentFy,
+  usePendingCounts, useRemovalRequests, useAnnualSummary,
+  usePendingRecordRequests, currentFy,
 } from '@/lib/queries'
 import { useBaseScore } from '@/contexts/ScoreThemeContext'
 import { Logo, LogoMark } from './Logo'
@@ -31,6 +32,9 @@ export default function Shell() {
     isManager ? employee?.id : undefined, fy,
   )
   const { data: removals } = useRemovalRequests('pending')
+  const { data: recordRequests } = usePendingRecordRequests(
+    isManager || isHrAdmin || isSwAdmin,
+  )
 
   // Set here rather than on the dashboard so the tint survives navigation —
   // every screen carries the signed-in person's band, not just the one that
@@ -40,10 +44,18 @@ export default function Shell() {
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.
+  // Deletion and revision requests stop at 'pending_manager' first. That
+  // queue was only ever linked from the HR and SW Admin navs, so a
+  // manager had no route to it and every request appeared to vanish.
+  const records: NavItem = {
+    to: '/deletions', label: 'Records', icon: Trash2,
+    badge: recordRequests ?? 0,
+  }
+
   const items: NavItem[] = isSwAdmin && !isHrAdmin
     ? [
         { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
-        { to: '/deletions', label: 'Deletions', icon: Trash2 },
+        records,
       ]
     : isHrAdmin
     ? [
@@ -51,10 +63,10 @@ export default function Shell() {
         { to: '/admin/employees', label: 'Employees', icon: Building2 },
         { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
         {
-          to: '/admin/requests', label: 'Requests', icon: UserPlus,
+          to: '/admin/requests', label: 'Joiners', icon: UserPlus,
           badge: removals?.length ?? 0,
         },
-        { to: '/deletions', label: 'Deletions', icon: Trash2 },
+        records,
         ...(isSwAdmin ? [{ to: '/admin/logins', label: 'Logins', icon: ShieldAlert }] : []),
       ]
     : [
@@ -65,6 +77,7 @@ export default function Shell() {
           ? [
               { to: '/team', label: 'My Team', icon: Users, badge: counts?.scoring ?? 0 },
               { to: '/approvals', label: 'Approvals', icon: CheckSquare, badge: counts?.approvals ?? 0 },
+              records,
             ]
           : []),
       ]

@@ -13,6 +13,12 @@ export interface Band {
   key: BandKey
   label: string
   min: number
+  /**
+   * Literal colours, for the two places a Tailwind class cannot reach:
+   * the CSS custom properties driving hover states, and the score hero's
+   * gradient wash. Kept beside the classes so a band is defined once.
+   */
+  hex: { base: string; soft: string; strong: string }
   /** Text + background for chips and pills. */
   chip: string
   /** Accent used for the page wash and section rules. */
@@ -36,6 +42,7 @@ export interface Band {
 export const BANDS: Band[] = [
   {
     key: 'excellent', label: 'Excellent', min: 90,
+    hex: { base: '#10b981', soft: '#d1fae5', strong: '#065f46' },
     chip: 'bg-emerald-100 text-emerald-800',
     accent: 'text-emerald-700', wash: 'from-emerald-50', bar: 'bg-emerald-500',
     onDark: {
@@ -46,6 +53,7 @@ export const BANDS: Band[] = [
   },
   {
     key: 'veryGood', label: 'Very Good', min: 80,
+    hex: { base: '#84cc16', soft: '#ecfccb', strong: '#3f6212' },
     chip: 'bg-lime-100 text-lime-900',
     accent: 'text-lime-800', wash: 'from-lime-50', bar: 'bg-lime-500',
     onDark: {
@@ -56,6 +64,7 @@ export const BANDS: Band[] = [
   },
   {
     key: 'good', label: 'Good', min: 60,
+    hex: { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
     chip: 'bg-amber-100 text-amber-800',
     accent: 'text-amber-700', wash: 'from-amber-50', bar: 'bg-amber-500',
     onDark: {
@@ -66,6 +75,7 @@ export const BANDS: Band[] = [
   },
   {
     key: 'satisfactory', label: 'Satisfactory', min: 40,
+    hex: { base: '#f97316', soft: '#ffedd5', strong: '#9a3412' },
     chip: 'bg-orange-100 text-orange-800',
     accent: 'text-orange-700', wash: 'from-orange-50', bar: 'bg-orange-500',
     onDark: {
@@ -76,6 +86,7 @@ export const BANDS: Band[] = [
   },
   {
     key: 'poor', label: 'Poor', min: -Infinity,
+    hex: { base: '#e30613', soft: '#fde3e5', strong: '#9e0812' },
     chip: 'bg-cyrixRed-100 text-cyrixRed-800',
     accent: 'text-cyrixRed-700', wash: 'from-cyrixRed-50', bar: 'bg-cyrixRed-600',
     onDark: {

@@ -28,15 +28,6 @@ interface ScoreTheme {
 
 const Ctx = createContext<ScoreTheme | undefined>(undefined)
 
-/** Hex per band — CSS variables need literal values. */
-const HEX: Record<string, { base: string; soft: string; strong: string }> = {
-  excellent:    { base: '#10b981', soft: '#d1fae5', strong: '#065f46' },
-  veryGood:     { base: '#84cc16', soft: '#ecfccb', strong: '#3f6212' },
-  good:         { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
-  satisfactory: { base: '#f97316', soft: '#ffedd5', strong: '#9a3412' },
-  poor:         { base: '#e30613', soft: '#fde3e5', strong: '#9e0812' },
-}
-
 /** Before any score exists, interactive states stay brand black. */
 const NEUTRAL = { base: '#141519', soft: '#eeeef0', strong: '#000000' }
 
@@ -48,7 +39,7 @@ export function ScoreThemeProvider({ children }: { children: ReactNode }) {
   const band = useMemo(() => bandFor(score), [score])
 
   useEffect(() => {
-    const c = band ? HEX[band.key] ?? NEUTRAL : NEUTRAL
+    const c = band?.hex ?? NEUTRAL
     const root = document.documentElement
     root.style.setProperty('--score-accent', c.base)
     root.style.setProperty('--score-soft', c.soft)

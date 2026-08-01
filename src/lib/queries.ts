@@ -6,7 +6,7 @@ import type {
   CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
-  WeakAreaRow, TmRemovalRequest,
+  WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -14,6 +14,26 @@ async function unwrap<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Pr
   const { data, error } = await p
   if (error) throw new Error(friendlyError(error))
   return data as T
+}
+
+/**
+ * Everything downstream of a submission changing state.
+ *
+ * Scoring a month moves a number that is read in six other places — the
+ * nav badge, the team grid, the analysis pages, the year average. Listing
+ * them here rather than at each call site is why the badge kept showing
+ * work that was already done.
+ */
+const SUBMISSION_DEPENDENTS = [
+  'submission', 'submission_by_id', 'team', 'team_submissions', 'history',
+  'pending_counts', 'annual', 'kra_attainment', 'weak_areas',
+  'org_kpi_status', 'manager_completion', 'manager_tat',
+]
+
+function invalidateSubmissionViews(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of SUBMISSION_DEPENDENTS) {
+    qc.invalidateQueries({ queryKey: [key] })
+  }
 }
 
 export const currentFy = () => fyForDate(new Date())
@@ -214,7 +234,9 @@ export function useAssignmentAction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assignment'] })
       qc.invalidateQueries({ queryKey: ['pending_approvals'] })
+      qc.invalidateQueries({ queryKey: ['pending_counts'] })
       qc.invalidateQueries({ queryKey: ['team'] })
+      qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
     },
   })
 }
@@ -358,12 +380,7 @@ export function useSubmissionAction() {
       const { error } = await supabase.rpc(fn, params)
       if (error) throw new Error(friendlyError(error))
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['submission'] })
-      qc.invalidateQueries({ queryKey: ['submission_by_id'] })
-      qc.invalidateQueries({ queryKey: ['team'] })
-      qc.invalidateQueries({ queryKey: ['history'] })
-    },
+    onSuccess: () => invalidateSubmissionViews(qc),
   })
 }
 
@@ -629,6 +646,128 @@ export function useRemovalAction() {
       qc.invalidateQueries({ queryKey: ['removal_requests'] })
       qc.invalidateQueries({ queryKey: ['team'] })
       qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------
+// Record requests — deleting a wrongly submitted month, and revising a
+// KPI that has already been approved and locked. Different subjects, the
+// same two-stage governance, so they share a screen and a badge.
+// ---------------------------------------------------------------------
+
+/** Both queues, with the people attached, newest first. */
+export function useRecordRequests() {
+  return useQuery({
+    queryKey: ['record_requests'],
+    queryFn: async () => {
+      const [deletions, revisions] = await Promise.all([
+        unwrap<DeletionRequest[]>(
+          supabase.from('record_deletion_requests').select('*')
+            .order('created_at', { ascending: false }),
+        ),
+        unwrap<RevisionRequest[]>(
+          supabase.from('kpi_revision_requests').select('*')
+            .order('created_at', { ascending: false }),
+        ),
+      ])
+
+      const rows: RecordRequest[] = [
+        ...deletions.map(r => ({ kind: 'deletion' as const, ...r })),
+        ...revisions.map(r => ({ kind: 'revision' as const, ...r })),
+      ].sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+      if (rows.length === 0) return []
+
+      const ids = [...new Set(rows.flatMap(r => [r.employee_id, r.requested_by]))]
+      const people = await unwrap<Employee[]>(
+        supabase.from('employees').select('*').in('id', ids),
+      )
+      const byId = new Map(people.map(p => [p.id, p]))
+      return rows.map(request => ({
+        request,
+        employee: byId.get(request.employee_id),
+        requester: byId.get(request.requested_by),
+      }))
+    },
+  })
+}
+
+/**
+ * The nav badge. Counted in SQL rather than by filtering the list above,
+ * so the number is the same one the server would enforce — a client-side
+ * filter over rows RLS happened to return is a different question.
+ */
+export function usePendingRecordRequests(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['pending_record_requests'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('my_pending_record_requests')
+      if (error) throw new Error(friendlyError(error))
+      return (data as number) ?? 0
+    },
+  })
+}
+
+/** Is there already an open request against this month or this KPI? */
+export function useOpenRequestFor(
+  kind: 'deletion' | 'revision',
+  id: string | undefined,
+) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: ['open_request', kind, id],
+    queryFn: async () => {
+      const table = kind === 'deletion'
+        ? 'record_deletion_requests' : 'kpi_revision_requests'
+      const column = kind === 'deletion' ? 'submission_id' : 'assignment_id'
+      const rows = await unwrap<Array<{ status: string }>>(
+        supabase.from(table).select('status')
+          .eq(column, id!).in('status', ['pending_manager', 'pending_hr']).limit(1),
+      )
+      return rows[0] ?? null
+    },
+  })
+}
+
+export function useRequestAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      kind: 'deletion' | 'revision'
+      action: 'request' | 'review'
+      /** submission_id for a deletion, assignment_id for a revision. */
+      subjectId?: string
+      reason?: string
+      requestId?: string
+      approve?: boolean
+      note?: string
+    }) => {
+      const fn = args.action === 'request'
+        ? (args.kind === 'deletion' ? 'request_record_deletion' : 'request_kpi_revision')
+        : (args.kind === 'deletion' ? 'review_record_deletion' : 'review_kpi_revision')
+
+      const params: Record<string, unknown> = args.action === 'request'
+        ? args.kind === 'deletion'
+          ? { p_submission_id: args.subjectId, p_reason: args.reason ?? '' }
+          : { p_assignment_id: args.subjectId, p_reason: args.reason ?? '' }
+        : {
+            p_request_id: args.requestId,
+            p_approve: args.approve ?? false,
+            p_note: args.note ?? null,
+          }
+
+      const { error } = await supabase.rpc(fn, params)
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['record_requests'] })
+      qc.invalidateQueries({ queryKey: ['pending_record_requests'] })
+      qc.invalidateQueries({ queryKey: ['open_request'] })
+      qc.invalidateQueries({ queryKey: ['assignment'] })
+      invalidateSubmissionViews(qc)
     },
   })
 }

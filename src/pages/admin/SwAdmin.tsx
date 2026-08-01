@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Search, ShieldAlert, KeyRound, Download, Info } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Search, ShieldAlert, KeyRound, Download, Info, RotateCcw } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
-import { PageLoader, Alert, StatTile } from '@/components/ui'
+import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 
 interface LoginStatusRow {
   employee_id: string
@@ -31,8 +31,12 @@ const STATE_STYLE: Record<string, string> = {
 }
 
 export default function SwAdmin() {
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
+  const [confirming, setConfirming] = useState<LoginStatusRow | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [resetError, setResetError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['login_status'],
@@ -72,6 +76,33 @@ export default function SwAdmin() {
     for (const r of data ?? []) c[r.login_state] = (c[r.login_state] ?? 0) + 1
     return c
   }, [data])
+
+  /**
+   * Puts an account back to ecode-as-password. The hash is written inside
+   * the database by a definer function that checks the caller's role, so
+   * the service key stays out of the browser — the reason this used to be
+   * command line only.
+   */
+  const reset = useMutation({
+    mutationFn: async (row: LoginStatusRow) => {
+      const { error } = await supabase.rpc('admin_reset_password', {
+        p_employee_id: row.employee_id,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return row
+    },
+    onSuccess: row => {
+      setConfirming(null)
+      setNotice(
+        `${row.full_name} (${row.ecode}) can now sign in with ${row.ecode.toUpperCase()} as their password.`,
+      )
+      qc.invalidateQueries({ queryKey: ['login_status'] })
+    },
+    onError: err => {
+      setConfirming(null)
+      setResetError(err instanceof Error ? err.message : 'Could not reset that password.')
+    },
+  })
 
   if (isLoading) return <PageLoader label="Loading login records…" />
   if (error) return <Alert kind="error">{(error as Error).message}</Alert>
@@ -122,14 +153,45 @@ export default function SwAdmin() {
           </p>
           <p className="mt-1.5">
             While the system is in testing everyone's password{' '}
-            <strong>is their employee code</strong>. To get someone in, reset
-            rather than look up:
+            <strong>is their employee code</strong>. To get someone in, use
+            Reset on their row — it puts the password back to their code.
           </p>
-          <code className="mt-2 block rounded bg-ink-950 px-2.5 py-1.5 text-xs text-white">
-            node scripts/user-admin.mjs reset E1234
-          </code>
         </div>
       </div>
+
+      {notice && <Alert kind="success">{notice}</Alert>}
+      {resetError && <Alert kind="error">{resetError}</Alert>}
+
+      {confirming && (
+        <div className="card space-y-3 border-cyrixRed-200 p-4">
+          <div>
+            <p className="font-medium text-ink-900">
+              Reset {confirming.full_name} back to their employee code?
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Their password becomes{' '}
+              <code className="rounded bg-ink-100 px-1.5 py-0.5 text-xs font-semibold">
+                {confirming.ecode.toUpperCase()}
+              </code>
+              . Whatever they had set is overwritten and cannot be recovered.
+              They are not notified.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => reset.mutate(confirming)}
+              disabled={reset.isPending}
+              className="btn-danger"
+            >
+              {reset.isPending && <Spinner className="h-4 w-4" />}
+              Reset to {confirming.ecode.toUpperCase()}
+            </button>
+            <button onClick={() => setConfirming(null)} className="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <StatTile label="Total accounts" value={data?.length ?? 0} />
@@ -181,6 +243,7 @@ export default function SwAdmin() {
                 <th className="px-4 py-2.5">State</th>
                 <th className="px-4 py-2.5">Last sign-in</th>
                 <th className="px-4 py-2.5">Password changed</th>
+                <th className="px-4 py-2.5 text-right">Password</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
@@ -210,6 +273,19 @@ export default function SwAdmin() {
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.has_login ? (
+                      <button
+                        onClick={() => { setNotice(null); setResetError(null); setConfirming(r) }}
+                        className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                        title={`Reset ${r.ecode} back to their employee code`}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" /> Reset
+                      </button>
+                    ) : (
+                      <span className="text-xs text-ink-300">No login</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -224,8 +300,8 @@ export default function SwAdmin() {
 
       <p className="flex items-center gap-1.5 text-xs text-ink-400">
         <KeyRound className="h-3.5 w-3.5" />
-        Resets are issued from the command line so the service-role key never
-        reaches a browser.
+        Every reset is written to the audit log against your account. For bulk
+        work there is still <code>node scripts/user-admin.mjs reset-all</code>.
       </p>
     </div>
   )

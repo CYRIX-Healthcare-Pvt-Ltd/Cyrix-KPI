@@ -182,6 +182,43 @@ export interface TmRemovalRequest {
   created_at: string
 }
 
+/**
+ * Deleting a submitted month, and revising a KPI that is already
+ * approved. Two subjects, one shape: both need the reporting manager and
+ * then HR, and neither is reversible once HR says yes.
+ */
+export type RequestStage =
+  | 'pending_manager' | 'pending_hr' | 'approved' | 'rejected'
+
+interface TwoStageRequest {
+  id: string
+  employee_id: string
+  requested_by: string
+  reason: string
+  status: RequestStage
+  manager_id: string | null
+  manager_decided_at: string | null
+  manager_note: string | null
+  hr_id: string | null
+  hr_decided_at: string | null
+  hr_note: string | null
+  created_at: string
+}
+
+export interface DeletionRequest extends TwoStageRequest {
+  submission_id: string
+  period_month: string
+}
+
+export interface RevisionRequest extends TwoStageRequest {
+  assignment_id: string
+  financial_year: string
+}
+
+export type RecordRequest =
+  | ({ kind: 'deletion' } & DeletionRequest)
+  | ({ kind: 'revision' } & RevisionRequest)
+
 export interface OrgKpiStatusRow {
   employee_id: string
   ecode: string

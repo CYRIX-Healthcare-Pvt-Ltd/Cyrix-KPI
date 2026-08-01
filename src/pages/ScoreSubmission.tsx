@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Undo2, Lock, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
-  useSubmissionAction, useCoreValues,
+  useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import {
@@ -24,6 +24,8 @@ export default function ScoreSubmission() {
   const saveItems = useSaveItemValues()
   const saveRatings = useSaveCoreRatings()
   const action = useSubmissionAction()
+  const requestAction = useRequestAction()
+  const { data: openDeletion } = useOpenRequestFor('deletion', submissionId)
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
@@ -151,16 +153,19 @@ export default function ScoreSubmission() {
   const onRequestDeletion = async () => {
     if (!submission || !deleteReason.trim()) return
     setError(null)
+    setNotice(null)
     try {
-      const { error: rpcError } = await supabase.rpc('request_record_deletion', {
-        p_submission_id: submission.id,
-        p_reason: deleteReason,
+      await requestAction.mutateAsync({
+        kind: 'deletion',
+        action: 'request',
+        subjectId: submission.id,
+        reason: deleteReason,
       })
-      if (rpcError) throw new Error(rpcError.message)
       setShowDelete(false)
       setDeleteReason('')
       setNotice('Deletion request sent. It needs HR approval before the record is removed.')
     } catch (err) {
+      setNotice(null)
       setError(err instanceof Error ? err.message : 'Could not send that request.')
     }
   }
@@ -374,16 +379,25 @@ export default function ScoreSubmission() {
             </button>
             {/* Wrongly submitted months are deleted, not corrected — but
                 only with both the manager's and HR's approval. */}
-            <button
-              onClick={() => setShowDelete(v => !v)}
-              disabled={busy}
-              className="btn-secondary !text-cyrixRed-700"
-            >
-              <Trash2 className="h-4 w-4" /> Request deletion
-            </button>
+            {openDeletion ? (
+              <span className="badge bg-amber-100 text-amber-800">
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Deletion {openDeletion.status === 'pending_manager'
+                  ? 'awaiting your decision on the Records screen'
+                  : 'with HR'}
+              </span>
+            ) : (
+              <button
+                onClick={() => setShowDelete(v => !v)}
+                disabled={busy}
+                className="btn-secondary !text-cyrixRed-700"
+              >
+                <Trash2 className="h-4 w-4" /> Request deletion
+              </button>
+            )}
           </div>
 
-          {showDelete && (
+          {showDelete && !openDeletion && (
             <div className="card space-y-3 border-cyrixRed-200 p-4">
               <div>
                 <p className="font-medium text-ink-900">
@@ -404,9 +418,10 @@ export default function ScoreSubmission() {
               <div className="flex gap-2">
                 <button
                   onClick={onRequestDeletion}
-                  disabled={!deleteReason.trim() || busy}
+                  disabled={!deleteReason.trim() || busy || requestAction.isPending}
                   className="btn-danger"
                 >
+                  {requestAction.isPending && <Spinner className="h-4 w-4" />}
                   Send to HR for approval
                 </button>
                 <button onClick={() => setShowDelete(false)} className="btn-secondary">

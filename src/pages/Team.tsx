@@ -81,12 +81,17 @@ export default function Team() {
     )
   }
 
-  const awaiting = team.filter(t => subsById.get(t.id)?.status === 'submitted').length
+  const waiting = team.filter(t => subsById.get(t.id)?.status === 'submitted')
+  const awaiting = waiting.length
   const notStarted = team.filter(t => {
     const s = subsById.get(t.id)
     return !s || s.status === 'draft'
   }).length
   const done = team.filter(t => SCORED.has(subsById.get(t.id)?.status ?? '')).length
+
+  // The call to action has to land on something to score. It pointed at
+  // /team — the page it is already on — so the button did nothing.
+  const firstToScore = waiting.length ? subsById.get(waiting[0].id) : undefined
 
   return (
     <div className="space-y-5">
@@ -96,36 +101,45 @@ export default function Team() {
         score={teamAvg}
         scoreLabel="Team average"
       >
-        <div className="flex flex-wrap gap-2">
-          <Link to="/team/analysis" className="btn-primary">
-            <BarChart3 className="h-4 w-4" /> Team analysis
-          </Link>
-          <button onClick={download} className="btn-secondary" disabled={busy}>
-            {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-            Export to Excel
-          </button>
+        {/* Two columns on a phone: the month picker spans both, then the
+            two actions sit side by side at equal width. A plain flex-wrap
+            row left them ragged, breaking after one button on one width
+            and after two on the next. */}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <select
-            className="input w-auto"
+            className="select-on-dark col-span-2 sm:w-auto"
             value={month}
             onChange={e => setMonth(e.target.value)}
+            aria-label="Month"
           >
             {/* Completed months only — a month in progress cannot be assessed. */}
             {openFyMonths(fy).reverse().map(m => (
               <option key={m} value={m}>{monthLabel(m)}</option>
             ))}
           </select>
+          <Link to="/team/analysis" className="btn-on-dark">
+            <BarChart3 className="h-4 w-4" /> Team analysis
+          </Link>
+          <button onClick={download} className="btn-excel" disabled={busy}>
+            {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            Export to Excel
+          </button>
         </div>
       </ScoreHeader>
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
 
-      {awaiting > 0 && (
+      {awaiting > 0 && firstToScore && (
         <ActionRequired
           eyebrow="Scoring Due"
           title={`${awaiting} assessment${awaiting === 1 ? '' : 's'} waiting for you`}
-          body={`Your team has submitted ${monthLabel(month)} and cannot be finalised until you score it.`}
-          to="/team"
+          body={
+            awaiting === 1
+              ? `${waiting[0].full_name} has submitted ${monthLabel(month)} and it cannot be finalised until you score it.`
+              : `Your team has submitted ${monthLabel(month)} and those months cannot be finalised until you score them. Starting with ${waiting[0].full_name}.`
+          }
+          to={`/score/${firstToScore.id}`}
           cta="Start Scoring"
         />
       )}

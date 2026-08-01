@@ -80,20 +80,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
+    // Which user the loaded profile belongs to. A token refresh fires the
+    // same event as a sign-in, and re-showing the loader every hour for a
+    // profile we already have would be a visible flicker for no reason.
+    let loadedFor: string | undefined
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!alive) return
-      setSession(data.session)
-      await loadProfile(data.session?.user.id)
-      if (alive) setLoading(false)
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    const sync = async (s: Session | null) => {
       if (!alive) return
       setSession(s)
-      await loadProfile(s?.user.id)
+
+      // Signing in takes two round trips: the token, then the employee
+      // row. Between them the session exists and the profile does not,
+      // which is indistinguishable from an auth user with no employee
+      // record — and that is what the app was briefly reporting. Hold the
+      // loading state across both.
+      const uid = s?.user.id
+      if (uid && uid !== loadedFor) setLoading(true)
+
+      await loadProfile(uid)
+      loadedFor = uid
       if (alive) setLoading(false)
-    })
+    }
+
+    supabase.auth.getSession().then(({ data }) => sync(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => { sync(s) })
 
     return () => {
       alive = false

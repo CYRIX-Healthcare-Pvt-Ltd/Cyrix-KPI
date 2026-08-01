@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy } from 'lucide-react'
@@ -28,14 +28,17 @@ export function ScoreHeader({
   const pct = Math.max(0, Math.min(100, score ?? 0))
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-ink-950 text-white">
-      {/* A wash of the band colour bleeding in from the score side. It is
-          the one place the performance colour is allowed to dominate. */}
+    <section
+      className="relative overflow-hidden rounded-2xl bg-ink-950 text-white"
+      // The wash takes its colour from THIS header's band, not the page
+      // tint. They diverge whenever a screen reports on someone other than
+      // the reader — a team average, a report's year — and a green glow
+      // behind an orange score reads as a bug, because it is one.
+      style={band ? ({ '--hero-accent': band.hex.base } as CSSProperties) : undefined}
+    >
       {/* Band-coloured light drifting from the top-right corner down toward
-          the bottom-left and back. Two layers on 18s and 27s so they
-          separate and rejoin, which stops the loop reading as a loop.
-          Colour comes from --score-accent rather than a Tailwind class, so
-          it tracks the band without shipping five variants. */}
+          the bottom-left and back. Two layers on different periods so they
+          separate and rejoin, which stops the loop reading as a loop. */}
       {band && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="score-aurora animate-score-drift absolute -right-1/4 -top-1/2 h-[38rem] w-[38rem]" />

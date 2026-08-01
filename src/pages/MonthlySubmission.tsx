@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
-  currentFy,
+  useOpenRequestFor, useRequestAction, currentFy,
 } from '@/lib/queries'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
@@ -30,6 +30,7 @@ export default function MonthlySubmission() {
   const saveRatings = useSaveCoreRatings()
   const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
+  const requestAction = useRequestAction()
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
@@ -43,6 +44,8 @@ export default function MonthlySubmission() {
   const submission = data?.submission ?? null
   const items = data?.items ?? []
   const editable = submission?.status === 'draft' || submission?.status === 'returned'
+
+  const { data: openDeletion } = useOpenRequestFor('deletion', submission?.id)
 
   // Seed local state once the server data lands.
   useEffect(() => {
@@ -167,16 +170,22 @@ export default function MonthlySubmission() {
   const onRequestDeletion = async () => {
     if (!submission || !deleteReason.trim()) return
     setError(null)
+    setNotice(null)
     try {
-      const { error: rpcError } = await supabase.rpc('request_record_deletion', {
-        p_submission_id: submission.id,
-        p_reason: deleteReason,
+      await requestAction.mutateAsync({
+        kind: 'deletion',
+        action: 'request',
+        subjectId: submission.id,
+        reason: deleteReason,
       })
-      if (rpcError) throw new Error(rpcError.message)
       setShowDelete(false)
       setDeleteReason('')
       setNotice('Sent to your manager. HR approves the removal after them.')
     } catch (err) {
+      // Clearing the notice matters as much as setting the error: the
+      // previous "sent to your manager" was still on screen underneath a
+      // failure, which read as both things having happened.
+      setNotice(null)
       setError(err instanceof Error ? err.message : 'Could not send that request.')
     }
   }
@@ -523,7 +532,27 @@ export default function MonthlySubmission() {
           the final say either way. */}
       {!editable && (
         <div className="card p-4">
-          {!showDelete ? (
+          {openDeletion ? (
+            // One open request at a time, enforced by a partial unique
+            // index. Showing where it has got to is more use than a button
+            // that can only fail.
+            <div className="flex flex-wrap items-center gap-3">
+              <Trash2 className="h-5 w-5 shrink-0 text-ink-300" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink-900">
+                  Removal already requested
+                </p>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  {openDeletion.status === 'pending_manager'
+                    ? 'Waiting for your manager to review it. HR decides after them.'
+                    : 'Your manager approved it. Waiting on HR to remove the record.'}
+                </p>
+              </div>
+              <span className="badge bg-amber-100 text-amber-800">
+                {openDeletion.status === 'pending_manager' ? 'With manager' : 'With HR'}
+              </span>
+            </div>
+          ) : !showDelete ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-ink-900">
@@ -562,9 +591,10 @@ export default function MonthlySubmission() {
               <div className="flex gap-2">
                 <button
                   onClick={onRequestDeletion}
-                  disabled={!deleteReason.trim()}
+                  disabled={!deleteReason.trim() || requestAction.isPending}
                   className="btn-danger"
                 >
+                  {requestAction.isPending && <Spinner className="h-4 w-4" />}
                   Send to my manager
                 </button>
                 <button onClick={() => setShowDelete(false)} className="btn-secondary">

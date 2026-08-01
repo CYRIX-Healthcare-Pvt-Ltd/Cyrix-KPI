@@ -42,6 +42,16 @@ export function friendlyError(err: unknown): string {
   if (msg.includes('duplicate key') && msg.includes('idx_assignment_one_live')) {
     return 'A KPI already exists for this employee for that financial year.'
   }
+  // Both request tables carry a partial unique index over the open
+  // states, which is how "one at a time" is enforced. Reaching it means
+  // the request already went through, so say that rather than leaking the
+  // index name.
+  if (msg.includes('duplicate key') && msg.includes('idx_deletion_one_open')) {
+    return 'A deletion request for this month has already been raised and is still being reviewed.'
+  }
+  if (msg.includes('duplicate key') && msg.includes('idx_revision_one_open')) {
+    return 'A revision request for this KPI has already been raised and is still being reviewed.'
+  }
   if (msg.includes('row-level security') || msg.includes('Not permitted')) {
     return 'You do not have access to this.'
   }

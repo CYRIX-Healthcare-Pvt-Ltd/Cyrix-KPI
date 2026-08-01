@@ -138,10 +138,19 @@ export function StatTile({
   tone?: 'default' | 'brand'
 }) {
   return (
-    <div className={clsx('card p-4', tone === 'brand' && 'border-ink-300 bg-ink-50')}>
+    // A row of these should read as one band, so the caption line is
+    // always rendered — reserved with a non-breaking space when a tile has
+    // nothing to say. Otherwise the tile carrying a sub-label stands a
+    // line taller than the ones beside it.
+    <div
+      className={clsx(
+        'card flex flex-col p-4',
+        tone === 'brand' && 'border-ink-300 bg-ink-50',
+      )}
+    >
       <p className="label !mb-0">{label}</p>
       <p className="mt-2 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-ink-400">{sub}</p>}
+      <p className="mt-0.5 text-xs text-ink-400">{sub ?? ' '}</p>
     </div>
   )
 }
