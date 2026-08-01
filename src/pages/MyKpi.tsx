@@ -86,14 +86,11 @@ export default function MyKpi() {
                       <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
                     )}
                   </div>
-                  <div className="flex shrink-0 gap-2">
-                    <span className="badge bg-ink-100 text-ink-900">{item.weightage}%</span>
-                    {item.target_value !== null && (
-                      <span className="badge bg-ink-100 text-ink-600">
-                        target {item.target_value}
-                      </span>
-                    )}
-                  </div>
+                  {/* No target shown here: this is the year's contract, and
+                      the target is set per month on the assessment itself. */}
+                  <span className="badge shrink-0 bg-ink-100 text-ink-900">
+                    {item.weightage}%
+                  </span>
                 </div>
                 <p className="mt-2 text-xs text-ink-400">
                   {rules?.find(r => r.code === item.scoring_rule)?.label ?? item.scoring_rule}

@@ -32,12 +32,28 @@ export function ScoreHeader({
       {/* A wash of the band colour bleeding in from the score side. It is
           the one place the performance colour is allowed to dominate. */}
       {band && (
-        <div
-          className={clsx(
-            'pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl',
-            band.onDark.glow,
-          )}
-        />
+        <>
+          <div
+            className={clsx(
+              'pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl',
+              'animate-score-breathe',
+              band.onDark.glow,
+            )}
+          />
+          {/* Two rings easing outward from behind the score. Outline only —
+              a filled circle reads as a bubble sitting on the panel. */}
+          {[0, 2].map(delay => (
+            <span
+              key={delay}
+              className={clsx(
+                'pointer-events-none absolute right-14 top-20 h-32 w-32 rounded-full',
+                'animate-score-ripple border border-current',
+                band.onDark.text,
+              )}
+              style={{ animationDelay: `${delay}s` }}
+            />
+          ))}
+        </>
       )}
 
       <div className="relative flex flex-wrap items-end justify-between gap-6 p-6 sm:p-7">
@@ -90,9 +106,16 @@ export function ScoreHeader({
         <div className="relative h-1.5 overflow-hidden rounded-full bg-white/10">
           {band && (
             <div
-              className={clsx('h-full rounded-full transition-all duration-700', band.onDark.bar)}
+              className={clsx(
+                'relative h-full overflow-hidden rounded-full transition-all duration-700',
+                'animate-score-fill',
+                band.onDark.bar,
+              )}
               style={{ width: `${pct}%` }}
-            />
+            >
+              {/* Light travelling along the fill. */}
+              <span className="animate-score-sweep absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+            </div>
           )}
           {[40, 60, 80, 90].map(t => (
             <span

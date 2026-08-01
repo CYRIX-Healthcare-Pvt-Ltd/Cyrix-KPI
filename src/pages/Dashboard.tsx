@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { Users, Target } from 'lucide-react'
-import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
@@ -40,10 +39,6 @@ export default function Dashboard() {
     )
     return fyMonths(fy).map(m => byMonth.get(m)?.final_total_score ?? null)
   }, [history, fy])
-
-  // Interactive states across the app take the colour of this person's
-  // own performance band.
-  useAmbientScore(annual?.avg_total_score)
 
   if (aLoading) return <PageLoader />
 

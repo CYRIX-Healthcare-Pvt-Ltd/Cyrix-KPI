@@ -95,3 +95,57 @@
     color: var(--score-accent);
   }
 }
+
+@layer utilities {
+  /**
+   * Score hero motion. Slow and low-contrast on purpose: it should read
+   * as the panel being alive, not as something demanding attention.
+   *
+   * All of it is disabled under prefers-reduced-motion.
+   */
+
+  /* A light sweeps along the filled meter, once every few seconds. */
+  @keyframes score-sweep {
+    0%   { transform: translateX(-100%); }
+    60%  { transform: translateX(200%); }
+    100% { transform: translateX(200%); }
+  }
+  .animate-score-sweep {
+    animation: score-sweep 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  /* The corner glow breathes. */
+  @keyframes score-breathe {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50%      { opacity: 0.9;  transform: scale(1.12); }
+  }
+  .animate-score-breathe {
+    animation: score-breathe 7s ease-in-out infinite;
+  }
+
+  /* The meter fills from zero on first paint, so the number lands. */
+  @keyframes score-fill {
+    from { width: 0; }
+  }
+  .animate-score-fill {
+    animation: score-fill 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Two rings pushing outward from the score, like a slow pulse. */
+  @keyframes score-ripple {
+    0%   { transform: scale(0.85); opacity: 0.5; }
+    100% { transform: scale(1.9);  opacity: 0; }
+  }
+  .animate-score-ripple {
+    animation: score-ripple 4s ease-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-score-sweep,
+    .animate-score-breathe,
+    .animate-score-fill,
+    .animate-score-ripple {
+      animation: none;
+    }
+  }
+}

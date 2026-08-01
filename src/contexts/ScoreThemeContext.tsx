@@ -1,33 +1,39 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext, useContext, useEffect, useMemo, useState, type ReactNode,
+} from 'react'
 import { bandFor, type Band } from '@/lib/bands'
 
 /**
- * Publishes the signed-in person's own performance band as CSS custom
- * properties on :root, so interactive states — hover, active tab, focus
- * ring — take the colour of how they are actually doing.
+ * Publishes a performance band as CSS custom properties on :root, so
+ * interactive states — hover, active tab, focus ring — take the colour of
+ * how someone is actually doing.
  *
- * Managers viewing their team get the team average instead, set by the
- * team screens via `setScore`. It resets on unmount so the manager's own
- * band returns when they navigate away.
+ * Two layers, because they have different lifetimes:
  *
- * Done with CSS variables rather than Tailwind classes because the value
- * changes at runtime; Tailwind can only ship classes it saw at build.
+ *   base      the signed-in person's own year average. Set once by the
+ *             shell and kept for the whole session, so every screen is
+ *             tinted, not only the dashboard.
+ *   override  a screen-scoped value, e.g. the team average on the team
+ *             pages. Falls back to base when that screen unmounts.
+ *
+ * CSS variables rather than Tailwind classes because the value is only
+ * known at runtime; Tailwind can only ship classes it saw at build time.
  */
 interface ScoreTheme {
   band: Band | null
   score: number | null
-  /** Override the ambient band, e.g. with a team average. */
-  setScore: (score: number | null) => void
+  setBaseScore: (score: number | null) => void
+  setOverride: (score: number | null) => void
 }
 
 const Ctx = createContext<ScoreTheme | undefined>(undefined)
 
-/** Hex per band, kept here because CSS variables need literal values. */
+/** Hex per band — CSS variables need literal values. */
 const HEX: Record<string, { base: string; soft: string; strong: string }> = {
-  excellent:    { base: '#10b981', soft: '#d1fae5', strong: '#047857' },
-  veryGood:     { base: '#84cc16', soft: '#ecfccb', strong: '#4d7c0f' },
-  good:         { base: '#f59e0b', soft: '#fef3c7', strong: '#b45309' },
-  satisfactory: { base: '#f97316', soft: '#ffedd5', strong: '#c2410c' },
+  excellent:    { base: '#10b981', soft: '#d1fae5', strong: '#065f46' },
+  veryGood:     { base: '#84cc16', soft: '#ecfccb', strong: '#3f6212' },
+  good:         { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
+  satisfactory: { base: '#f97316', soft: '#ffedd5', strong: '#9a3412' },
   poor:         { base: '#e30613', soft: '#fde3e5', strong: '#9e0812' },
 }
 
@@ -35,7 +41,10 @@ const HEX: Record<string, { base: string; soft: string; strong: string }> = {
 const NEUTRAL = { base: '#141519', soft: '#eeeef0', strong: '#000000' }
 
 export function ScoreThemeProvider({ children }: { children: ReactNode }) {
-  const [score, setScore] = useState<number | null>(null)
+  const [base, setBaseScore] = useState<number | null>(null)
+  const [override, setOverride] = useState<number | null>(null)
+
+  const score = override ?? base
   const band = useMemo(() => bandFor(score), [score])
 
   useEffect(() => {
@@ -47,7 +56,9 @@ export function ScoreThemeProvider({ children }: { children: ReactNode }) {
   }, [band])
 
   return (
-    <Ctx.Provider value={{ band, score, setScore }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ band, score, setBaseScore, setOverride }}>
+      {children}
+    </Ctx.Provider>
   )
 }
 
@@ -57,16 +68,24 @@ export function useScoreTheme() {
   return ctx
 }
 
-/**
- * Sets the ambient band for as long as the calling screen is mounted.
- * A manager on the team pages tints to the team average; leaving the
- * page restores whatever was there before.
- */
-export function useAmbientScore(score: number | null | undefined) {
-  const { setScore } = useScoreTheme()
+/** The session-wide tint: the signed-in person's own average. */
+export function useBaseScore(score: number | null | undefined) {
+  const { setBaseScore } = useScoreTheme()
   useEffect(() => {
     if (score === null || score === undefined) return
-    setScore(score)
-    return () => setScore(null)
-  }, [score, setScore])
+    setBaseScore(score)
+  }, [score, setBaseScore])
+}
+
+/**
+ * Screen-scoped tint. A manager on the team pages sees the team average;
+ * leaving the page falls back to their own.
+ */
+export function useAmbientScore(score: number | null | undefined) {
+  const { setOverride } = useScoreTheme()
+  useEffect(() => {
+    if (score === null || score === undefined) return
+    setOverride(score)
+    return () => setOverride(null)
+  }, [score, setOverride])
 }

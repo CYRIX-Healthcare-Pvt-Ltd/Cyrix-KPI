@@ -18,8 +18,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '..', 'public')
 mkdirSync(outDir, { recursive: true })
 
-const BRAND = [15, 118, 110]   // #0f766e
+// The logo mark: black tile, one white stroke and one red, forming the X.
+const INK = [0, 0, 0]
 const WHITE = [255, 255, 255]
+const RED = [227, 6, 19]       // #e30613
 
 // ---- CRC32 -----------------------------------------------------------
 const CRC_TABLE = (() => {
@@ -89,10 +91,9 @@ function coverage(x, y, test) {
 
 function makeIcon(size) {
   const rgba = Buffer.alloc(size * size * 4)
-  const r = size * 0.22                       // corner radius
-  const cx = size / 2, cy = size / 2
-  const outer = size * 0.30, inner = size * 0.185
-  const strokeMid = (outer + inner) / 2
+  const r = size * 0.19                       // corner radius
+  const pad = size * 0.24                     // inset of the X arms
+  const half = size * 0.072                   // half stroke width
 
   const insideSquare = (x, y) => {
     // Rounded rectangle: clamp to the inner rect, then check distance.
@@ -101,32 +102,40 @@ function makeIcon(size) {
     return Math.hypot(qx, qy) <= r
   }
 
-  const insideC = (x, y) => {
-    const dx = x - cx, dy = y - cy
-    const d = Math.hypot(dx, dy)
-    if (d < inner || d > outer) return false
-    // Open the ring on the right — the gap that makes it a C, not an O.
-    const angle = Math.atan2(dy, dx)          // -pi..pi, 0 = east
-    return Math.abs(angle) > Math.PI * 0.28
+  /** Distance from a point to a line segment, for stroke thickness. */
+  const nearSegment = (x, y, x1, y1, x2, y2) => {
+    const dx = x2 - x1, dy = y2 - y1
+    const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)))
+    return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) <= half
   }
+
+  const lo = pad, hi = size - pad
+  const onWhite = (x, y) => nearSegment(x, y, lo, lo, hi, hi)   // ↘ stroke
+  const onRed   = (x, y) => nearSegment(x, y, hi, lo, lo, hi)   // ↙ stroke
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4
       const bg = coverage(x, y, insideSquare)
-      const fg = coverage(x, y, insideC)
+      const w = coverage(x, y, onWhite)
+      // Red drawn last so the crossing point reads red, as in the logo.
+      const rd = coverage(x, y, onRed)
 
-      // Composite white C over the teal square, then the square over nothing.
-      const [br, bgc, bb] = BRAND
-      const [wr, wg, wb] = WHITE
-      rgba[i]     = Math.round(br * (1 - fg) + wr * fg)
-      rgba[i + 1] = Math.round(bgc * (1 - fg) + wg * fg)
-      rgba[i + 2] = Math.round(bb * (1 - fg) + wb * fg)
+      let [cr, cg, cb] = INK
+      cr = cr * (1 - w) + WHITE[0] * w
+      cg = cg * (1 - w) + WHITE[1] * w
+      cb = cb * (1 - w) + WHITE[2] * w
+      cr = cr * (1 - rd) + RED[0] * rd
+      cg = cg * (1 - rd) + RED[1] * rd
+      cb = cb * (1 - rd) + RED[2] * rd
+
+      rgba[i]     = Math.round(cr)
+      rgba[i + 1] = Math.round(cg)
+      rgba[i + 2] = Math.round(cb)
       rgba[i + 3] = Math.round(255 * bg)
     }
   }
 
-  void strokeMid
   return encodePng(size, size, rgba)
 }
 

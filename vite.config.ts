@@ -13,7 +13,7 @@ export default defineConfig({
         name: 'Cyrix KPI',
         short_name: 'Cyrix KPI',
         description: 'Monthly KPI submission and appraisal scoring for Cyrix Healthcare',
-        theme_color: '#0f766e',
+        theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait-primary',

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Send, Save, Lock } from 'lucide-react'
+import { ArrowLeft, Send, Save, Lock, Trash2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -35,6 +35,8 @@ export default function MonthlySubmission() {
   const [targets, setTargets] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -159,6 +161,23 @@ export default function MonthlySubmission() {
       setNotice('Submitted to your manager.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit.')
+    }
+  }
+
+  const onRequestDeletion = async () => {
+    if (!submission || !deleteReason.trim()) return
+    setError(null)
+    try {
+      const { error: rpcError } = await supabase.rpc('request_record_deletion', {
+        p_submission_id: submission.id,
+        p_reason: deleteReason,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      setShowDelete(false)
+      setDeleteReason('')
+      setNotice('Sent to your manager. HR approves the removal after them.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send that request.')
     }
   }
 
@@ -494,6 +513,66 @@ export default function MonthlySubmission() {
           <button onClick={onSaveDraft} disabled={busy} className="btn-secondary">
             <Save className="h-4 w-4" /> Save draft
           </button>
+        </div>
+      )}
+
+      {/* Once submitted a team member can no longer edit, so a month sent
+          in by mistake is withdrawn rather than corrected — with their
+          manager and then HR approving. Available on finalised months too:
+          that is precisely when a wrong record needs removing, and HR has
+          the final say either way. */}
+      {!editable && (
+        <div className="card p-4">
+          {!showDelete ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink-900">
+                  Submitted this by mistake?
+                </p>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  Ask for it to be removed. Your manager reviews it first, then HR.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDelete(true)}
+                className="btn-secondary !text-cyrixRed-700"
+              >
+                <Trash2 className="h-4 w-4" /> Request deletion
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <p className="font-medium text-ink-900">
+                  Request deletion of {monthLabel(month)}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  This goes to your manager, then to HR. Nothing is removed until
+                  both approve.
+                </p>
+              </div>
+              <textarea
+                rows={2}
+                className="input"
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="e.g. Entered against the wrong month"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={onRequestDeletion}
+                  disabled={!deleteReason.trim()}
+                  className="btn-danger"
+                >
+                  Send to my manager
+                </button>
+                <button onClick={() => setShowDelete(false)} className="btn-secondary">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

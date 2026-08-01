@@ -7,7 +7,10 @@ import {
   ShieldAlert, Trash2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { usePendingCounts, useRemovalRequests, currentFy } from '@/lib/queries'
+import {
+  usePendingCounts, useRemovalRequests, useAnnualSummary, currentFy,
+} from '@/lib/queries'
+import { useBaseScore } from '@/contexts/ScoreThemeContext'
 import { Logo, LogoMark } from './Logo'
 
 interface NavItem {
@@ -28,6 +31,12 @@ export default function Shell() {
     isManager ? employee?.id : undefined, fy,
   )
   const { data: removals } = useRemovalRequests('pending')
+
+  // Set here rather than on the dashboard so the tint survives navigation —
+  // every screen carries the signed-in person's band, not just the one that
+  // happens to display their score.
+  const { data: annual } = useAnnualSummary(employee?.id, fy)
+  useBaseScore(annual?.avg_total_score)
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.
