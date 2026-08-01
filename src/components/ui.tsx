@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react'
+import { bandFor } from '@/lib/bands'
 import type { SubmissionStatus, AssignmentStatus } from '@/types/db'
 
 export function Spinner({ className }: { className?: string }) {
@@ -25,9 +26,12 @@ export function Alert({
   title?: string
   children?: ReactNode
 }) {
+  // Informational uses the brand's ink rather than a blue — blue is not a
+  // Cyrix colour, and an "FYI" panel does not need its own hue to read as
+  // one. Error, warning and success keep their conventional meanings.
   const styles = {
-    info: 'bg-blue-50 border-blue-200 text-blue-900',
-    error: 'bg-red-50 border-red-200 text-red-900',
+    info: 'bg-ink-50 border-ink-200 text-ink-800',
+    error: 'bg-cyrixRed-50 border-cyrixRed-200 text-cyrixRed-900',
     success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
     warning: 'bg-amber-50 border-amber-200 text-amber-900',
   }[kind]
@@ -48,7 +52,7 @@ const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }
   draft:     { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
   submitted: { label: 'Awaiting manager',   cls: 'bg-amber-100 text-amber-800' },
   returned:  { label: 'Returned to you',    cls: 'bg-orange-100 text-orange-800' },
-  scored:    { label: 'Scored',             cls: 'bg-blue-100 text-blue-800' },
+  scored:    { label: 'Scored',             cls: 'bg-ink-900 text-white' },
   finalized: { label: 'Final',              cls: 'bg-emerald-100 text-emerald-800' },
 }
 
@@ -87,11 +91,10 @@ export function ScorePill({
   if (value === null || value === undefined) {
     return <span className="text-ink-400">—</span>
   }
-  const cls =
-    value >= 85 ? 'bg-emerald-100 text-emerald-800'
-    : value >= 70 ? 'bg-blue-100 text-blue-800'
-    : value >= 55 ? 'bg-amber-100 text-amber-800'
-    : 'bg-red-100 text-red-800'
+  // Colour comes from the same band scale as everything else. This used to
+  // carry its own thresholds (85/70/55), so one score could be emerald here
+  // and "Very Good" lime in the hero — two answers for the same number.
+  const cls = bandFor(value)?.chip ?? 'bg-ink-100 text-ink-700'
   const sizeCls = {
     sm: 'px-2 py-0.5 text-xs',
     md: 'px-2.5 py-1 text-sm',
@@ -135,10 +138,10 @@ export function StatTile({
   tone?: 'default' | 'brand'
 }) {
   return (
-    <div className={clsx('card p-4', tone === 'brand' && 'border-ink-300 bg-ink-100')}>
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-ink-500">{sub}</p>}
+    <div className={clsx('card p-4', tone === 'brand' && 'border-ink-300 bg-ink-50')}>
+      <p className="label !mb-0">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-ink-400">{sub}</p>}
     </div>
   )
 }

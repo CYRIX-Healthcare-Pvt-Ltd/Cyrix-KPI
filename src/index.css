@@ -14,6 +14,16 @@
     --score-accent: #141519;
     --score-soft: #eeeef0;
     --score-strong: #000000;
+
+    /* Motion tokens. The built-in CSS easings are too weak to read as
+       deliberate; these are the standard strong curves. Everything that
+       moves should reach for one of these rather than hand-rolling a
+       cubic-bezier — four near-identical ones had already accumulated. */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --dur-press: 160ms;
+    --dur-fast: 200ms;
+    --dur-ui: 250ms;
   }
 
   html {
@@ -33,8 +43,19 @@
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
-           text-sm font-medium transition-colors disabled:cursor-not-allowed
+           text-sm font-medium disabled:cursor-not-allowed
            disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-2;
+    transition:
+      background-color var(--dur-fast) ease,
+      border-color var(--dur-fast) ease,
+      color var(--dur-fast) ease,
+      transform var(--dur-press) var(--ease-out);
+  }
+  /* Press feedback. Without it a button answers the pointer but never the
+     click, which is most of why an interface feels unresponsive. scale()
+     takes the label and icon with it, so the whole control depresses. */
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
   }
   /**
    * Every interactive surface answers in the score colour on hover — the
@@ -66,12 +87,19 @@
 
   /** Bare icon buttons in the header and table rows. */
   .btn-icon {
-    @apply rounded-lg p-2 text-ink-400 transition-colors;
+    @apply rounded-lg p-2 text-ink-400;
+    transition:
+      background-color var(--dur-fast) ease,
+      color var(--dur-fast) ease,
+      transform var(--dur-press) var(--ease-out);
   }
   .btn-icon:hover,
   .btn-icon:focus-visible {
     background-color: var(--score-soft);
     color: var(--score-strong);
+  }
+  .btn-icon:active {
+    transform: scale(0.94);
   }
 
   /** A whole card that behaves as a link. */
@@ -128,6 +156,18 @@
   .link-accent:hover {
     color: var(--score-accent);
   }
+
+  /** Press feedback for pressable things that aren't .btn — links styled
+      as buttons, the login submit, the Action Required call to action. */
+  .btn-press {
+    transition:
+      background-color var(--dur-fast) ease,
+      color var(--dur-fast) ease,
+      transform var(--dur-press) var(--ease-out);
+  }
+  .btn-press:active {
+    transform: scale(0.97);
+  }
 }
 
 @layer utilities {
@@ -145,25 +185,15 @@
     100% { transform: translateX(200%); }
   }
   .animate-score-sweep {
-    animation: score-sweep 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    animation: score-sweep 4.5s var(--ease-in-out) infinite;
   }
 
   /**
-   * The score hero's aurora.
-   *
-   * Painted as gradients on the panel itself rather than as a blurred
-   * circle floating over it. A blob, however soft, still has an edge —
-   * which is what made the green sit on the right half like a patch
-   * instead of blending into the black.
-   *
-   * Two parts: a resting glow anchored in the top-right corner, and a
-   * band of light travelling diagonally through it from top-right to
-   * bottom-left. Animated via background-position, which stays smooth
-   * because nothing is being transformed or re-blurred each frame.
+   * The score hero's aurora — a radial gradient that ends at transparent,
+   * so there is no edge to see. A solid circle behind a blur still shows
+   * its falloff as a ring, which is what made the colour sit on the right
+   * half like a patch instead of blending into the black.
    */
-  /* Resting glow, anchored in the top-right. A radial gradient that ends
-     at transparent, so there is no edge to see — a solid circle behind a
-     blur still shows its falloff as a ring. */
   .score-aurora {
     background: radial-gradient(
       circle at center,
@@ -175,20 +205,24 @@
   }
 
   /* The drift. transform only — background-position would repaint the
-     whole layer every frame; transform runs on the GPU. */
+     whole layer every frame; transform runs on the GPU.
+
+     Timing matters more than it looks. At 18s the gradient crossed its
+     range over a nine-second half-cycle, through a deliberately diffuse
+     fade — slow enough to sit below the threshold where the eye registers
+     motion at all, which is why it read as a static wash. Halved, with a
+     longer path, so the movement is actually perceptible. */
   @keyframes score-drift {
-    0%   { transform: translate3d(6%, -10%, 0) scale(1); }
-    50%  { transform: translate3d(-42%, 30%, 0) scale(1.22); }
-    100% { transform: translate3d(6%, -10%, 0) scale(1); }
+    0%   { transform: translate3d(14%, -14%, 0) scale(1); }
+    50%  { transform: translate3d(-56%, 40%, 0) scale(1.28); }
+    100% { transform: translate3d(14%, -14%, 0) scale(1); }
   }
   .animate-score-drift {
-    animation: score-drift 18s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-    will-change: transform;
+    animation: score-drift 9s var(--ease-in-out) infinite;
   }
   .animate-score-drift-slow {
-    animation: score-drift 27s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-    animation-delay: -9s;
-    will-change: transform;
+    animation: score-drift 13s var(--ease-in-out) infinite;
+    animation-delay: -4.5s;
   }
 
   /* Gentle breathing, used in place of the drift when the reader has
@@ -199,12 +233,30 @@
     50%      { opacity: 1; }
   }
 
-  /* The meter fills from zero on first paint, so the number lands. */
+  /* Alert pulse: three rings, then done. */
+  @keyframes alert-ping {
+    0%   { transform: scale(1);   opacity: 0.75; }
+    75%  { transform: scale(2.4); opacity: 0; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  .animate-alert-ping {
+    animation: alert-ping 1.4s var(--ease-out) 3;
+  }
+
+  /* The meter fills from zero on first paint, so the number lands.
+
+     scaleX rather than width: width forces layout, paint and composite on
+     every frame, while a transform is composited alone. The fill is
+     anchored left so it grows from the start of the track, and the inner
+     sweep counter-scales so the travelling light is not stretched with
+     the bar. */
   @keyframes score-fill {
-    from { width: 0; }
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
   }
   .animate-score-fill {
-    animation: score-fill 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: left center;
+    animation: score-fill var(--dur-ui) var(--ease-out);
   }
 
   /* Reduced motion means fewer and gentler, not none. Everything that
@@ -212,8 +264,16 @@
      breathe so the panel does not go dead. */
   @media (prefers-reduced-motion: reduce) {
     .animate-score-sweep,
-    .animate-score-fill {
+    .animate-score-fill,
+    .animate-alert-ping {
       animation: none;
+    }
+    /* Press feedback is a position change, so it goes too — the colour
+       change on :hover/:active still confirms the interaction. */
+    .btn:active:not(:disabled),
+    .btn-press:active,
+    .btn-icon:active {
+      transform: none;
     }
     .animate-score-drift,
     .animate-score-drift-slow {

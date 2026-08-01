@@ -94,13 +94,20 @@ export function ScoreHeader({
           {band && (
             <div
               className={clsx(
-                'relative h-full overflow-hidden rounded-full transition-all duration-700',
-                'animate-score-fill',
+                'animate-score-fill absolute inset-y-0 left-0 w-full origin-left overflow-hidden rounded-full',
                 band.onDark.bar,
               )}
-              style={{ width: `${pct}%` }}
+              style={{
+                // scaleX rather than width: a transform is composited on its
+                // own, where width would force layout and paint each frame.
+                transform: `scaleX(${pct / 100})`,
+                transition: 'transform var(--dur-ui) var(--ease-out)',
+              }}
             >
-              {/* Light travelling along the fill. */}
+              {/* Light travelling along the fill. Not counter-scaled: the
+                  sweep animates its own transform, which would override an
+                  inline one, and a soft gradient squashed to ~88% reads no
+                  differently. */}
               <span className="animate-score-sweep absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
             </div>
           )}
@@ -152,8 +159,12 @@ export function ActionRequired({
     <div className="relative overflow-hidden rounded-xl bg-ink-950 text-white">
       <span className="absolute inset-y-0 left-0 w-1 bg-cyrixRed-600" />
       <div className="flex flex-wrap items-center gap-5 p-5 pl-7">
+        {/* Three pulses, then still. This panel stays until the work is
+            done, so an infinite ping would put permanent motion in the
+            corner of a screen someone reads every day — attention-getting
+            once, noise thereafter. */}
         <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyrixRed-600 opacity-75" />
+          <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />
         </span>
 
@@ -167,7 +178,7 @@ export function ActionRequired({
 
         <Link
           to={to}
-          className="shrink-0 bg-white px-6 py-3 text-[12px] font-bold uppercase tracking-label text-ink-950 transition-colors hover:bg-cyrixRed-600 hover:text-white"
+          className="btn-press shrink-0 bg-white px-6 py-3 text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
         >
           {cta}
         </Link>
@@ -323,9 +334,14 @@ function Bar({ kra, pct }: { kra: string; pct: number }) {
         </span>
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-ink-100">
+        {/* scaleX, not width: a transform is composited on its own, where
+            width forces layout and paint. Same reason as the score meter. */}
         <div
-          className={clsx('h-full rounded-full transition-all', band.bar)}
-          style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+          className={clsx('absolute inset-y-0 left-0 w-full origin-left rounded-full', band.bar)}
+          style={{
+            transform: `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`,
+            transition: 'transform var(--dur-ui) var(--ease-out)',
+          }}
         />
         {/* The line below which we call something weak. */}
         <div

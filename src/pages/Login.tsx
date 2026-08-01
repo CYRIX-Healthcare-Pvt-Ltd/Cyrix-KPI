@@ -128,7 +128,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={busy}
-                className="flex w-full items-center justify-center gap-2 bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600 disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600 disabled:opacity-60"
               >
                 {busy && <Spinner className="h-4 w-4" />}
                 {busy ? 'Signing In' : 'Sign In'}
@@ -234,7 +234,7 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
         </Alert>
         <button
           onClick={() => onBack(done)}
-          className="w-full bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600"
+          className="w-full btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600"
         >
           Back to Sign In
         </button>
@@ -260,7 +260,7 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
       <button
         type="submit"
         disabled={busy}
-        className="flex w-full items-center justify-center gap-2 bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white transition-colors hover:bg-cyrixRed-600 disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600 disabled:opacity-60"
       >
         {busy && <Spinner className="h-4 w-4" />}
         {busy ? 'Resetting' : 'Reset My Password'}
