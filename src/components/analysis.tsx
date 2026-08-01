@@ -32,24 +32,14 @@ export function ScoreHeader({
       {/* A wash of the band colour bleeding in from the score side. It is
           the one place the performance colour is allowed to dominate. */}
       {/* Band-coloured light drifting from the top-right corner down toward
-          the bottom-left and back. Two layers on different durations so
-          they separate and rejoin, which stops the loop reading as a loop. */}
+          the bottom-left and back. Two layers on 18s and 27s so they
+          separate and rejoin, which stops the loop reading as a loop.
+          Colour comes from --score-accent rather than a Tailwind class, so
+          it tracks the band without shipping five variants. */}
       {band && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div
-            className={clsx(
-              'animate-score-wave absolute -right-32 -top-40 h-[34rem] w-[34rem]',
-              'rounded-full blur-3xl',
-              band.onDark.glow,
-            )}
-          />
-          <div
-            className={clsx(
-              'animate-score-wave-slow absolute -right-16 -top-56 h-[26rem] w-[26rem]',
-              'rounded-full blur-3xl opacity-70',
-              band.onDark.glow,
-            )}
-          />
+          <div className="score-aurora animate-score-drift absolute -right-1/4 -top-1/2 h-[38rem] w-[38rem]" />
+          <div className="score-aurora animate-score-drift-slow absolute -right-1/3 -top-2/3 h-[30rem] w-[30rem] opacity-80" />
         </div>
       )}
 
