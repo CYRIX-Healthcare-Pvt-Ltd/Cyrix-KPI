@@ -10,6 +10,7 @@ import {
 } from '@/lib/queries'
 import { PageLoader, StatTile, ScorePill, Alert } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
+import CompletionByDimension from '@/components/CompletionByDimension'
 import { bandFor } from '@/lib/bands'
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -155,6 +156,8 @@ export default function AdminOverview() {
             ))}
           </ul>
         </div>
+
+        <CompletionByDimension />
 
         <div className="card p-4">
           <h3 className="mb-1 text-sm font-semibold text-ink-800">

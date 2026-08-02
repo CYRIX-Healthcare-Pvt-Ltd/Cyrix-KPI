@@ -7,7 +7,7 @@ import type {
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
-  ManagerMonthStatusRow,
+  ManagerMonthStatusRow, KpiReportRow,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -569,6 +569,83 @@ export function useOrgKpiStatus(enabled: boolean, fy: string) {
         if (page.length < 1000) break
       }
       return all
+    },
+  })
+}
+
+// ---------------------------------------------------------------------
+// The HR report
+// ---------------------------------------------------------------------
+
+/** Dimensions to slice by. Order matters — it is the column order too. */
+export type ReportDim = 'function' | 'department' | 'manager'
+
+/**
+ * The one report behind what used to be three tabs.
+ *
+ * Aggregation happens in SQL, so changing the grouping returns tens of
+ * rows rather than re-summing thousands in the browser, and the export
+ * is the same rows the table is showing.
+ */
+export function useKpiReport(
+  fy: string,
+  opts: {
+    month?: string | null
+    fn?: string | null
+    department?: string | null
+    managerId?: string | null
+    groupBy: ReportDim[]
+    enabled?: boolean
+  },
+) {
+  const { month, fn, department, managerId, groupBy, enabled = true } = opts
+  return useQuery({
+    enabled: enabled && groupBy.length > 0,
+    queryKey: ['kpi_report', fy, month ?? 'ytd', fn, department, managerId, groupBy],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('kpi_report', {
+        p_financial_year: fy,
+        p_month: month ?? null,
+        p_function: fn ?? null,
+        p_department: department ?? null,
+        p_manager_id: managerId ?? null,
+        p_group_by: groupBy,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as KpiReportRow[]
+    },
+  })
+}
+
+/**
+ * Every function / department / manager combination that exists, for the
+ * cascading filters.
+ *
+ * Pulled from one month of the report rows: the view crosses employees
+ * with months, so a single month is exactly one row per person — the
+ * cheapest way to get all three dimensions already scoped by RLS.
+ */
+export function useReportFilterTree(fy: string, anyMonth: string, enabled: boolean) {
+  return useQuery({
+    enabled,
+    staleTime: 5 * 60_000,
+    queryKey: ['report_filter_tree', fy, anyMonth],
+    queryFn: async () => {
+      const rows: Array<{
+        function_name: string; department: string
+        manager_id: string; manager_ecode: string; manager_name: string
+      }> = []
+      for (let from = 0; ; from += 1000) {
+        const page = await unwrap<typeof rows>(
+          supabase.from('v_kpi_report_rows')
+            .select('function_name, department, manager_id, manager_ecode, manager_name')
+            .eq('financial_year', fy).eq('period_month', anyMonth)
+            .order('function_name').range(from, from + 999),
+        )
+        rows.push(...page)
+        if (page.length < 1000) break
+      }
+      return rows
     },
   })
 }

@@ -221,6 +221,27 @@ export type RecordRequest =
   | ({ kind: 'deletion' } & DeletionRequest)
   | ({ kind: 'revision' } & RevisionRequest)
 
+/**
+ * A row of the HR report. Whichever dimensions were not grouped on come
+ * back null, so the table can drop those columns without knowing which
+ * shape it asked for.
+ */
+export interface KpiReportRow {
+  function_name: string | null
+  department: string | null
+  manager_id: string | null
+  manager_ecode: string | null
+  manager_name: string | null
+  team: number
+  scored: number
+  to_score: number
+  not_submitted: number
+  scored_pct: number | null
+  avg_score: number | null
+  tm_tat: number | null
+  rm_tat: number | null
+}
+
 /** One row per manager per month — see v_manager_month_status. */
 export interface ManagerMonthStatusRow {
   financial_year: string
