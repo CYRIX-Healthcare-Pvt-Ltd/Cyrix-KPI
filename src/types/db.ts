@@ -235,7 +235,10 @@ export interface KpiReportRow {
   team: number
   scored: number
   to_score: number
+  /** Has a KPI for the year but has not sent the month in. */
   not_submitted: number
+  /** No agreed KPI at all, so cannot submit anything. */
+  kpi_not_set: number
   scored_pct: number | null
   avg_score: number | null
   tm_tat: number | null

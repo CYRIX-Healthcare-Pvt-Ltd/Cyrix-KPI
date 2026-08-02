@@ -111,8 +111,9 @@ export default function KpiReport() {
       }
       line.Team = r.team
       line.Scored = r.scored
-      line['To score'] = r.to_score
-      line['Not submitted'] = r.not_submitted
+      line['With manager'] = r.to_score
+      line['With team member'] = r.not_submitted
+      line['KPI not set'] = r.kpi_not_set
       // Numbers, not strings, so Excel can still sum and sort them —
       // rounded to what the screen shows rather than the stored scale.
       const at = (n: number | null, dp: number) =>
@@ -136,12 +137,12 @@ export default function KpiReport() {
 
   const totals = useMemo(() => {
     const r = rows ?? []
-    const sum = (k: 'team' | 'scored' | 'to_score' | 'not_submitted') =>
+    const sum = (k: 'team' | 'scored' | 'to_score' | 'not_submitted' | 'kpi_not_set') =>
       r.reduce((a, x) => a + Number(x[k] ?? 0), 0)
     const team = sum('team')
     return {
       team, scored: sum('scored'), toScore: sum('to_score'),
-      notIn: sum('not_submitted'),
+      notIn: sum('not_submitted'), noKpi: sum('kpi_not_set'),
       pct: team ? Math.round((sum('scored') / team) * 1000) / 10 : 0,
     }
   }, [rows])
@@ -250,7 +251,7 @@ export default function KpiReport() {
       </div>
 
       {/* ---- totals for whatever is currently selected ---- */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Tile
           label={month === YTD ? 'Person-months' : 'People'}
           value={totals.team}
@@ -258,10 +259,15 @@ export default function KpiReport() {
         />
         <Tile label="Scored" value={totals.scored} sub="manager has scored"
               cls="text-emerald-700" />
-        <Tile label="To score" value={totals.toScore} sub="submitted, waiting"
+        <Tile label="With manager" value={totals.toScore} sub="submitted, not yet scored"
               cls={totals.toScore ? 'text-amber-700' : undefined} />
-        <Tile label="Not submitted" value={totals.notIn} sub="nothing from the TM"
-              cls={totals.notIn ? 'text-cyrixRed-700' : undefined} />
+        <Tile label="With team member" value={totals.notIn} sub="has a KPI, month not sent"
+              cls={totals.notIn ? 'text-orange-700' : undefined} />
+        {/* A different job from the one above: these people cannot submit
+            anything until a KPI exists, and that is fixed once a year
+            rather than chased every month. */}
+        <Tile label="KPI not set" value={totals.noKpi} sub="nothing to submit against"
+              cls={totals.noKpi ? 'text-cyrixRed-700' : undefined} />
         <Tile label="Completion" value={`${totals.pct}%`} sub="of what was due" />
       </div>
 
@@ -276,8 +282,18 @@ export default function KpiReport() {
                 <th className="px-4 py-2.5 min-w-28">Progress</th>
                 <th className="px-4 py-2.5 text-right">Team</th>
                 <th className="px-4 py-2.5 text-right">Scored</th>
-                <th className="px-4 py-2.5 text-right">To score</th>
-                <th className="px-4 py-2.5 text-right">Not in</th>
+                {/* Named by who is holding each one up. "To score" and
+                    "Not submitted" are opposite ends of the same month and
+                    read as duplicates when neither says whose move it is. */}
+                <th className="px-4 py-2.5 text-right" title="The team member has submitted; the manager has not scored it yet">
+                  With manager
+                </th>
+                <th className="px-4 py-2.5 text-right" title="Has a KPI for the year but has not sent this month in">
+                  With team member
+                </th>
+                <th className="px-4 py-2.5 text-right" title="No agreed KPI for the year, so there is nothing to submit against">
+                  KPI not set
+                </th>
                 <th className="px-4 py-2.5 text-right">Scored %</th>
                 <th className="px-4 py-2.5 text-right">Average</th>
                 <th className="px-4 py-2.5 text-right" title="Days from the 1st of the following month to the team member submitting">
@@ -291,7 +307,7 @@ export default function KpiReport() {
             <tbody className="divide-y divide-ink-100">
               {(rows ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-8 text-center text-sm text-ink-500">
+                  <td colSpan={13} className="px-4 py-8 text-center text-sm text-ink-500">
                     {isFetching ? 'Loading…' : 'Nothing matches those filters.'}
                   </td>
                 </tr>
@@ -327,7 +343,8 @@ export default function KpiReport() {
                       <Num v={r.team} />
                       <Num v={r.scored} cls={r.scored ? 'text-emerald-700' : undefined} />
                       <Num v={r.to_score} cls={r.to_score ? 'text-amber-700' : undefined} />
-                      <Num v={r.not_submitted} cls={r.not_submitted ? 'text-ink-500' : undefined} />
+                      <Num v={r.not_submitted} cls={r.not_submitted ? 'text-orange-700' : undefined} />
+                      <Num v={r.kpi_not_set} cls={r.kpi_not_set ? 'text-cyrixRed-700' : undefined} />
                       <td className="px-4 py-3 text-right tabular-nums text-ink-700">
                         {pct.toFixed(1)}%
                       </td>

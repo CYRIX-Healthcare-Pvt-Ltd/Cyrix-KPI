@@ -15,12 +15,19 @@ import type { ManagerMonthStatusRow } from '@/types/db'
 
 export type MonthStatusMode = 'by-manager' | 'by-month'
 
-/** Everything a row needs said once, so the table and the bar agree. */
+/**
+ * Everything a row needs said once, so the table and the bar agree.
+ *
+ * Named by who is holding each one up rather than by what happened to
+ * it. "To score" and "Not in" describe the same month from opposite
+ * ends, and neither said whose move it was, so the pair read as one
+ * thing said twice.
+ */
 const STATES = [
-  { key: 'scored',           label: 'Scored',   icon: CheckCircle2, cls: 'text-emerald-700', bar: 'bg-emerald-500' },
-  { key: 'awaiting_manager', label: 'To score',  icon: Clock,        cls: 'text-amber-700',   bar: 'bg-amber-500' },
-  { key: 'returned',         label: 'Returned', icon: Undo2,        cls: 'text-orange-700',  bar: 'bg-orange-400' },
-  { key: 'not_submitted',    label: 'Not in',   icon: CircleDashed, cls: 'text-ink-400',     bar: 'bg-ink-200' },
+  { key: 'scored',           label: 'Scored',           icon: CheckCircle2, cls: 'text-emerald-700', bar: 'bg-emerald-500' },
+  { key: 'awaiting_manager', label: 'With me',          icon: Clock,        cls: 'text-amber-700',   bar: 'bg-amber-500' },
+  { key: 'returned',         label: 'Sent back',        icon: Undo2,        cls: 'text-orange-700',  bar: 'bg-orange-400' },
+  { key: 'not_submitted',    label: 'With team member', icon: CircleDashed, cls: 'text-ink-400',     bar: 'bg-ink-200' },
 ] as const
 
 const pctDone = (r: ManagerMonthStatusRow) =>
