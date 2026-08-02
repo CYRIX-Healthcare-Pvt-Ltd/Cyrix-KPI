@@ -29,21 +29,26 @@ const TOP_N = 8
 export default function CompletionByDimension() {
   const fy = currentFy()
   const [dim, setDim] = useState<Extract<ReportDim, 'function' | 'department'>>('function')
+  const [showAll, setShowAll] = useState(false)
 
   const { data, isFetching } = useKpiReport(fy, { groupBy: [dim] })
 
-  const rows = useMemo(() => {
-    const all = (data ?? [])
+  const all = useMemo(
+    () => (data ?? [])
       .map(r => ({
         name: (dim === 'function' ? r.function_name : r.department) ?? 'Unassigned',
         team: Number(r.team),
         scored: Number(r.scored),
         toScore: Number(r.to_score),
       }))
-      .sort((a, b) => b.team - a.team)
+      .sort((a, b) => b.team - a.team),
+    [data, dim],
+  )
 
+  const rows = useMemo(() => {
+    if (showAll) return all
     // Everything past the top few becomes one row rather than a long
-    // tail of single-person slivers nobody reads.
+    // tail of single-person slivers nobody reads — until it is asked for.
     const head = all.slice(0, TOP_N)
     const tail = all.slice(TOP_N)
     if (tail.length) {
@@ -55,7 +60,9 @@ export default function CompletionByDimension() {
       })
     }
     return head
-  }, [data, dim])
+  }, [all, showAll])
+
+  const hidden = Math.max(0, all.length - TOP_N)
 
   return (
     <div className="card p-4">
@@ -65,7 +72,10 @@ export default function CompletionByDimension() {
             Completion by {dim === 'function' ? 'function' : 'department'}
           </h3>
           <p className="mt-0.5 text-xs text-ink-500">
-            Every month of FY {fy} so far. Largest {TOP_N} shown.
+            Every month of FY {fy} so far.{' '}
+            {showAll
+              ? `All ${all.length}.`
+              : hidden > 0 ? `Largest ${TOP_N} shown.` : ''}
           </p>
         </div>
 
@@ -73,7 +83,11 @@ export default function CompletionByDimension() {
           {(['function', 'department'] as const).map(d => (
             <button
               key={d}
-              onClick={() => setDim(d)}
+              // Switching dimension collapses again: 46 functions and 17
+              // departments are different lists, and carrying "expanded"
+              // across them means landing in a scrolled view of something
+              // you did not ask to see in full.
+              onClick={() => { setDim(d); setShowAll(false) }}
               className={clsx(
                 'rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors',
                 dim === d ? 'bg-ink-900 text-white' : 'text-ink-500 hover:text-ink-800',
@@ -85,19 +99,37 @@ export default function CompletionByDimension() {
         </div>
       </div>
 
-      <ul className="mt-4 space-y-3">
+      {/* Fixed height either way, so expanding scrolls inside the card
+          rather than pushing the rest of the dashboard down the page. */}
+      <ul className="mt-4 h-[21.5rem] space-y-3 overflow-y-auto pr-1">
         {rows.length === 0 ? (
           <li className="py-8 text-center text-sm text-ink-400">
             {isFetching ? 'Loading…' : 'Nothing to show yet.'}
           </li>
         ) : (
-          rows.map(r => {
+          rows.map((r, i) => {
             const pct = (n: number) => (r.team ? (n / r.team) * 100 : 0)
             const done = pct(r.scored)
+            const isOthers = !showAll && hidden > 0 && i === rows.length - 1
             return (
-              <li key={r.name}>
+              <li
+                key={r.name}
+                onClick={isOthers ? () => setShowAll(true) : undefined}
+                className={clsx(
+                  isOthers && 'cursor-pointer rounded-md hover:bg-ink-50',
+                )}
+                title={isOthers ? `Show all ${all.length}` : undefined}
+              >
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-xs font-medium text-ink-700">{r.name}</span>
+                  <span
+                    className={clsx(
+                      'truncate text-xs font-medium',
+                      isOthers ? 'text-ink-900 underline decoration-ink-300 underline-offset-2'
+                               : 'text-ink-700',
+                    )}
+                  >
+                    {r.name}
+                  </span>
                   {/* The percentage in text, not colour — this is what
                       makes the palette legal for red-green readers. */}
                   <span className="shrink-0 text-xs tabular-nums text-ink-500">
@@ -143,6 +175,16 @@ export default function CompletionByDimension() {
           <span className="h-2.5 w-2.5 rounded-sm bg-ink-100 ring-1 ring-inset ring-ink-200" />
           Not submitted
         </li>
+        {hidden > 0 && (
+          <li className="ml-auto">
+            <button
+              onClick={() => setShowAll(v => !v)}
+              className="text-xs font-medium text-ink-500 underline decoration-ink-300 underline-offset-2 hover:text-ink-900"
+            >
+              {showAll ? `Show largest ${TOP_N}` : `Show all ${all.length}`}
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   )

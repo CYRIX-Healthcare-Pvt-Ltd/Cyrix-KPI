@@ -113,10 +113,14 @@ export default function KpiReport() {
       line.Scored = r.scored
       line['To score'] = r.to_score
       line['Not submitted'] = r.not_submitted
-      line['Scored %'] = r.scored_pct ?? ''
-      line.Average = r.avg_score ?? ''
-      line['TM TAT (days)'] = r.tm_tat ?? ''
-      line['RM TAT (days)'] = r.rm_tat ?? ''
+      // Numbers, not strings, so Excel can still sum and sort them —
+      // rounded to what the screen shows rather than the stored scale.
+      const at = (n: number | null, dp: number) =>
+        n === null || n === undefined ? '' : Number(Number(n).toFixed(dp))
+      line['Scored %'] = at(r.scored_pct, 1)
+      line.Average = at(r.avg_score, 1)
+      line['TM TAT (days)'] = at(r.tm_tat, 1)
+      line['RM TAT (days)'] = at(r.rm_tat, 1)
       return line
     })
     const scope = [
@@ -336,8 +340,11 @@ export default function KpiReport() {
                           </span>
                         )}
                       </td>
-                      <Num v={r.tm_tat} dash />
-                      <Num v={r.rm_tat} dash />
+                      {/* One decimal because these are averages. A single
+                          person's turnaround is always a whole number of
+                          days — the halves appear only across a group. */}
+                      <Num v={r.tm_tat} decimals={1} />
+                      <Num v={r.rm_tat} decimals={1} />
                     </tr>
                   )
                 })
@@ -365,11 +372,22 @@ function Labelled({ label, children }: { label: string; children: React.ReactNod
   )
 }
 
-function Num({ v, cls, dash }: { v: number | null; cls?: string; dash?: boolean }) {
-  const empty = v === null || v === undefined || (dash && Number.isNaN(Number(v)))
+function Num({
+  v, cls, decimals,
+}: {
+  v: number | null
+  cls?: string
+  /** Fixed decimals. Turnaround uses 1; counts use none. */
+  decimals?: number
+}) {
+  const empty = v === null || v === undefined || Number.isNaN(Number(v))
   return (
     <td className={clsx('px-4 py-3 text-right tabular-nums', cls ?? 'text-ink-700')}>
-      {empty ? <span className="text-ink-300">—</span> : Number(v).toLocaleString()}
+      {empty
+        ? <span className="text-ink-300">—</span>
+        : decimals === undefined
+          ? Number(v).toLocaleString()
+          : Number(v).toFixed(decimals)}
     </td>
   )
 }

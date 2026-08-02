@@ -1,11 +1,11 @@
 import { useState, Fragment } from 'react'
-import { CheckSquare, Check, X, Pencil } from 'lucide-react'
+import { CheckSquare, Check, X, Pencil, CheckCheck } from 'lucide-react'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   usePendingApprovals, useAssignmentAction, useEditAssignmentItem, currentFy,
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
-import { useQuery } from '@tanstack/react-query'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
 import type { KpiAssignmentItem, Section } from '@/types/db'
 
@@ -27,12 +27,20 @@ export default function Approvals() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-ink-900">KPI approvals</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          {data.length} waiting · FY {fy}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink-900">KPI approvals</h1>
+          <p className="mt-0.5 text-sm text-ink-500">
+            {data.length} waiting · FY {fy}
+          </p>
+        </div>
       </div>
+
+      <ApproveAll
+        pending={data.map(({ assignment, employee: tm }) => ({
+          id: assignment.id, name: tm.full_name, ecode: tm.ecode,
+        }))}
+      />
 
       <div className="space-y-3">
         {data.map(({ assignment, employee: tm }) => (
@@ -49,6 +57,136 @@ export default function Approvals() {
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Approving a whole queue at once.
+ *
+ * A manager with thirty reports cannot reasonably open thirty cards, and
+ * the alternative to this button is not thirty careful reviews — it is
+ * thirty reflexive clicks on Approve. So the bulk action is honest about
+ * what it is: it says how many, warns that each one locks for the year,
+ * and needs a second press.
+ *
+ * Each KPI still goes through approve_assignment individually, which
+ * re-validates the weightages. One that does not add up is refused and
+ * named rather than quietly skipped, and the rest still go through — a
+ * single bad row must not block a queue of thirty.
+ */
+function ApproveAll({
+  pending,
+}: {
+  pending: Array<{ id: string; name: string; ecode: string }>
+}) {
+  const qc = useQueryClient()
+  const [arming, setArming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(0)
+  const [failed, setFailed] = useState<Array<{ name: string; why: string }>>([])
+  const [result, setResult] = useState<string | null>(null)
+
+  // The offer only makes sense for a queue, but the outcome has to
+  // survive it: approving 3 of 4 drops the queue below the threshold, and
+  // hiding the panel at that moment takes the explanation of why the
+  // fourth is still sitting there with it.
+  if (pending.length < 2 && !result) return null
+
+  const run = async () => {
+    setBusy(true); setDone(0); setFailed([]); setResult(null)
+    const problems: Array<{ name: string; why: string }> = []
+    let ok = 0
+
+    for (const p of pending) {
+      const { error } = await supabase.rpc('approve_assignment', {
+        p_assignment_id: p.id,
+      })
+      if (error) problems.push({ name: `${p.name} (${p.ecode})`, why: friendlyError(error) })
+      else ok++
+      setDone(d => d + 1)
+    }
+
+    setFailed(problems)
+    setResult(
+      problems.length === 0
+        ? `Approved all ${ok}.`
+        : `Approved ${ok} of ${pending.length}. ${problems.length === 1
+            ? 'One could not be approved and is'
+            : `${problems.length} could not be approved and are`} still waiting below.`,
+    )
+    setBusy(false)
+    setArming(false)
+    qc.invalidateQueries({ queryKey: ['pending_approvals'] })
+    qc.invalidateQueries({ queryKey: ['pending_counts'] })
+    qc.invalidateQueries({ queryKey: ['assignment'] })
+    qc.invalidateQueries({ queryKey: ['team'] })
+  }
+
+  return (
+    <div className="card space-y-3 p-4">
+      {result && (
+        <Alert kind={failed.length ? 'warning' : 'success'}>
+          {result}
+        </Alert>
+      )}
+
+      {failed.length > 0 && (
+        <ul className="space-y-1 text-sm text-ink-700">
+          {failed.map(f => (
+            <li key={f.name}>
+              <span className="font-medium">{f.name}</span> — {f.why}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {pending.length < 2 ? (
+        result && (
+          <button
+            onClick={() => { setResult(null); setFailed([]) }}
+            className="btn-secondary"
+          >
+            Dismiss
+          </button>
+        )
+      ) : !arming ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink-900">
+              Approve all {pending.length}?
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              For when you have already agreed these offline. Each one is still
+              checked for a valid 80 / 20 split.
+            </p>
+          </div>
+          <button onClick={() => { setArming(true); setResult(null) }} className="btn-secondary">
+            <CheckCheck className="h-4 w-4" /> Approve all
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium text-ink-900">
+              Approve {pending.length} KPIs without opening them?
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Each becomes the locked basis for that person's scoring all year.
+              Reopening one afterwards needs your approval and then HR's.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={run} disabled={busy} className="btn-primary">
+              {busy && <Spinner className="h-4 w-4" />}
+              {busy ? `Approving ${done} of ${pending.length}…` : `Yes, approve all ${pending.length}`}
+            </button>
+            <button onClick={() => setArming(false)} disabled={busy} className="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
