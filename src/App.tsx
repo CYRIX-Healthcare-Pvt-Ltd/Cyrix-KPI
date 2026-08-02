@@ -131,7 +131,13 @@ export default function App() {
           <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
           <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
           <Route path="admin/logins" element={<RequireSw><SwAdmin /></RequireSw>} />
-          <Route path="deletions" element={<DeletionRequests />} />
+          {/* The approval chain is the reporting manager and then HR. The
+              link was removed from the SW Admin nav, but a nav is not a
+              permission — the route has to say so too. */}
+          <Route
+            path="deletions"
+            element={<RequireManager><DeletionRequests /></RequireManager>}
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

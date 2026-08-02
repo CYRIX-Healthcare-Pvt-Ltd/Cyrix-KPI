@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, ShieldAlert, KeyRound, Download, Info, RotateCcw } from 'lucide-react'
+import {
+  Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser,
+} from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
@@ -35,6 +37,8 @@ export default function SwAdmin() {
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [confirming, setConfirming] = useState<LoginStatusRow | null>(null)
+  const [wiping, setWiping] = useState<LoginStatusRow | null>(null)
+  const [typedCode, setTypedCode] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [resetError, setResetError] = useState<string | null>(null)
 
@@ -101,6 +105,40 @@ export default function SwAdmin() {
     onError: err => {
       setConfirming(null)
       setResetError(err instanceof Error ? err.message : 'Could not reset that password.')
+    },
+  })
+
+  /**
+   * Puts one person back to having no KPI at all, for starting a test
+   * over. Testing-phase only, and the server enforces that rather than
+   * trusting this screen — erasing a year in one click is exactly what
+   * the manager-then-HR deletion flow exists to prevent, so the two
+   * cannot both be available once the data is real.
+   */
+  const wipe = useMutation({
+    mutationFn: async (args: { row: LoginStatusRow; code: string }) => {
+      const { data, error } = await supabase.rpc('sw_reset_employee_data', {
+        p_employee_id: args.row.employee_id,
+        p_confirm_ecode: args.code,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as {
+        ecode: string; full_name: string
+        submissions_removed: number; assignments_removed: number
+      }
+    },
+    onSuccess: r => {
+      setWiping(null)
+      setTypedCode('')
+      setNotice(
+        `Cleared ${r.full_name} (${r.ecode}) — ${r.assignments_removed} KPI and ` +
+        `${r.submissions_removed} month${r.submissions_removed === 1 ? '' : 's'} removed. ` +
+        `Their login is untouched and they can set up a KPI again from scratch.`,
+      )
+      qc.invalidateQueries()
+    },
+    onError: err => {
+      setResetError(err instanceof Error ? err.message : 'Could not clear that data.')
     },
   })
 
@@ -193,6 +231,57 @@ export default function SwAdmin() {
         </div>
       )}
 
+      {wiping && (
+        <div className="card space-y-3 border-cyrixRed-300 p-4">
+          <div>
+            <p className="font-medium text-ink-900">
+              Clear all KPI data for {wiping.full_name}?
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Deletes their KPI for every year and every month they have
+              submitted or been scored on. The figures are written to the audit
+              log first, but the records themselves cannot be recovered. Their
+              login and employee record are untouched, so they can set up a KPI
+              again from scratch.
+            </p>
+          </div>
+
+          <div className="max-w-xs">
+            <label className="label text-xs">
+              Type {wiping.ecode.toUpperCase()} to confirm
+            </label>
+            <input
+              className="input font-mono"
+              value={typedCode}
+              onChange={e => setTypedCode(e.target.value.toUpperCase())}
+              placeholder={wiping.ecode.toUpperCase()}
+              autoFocus
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => wipe.mutate({ row: wiping, code: typedCode })}
+              disabled={
+                typedCode.trim().toUpperCase() !== wiping.ecode.toUpperCase() ||
+                wipe.isPending
+              }
+              className="btn-danger"
+            >
+              {wipe.isPending && <Spinner className="h-4 w-4" />}
+              Clear everything for {wiping.ecode.toUpperCase()}
+            </button>
+            <button
+              onClick={() => { setWiping(null); setTypedCode('') }}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-4">
         <StatTile label="Total accounts" value={data?.length ?? 0} />
         <StatTile
@@ -243,7 +332,7 @@ export default function SwAdmin() {
                 <th className="px-4 py-2.5">State</th>
                 <th className="px-4 py-2.5">Last sign-in</th>
                 <th className="px-4 py-2.5">Password changed</th>
-                <th className="px-4 py-2.5 text-right">Password</th>
+                <th className="px-4 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
@@ -273,18 +362,33 @@ export default function SwAdmin() {
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
-                  <td className="px-4 py-3 text-right">
-                    {r.has_login ? (
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1.5">
+                      {r.has_login ? (
+                        <button
+                          onClick={() => {
+                            setNotice(null); setResetError(null)
+                            setWiping(null); setConfirming(r)
+                          }}
+                          className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                          title={`Reset ${r.ecode} back to their employee code`}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        </button>
+                      ) : (
+                        <span className="self-center text-xs text-ink-300">No login</span>
+                      )}
                       <button
-                        onClick={() => { setNotice(null); setResetError(null); setConfirming(r) }}
-                        className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                        title={`Reset ${r.ecode} back to their employee code`}
+                        onClick={() => {
+                          setNotice(null); setResetError(null)
+                          setConfirming(null); setTypedCode(''); setWiping(r)
+                        }}
+                        className="btn-secondary !px-2.5 !py-1.5 text-xs !text-cyrixRed-700"
+                        title={`Clear all KPI data for ${r.ecode}`}
                       >
-                        <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        <Eraser className="h-3.5 w-3.5" /> Clear KPI
                       </button>
-                    ) : (
-                      <span className="text-xs text-ink-300">No login</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -300,8 +404,9 @@ export default function SwAdmin() {
 
       <p className="flex items-center gap-1.5 text-xs text-ink-400">
         <KeyRound className="h-3.5 w-3.5" />
-        Every reset is written to the audit log against your account. For bulk
-        work there is still <code>node scripts/user-admin.mjs reset-all</code>.
+        Every reset and clear is written to the audit log against your account.
+        Clearing KPI data works only while the system is in testing — after
+        that, removing a record goes through the reporting manager and HR.
       </p>
     </div>
   )

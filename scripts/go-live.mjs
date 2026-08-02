@@ -42,7 +42,7 @@ await db.connect()
 const show = async () => {
   const { rows } = await db.query(`
     select key, value::text as value from app_settings
-    where key in ('force_password_change','self_service_password_reset')
+    where key in ('force_password_change','self_service_password_reset','testing_mode')
     order by key`)
   const { rows: [c] } = await db.query(
     `select count(*)::int n from employees where is_active and password_is_default`)
@@ -54,7 +54,8 @@ const show = async () => {
 
   const live =
     rows.find(r => r.key === 'force_password_change')?.value === 'true' &&
-    rows.find(r => r.key === 'self_service_password_reset')?.value === 'false'
+    rows.find(r => r.key === 'self_service_password_reset')?.value === 'false' &&
+    rows.find(r => r.key === 'testing_mode')?.value === 'false'
   console.log(`\n  Mode: ${live ? 'LIVE (tightened)' : 'TESTING (relaxed)'}\n`)
   return live
 }
@@ -70,10 +71,12 @@ await show()
 if (revert) {
   await db.query(`update app_settings set value = 'false' where key = 'force_password_change'`)
   await db.query(`update app_settings set value = 'true'  where key = 'self_service_password_reset'`)
+  await db.query(`update app_settings set value = 'true'  where key = 'testing_mode'`)
   console.log('  Reverted to testing mode.\n')
 } else {
   await db.query(`update app_settings set value = 'true'  where key = 'force_password_change'`)
   await db.query(`update app_settings set value = 'false' where key = 'self_service_password_reset'`)
+  await db.query(`update app_settings set value = 'false' where key = 'testing_mode'`)
 
   const { rows: [c] } = await db.query(
     `select count(*)::int n from employees where is_active and password_is_default`)
@@ -85,9 +88,13 @@ if (revert) {
     own on the next sign-in (${c.n} accounts).
   - The login screen no longer resets passwords. HR does it:
       node scripts/user-admin.mjs reset E1234
+  - SW Admin can no longer clear an employee's KPI history. Removing a
+    month now goes through the reporting manager and then HR, which is
+    the point of that flow — a one-click wipe and a two-approval
+    deletion cannot both exist once the data is real.
 
-  Both changes take effect immediately — the app reads these at runtime,
-  so nothing needs redeploying.
+  All three take effect immediately — the app reads these at runtime, so
+  nothing needs redeploying.
 `)
 }
 

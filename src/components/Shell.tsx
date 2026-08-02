@@ -32,9 +32,7 @@ export default function Shell() {
     isManager ? employee?.id : undefined, fy,
   )
   const { data: removals } = useRemovalRequests('pending')
-  const { data: recordRequests } = usePendingRecordRequests(
-    isManager || isHrAdmin || isSwAdmin,
-  )
+  const { data: recordRequests } = usePendingRecordRequests(isManager || isHrAdmin)
 
   // Set here rather than on the dashboard so the tint survives navigation —
   // every screen carries the signed-in person's band, not just the one that
@@ -45,19 +43,19 @@ export default function Shell() {
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.
-  // Deletion and revision requests stop at 'pending_manager' first. That
-  // queue was only ever linked from the HR and SW Admin navs, so a
-  // manager had no route to it and every request appeared to vanish.
+  // Deletion and revision requests stop at 'pending_manager' first, so
+  // the manager needs a route to them or every request appears to vanish.
+  // Not SW Admin: the two stages are the reporting manager and HR by
+  // design, and a deletion reason names an employee, a month and why
+  // their record is disputed. That is appraisal content, and SW Admin
+  // administers logins.
   const records: NavItem = {
     to: '/deletions', label: 'Records', icon: Trash2,
     badge: recordRequests ?? 0,
   }
 
   const items: NavItem[] = isSwAdmin && !isHrAdmin
-    ? [
-        { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
-        records,
-      ]
+    ? [{ to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true }]
     : isHrAdmin
     ? [
         { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
