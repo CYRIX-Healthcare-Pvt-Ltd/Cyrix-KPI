@@ -46,11 +46,13 @@ export default function SwAdmin() {
     queryKey: ['login_status'],
     queryFn: async () => {
       // PostgREST caps a response at 1,000 rows. With 1,100+ accounts that
-      // silently truncates, so page through explicitly.
+      // silently truncates, so page through explicitly — ordered, because
+      // two unordered range queries can return the same row twice and miss
+      // another entirely.
       const all: LoginStatusRow[] = []
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase
-          .rpc('login_status').range(from, from + 999)
+          .rpc('login_status').order('ecode').range(from, from + 999)
         if (error) throw new Error(friendlyError(error))
         const page = (data ?? []) as LoginStatusRow[]
         all.push(...page)

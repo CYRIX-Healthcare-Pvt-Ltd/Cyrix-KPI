@@ -7,6 +7,7 @@ import type {
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
+  ManagerMonthStatusRow,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -551,15 +552,51 @@ export function useOrgKpiStatus(enabled: boolean, fy: string) {
     queryFn: async () => {
       // 1,100+ active employees, so page through rather than truncate at
       // PostgREST's default limit and quietly under-report.
+      //
+      // The .order() is what makes paging safe. Each request is a separate
+      // query, and without an ORDER BY the planner is free to return rows
+      // in a different order each time — so a row could land in both pages
+      // or in neither. That is exactly what happened: one employee
+      // appeared twice in the list and the approved-KPI count read 4 when
+      // three exist.
       const all: OrgKpiStatusRow[] = []
       for (let from = 0; ; from += 1000) {
         const page = await unwrap<OrgKpiStatusRow[]>(
-          supabase.from('v_org_kpi_status').select('*').range(from, from + 999),
+          supabase.from('v_org_kpi_status').select('*')
+            .order('ecode').range(from, from + 999),
         )
         all.push(...page)
         if (page.length < 1000) break
       }
       return all
+    },
+  })
+}
+
+/**
+ * Month-by-month status per manager.
+ *
+ * One hook, two readings, because it is the same shape either way: HR
+ * pins a month and reads every manager; a manager pins themselves and
+ * reads every month. The view is security_invoker, so the scoping is the
+ * database's job — a manager gets their own row whatever they ask for.
+ */
+export function useManagerMonthStatus(
+  fy: string,
+  opts: { month?: string; managerId?: string; enabled?: boolean } = {},
+) {
+  const { month, managerId, enabled = true } = opts
+  return useQuery({
+    enabled,
+    queryKey: ['manager_month_status', fy, month ?? 'all', managerId ?? 'all'],
+    queryFn: () => {
+      let q = supabase.from('v_manager_month_status').select('*')
+        .eq('financial_year', fy)
+      if (month) q = q.eq('period_month', month)
+      if (managerId) q = q.eq('manager_id', managerId)
+      return unwrap<ManagerMonthStatusRow[]>(
+        q.order('period_month').order('manager_name'),
+      )
     },
   })
 }

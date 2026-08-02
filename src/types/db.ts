@@ -221,6 +221,22 @@ export type RecordRequest =
   | ({ kind: 'deletion' } & DeletionRequest)
   | ({ kind: 'revision' } & RevisionRequest)
 
+/** One row per manager per month — see v_manager_month_status. */
+export interface ManagerMonthStatusRow {
+  financial_year: string
+  period_month: string
+  manager_id: string
+  manager_ecode: string
+  manager_name: string
+  department: string | null
+  team_size: number
+  not_submitted: number
+  awaiting_manager: number
+  returned: number
+  scored: number
+  team_avg_score: number | null
+}
+
 export interface OrgKpiStatusRow {
   employee_id: string
   ecode: string

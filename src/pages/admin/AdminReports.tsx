@@ -1,21 +1,31 @@
 import { useState, useMemo } from 'react'
-import { Download, Clock, Users2 } from 'lucide-react'
+import { Download, Clock, Users2, CalendarRange } from 'lucide-react'
 import {
-  useOrgKpiStatus, useManagerCompletion, useManagerTat, currentFy,
+  useOrgKpiStatus, useManagerCompletion, useManagerTat,
+  useManagerMonthStatus, currentFy,
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportKpiScores, exportOrgStatus } from '@/lib/export'
+import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { PageLoader, ScorePill, StatTile, Alert, Spinner } from '@/components/ui'
+import {
+  MonthStatusTable, MonthStatusSummary, MonthStatusLegend,
+} from '@/components/MonthStatus'
 import type { Employee } from '@/types/db'
 
-type Tab = 'scores' | 'managers' | 'tat'
+type Tab = 'month' | 'scores' | 'managers' | 'tat'
 
 export default function AdminReports() {
   const fy = currentFy()
-  const [tab, setTab] = useState<Tab>('scores')
+  // Chasing a particular month is the commonest reason to open this page,
+  // so it opens there rather than on the export.
+  const [tab, setTab] = useState<Tab>('month')
+  const [month, setMonth] = useState(currentReportingMonth())
+  const [onlyBehind, setOnlyBehind] = useState(false)
   const { data: org, isLoading } = useOrgKpiStatus(true, fy)
   const { data: managers } = useManagerCompletion(true)
   const { data: tat } = useManagerTat(true, fy)
+  const { data: monthRows } = useManagerMonthStatus(fy, { month })
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -93,6 +103,7 @@ export default function AdminReports() {
 
       <div className="flex gap-1 border-b border-ink-200">
         {([
+          ['month', 'By month', CalendarRange],
           ['scores', 'Score export', Download],
           ['managers', 'Manager completion', Users2],
           ['tat', 'Turnaround', Clock],
@@ -112,6 +123,87 @@ export default function AdminReports() {
           ),
         )}
       </div>
+
+      {tab === 'month' && (
+        <div className="space-y-4">
+          <div className="card space-y-4 p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-ink-900">
+                  Who has finished {monthLabel(month)}
+                </h3>
+                <p className="mt-1 text-sm text-ink-500">
+                  Every manager with a team, whether or not they have started.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="input w-auto"
+                  value={month}
+                  onChange={e => setMonth(e.target.value)}
+                  aria-label="Month"
+                >
+                  {openFyMonths(fy).reverse().map(m => (
+                    <option key={m} value={m}>{monthLabel(m)}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => exportOrgStatus(
+                    (monthRows ?? []).filter(r => r.team_size > 0).map(r => ({
+                      Month: monthLabel(r.period_month),
+                      Manager: r.manager_name,
+                      Code: r.manager_ecode,
+                      Department: r.department ?? '',
+                      'Team size': r.team_size,
+                      Scored: r.scored,
+                      'Waiting on manager': r.awaiting_manager,
+                      Returned: r.returned,
+                      'Not submitted': r.not_submitted,
+                      'Team average': r.team_avg_score ?? '',
+                    })),
+                    `Cyrix-KPI-${monthLabel(month)}-status.xlsx`,
+                    'Month status',
+                  )}
+                  className="btn-secondary"
+                  disabled={!monthRows?.length}
+                >
+                  <Download className="h-4 w-4" /> Export
+                </button>
+              </div>
+            </div>
+
+            <MonthStatusSummary
+              rows={(monthRows ?? []).filter(r => r.team_size > 0)}
+            />
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+              <MonthStatusLegend />
+              <label className="flex items-center gap-2 text-xs font-medium text-ink-600">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-ink-300"
+                  checked={onlyBehind}
+                  onChange={e => setOnlyBehind(e.target.checked)}
+                />
+                Only those with something outstanding
+              </label>
+            </div>
+            <MonthStatusTable
+              mode="by-manager"
+              rows={(monthRows ?? []).filter(
+                r => r.team_size > 0 && (!onlyBehind || r.scored < r.team_size),
+              )}
+              emptyMessage={
+                onlyBehind
+                  ? `Every manager has scored their whole team for ${monthLabel(month)}.`
+                  : 'No managers with a team yet.'
+              }
+            />
+          </div>
+        </div>
+      )}
 
       {tab === 'scores' && (
         <div className="card space-y-4 p-5">

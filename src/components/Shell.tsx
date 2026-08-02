@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, History,
-  LogOut, Menu, X, KeyRound, Building2, BarChart3, UserPlus,
+  LogOut, Menu, X, KeyRound, Building2, BarChart3, UserMinus,
   ShieldAlert, Trash2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -62,7 +62,10 @@ export default function Shell() {
         { to: '/admin/employees', label: 'Employees', icon: Building2 },
         { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
         {
-          to: '/admin/requests', label: 'Joiners', icon: UserPlus,
+          // Managers flag people who have resigned; HR deactivates them.
+          // This was briefly labelled "Joiners", which is the opposite of
+          // what it holds.
+          to: '/admin/requests', label: 'Leavers', icon: UserMinus,
           badge: removals?.length ?? 0,
         },
         records,

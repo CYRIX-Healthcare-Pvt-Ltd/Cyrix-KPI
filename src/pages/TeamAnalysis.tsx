@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { Trophy, TrendingDown, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyTeam, useTeamSubmissions, useWeakAreas, currentFy,
+  useMyTeam, useTeamSubmissions, useWeakAreas, useManagerMonthStatus, currentFy,
 } from '@/lib/queries'
+import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
 import { fyMonths } from '@/lib/fy'
 import { bandFor, isWeak, trendOf } from '@/lib/bands'
 import { PageLoader, ScorePill, StatTile, EmptyState } from '@/components/ui'
@@ -20,6 +21,12 @@ export default function TeamAnalysis() {
   const ids = useMemo(() => (team ?? []).map(t => t.id), [team])
   const { data: subs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
   const { data: weak } = useWeakAreas(ids.length ? ids : undefined, fy)
+  // The year average says how the team is doing; this says which months
+  // are actually finished, which is the other half of the question.
+  const { data: byMonth } = useManagerMonthStatus(fy, {
+    managerId: employee?.id,
+    enabled: !!employee?.id,
+  })
 
   const analysis = useMemo(() => {
     if (!team || !subs) return null
@@ -103,6 +110,23 @@ export default function TeamAnalysis() {
           label="No scores yet"
           value={analysis.unscored}
           sub={`of ${team.length}`}
+        />
+      </div>
+
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">Month by month</h3>
+          <MonthStatusLegend />
+        </div>
+        <MonthStatusTable
+          mode="by-month"
+          // Months that have not opened yet carry no information — a row
+          // of zeroes for next February is noise, not a gap to chase.
+          rows={(byMonth ?? []).filter(
+            r => r.scored + r.awaiting_manager + r.returned > 0 ||
+                 r.period_month <= new Date().toISOString().slice(0, 10),
+          )}
+          emptyMessage="No months have been submitted yet."
         />
       </div>
 
