@@ -38,11 +38,15 @@ export function ScoreHeader({
     >
       {/* Band-coloured light drifting from the top-right corner down toward
           the bottom-left and back. Two layers on different periods so they
-          separate and rejoin, which stops the loop reading as a loop. */}
+          separate and rejoin, which stops the loop reading as a loop.
+
+          Both layers size and position themselves as a share of this panel
+          — see .score-aurora — so the composition holds on a tall phone
+          card and a wide desktop letterbox alike. */}
       {band && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="score-aurora animate-score-drift absolute -right-1/4 -top-1/2 h-[38rem] w-[38rem]" />
-          <div className="score-aurora animate-score-drift-slow absolute -right-1/3 -top-2/3 h-[30rem] w-[30rem] opacity-80" />
+          <div className="score-aurora animate-score-drift" />
+          <div className="score-aurora score-aurora-alt animate-score-drift-slow opacity-80" />
         </div>
       )}
 

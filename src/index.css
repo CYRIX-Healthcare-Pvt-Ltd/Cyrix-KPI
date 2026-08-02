@@ -258,15 +258,51 @@
    * whose own year is Excellent looking at a Satisfactory team average
    * had a green wash behind an orange figure.
    */
+  /**
+   * Geometry lives here rather than in utility classes, because all of it
+   * is one decision: the gradient must reach transparent before it meets
+   * the edge of its own layer.
+   *
+   * Two things went wrong before. A fixed 38rem circle filled a 343px
+   * phone and covered barely a sixth of a 1200px desktop — so the size is
+   * now a share of the panel. Then, sizing it that way with an off-centre
+   * focal point put the gradient's left edge outside the layer, and the
+   * box clipped it while it was still ~10% opaque, which draws a hard
+   * vertical seam straight down the hero.
+   *
+   * So the ellipse is centred in its layer at 45% — comfortably inside
+   * on every side, at any scale the drift applies — and the layer itself
+   * is positioned to put the light in the top right. Position places it;
+   * size spreads it; nothing clips.
+   */
   .score-aurora {
     --aurora: var(--hero-accent, var(--score-accent));
+    position: absolute;
+    width: 220%;
+    height: 300%;
+    left: -32%;
+    top: -135%;
+
+    /* Stops pushed well out. At the old spacing everything past a third
+       of a desktop panel sat below 4% alpha — technically lit, visibly
+       black. Now the mid-tone carries across and only the last sixth is
+       falloff. */
     background: radial-gradient(
-      circle at center,
+      ellipse 45% 45% at 50% 50%,
       color-mix(in srgb, var(--aurora) 32%, transparent) 0%,
-      color-mix(in srgb, var(--aurora) 14%, transparent) 32%,
-      color-mix(in srgb, var(--aurora) 4%, transparent) 52%,
-      transparent 70%
+      color-mix(in srgb, var(--aurora) 14%, transparent) 62%,
+      color-mix(in srgb, var(--aurora) 4%, transparent) 84%,
+      transparent 100%
     );
+  }
+
+  /* The second layer, larger and thrown further off the corner, so the
+     two separate and rejoin rather than travelling as one shape. */
+  .score-aurora-alt {
+    width: 260%;
+    height: 340%;
+    left: -35%;
+    top: -175%;
   }
 
   /* The drift. transform only — background-position would repaint the
