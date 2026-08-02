@@ -4,7 +4,7 @@ import { Download, RotateCcw } from 'lucide-react'
 import {
   useKpiReport, useReportFilterTree, currentFy, type ReportDim,
 } from '@/lib/queries'
-import { fyMonths, monthLabel } from '@/lib/fy'
+import { openFyMonths, monthLabel } from '@/lib/fy'
 import { exportOrgStatus } from '@/lib/export'
 import { bandFor } from '@/lib/bands'
 import { Spinner, Alert } from '@/components/ui'
@@ -34,13 +34,12 @@ const DIMS: Array<{ key: ReportDim; label: string }> = [
  */
 export default function KpiReport() {
   const fy = currentFy()
-  const months = useMemo(() => {
-    const now = new Date()
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    // Up to and including the current month — a report on next February
-    // is a row of zeroes pretending to be an outstanding item.
-    return fyMonths(fy).filter(m => m <= thisMonth)
-  }, [fy])
+  // Only months that have finished. August's KPI is submitted during
+  // September, so offering August on 2 August lists a month nobody can
+  // have done yet — every row would read as outstanding. openFyMonths is
+  // the rule the submission screens and the exports already use; this
+  // page had its own copy of it that let the current month through.
+  const months = useMemo(() => openFyMonths(fy), [fy])
 
   const [month, setMonth] = useState<string>(YTD)
   const [fn, setFn] = useState<string | null>(null)

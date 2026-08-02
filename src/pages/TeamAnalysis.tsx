@@ -6,7 +6,7 @@ import {
   useMyTeam, useTeamSubmissions, useWeakAreas, useManagerMonthStatus, currentFy,
 } from '@/lib/queries'
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
-import { fyMonths } from '@/lib/fy'
+import { fyMonths, isMonthOpen } from '@/lib/fy'
 import { bandFor, isWeak, trendOf } from '@/lib/bands'
 import { PageLoader, ScorePill, StatTile, EmptyState } from '@/components/ui'
 import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
@@ -120,13 +120,11 @@ export default function TeamAnalysis() {
         </div>
         <MonthStatusTable
           mode="by-month"
-          // Months that have not opened yet carry no information — a row
-          // of zeroes for next February is noise, not a gap to chase.
-          rows={(byMonth ?? []).filter(
-            r => r.scored + r.awaiting_manager + r.returned > 0 ||
-                 r.period_month <= new Date().toISOString().slice(0, 10),
-          )}
-          emptyMessage="No months have been submitted yet."
+          // Only months that have finished. August's KPI is submitted
+          // during September, so listing August on 2 August shows a whole
+          // team as outstanding for work that is not due yet.
+          rows={(byMonth ?? []).filter(r => isMonthOpen(r.period_month))}
+          emptyMessage="No months have finished yet."
         />
       </div>
 
