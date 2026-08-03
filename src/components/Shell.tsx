@@ -135,18 +135,29 @@ export default function Shell() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium leading-tight text-ink-900">
-                {employee?.full_name}
-              </p>
-              <p className="text-xs leading-tight text-ink-500">
-                {employee?.ecode}
-                {isHrAdmin && ' · HR Admin'}
-              </p>
-            </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">
-              {initials}
-            </div>
+            {/* The name was the obvious place to look for your own record
+                and did nothing, so it is now the way in. One target
+                covering the name and the avatar: they read as one thing,
+                and two adjacent links to the same page is a thumb trap. */}
+            <NavLink
+              to="/me"
+              className="nav-profile btn-press flex items-center gap-3 rounded-lg py-1 pl-2 pr-1"
+              aria-label="My profile"
+              title="My profile"
+            >
+              <span className="hidden text-right sm:block">
+                <span className="block text-sm font-medium leading-tight text-ink-900">
+                  {employee?.full_name}
+                </span>
+                <span className="block text-xs leading-tight text-ink-500">
+                  {employee?.ecode}
+                  {isHrAdmin && ' · HR Admin'}
+                </span>
+              </span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">
+                {initials}
+              </span>
+            </NavLink>
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}
             <Notifications enabled={!isSwAdmin || isHrAdmin} />

@@ -208,6 +208,39 @@
     color: var(--score-strong);
   }
 
+  /**
+   * The name and avatar in the header, as one link to your own record.
+   *
+   * Hover is gated: on a touch screen :hover fires on tap and then
+   * sticks, so the control would sit lit up long after the finger left.
+   * The avatar answers too, because the two are one target and only half
+   * of it reacting reads as a bug.
+   */
+  .nav-profile {
+    transition:
+      background-color var(--dur-fast) ease,
+      transform var(--dur-press) var(--ease-out);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .nav-profile:hover {
+      background-color: var(--score-soft);
+    }
+    .nav-profile:hover > span:last-child {
+      background-color: color-mix(in srgb, var(--score-accent) 18%, #fff);
+      color: var(--score-strong);
+    }
+  }
+  .nav-profile:focus-visible {
+    background-color: var(--score-soft);
+    outline: none;
+  }
+  .nav-profile[aria-current='page'] {
+    background-color: var(--score-soft);
+  }
+  .nav-profile > span:last-child {
+    transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+  }
+
   .link-accent {
     @apply font-medium transition-colors;
   }
@@ -384,9 +417,31 @@
      breathe so the panel does not go dead. */
   @media (prefers-reduced-motion: reduce) {
     .animate-score-sweep,
-    .animate-score-fill,
-    .animate-alert-ping {
+    .animate-score-fill {
       animation: none;
+    }
+
+    /* The alert dot keeps blinking, gently.
+     *
+     * It was in the list above, which was too blunt. Reduced motion
+     * means remove movement, not remove the signal — and this dot is the
+     * signal: it is the only thing on a black panel that says "this one
+     * is new". Switched off entirely, someone with the setting on gets
+     * no cue at all, and on Windows that setting is on by default
+     * whenever "show animations" is unchecked.
+     *
+     * So the ring stops travelling and starts breathing. The scale is
+     * held rather than animated — a static transform is a position, not
+     * motion — and only the opacity moves, which is exactly the carve-out
+     * the guidance makes for cues that aid comprehension.
+     */
+    @keyframes alert-blink {
+      0%, 100% { opacity: 0; }
+      50%      { opacity: 0.45; }
+    }
+    .animate-alert-ping {
+      animation: alert-blink 1.8s ease-in-out 3;
+      transform: scale(2);
     }
     /* The panel still needs to announce that it arrived, so it keeps the
        fade and loses the travel. */

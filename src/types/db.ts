@@ -22,6 +22,8 @@ export interface Employee {
   work_email: string | null
   designation: string | null
   department: string | null
+  function_name: string | null
+  grade: string | null
   location: string | null
   job_role_id: string | null
   reporting_manager_id: string | null
@@ -29,6 +31,25 @@ export interface Employee {
   is_active: boolean
   auth_user_id: string | null
   must_change_password: boolean
+}
+
+/**
+ * Where one person stands for a year — see kpi_ranking().
+ *
+ * Ranked among the people who have a score, not among everyone: 40th of
+ * 340 means something, 40th of 1,146 because 800 have not been assessed
+ * does not. team_size is the whole team either way, so the screen can
+ * say both.
+ */
+export interface KpiRanking {
+  employee_id: string
+  financial_year: string
+  score: number | null
+  team_rank: number | null
+  team_of: number | null
+  org_rank: number | null
+  org_of: number | null
+  team_size: number
 }
 
 export interface JobRole {

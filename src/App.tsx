@@ -13,6 +13,7 @@ const MyKpi             = lazy(() => import('@/pages/MyKpi'))
 const KpiSetup          = lazy(() => import('@/pages/KpiSetup'))
 const MonthlySubmission = lazy(() => import('@/pages/MonthlySubmission'))
 const MyHistory         = lazy(() => import('@/pages/MyHistory'))
+const Profile           = lazy(() => import('@/pages/Profile'))
 const Team              = lazy(() => import('@/pages/Team'))
 const TeamAnalysis      = lazy(() => import('@/pages/TeamAnalysis'))
 const Approvals         = lazy(() => import('@/pages/Approvals'))
@@ -119,6 +120,9 @@ export default function App() {
           <Route path="my-kpi/setup" element={<KpiSetup />} />
           <Route path="submission/:month" element={<MonthlySubmission />} />
           <Route path="history" element={<MyHistory />} />
+          {/* Everyone has a record, including HR and SW Admin — the page
+              shows a rank only to those the system actually appraises. */}
+          <Route path="me" element={<Profile />} />
 
           <Route path="team" element={<RequireManager><Team /></RequireManager>} />
           <Route path="team/analysis" element={<RequireManager><TeamAnalysis /></RequireManager>} />

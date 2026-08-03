@@ -7,7 +7,7 @@ import type {
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
-  ManagerMonthStatusRow, KpiReportRow, NotificationRow,
+  ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -935,6 +935,48 @@ export function useMarkNotificationsRead() {
       if (error) throw new Error(friendlyError(error))
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+}
+
+// ---------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------
+
+/**
+ * Where this person stands for the year.
+ *
+ * The whole calculation is server-side because it has to be: a team
+ * member can read their own submissions and nobody else's, so no query
+ * this client could make would rank them against the company. The RPC
+ * returns a position and a denominator, never another person's score.
+ */
+export function useKpiRanking(employeeId: string | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeId,
+    queryKey: ['kpi_ranking', employeeId, fy],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('kpi_ranking', {
+        p_employee_id: employeeId,
+        p_financial_year: fy,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return ((data ?? [])[0] ?? null) as KpiRanking | null
+    },
+  })
+}
+
+/** The one person above you in the tree. RLS already allows reading them. */
+export function useMyManager(managerId: string | null | undefined) {
+  return useQuery({
+    enabled: !!managerId,
+    staleTime: 5 * 60_000,
+    queryKey: ['manager', managerId],
+    queryFn: async () => {
+      const rows = await unwrap<Employee[]>(
+        supabase.from('employees').select('*').eq('id', managerId!).limit(1),
+      )
+      return rows[0] ?? null
+    },
   })
 }
 
