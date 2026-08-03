@@ -926,6 +926,24 @@ export function useNotifications(employeeId: string | undefined, enabled: boolea
   })
 }
 
+/**
+ * Clears one informational notification.
+ *
+ * Only the news kinds — the server refuses anything that represents
+ * outstanding work, because a queue you can dismiss is a queue that gets
+ * forgotten.
+ */
+export function useDismissNotification() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (kind: string) => {
+      const { error } = await supabase.rpc('dismiss_notification', { p_kind: kind })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+}
+
 /** Opening the panel is reading it: stamps every kind currently listed. */
 export function useMarkNotificationsRead() {
   const qc = useQueryClient()

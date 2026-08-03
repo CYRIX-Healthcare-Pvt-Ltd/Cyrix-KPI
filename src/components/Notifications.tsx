@@ -3,10 +3,16 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Bell, CalendarCheck, CheckCircle2, CheckSquare, ClipboardList,
-  Trash2, Undo2, UserMinus,
+  Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useNotifications, useMarkNotificationsRead } from '@/lib/queries'
+import {
+  useNotifications, useMarkNotificationsRead, useDismissNotification,
+} from '@/lib/queries'
+import {
+  alertsEnabled, setAlertsEnabled, askToNotify, notifyPermission, canNotify,
+  playPing, raiseAlert, newlyArrived,
+} from '@/lib/alerts'
 import type { NotificationKind, NotificationRow } from '@/types/db'
 
 /**
@@ -106,6 +112,7 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
   const { employee } = useAuth()
   const { data } = useNotifications(employee?.id, enabled)
   const markRead = useMarkNotificationsRead()
+  const dismiss = useDismissNotification()
 
   // Which rows were new at the moment the panel opened.
   //
@@ -125,6 +132,43 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
   )
   const unreadCount = rows.filter(r => r.unread).length
 
+  const [alertsOn, setAlertsOn] = useState(() => alertsEnabled())
+  const [permission, setPermission] = useState(() => notifyPermission())
+
+  /**
+   * Ping when something new lands.
+   *
+   * Compared against what was here last time rather than against the
+   * unread flag: unread is cleared by reading, so a second person
+   * submitting after you have opened the panel would not raise it again.
+   * A count that went up is the actual event.
+   */
+  const seen = useRef<Map<string, number> | null>(null)
+
+  useEffect(() => {
+    if (!data) return
+
+    const now = new Map(rows.map(r => [r.kind, r.n]))
+    const before = seen.current
+    seen.current = now
+
+    // Only the things asking something of you. An approval coming back or
+    // a month being scored still appears in the tray with a dot, but a
+    // sound for news you cannot act on is the kind of thing that gets an
+    // app muted for good.
+    const top = newlyArrived(before, rows, k => CATALOGUE[k as NotificationKind].action)
+      .sort((a, b) => CATALOGUE[a.kind].priority - CATALOGUE[b.kind].priority)[0]
+    if (!top) return
+
+    const e = CATALOGUE[top.kind]
+    void raiseAlert({
+      kind: top.kind,
+      title: e.title(top.n),
+      body: e.body,
+      url: e.href,
+    })
+  }, [data, rows])
+
   useEffect(() => {
     if (!open) return
 
@@ -142,6 +186,24 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
   }, [open])
 
   if (!enabled) return null
+
+  /**
+   * Turning alerts on is the only place permission is ever asked for, and
+   * it doubles as the gesture browsers require before they will play
+   * audio — so the confirmation ping is both a preview of the sound and
+   * the thing that unlocks it for the rest of the session.
+   */
+  const toggleAlerts = async () => {
+    const next = !alertsOn
+    setAlertsOn(next)
+    setAlertsEnabled(next)
+    if (!next) return
+
+    void playPing()
+    if (canNotify() && Notification.permission === 'default') {
+      setPermission(await askToNotify())
+    }
+  }
 
   const toggle = () => {
     const next = !open
@@ -187,11 +249,34 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
           // notched phone as well as a flat one.
           className="animate-pop-in fixed inset-x-3 top-[calc(env(safe-area-inset-top)_+_3.75rem)] z-40 origin-top overflow-hidden rounded-xl border border-ink-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] sm:origin-top-right"
         >
-          <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-            <h2 className="text-sm font-semibold text-ink-800">Notifications</h2>
+          <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2">
+            <h2 className="flex-1 text-sm font-semibold text-ink-800">Notifications</h2>
             <span className="text-xs text-ink-400">
               {rows.length === 0 ? 'All clear' : plural(rows.length, 'item')}
             </span>
+            {/* In the header rather than a row of its own: it is a setting
+                somebody touches twice a year, and it was taking as much
+                height as an actual notification. */}
+            <button
+              onClick={toggleAlerts}
+              role="switch"
+              aria-checked={alertsOn}
+              className="btn-icon -mr-1.5 !p-1.5"
+              aria-label={alertsOn ? 'Turn alerts off' : 'Turn alerts on'}
+              title={
+                !alertsOn
+                  ? 'Alerts are off — no sound, no pop-ups'
+                  : permission === 'granted'
+                  ? 'Alerts on: a ping, and a pop-up when the app is in the background'
+                  : permission === 'denied'
+                  ? 'Alerts on: ping only — your browser is blocking pop-ups for this site'
+                  : 'Alerts on: ping only. Turn off and on again to allow pop-ups'
+              }
+            >
+              {alertsOn
+                ? <Volume2 className="h-4 w-4" />
+                : <VolumeX className="h-4 w-4 text-ink-300" />}
+            </button>
           </div>
 
           {rows.length === 0 ? (
@@ -210,7 +295,7 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
                 const e = CATALOGUE[r.kind]
                 const isNew = wasUnread.has(r.kind)
                 return (
-                  <li key={r.kind}>
+                  <li key={r.kind} className="group relative">
                     <Link
                       to={e.href}
                       onClick={() => setOpen(false)}
@@ -230,18 +315,46 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
                           {e.body}
                         </p>
                       </div>
-                      {isNew && (
-                        <span
-                          className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-cyrixRed-600"
-                          aria-label="New"
-                        />
-                      )}
+                      {/* Room kept for the clear button whether or not it
+                          is showing, so the text does not reflow under
+                          the pointer on hover. */}
+                      <span className="w-4 shrink-0">
+                        {isNew && (
+                          <span
+                            className="mt-1.5 block h-2 w-2 rounded-full bg-cyrixRed-600"
+                            aria-label="New"
+                          />
+                        )}
+                      </span>
                     </Link>
+
+                    {/*
+                      Only on the news. There is no clear button on an
+                      approval waiting for you, because the way to clear
+                      that is to approve it — and a tray you can empty
+                      without doing anything is a tray nobody trusts.
+
+                      Always present on touch, revealed on hover on a
+                      pointer: there is no hover on a phone, so a
+                      hover-only control is one that does not exist there.
+                    */}
+                    {!e.action && (
+                      <button
+                        onClick={() => dismiss.mutate(r.kind)}
+                        disabled={dismiss.isPending}
+                        aria-label={`Clear "${e.title(r.n)}"`}
+                        title="Clear"
+                        className="btn-icon absolute right-2 top-2 !p-1.5 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </li>
                 )
               })}
             </ul>
           )}
+
         </div>
       )}
     </div>

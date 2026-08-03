@@ -25,6 +25,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Handles the tap on a notification. Android will not let the page
+        // raise one at all — only the worker may — so the click arrives
+        // here rather than in the app.
+        importScripts: ['/sw-notifications.js'],
         // Never cache API responses — appraisal figures must always be live.
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//],
         runtimeCaching: [
