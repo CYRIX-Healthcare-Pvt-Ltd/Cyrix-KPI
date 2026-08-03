@@ -9,11 +9,23 @@
 
 @layer base {
   :root {
-    /* Overwritten at runtime by ScoreThemeProvider with the signed-in
-       person's band colour — or the team average on the team screens. */
+    /* Overwritten at runtime by ScoreThemeProvider.
+
+       --score-* is the signed-in person: the chrome, every hover, every
+       focus ring. --page-* is whatever the screen in front of them is
+       reporting on, which is the same thing on most screens and the team
+       average on the team pages.
+
+       The split exists because the tab you are standing on is a label
+       for the page, not for you — it follows --page-* — while the tab
+       next to it is still yours and follows --score-*. */
     --score-accent: #141519;
     --score-soft: #eeeef0;
     --score-strong: #000000;
+
+    --page-accent: #141519;
+    --page-soft: #eeeef0;
+    --page-strong: #000000;
 
     /* Motion tokens. The built-in CSS easings are too weak to read as
        deliberate; these are the standard strong curves. Everything that
@@ -225,9 +237,10 @@
     background-color: var(--score-soft);
     color: var(--score-strong);
   }
+  /* The one that follows the page rather than the reader. */
   .nav-link[aria-current='page'] {
-    background-color: var(--score-soft);
-    color: var(--score-strong);
+    background-color: var(--page-soft);
+    color: var(--page-strong);
   }
 
   /**
@@ -257,7 +270,7 @@
     outline: none;
   }
   .nav-profile[aria-current='page'] {
-    background-color: var(--score-soft);
+    background-color: var(--page-soft);
   }
   .nav-profile > span:last-child {
     transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;

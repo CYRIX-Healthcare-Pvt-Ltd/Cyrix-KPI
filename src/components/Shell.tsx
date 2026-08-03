@@ -227,7 +227,8 @@ export default function Shell() {
               className={({ isActive }) =>
                 clsx(
                   'relative flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors',
-                  isActive ? 'text-[color:var(--score-strong)]' : 'text-ink-400',
+                  // The page's colour, matching the desktop tab above it.
+                  isActive ? 'text-[color:var(--page-strong)]' : 'text-ink-400',
                 )
               }
             >

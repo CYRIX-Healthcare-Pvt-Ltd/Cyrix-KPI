@@ -73,6 +73,27 @@ export function ScoreThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--score-strong', c.strong)
   }, [baseBand])
 
+  /**
+   * The colour of the screen you are on, published separately.
+   *
+   * One piece of chrome is not about you: the tab you are standing on,
+   * which is a label for the page below it. It reads --page-*, so it can
+   * go green on My Team while every other tab still hovers in your own
+   * band. Two names rather than one scope, because the active tab and
+   * the tab beside it are siblings — there is no element to put a scope
+   * on that contains one and not the other.
+   *
+   * Identical to --score-* wherever the screen has nothing of its own to
+   * report, which is most of them.
+   */
+  useEffect(() => {
+    const c = band?.hex ?? NEUTRAL
+    const root = document.documentElement
+    root.style.setProperty('--page-accent', c.base)
+    root.style.setProperty('--page-soft', c.soft)
+    root.style.setProperty('--page-strong', c.strong)
+  }, [band])
+
   const scopeStyle = useMemo(
     () => (override === null ? {} : varsFor(bandFor(override))),
     [override],
