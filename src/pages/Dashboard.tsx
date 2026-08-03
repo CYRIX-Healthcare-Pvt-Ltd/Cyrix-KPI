@@ -7,6 +7,7 @@ import {
   currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonths } from '@/lib/fy'
+import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
   ScoreHeader, TrendChip, WeakAreas, KraBars, ActionRequired,
@@ -44,6 +45,12 @@ export default function Dashboard() {
 
   const kpiStatus = assignment?.assignment?.status ?? null
   const sub = submission?.submission ?? null
+
+  const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
+  const hasEsms = esmsWeight > 0
+  const coreWeight = Number(
+    assignment?.assignment?.core_values_weight ?? (REMAINDER_TOTAL - esmsWeight),
+  )
 
   const awaitingMe = (teamData?.submissions ?? []).filter(s => s.status === 'submitted').length
   const notSubmitted = (teamData?.team.length ?? 0) -
@@ -123,22 +130,27 @@ export default function Dashboard() {
           value={annual?.months_scored ?? 0}
           sub="of 12"
         />
+        {/* One figure per band this person actually has. Read off the
+            assignment, not off the scores, so the tile does not change
+            shape the month a first ESMS score lands. */}
         <StatTile
-          // The second figure is the whole non-job-role block, which is
-          // core values alone, or core values and ESMS together.
-          label={
-            Number(assignment?.assignment?.esms_weight ?? 0) > 0
-              ? 'Job role / ESMS + core'
-              : 'Job role / core values'
-          }
+          label={hasEsms ? 'Job role / ESMS / core' : 'Job role / core values'}
           value={
             <span className="text-base">
               {annual?.avg_job_role_score?.toFixed(1) ?? '—'}
+              {hasEsms && (
+                <>
+                  <span className="text-ink-400"> / </span>
+                  {annual?.avg_esms_score?.toFixed(1) ?? '—'}
+                </>
+              )}
               <span className="text-ink-400"> / </span>
               {annual?.avg_core_values_score?.toFixed(1) ?? '—'}
             </span>
           }
-          sub="out of 80 and 20"
+          sub={hasEsms
+            ? `out of ${JOB_ROLE_TOTAL}, ${esmsWeight} and ${coreWeight}`
+            : `out of ${JOB_ROLE_TOTAL} and ${coreWeight}`}
         />
       </div>
 

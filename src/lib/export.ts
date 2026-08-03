@@ -9,9 +9,13 @@ import { openFyMonths, monthLabel } from './fy'
  *   | Ecode | Name | Designation | Department |   Apr-26    |   May-26    | … | Average |
  *   |       |      |             |            | Job | CV | Total | Job | CV | Total |  …
  *
- * Each month is a merged three-column block. The averages at the end are
- * over scored months only — averaging in an unscored month as zero would
- * quietly drag everyone down.
+ * Each month is a merged block. The averages at the end are over scored
+ * months only — averaging in an unscored month as zero would quietly
+ * drag everyone down.
+ *
+ * An ESMS column joins each block only when somebody in this export
+ * actually carries ESMS. A team where nobody does gets the file it has
+ * always got, rather than a column of blanks to explain.
  *
  * xlsx is imported dynamically: it is a large dependency and only the two
  * screens with a download button ever need it.
@@ -34,16 +38,24 @@ export async function exportKpiScores(
   // have been assessed on is noise at best and misleading at worst.
   const months = openFyMonths(fy)
 
+  const withEsms = rows.some(r =>
+    r.submissions.some(s => s.final_esms_score !== null || s.self_esms_score !== null))
+  const blockCols = withEsms ? 4 : 3
+
   // ---- two header rows, the first merged across each month block ----
   const head1: (string | null)[] = ['Ecode', 'Name', 'Designation', 'Department']
   const head2: (string | null)[] = ['', '', '', '']
 
+  const subHead = withEsms
+    ? ['Job Role %', 'ESMS %', 'Core Value %', 'Total']
+    : ['Job Role %', 'Core Value %', 'Total']
+
   for (const m of months) {
-    head1.push(monthLabel(m), null, null)
-    head2.push('Job Role %', 'Core Value %', 'Total')
+    head1.push(monthLabel(m), ...Array(blockCols - 1).fill(null))
+    head2.push(...subHead)
   }
-  head1.push('Average', null, null)
-  head2.push('Job Role %', 'Core Value %', 'Total')
+  head1.push('Average', ...Array(blockCols - 1).fill(null))
+  head2.push(...subHead)
 
   const body = rows.map(({ employee, submissions }) => {
     const byMonth = new Map(submissions.map(s => [s.period_month, s]))
@@ -55,47 +67,58 @@ export async function exportKpiScores(
     ]
 
     const jobs: number[] = []
+    const esms: number[] = []
     const cores: number[] = []
     const totals: number[] = []
+    const keep = (bucket: number[], v: number | null | undefined) => {
+      if (v !== null && v !== undefined) bucket.push(v)
+    }
 
     for (const m of months) {
       const s = byMonth.get(m)
       const scored = s && SCORED.has(s.status)
       const job = scored ? s.final_job_role_score ?? s.self_job_role_score : null
+      // Stays null for a person who carries no ESMS even in a file that
+      // has the column, because somebody else in the team does.
+      const es = scored ? s.final_esms_score ?? s.self_esms_score : null
       const core = scored ? s.final_core_score ?? s.self_core_score : null
       const total = scored ? s.final_total_score ?? s.self_total_score : null
 
-      if (job !== null && job !== undefined) jobs.push(job)
-      if (core !== null && core !== undefined) cores.push(core)
-      if (total !== null && total !== undefined) totals.push(total)
+      keep(jobs, job); keep(esms, es); keep(cores, core); keep(totals, total)
 
-      line.push(num(job), num(core), num(total))
+      line.push(num(job), ...(withEsms ? [num(es)] : []), num(core), num(total))
     }
 
     const mean = (a: number[]) =>
       a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 100) / 100 : null
 
-    line.push(num(mean(jobs)), num(mean(cores)), num(mean(totals)))
+    line.push(
+      num(mean(jobs)),
+      ...(withEsms ? [num(mean(esms))] : []),
+      num(mean(cores)),
+      num(mean(totals)),
+    )
     return line
   })
 
   const ws = XLSX.utils.aoa_to_sheet([head1, head2, ...body])
 
-  // Merge each month label across its three columns, and the four
-  // identity columns down across both header rows.
+  // Merge each month label across its own block, and the four identity
+  // columns down across both header rows. blockCols rather than a 3, so
+  // the merges cannot drift out of step with the columns they cover.
   const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = []
   for (let c = 0; c < 4; c++) {
     merges.push({ s: { r: 0, c }, e: { r: 1, c } })
   }
   for (let i = 0; i <= months.length; i++) {
-    const start = 4 + i * 3
-    merges.push({ s: { r: 0, c: start }, e: { r: 0, c: start + 2 } })
+    const start = 4 + i * blockCols
+    merges.push({ s: { r: 0, c: start }, e: { r: 0, c: start + blockCols - 1 } })
   }
   ws['!merges'] = merges
 
   ws['!cols'] = [
     { wch: 10 }, { wch: 26 }, { wch: 20 }, { wch: 18 },
-    ...Array.from({ length: (months.length + 1) * 3 }, () => ({ wch: 11 })),
+    ...Array.from({ length: (months.length + 1) * blockCols }, () => ({ wch: 11 })),
   ]
   ws['!freeze'] = { xSplit: 4, ySplit: 2 }
 

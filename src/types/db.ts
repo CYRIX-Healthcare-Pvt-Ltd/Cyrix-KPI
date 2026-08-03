@@ -123,12 +123,16 @@ export interface KpiSubmission {
   employee_remarks: string | null
   manager_remarks: string | null
   self_job_role_score: number | null
+  /** Null for anyone who carries no ESMS — not zero, it does not apply. */
+  self_esms_score: number | null
   self_core_score: number | null
   self_total_score: number | null
   mgr_job_role_score: number | null
+  mgr_esms_score: number | null
   mgr_core_score: number | null
   mgr_total_score: number | null
   final_job_role_score: number | null
+  final_esms_score: number | null
   final_core_score: number | null
   final_total_score: number | null
 }
@@ -172,6 +176,8 @@ export interface AnnualSummary {
   months_finalized: number
   months_scored: number
   avg_job_role_score: number | null
+  /** Null all year for anyone who carries no ESMS. */
+  avg_esms_score: number | null
   avg_core_values_score: number | null
   avg_total_score: number | null
   lowest_month: number | null

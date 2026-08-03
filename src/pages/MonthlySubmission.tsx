@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import clsx from 'clsx'
 import { ArrowLeft, Send, Save, Lock, Trash2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -108,10 +109,8 @@ export default function MonthlySubmission() {
   const coreRows = items.filter(i => i.section === 'core_values')
   const jobTotal = jobRows.reduce((a, i) => a + liveScore(i), 0)
   const esmsTotal = esmsRows.reduce((a, i) => a + liveScore(i), 0)
-  // The tile below mirrors what the database stores in final_core_score:
-  // everything that is not the job role. Preview it any other way and the
-  // number moves the moment the month is saved.
-  const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0) + esmsTotal
+  const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
+  const hasEsms = esmsRows.length > 0
 
   /**
    * The blocks that are filled in by hand, in reading order.
@@ -125,7 +124,7 @@ export default function MonthlySubmission() {
       key: 'job_role', label: 'Job Role', rows: jobRows,
       total: jobTotal, weight: 80, targetFixed: false,
     },
-    ...(esmsRows.length > 0 ? [{
+    ...(hasEsms ? [{
       key: 'esms', label: 'ESMS', rows: esmsRows,
       total: esmsTotal, weight: esmsRows.reduce((a, i) => a + Number(i.weightage), 0),
       targetFixed: true,
@@ -297,19 +296,24 @@ export default function MonthlySubmission() {
         </Alert>
       )}
 
-      {/* ---- running totals ---- */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* ---- running totals: one tile per band this person has ---- */}
+      <div className={clsx('grid gap-3', hasEsms ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
         <StatTile label="Job role" value={jobTotal.toFixed(2)} sub="out of 80" />
-        {/* One tile for the whole non-job-role block, because that is what
-            the database stores as one number. Named for what is in it. */}
+        {hasEsms && (
+          <StatTile
+            label="ESMS"
+            value={esmsTotal.toFixed(2)}
+            sub={`out of ${esmsRows.reduce((a, i) => a + Number(i.weightage), 0)}`}
+          />
+        )}
         <StatTile
-          label={esmsRows.length > 0 ? 'ESMS + core values' : 'Core values'}
+          label="Core values"
           value={coreTotal.toFixed(2)}
-          sub="out of 20"
+          sub={`out of ${coreRows.reduce((a, i) => a + Number(i.weightage), 0)}`}
         />
         <StatTile
           label={editable ? 'My total so far' : 'My total'}
-          value={<ScorePill value={jobTotal + coreTotal} size="lg" />}
+          value={<ScorePill value={jobTotal + esmsTotal + coreTotal} size="lg" />}
           sub="out of 100"
           tone="brand"
         />
