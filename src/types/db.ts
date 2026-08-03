@@ -245,6 +245,31 @@ export interface KpiReportRow {
   rm_tat: number | null
 }
 
+/**
+ * One thing somebody else has put in the signed-in person's court — see
+ * my_notifications(). Never their own state: nobody is notified that
+ * they have not done their own work, because the dashboard says that on
+ * the way in and saying it twice is how a tray gets ignored.
+ *
+ * The database returns the fact and nothing else; the wording, the icon
+ * and the link all live in the app, because a copy change should not
+ * need a migration.
+ */
+export type NotificationKind =
+  | 'kpi_rejected' | 'kpi_approved'
+  | 'month_returned' | 'month_scored'
+  | 'approvals' | 'scoring' | 'records_manager'
+  | 'records_hr' | 'leavers'
+
+export interface NotificationRow {
+  kind: NotificationKind
+  /** How many things of this kind — 1 for the ones that are singular. */
+  n: number
+  /** The newest of them. What "unread" is measured against. */
+  latest: string
+  unread: boolean
+}
+
 /** One row per manager per month — see v_manager_month_status. */
 export interface ManagerMonthStatusRow {
   financial_year: string

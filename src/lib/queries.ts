@@ -7,7 +7,7 @@ import type {
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
-  ManagerMonthStatusRow, KpiReportRow,
+  ManagerMonthStatusRow, KpiReportRow, NotificationRow,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -28,7 +28,7 @@ async function unwrap<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Pr
 const SUBMISSION_DEPENDENTS = [
   'submission', 'submission_by_id', 'team', 'team_submissions', 'history',
   'pending_counts', 'annual', 'kra_attainment', 'weak_areas',
-  'org_kpi_status', 'manager_completion', 'manager_tat',
+  'org_kpi_status', 'manager_completion', 'manager_tat', 'notifications',
 ]
 
 function invalidateSubmissionViews(qc: ReturnType<typeof useQueryClient>) {
@@ -238,6 +238,7 @@ export function useAssignmentAction() {
       qc.invalidateQueries({ queryKey: ['pending_counts'] })
       qc.invalidateQueries({ queryKey: ['team'] })
       qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }
@@ -760,6 +761,7 @@ export function useRemovalAction() {
       qc.invalidateQueries({ queryKey: ['removal_requests'] })
       qc.invalidateQueries({ queryKey: ['team'] })
       qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }
@@ -883,6 +885,48 @@ export function useRequestAction() {
       qc.invalidateQueries({ queryKey: ['assignment'] })
       invalidateSubmissionViews(qc)
     },
+  })
+}
+
+// ---------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------
+
+/**
+ * Everything waiting on the signed-in person, in one round trip.
+ *
+ * Derived server-side from live state rather than read from an event
+ * log, so a notification cannot outlive its cause: approve the KPI and
+ * the row stops being returned. Which is also why nothing here is
+ * dismissible — the way to clear it is to do it.
+ */
+export function useNotifications(employeeId: string | undefined, enabled: boolean) {
+  return useQuery({
+    enabled: enabled && !!employeeId,
+    // Keyed by person, like every other per-employee query here. The RPC
+    // scopes itself to the caller, so this is not what keeps one person's
+    // notifications away from another — it is what stops the cache from
+    // handing the previous sign-in's rows to the next one on a shared
+    // phone, in the moment before the refetch lands.
+    queryKey: ['notifications', employeeId],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('my_notifications')
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as NotificationRow[]
+    },
+  })
+}
+
+/** Opening the panel is reading it: stamps every kind currently listed. */
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('mark_notifications_read')
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 }
 

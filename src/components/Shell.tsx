@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  LayoutDashboard, ClipboardList, Users, CheckSquare, History,
+  LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, KeyRound, Building2, BarChart3, UserMinus,
   ShieldAlert, Trash2,
 } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   usePendingRecordRequests, currentFy,
 } from '@/lib/queries'
 import { useBaseScore } from '@/contexts/ScoreThemeContext'
+import Notifications from './Notifications'
 import { Logo, LogoMark } from './Logo'
 
 interface NavItem {
@@ -74,7 +75,13 @@ export default function Shell() {
     : [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
         { to: '/my-kpi', label: 'My KPI', icon: ClipboardList },
-        { to: '/history', label: 'History', icon: History },
+        // "History" is where the monthly assessment is actually done, but
+        // the name only described the half of the screen that looks
+        // backwards — so people went looking for somewhere to submit and
+        // did not find it. "Assessments" is the word the app already uses
+        // for this ("You cannot start monthly assessments until…"), and a
+        // calendar tick says months rather than archive.
+        { to: '/history', label: 'Assessments', icon: CalendarCheck },
         ...(isManager
           ? [
               { to: '/team', label: 'My Team', icon: Users, badge: counts?.scoring ?? 0 },
@@ -140,6 +147,9 @@ export default function Shell() {
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">
               {initials}
             </div>
+            {/* Not for SW Admin: their remit is logins, and every kind of
+                notification there is names an appraisal. */}
+            <Notifications enabled={!isSwAdmin || isHrAdmin} />
             <NavLink
               to="/change-password"
               className="btn-icon"

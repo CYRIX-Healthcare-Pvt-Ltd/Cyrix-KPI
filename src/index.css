@@ -342,6 +342,17 @@
     50%      { opacity: 1; }
   }
 
+  /* A panel arriving under the control that opened it. Short and from
+     the corner it is anchored to, so it reads as having come out of the
+     button rather than as having been there all along. */
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+  }
+  .animate-pop-in {
+    animation: pop-in var(--dur-fast) var(--ease-out);
+  }
+
   /* Alert pulse: three rings, then done. */
   @keyframes alert-ping {
     0%   { transform: scale(1);   opacity: 0.75; }
@@ -376,6 +387,15 @@
     .animate-score-fill,
     .animate-alert-ping {
       animation: none;
+    }
+    /* The panel still needs to announce that it arrived, so it keeps the
+       fade and loses the travel. */
+    @keyframes pop-in-fade {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .animate-pop-in {
+      animation: pop-in-fade var(--dur-fast) ease;
     }
     /* Press feedback is a position change, so it goes too — the colour
        change on :hover/:active still confirms the interaction. */

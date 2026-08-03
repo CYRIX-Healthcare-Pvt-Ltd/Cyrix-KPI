@@ -1,6 +1,7 @@
 import {
   createContext, useContext, useEffect, useState, useCallback, type ReactNode,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, ecodeToEmail, friendlyError } from '@/lib/supabase'
 import type { Employee } from '@/types/db'
@@ -29,6 +30,7 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const qc = useQueryClient()
   const [session, setSession] = useState<Session | null>(null)
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [directReportCount, setDirectReportCount] = useState(0)
@@ -122,7 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     setEmployee(null)
-  }, [])
+    // Everything cached was fetched as the person who just left. This is
+    // an installable PWA and a shared handset is normal, so the next
+    // sign-in must not be shown a frame of somebody else's appraisal
+    // while their own request is still in flight. Most queries are keyed
+    // by employee id and would miss anyway; the ones that are not — the
+    // notification feed, the request queues — would not.
+    qc.clear()
+  }, [qc])
 
   /**
    * Everyone starts with their ecode as the password, so the first login
