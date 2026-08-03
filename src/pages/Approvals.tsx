@@ -7,7 +7,8 @@ import {
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
-import type { KpiAssignmentItem, Section } from '@/types/db'
+import { sectionsOf } from '@/lib/sections'
+import type { KpiAssignment, KpiAssignmentItem, Section } from '@/types/db'
 
 export default function Approvals() {
   const { employee } = useAuth()
@@ -46,7 +47,7 @@ export default function Approvals() {
         {data.map(({ assignment, employee: tm }) => (
           <ApprovalCard
             key={assignment.id}
-            assignmentId={assignment.id}
+            assignment={assignment}
             name={tm.full_name}
             ecode={tm.ecode}
             designation={tm.designation}
@@ -291,15 +292,19 @@ function EditableRow({
 }
 
 function ApprovalCard({
-  assignmentId, name, ecode, designation, expanded, onToggle,
+  assignment, name, ecode, designation, expanded, onToggle,
 }: {
-  assignmentId: string
+  // The whole row rather than its id: the section weights are per person
+  // — 20% core values, or 15% with ESMS carrying the other 5% — so the
+  // targets each block is checked against have to come from it.
+  assignment: KpiAssignment
   name: string
   ecode: string
   designation: string | null
   expanded: boolean
   onToggle: () => void
 }) {
+  const assignmentId = assignment.id
   const action = useAssignmentAction()
   const [rejecting, setRejecting] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -370,14 +375,13 @@ function ApprovalCard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-ink-100">
-                    {(['job_role', 'core_values'] as Section[]).map(section => (
+                    {sectionsOf(assignment).map(({ key: section, label, weight, standard }) => (
                       <Fragment key={section}>
                         <tr className="bg-ink-50/60">
                           <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-ink-600">
-                            {section === 'job_role' ? 'Job Role — 80%' : 'Core Values — 20%'}
+                            {label} — {weight}%
                             <span className={`ml-2 font-normal ${
-                              total(section) === (section === 'job_role' ? 80 : 20)
-                                ? 'text-emerald-700' : 'text-red-700'
+                              total(section) === weight ? 'text-emerald-700' : 'text-red-700'
                             }`}>
                               (total {total(section)}%)
                             </span>
@@ -387,7 +391,10 @@ function ApprovalCard({
                           <EditableRow
                             key={item.id}
                             item={item}
-                            editable={editing && section === 'job_role'}
+                            // The standard bands are the same for everyone
+                            // who has them, so a manager approving one
+                            // person cannot quietly reword them.
+                            editable={editing && !standard}
                           />
                         ))}
                       </Fragment>

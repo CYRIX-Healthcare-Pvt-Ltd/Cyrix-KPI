@@ -124,7 +124,13 @@ export default function Dashboard() {
           sub="of 12"
         />
         <StatTile
-          label="Job role / core values"
+          // The second figure is the whole non-job-role block, which is
+          // core values alone, or core values and ESMS together.
+          label={
+            Number(assignment?.assignment?.esms_weight ?? 0) > 0
+              ? 'Job role / ESMS + core'
+              : 'Job role / core values'
+          }
           value={
             <span className="text-base">
               {annual?.avg_job_role_score?.toFixed(1) ?? '—'}

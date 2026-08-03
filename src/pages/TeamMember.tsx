@@ -9,7 +9,8 @@ import { supabase, friendlyError } from '@/lib/supabase'
 import { useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy } from '@/lib/queries'
 import { fyMonths, monthLabel } from '@/lib/fy'
 import { PageLoader, ScorePill, StatTile, StatusBadge, Alert } from '@/components/ui'
-import type { Employee, Section } from '@/types/db'
+import { sectionsOf } from '@/lib/sections'
+import type { Employee } from '@/types/db'
 
 export default function TeamMember() {
   const { employeeId = '' } = useParams()
@@ -156,11 +157,11 @@ export default function TeamMember() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-ink-100">
-                {(['job_role', 'core_values'] as Section[]).map(section => (
+                {sectionsOf(assignment.assignment).map(({ key: section, label, weight }) => (
                   <Fragment key={section}>
                     <tr className="bg-ink-50/60">
                       <td colSpan={3} className="px-4 py-1.5 text-xs font-semibold text-ink-600">
-                        {section === 'job_role' ? 'Job Role — 80%' : 'Core Values — 20%'}
+                        {label} — {weight}%
                       </td>
                     </tr>
                     {assignment.items.filter(i => i.section === section).map(i => (

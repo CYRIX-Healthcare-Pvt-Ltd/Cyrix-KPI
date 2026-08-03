@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy } from 'lucide-react'
 import { bandFor, isWeak, trendOf, WEAK_THRESHOLD, type Band } from '@/lib/bands'
+import { SECTION_SHORT } from '@/lib/sections'
 import type { KraAttainmentRow, WeakAreaRow } from '@/types/db'
 
 /**
@@ -277,7 +278,7 @@ export function WeakAreas({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink-900">{a.kra}</p>
               <p className="text-xs text-ink-500">
-                {a.section === 'job_role' ? 'Job role' : 'Core values'} · {a.months} month
+                {SECTION_SHORT[a.section] ?? a.section} · {a.months} month
                 {a.months === 1 ? '' : 's'}
               </p>
             </div>
@@ -317,7 +318,12 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
     kra, section: v.section, pct: v.total / v.n,
   }))
   const jobRole = all.filter(i => i.section === 'job_role').sort((a, b) => a.pct - b.pct)
-  const coreValues = all.filter(i => i.section === 'core_values')
+  // The standard bands, in the order they appear on the KPI. Kept out of
+  // the job-role ranking and out of each other's: a weak ESMS month and a
+  // weak KRA are different problems with different owners.
+  const standard = (['esms', 'core_values'] as const)
+    .map(key => ({ key, rows: all.filter(i => i.section === key) }))
+    .filter(g => g.rows.length > 0)
 
   if (all.length === 0) {
     return <p className="text-sm text-ink-500">No scored months yet.</p>
@@ -334,14 +340,14 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
         </div>
       )}
 
-      {coreValues.length > 0 && (
-        <div className="space-y-3 border-t border-ink-100 pt-4">
+      {standard.map(({ key, rows: group }) => (
+        <div key={key} className="space-y-3 border-t border-ink-100 pt-4">
           <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
-            Core Values — 20%
+            {SECTION_SHORT[key]}
           </p>
-          {coreValues.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
+          {group.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
         </div>
-      )}
+      ))}
 
       <p className="pt-1 text-[11px] text-ink-400">
         The marker sits at {WEAK_THRESHOLD}% — anything left of it is below Good.

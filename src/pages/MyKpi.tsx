@@ -8,6 +8,7 @@ import {
 import {
   Alert, PageLoader, StatusBadge, EmptyState, Spinner,
 } from '@/components/ui'
+import { sectionsOf } from '@/lib/sections'
 import type { Section } from '@/types/db'
 
 export default function MyKpi() {
@@ -78,15 +79,15 @@ export default function MyKpi() {
         </>
       )}
 
-      {(['job_role', 'core_values'] as Section[]).map(section => (
+      {/* The bands this person actually has. ESMS is absent for anyone
+          who does not carry it, rather than shown as an empty 0%. */}
+      {sectionsOf(assignment).map(({ key: section, label, weight }) => (
 
         <div key={section} className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
             <h3 className="text-sm font-semibold text-ink-800">
-              {section === 'job_role' ? 'Job Role' : 'Alignment To Core Values'}
-              <span className="font-normal text-ink-500">
-                {' '}— {section === 'job_role' ? 80 : 20}%
-              </span>
+              {label}
+              <span className="font-normal text-ink-500">{' '}— {weight}%</span>
             </h3>
             <span className="badge bg-ink-100 text-ink-600">
               {sectionTotal(section)}%

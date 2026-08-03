@@ -131,6 +131,8 @@ export function useSaveAssignmentRows() {
       rows: KpiRowDefinition[]
       sourceTemplateId?: string | null
       existingAssignmentId?: string | null
+      /** Does this person carry the ESMS obligation? */
+      esms: boolean
     }) => {
       let assignmentId = args.existingAssignmentId ?? null
 
@@ -156,13 +158,19 @@ export function useSaveAssignmentRows() {
       )
       if (ins.error) throw new Error(friendlyError(ins.error))
 
-      // Core values are identical for everyone, so the system owns that row
-      // rather than the team member. Stamped on here so a saved draft is
-      // already complete, and again server-side on submit.
-      const { error: cvError } = await supabase.rpc('apply_standard_core_values', {
+      // Core values and ESMS are identical for everyone who has them, so
+      // the system owns those rows rather than the team member. Stamped
+      // on here so a saved draft is already complete.
+      //
+      // One call for both, because they are one decision: ESMS takes its
+      // 5% out of the core values block, and set_esms restamps core
+      // values at whatever it is left with. Setting them separately is
+      // how you get an assignment totalling 105%.
+      const { error: stdError } = await supabase.rpc('set_esms', {
         p_assignment_id: assignmentId,
+        p_enabled: args.esms,
       })
-      if (cvError) throw new Error(friendlyError(cvError))
+      if (stdError) throw new Error(friendlyError(stdError))
 
       return assignmentId
     },

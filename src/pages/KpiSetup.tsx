@@ -9,14 +9,15 @@ import {
 import type { ParseResult } from '@/lib/excel'
 import type { KpiRowDefinition } from '@/types/db'
 import type { ScoringRule } from '@/lib/scoring'
+import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 
 /**
- * Team members define their Job Role rows only — the 20% core values
- * block is identical company-wide and is attached by the system, so it is
- * shown here for reference but is not editable.
+ * Team members define their Job Role rows only. The remaining 20% is
+ * standard — core values for everyone, and for the people who carry an
+ * ESMS obligation, 5% of that 20% moves to ESMS. Both are attached by
+ * the system, so they are shown here for reference and are not editable.
  */
-const JOB_ROLE_TOTAL = 80
 
 type Draft = KpiRowDefinition & { _key: string; _inferred?: boolean }
 
@@ -50,9 +51,14 @@ export default function KpiSetup() {
   const [parseInfo, setParseInfo] = useState<ParseResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // null until the saved answer is known, so a draft that already has
+  // ESMS does not flash as unticked and then correct itself.
+  const [esmsChoice, setEsmsChoice] = useState<boolean | null>(null)
 
   const assignment = data?.assignment ?? null
   const locked = assignment?.status === 'pending_approval' || assignment?.status === 'active'
+  const esms = esmsChoice ?? Number(assignment?.esms_weight ?? 0) > 0
+  const coreWeight = esms ? REMAINDER_TOTAL - ESMS_WEIGHT : REMAINDER_TOTAL
 
   // Only job role rows are editable; core values are filtered out entirely.
   const working: Draft[] = useMemo(() => {
@@ -101,11 +107,22 @@ export default function KpiSetup() {
         _inferred: r.rule_inferred,
       })))
 
+      // The sheet decides whether this person carries ESMS. Its actual
+      // ESMS row is not imported: like core values, the wording and the
+      // 5% are standard, so the system's own row is stamped on instead
+      // of whatever the spreadsheet happened to say.
+      setEsmsChoice(parsed.hasEsms)
+
       const skipped = parsed.rows.length - jobRows.length
       setNotice(
         `Read ${jobRows.length} Job Role row(s) from sheet “${parsed.sheetName}”.` +
+        (parsed.hasEsms
+          ? ' The sheet has an ESMS band, so ESMS is switched on at 5% and core values' +
+            ` sit at ${REMAINDER_TOTAL - ESMS_WEIGHT}%.`
+          : '') +
         (skipped > 0
-          ? ` The ${skipped} core values row(s) were ignored — those are standard for everyone.`
+          ? ` The other ${skipped} standard row(s) were not imported — those are the same` +
+            ' for everyone and are added automatically.'
           : ''),
       )
     } catch (err) {
@@ -136,6 +153,7 @@ export default function KpiSetup() {
         fy,
         existingAssignmentId: assignment?.id ?? null,
         sourceTemplateId: roleTemplate?.template?.id ?? null,
+        esms,
         rows: working.map(({ _key, _inferred, ...r }, idx) => {
           void _key; void _inferred
           return { ...r, sort_order: idx + 1 }
@@ -149,7 +167,12 @@ export default function KpiSetup() {
 
   const onSaveDraft = async () => {
     const id = await persist()
-    if (id) { setNotice('Saved as a draft. Nothing has been sent to your manager yet.'); setRows(null) }
+    if (id) {
+      setNotice('Saved as a draft. Nothing has been sent to your manager yet.')
+      // Back to reading from the saved assignment, both of them, so what
+      // is on screen is what is in the database.
+      setRows(null); setEsmsChoice(null)
+    }
   }
 
   const onSubmit = async () => {
@@ -289,24 +312,68 @@ export default function KpiSetup() {
             </button>
           </div>
 
-          {/* Read-only: identical for everyone, so nobody sets their own. */}
-          <div className="card overflow-hidden opacity-90">
-            <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          {/*
+            The other 20%. Read-only rows, but one real decision: whether
+            ESMS applies. It is a checkbox rather than a weightage field
+            because the split is not negotiable — 5% and 15%, or 0% and
+            20%. Letting someone type the numbers only creates ways for
+            them not to add up.
+          */}
+          <div className="card overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
                 <Lock className="h-3.5 w-3.5 text-ink-400" />
-                Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
+                The other {REMAINDER_TOTAL}%
               </h3>
-              <span className="badge bg-ink-100 text-ink-600">Standard for everyone</span>
+              <span className="badge bg-ink-100 text-ink-600">Standard, added for you</span>
             </div>
-            <div className="px-4 py-3">
-              <p className="text-sm text-ink-500">
-                Rated each month against the five company core values. Nothing to set up here.
-              </p>
-              <ul className="mt-2 flex flex-wrap gap-1.5">
-                {(coreValues ?? []).map(cv => (
-                  <li key={cv.id} className="badge bg-ink-100 text-ink-700">{cv.name}</li>
-                ))}
-              </ul>
+
+            <label className="flex cursor-pointer items-start gap-3 border-b border-ink-100 px-4 py-3 hover:bg-ink-50">
+              <input
+                type="checkbox"
+                checked={esms}
+                onChange={e => setEsmsChoice(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-300 accent-cyrixRed-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-ink-900">
+                  ESMS applies to my role
+                </span>
+                <span className="mt-0.5 block text-xs text-ink-500">
+                  Incident reporting within TAT, report submission, quality management
+                  and training. Worth {ESMS_WEIGHT}%, taken out of core values — your Job
+                  Role stays at {JOB_ROLE_TOTAL}%.
+                </span>
+              </span>
+            </label>
+
+            {esms && (
+              <div className="flex items-baseline justify-between gap-3 border-b border-ink-100 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink-900">
+                    ESMS Monitoring and reporting
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    Scored out of a fixed target of 100 each month, like a Job Role row.
+                  </p>
+                </div>
+                <span className="badge shrink-0 bg-ink-100 text-ink-700">{ESMS_WEIGHT}%</span>
+              </div>
+            )}
+
+            <div className="flex items-baseline justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink-900">Alignment To Core Values</p>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  Rated each month against the five company core values.
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {(coreValues ?? []).map(cv => (
+                    <li key={cv.id} className="badge bg-ink-100 text-ink-700">{cv.name}</li>
+                  ))}
+                </ul>
+              </div>
+              <span className="badge shrink-0 bg-ink-100 text-ink-700">{coreWeight}%</span>
             </div>
           </div>
 

@@ -104,9 +104,33 @@ export default function MonthlySubmission() {
   )
 
   const jobRows = items.filter(i => i.section === 'job_role')
+  const esmsRows = items.filter(i => i.section === 'esms')
   const coreRows = items.filter(i => i.section === 'core_values')
   const jobTotal = jobRows.reduce((a, i) => a + liveScore(i), 0)
-  const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
+  const esmsTotal = esmsRows.reduce((a, i) => a + liveScore(i), 0)
+  // The tile below mirrors what the database stores in final_core_score:
+  // everything that is not the job role. Preview it any other way and the
+  // number moves the moment the month is saved.
+  const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0) + esmsTotal
+
+  /**
+   * The blocks that are filled in by hand, in reading order.
+   *
+   * ESMS is scored exactly like a job role row — a number against a
+   * target — so it is the same editor, with the target locked because
+   * it is fixed at 100 for everyone who carries it.
+   */
+  const measuredBlocks = [
+    {
+      key: 'job_role', label: 'Job Role', rows: jobRows,
+      total: jobTotal, weight: 80, targetFixed: false,
+    },
+    ...(esmsRows.length > 0 ? [{
+      key: 'esms', label: 'ESMS', rows: esmsRows,
+      total: esmsTotal, weight: esmsRows.reduce((a, i) => a + Number(i.weightage), 0),
+      targetFixed: true,
+    }] : []),
+  ]
 
   const isScored = submission?.status === 'scored' || submission?.status === 'finalized'
 
@@ -276,7 +300,13 @@ export default function MonthlySubmission() {
       {/* ---- running totals ---- */}
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile label="Job role" value={jobTotal.toFixed(2)} sub="out of 80" />
-        <StatTile label="Core values" value={coreTotal.toFixed(2)} sub="out of 20" />
+        {/* One tile for the whole non-job-role block, because that is what
+            the database stores as one number. Named for what is in it. */}
+        <StatTile
+          label={esmsRows.length > 0 ? 'ESMS + core values' : 'Core values'}
+          value={coreTotal.toFixed(2)}
+          sub="out of 20"
+        />
         <StatTile
           label={editable ? 'My total so far' : 'My total'}
           value={<ScorePill value={jobTotal + coreTotal} size="lg" />}
@@ -300,16 +330,17 @@ export default function MonthlySubmission() {
         </div>
       ) : null}
 
-      {/* ---- job role rows ---- */}
-      <div className="card overflow-hidden">
+      {/* ---- the rows entered by hand: job role, then ESMS ---- */}
+      {measuredBlocks.map(block => (
+      <div key={block.key} className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
-            Job Role <span className="font-normal text-ink-500">— 80%</span>
+            {block.label} <span className="font-normal text-ink-500">— {block.weight}%</span>
           </h3>
-          <ScorePill value={jobTotal} size="sm" />
+          <ScorePill value={block.total} size="sm" />
         </div>
         <div className="divide-y divide-ink-100">
-          {jobRows.map(item => (
+          {block.rows.map(item => (
             <div key={item.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -326,16 +357,24 @@ export default function MonthlySubmission() {
               <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 {/* Targets legitimately move month to month — a call quota
                     in April is not December's. Editable while the month is
-                    open; the KRA, weightage and scoring rule are not. */}
+                    open; the KRA, weightage and scoring rule are not.
+
+                    ESMS is the exception: its target is 100 every month
+                    for everyone, so the field shows it and will not take
+                    an edit. */}
                 <div>
                   <label className="label text-xs" htmlFor={`tgt-${item.id}`}>
-                    Target
+                    Target {block.targetFixed && (
+                      <span className="font-normal normal-case tracking-normal text-ink-400">
+                        · fixed
+                      </span>
+                    )}
                   </label>
                   <input
                     id={`tgt-${item.id}`}
                     type="number" inputMode="decimal" step="any"
                     className="input"
-                    disabled={!editable}
+                    disabled={!editable || block.targetFixed}
                     value={targets[item.id] ?? ''}
                     onChange={e => setTargets({ ...targets, [item.id]: e.target.value })}
                   />
@@ -380,12 +419,16 @@ export default function MonthlySubmission() {
           ))}
         </div>
       </div>
+      ))}
 
       {/* ---- core values ---- */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
-            Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
+            Alignment To Core Values{' '}
+            <span className="font-normal text-ink-500">
+              — {coreRows.reduce((a, i) => a + Number(i.weightage), 0)}%
+            </span>
           </h3>
           <div className="flex items-center gap-3 text-xs text-ink-500">
             <span>

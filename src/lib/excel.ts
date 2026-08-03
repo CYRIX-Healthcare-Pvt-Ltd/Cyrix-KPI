@@ -53,6 +53,9 @@ export interface ParseResult {
   errors: string[]
   jobRoleTotal: number
   coreValuesTotal: number
+  esmsTotal: number
+  /** True when the sheet carried an ESMS band. */
+  hasEsms: boolean
 }
 
 const norm = (v: unknown) =>
@@ -110,10 +113,15 @@ function detectScoringRule(
   return { rule: 'higher_capped', inferred: true }
 }
 
-/** 'Job Role - 80%' / 'Alignment To Core Values - 20%' → section key. */
+/** 'Job Role - 80%' / 'ESMS' / 'Alignment To Core Values - 20%' → section key. */
 function sectionFromLabel(label: string): Section | null {
   const l = label.toLowerCase()
   if (!l) return null
+  // Before core values: some sheets label the band "ESMS" and others
+  // spell it out, and "Environmental and Social Management System" has
+  // neither of the other two words in it, so order does not actually
+  // matter — but ESMS reads first on the sheet, so it reads first here.
+  if (/\besms\b/.test(l) || l.includes('environmental and social')) return 'esms'
   if (l.includes('core value') || l.includes('alignment')) return 'core_values'
   if (l.includes('job role')) return 'job_role'
   return null
@@ -144,6 +152,8 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
     errors: [],
     jobRoleTotal: 0,
     coreValuesTotal: 0,
+    esmsTotal: 0,
+    hasEsms: false,
   }
 
   if (!ws || !ws['!ref']) {
@@ -306,12 +316,13 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
   }
 
   // ---- totals and validation -------------------------------------------
-  result.jobRoleTotal = round3(
-    result.rows.filter(r => r.section === 'job_role').reduce((a, b) => a + b.weightage, 0),
+  const totalOf = (s: Section) => round3(
+    result.rows.filter(r => r.section === s).reduce((a, b) => a + b.weightage, 0),
   )
-  result.coreValuesTotal = round3(
-    result.rows.filter(r => r.section === 'core_values').reduce((a, b) => a + b.weightage, 0),
-  )
+  result.jobRoleTotal = totalOf('job_role')
+  result.coreValuesTotal = totalOf('core_values')
+  result.esmsTotal = totalOf('esms')
+  result.hasEsms = result.rows.some(r => r.section === 'esms')
 
   if (result.rows.length === 0) {
     result.errors.push('No KPI rows were found below the header.')
@@ -321,9 +332,17 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
       `Job Role weightages total ${result.jobRoleTotal}%, they must total 80%.`,
     )
   }
-  if (result.coreValuesTotal !== 20) {
+  // Checked as one block rather than two numbers. ESMS is carved out of
+  // the core values 20% — 15 + 5 and 20 + 0 are both correct, and a
+  // sheet with ESMS would otherwise fail for a core values total of 15
+  // that is exactly what it should be.
+  const remainder = round3(result.coreValuesTotal + result.esmsTotal)
+  if (remainder !== 20) {
     result.errors.push(
-      `Core Values weightages total ${result.coreValuesTotal}%, they must total 20%.`,
+      result.hasEsms
+        ? `Core Values and ESMS total ${remainder}%, together they must total 20% ` +
+          `(read as ${result.coreValuesTotal}% + ${result.esmsTotal}%).`
+        : `Core Values weightages total ${remainder}%, they must total 20%.`,
     )
   }
   if (result.rows.some(r => r.rule_inferred)) {

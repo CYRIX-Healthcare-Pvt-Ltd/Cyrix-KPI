@@ -1,6 +1,13 @@
 import type { ScoringRule, RuleParams } from '@/lib/scoring'
 
-export type Section = 'job_role' | 'core_values'
+/**
+ * The weighted bands a KPI is divided into.
+ *
+ * Job role is always 80%. The remaining 20% is core values alone, or
+ * core values at 15% alongside ESMS at 5% for the people who carry an
+ * ESMS obligation — see set_esms().
+ */
+export type Section = 'job_role' | 'core_values' | 'esms'
 
 export type AssignmentStatus =
   | 'draft' | 'pending_approval' | 'active' | 'rejected' | 'archived'
@@ -86,6 +93,8 @@ export interface KpiAssignment {
   status: AssignmentStatus
   job_role_weight: number
   core_values_weight: number
+  /** 5 for the people who carry ESMS, 0 for everyone else. */
+  esms_weight: number
   submitted_at: string | null
   submitted_by: string | null
   approved_at: string | null

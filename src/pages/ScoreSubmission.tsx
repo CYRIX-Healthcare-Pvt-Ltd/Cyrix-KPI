@@ -14,7 +14,17 @@ import {
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile,
 } from '@/components/ui'
-import type { KpiSubmissionItem } from '@/types/db'
+import type { KpiSubmissionItem, Section } from '@/types/db'
+
+/**
+ * The blocks a manager enters a number against, in reading order. Core
+ * values are absent on purpose — those are rated, not measured, and have
+ * their own panel below.
+ */
+const SCORED_SECTIONS: Array<{ key: Section; label: string }> = [
+  { key: 'job_role', label: 'Job Role' },
+  { key: 'esms', label: 'ESMS' },
+]
 
 export default function ScoreSubmission() {
   const { submissionId = '' } = useParams()
@@ -223,15 +233,23 @@ export default function ScoreSubmission() {
         />
       </div>
 
-      {/* ---- job role rows, side by side ---- */}
-      <div className="card overflow-hidden">
+      {/* ---- the scored rows, side by side: job role, then ESMS ---- */}
+      {SCORED_SECTIONS.map(({ key, label }) => {
+        const rows = items.filter(i => i.section === key)
+        // ESMS only exists for the people who carry it, and an empty card
+        // headed "ESMS — 0%" tells everyone else about a thing that does
+        // not apply to them.
+        if (rows.length === 0) return null
+        const weight = rows.reduce((a, i) => a + Number(i.weightage), 0)
+        return (
+      <div key={key} className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
-            Job Role <span className="font-normal text-ink-500">— 80%</span>
+            {label} <span className="font-normal text-ink-500">— {weight}%</span>
           </h3>
         </div>
         <div className="divide-y divide-ink-100">
-          {items.filter(i => i.section === 'job_role').map(item => (
+          {rows.map(item => (
             <div key={item.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -291,12 +309,18 @@ export default function ScoreSubmission() {
           ))}
         </div>
       </div>
+        )
+      })}
 
       {/* ---- core values ---- */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
-            Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
+            Alignment To Core Values{' '}
+            <span className="font-normal text-ink-500">
+              — {items.filter(i => i.section === 'core_values')
+                    .reduce((a, i) => a + Number(i.weightage), 0)}%
+            </span>
           </h3>
           {coreAverage !== null && (
             <span className="text-xs text-ink-500">my avg {coreAverage.toFixed(0)}/100</span>

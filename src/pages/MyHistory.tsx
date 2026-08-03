@@ -4,7 +4,9 @@ import {
 } from 'recharts'
 import { Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useSubmissionHistory, useAnnualSummary, currentFy } from '@/lib/queries'
+import {
+  useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy,
+} from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
@@ -55,6 +57,10 @@ export default function MyHistory() {
   const fy = currentFy()
   const { data: history, isLoading } = useSubmissionHistory(employee?.id, fy)
   const { data: annual } = useAnnualSummary(employee?.id, fy)
+  // Only to name the second figure honestly — with ESMS it is two bands,
+  // not one. Already in the query cache from the dashboard.
+  const { data: assignment } = useMyAssignment(employee?.id, fy)
+  const hasEsms = Number(assignment?.assignment?.esms_weight ?? 0) > 0
 
   if (isLoading) return <PageLoader />
 
@@ -89,7 +95,7 @@ export default function MyHistory() {
         <StatTile label="Best month" value={annual?.highest_month?.toFixed(1) ?? '—'} />
         <StatTile label="Lowest month" value={annual?.lowest_month?.toFixed(1) ?? '—'} />
         <StatTile
-          label="Job role / core values"
+          label={hasEsms ? 'Job role / ESMS + core' : 'Job role / core values'}
           value={
             <span className="text-base">
               {annual?.avg_job_role_score?.toFixed(1) ?? '—'}

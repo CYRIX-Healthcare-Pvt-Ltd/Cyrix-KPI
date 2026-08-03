@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
+import * as XLSX from 'xlsx'
 import { parseKpiWorkbook, type ParseResult } from './excel'
 
 /**
@@ -86,5 +87,84 @@ maybe('parsing the real KPI 26-27 template', () => {
     expect(parsed.rows[0].kpi_description).toBe(
       'BD calls assigned to be attended within 48 hours',
     )
+  })
+})
+
+/**
+ * ESMS detection, on a sheet built here rather than read from disk.
+ *
+ * The real template lives outside the repo, so the tests above skip on a
+ * machine without it — which is most of them, and which is exactly when
+ * a parser change goes in unverified. These build the grid in memory, so
+ * they run everywhere.
+ */
+function sheetOf(rows: Array<Array<string | number | null>>): ArrayBuffer {
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Apr-26')
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+}
+
+const HEADER = ['KRA& Weightage', 'KRA', 'KPI (Mesurable Parameter)', 'Weightage', 'Target KPI']
+
+describe('the ESMS band', () => {
+  it('reads 80 / 5 / 15 as a valid sheet', () => {
+    const parsed = parseKpiWorkbook(sheetOf([
+      ['Ecode :', 'Name :'],
+      HEADER,
+      ['Job Role - 80%', 'Audit Planning & Execution', 'Audits conducted vs planned', 20, 100],
+      [null, 'Non-Conformance', 'NC closure within TAT', 15, 100],
+      [null, 'Training and quality Awareness', 'Plan Vs Execution', 15, 100],
+      [null, 'TRA', 'Ensure TRA to be done on time', 15, 100],
+      [null, 'Team Handling', 'Team Retension', 15, 100],
+      ['ESMS', 'ESMS Monitoring and reporting', 'Incident reporting within TAT', 5, 100],
+      ['Alignment To Core Values - 20%', 'Customer Delight', 'Delivers a positive experience', 15, 100],
+    ]))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.hasEsms).toBe(true)
+    expect(parsed.jobRoleTotal).toBe(80)
+    expect(parsed.esmsTotal).toBe(5)
+    expect(parsed.coreValuesTotal).toBe(15)
+    expect(parsed.rows.find(r => r.section === 'esms')?.kra)
+      .toBe('ESMS Monitoring and reporting')
+  })
+
+  it('still reads 80 / 20 with no ESMS band at all', () => {
+    const parsed = parseKpiWorkbook(sheetOf([
+      ['Ecode :', 'Name :'],
+      HEADER,
+      ['Job Role - 80%', 'Response time', 'BD calls within 48 hours', 80, 100],
+      ['Alignment To Core Values - 20%', 'Customer Delight', 'Delivers a positive experience', 20, 100],
+    ]))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.hasEsms).toBe(false)
+    expect(parsed.coreValuesTotal).toBe(20)
+    expect(parsed.esmsTotal).toBe(0)
+  })
+
+  it('rejects a remainder that does not reach 20, and names both parts', () => {
+    const parsed = parseKpiWorkbook(sheetOf([
+      ['Ecode :', 'Name :'],
+      HEADER,
+      ['Job Role - 80%', 'Response time', 'BD calls within 48 hours', 80, 100],
+      ['ESMS', 'ESMS Monitoring and reporting', 'Incident reporting within TAT', 5, 100],
+      ['Alignment To Core Values - 20%', 'Customer Delight', 'Delivers a positive experience', 10, 100],
+    ]))
+
+    expect(parsed.errors).toHaveLength(1)
+    expect(parsed.errors[0]).toContain('15%')
+    expect(parsed.errors[0]).toContain('10% + 5%')
+  })
+
+  it('does not mistake "Alignment To Core Values" for an ESMS band', () => {
+    const parsed = parseKpiWorkbook(sheetOf([
+      ['Ecode :', 'Name :'],
+      HEADER,
+      ['Job Role - 80%', 'Response time', 'BD calls within 48 hours', 80, 100],
+      ['Alignment To Core Values - 20%', 'Customer Delight', 'Delivers a positive experience', 20, 100],
+    ]))
+    expect(parsed.rows.map(r => r.section)).toEqual(['job_role', 'core_values'])
   })
 })
