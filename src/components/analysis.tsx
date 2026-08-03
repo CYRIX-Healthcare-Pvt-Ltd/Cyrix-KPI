@@ -165,27 +165,47 @@ export function ActionRequired({
   return (
     <div className="relative overflow-hidden rounded-xl bg-ink-950 text-white">
       <span className="absolute inset-y-0 left-0 w-1 bg-cyrixRed-600" />
-      <div className="flex flex-wrap items-center gap-5 p-5 pl-7">
-        {/* Three pulses, then still. This panel stays until the work is
-            done, so an infinite ping would put permanent motion in the
-            corner of a screen someone reads every day — attention-getting
-            once, noise thereafter. */}
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />
-        </span>
+      {/*
+        Stacked on a phone, side by side from 640px up.
 
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-label text-cyrixRed-400">
-            {eyebrow}
-          </p>
-          <p className="mt-1.5 text-lg font-semibold">{title}</p>
-          {body && <div className="mt-1 text-sm text-white/60">{body}</div>}
+        This was one flex row with flex-wrap, which does not do what it
+        looks like it does: the button is shrink-0 and the text is flex-1,
+        so flex-basis is 0 and the text has no width it can insist on. It
+        never triggered a wrap — it just gave up its own width until the
+        heading was breaking one word per line beside a button that had
+        taken half a 375px screen. Wrapping needs a stated width to fail
+        against, so the breakpoint states it instead.
+      */}
+      <div className="flex flex-col gap-4 p-5 pl-7 sm:flex-row sm:items-center sm:gap-5">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          {/* Three pulses, then still. This panel stays until the work is
+              done, so an infinite ping would put permanent motion in the
+              corner of a screen someone reads every day — attention-getting
+              once, noise thereafter.
+
+              Aligned to the eyebrow rather than centred on the block: a
+              marker for the whole card reads as deliberate at the top and
+              as an accident when it is floating beside line three. */}
+          <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />
+          </span>
+
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-label text-cyrixRed-400">
+              {eyebrow}
+            </p>
+            <p className="mt-1.5 text-lg font-semibold">{title}</p>
+            {body && <div className="mt-1 text-sm text-white/60">{body}</div>}
+          </div>
         </div>
 
+        {/* Full width on a phone — a call to action the thumb can hit
+            without aiming — and rounded like every other button in the
+            app, which this one had never been. */}
         <Link
           to={to}
-          className="btn-press shrink-0 bg-white px-6 py-3 text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
+          className="btn-press shrink-0 rounded-lg bg-white px-6 py-3 text-center text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
         >
           {cta}
         </Link>
