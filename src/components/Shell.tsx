@@ -11,7 +11,7 @@ import {
   usePendingCounts, useRemovalRequests, useAnnualSummary,
   usePendingRecordRequests, currentFy,
 } from '@/lib/queries'
-import { useBaseScore } from '@/contexts/ScoreThemeContext'
+import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
 import { Logo, LogoMark } from './Logo'
 
@@ -41,6 +41,7 @@ export default function Shell() {
   // yet", which is neutral grey, from "not answered yet", which is nothing.
   const { data: annual, isSuccess: annualLoaded } = useAnnualSummary(employee?.id, fy)
   useBaseScore(employee?.id, annual?.avg_total_score, annualLoaded)
+  const { scopeStyle } = useScoreTheme()
 
   // HR administers the system rather than being appraised by it, so they
   // get the admin surfaces instead of a personal KPI.
@@ -199,7 +200,17 @@ export default function Shell() {
         )}
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 md:pb-6">
+      {/*
+        The page's own tint lands here rather than on :root, so a screen
+        reporting on somebody else colours itself and nothing above it.
+        Without this the team average reached the nav, and every tab —
+        Records, Approvals, the lot — hovered in the team's colour on the
+        team pages.
+      */}
+      <main
+        style={scopeStyle}
+        className="mx-auto max-w-7xl px-4 py-6 pb-24 md:pb-6"
+      >
         <Outlet />
       </main>
 
