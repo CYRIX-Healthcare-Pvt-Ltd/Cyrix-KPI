@@ -386,14 +386,26 @@
     animation: pop-in var(--dur-fast) var(--ease-out);
   }
 
-  /* Alert pulse: three rings, then done. */
+  /**
+   * Alert pulse. Keeps going for as long as the panel is there.
+   *
+   * It used to stop after three rings, on the reasoning that permanent
+   * motion in the corner of a screen someone reads all day is noise.
+   * Overruled, and rightly: the panel only exists while something is
+   * outstanding, so a dot that has gone still is a dot that is lying
+   * about a live queue. It stops when the work is done, which is the
+   * only honest moment for it to stop.
+   *
+   * The quarter-second hold at the end is what keeps it from being
+   * relentless — a ring, a pause, a ring, rather than a strobe.
+   */
   @keyframes alert-ping {
     0%   { transform: scale(1);   opacity: 0.75; }
     75%  { transform: scale(2.4); opacity: 0; }
     100% { transform: scale(2.4); opacity: 0; }
   }
   .animate-alert-ping {
-    animation: alert-ping 1.4s var(--ease-out) 3;
+    animation: alert-ping 1.4s var(--ease-out) infinite;
   }
 
   /* The meter fills from zero on first paint, so the number lands.
@@ -421,7 +433,7 @@
       animation: none;
     }
 
-    /* The alert dot keeps blinking, gently.
+    /* The alert dot keeps blinking, gently, and keeps going.
      *
      * It was in the list above, which was too blunt. Reduced motion
      * means remove movement, not remove the signal — and this dot is the
@@ -434,13 +446,21 @@
      * held rather than animated — a static transform is a position, not
      * motion — and only the opacity moves, which is exactly the carve-out
      * the guidance makes for cues that aid comprehension.
+     *
+     * Both ends of the cycle are transparent, which matters more here
+     * than in the full-motion version. This ran three times and stopped,
+     * and an animation that ends without `forwards` reverts to its
+     * unanimated state — opacity 1 — so it settled as a solid red disc
+     * at twice the size of the dot it was meant to be haloing. Running
+     * forever is what the design wants anyway; it also means there is no
+     * resting state left to get wrong.
      */
     @keyframes alert-blink {
       0%, 100% { opacity: 0; }
       50%      { opacity: 0.45; }
     }
     .animate-alert-ping {
-      animation: alert-blink 1.8s ease-in-out 3;
+      animation: alert-blink 1.8s ease-in-out infinite;
       transform: scale(2);
     }
     /* The panel still needs to announce that it arrived, so it keeps the
