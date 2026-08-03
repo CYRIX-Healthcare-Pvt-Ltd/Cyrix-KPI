@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { ArrowLeft, Send, Save, Lock, Trash2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -20,6 +20,7 @@ import type { KpiSubmissionItem } from '@/types/db'
 
 export default function MonthlySubmission() {
   const { month = '' } = useParams()
+  const navigate = useNavigate()
   const { employee } = useAuth()
   const fy = currentFy()
 
@@ -184,7 +185,14 @@ export default function MonthlySubmission() {
     if (!(await save())) return
     try {
       await action.mutateAsync({ action: 'submit_self', submissionId: submission.id })
-      setNotice('Submitted to your manager.')
+      // Back to the list rather than sitting on a month that is now
+      // read-only and has nothing left to do on it. The confirmation
+      // travels with the navigation so it lands where the eye does —
+      // next to the row that has just changed to Submitted.
+      navigate('/history', {
+        replace: true,
+        state: { notice: `${monthLabel(month)} has been submitted to your manager.` },
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit.')
     }

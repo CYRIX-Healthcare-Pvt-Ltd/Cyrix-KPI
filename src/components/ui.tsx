@@ -8,10 +8,44 @@ export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={clsx('animate-spin', className ?? 'h-5 w-5')} />
 }
 
+/**
+ * Five bars, staggered, in the signed-in person's own band colour.
+ *
+ * The heights are fixed and uneven — a chart, not a row of sticks — and
+ * only the vertical scale animates on top of them. 70ms apart: far
+ * enough to read as a wave travelling left to right, close enough that
+ * the whole set is moving at once rather than taking turns.
+ *
+ * Deliberately not a progress bar. A bar that fills is a promise about
+ * how long this will take, and nothing here knows that.
+ */
+export function ChartLoader({ className }: { className?: string }) {
+  const bars = [0.55, 0.8, 1, 0.65, 0.9]
+  return (
+    <div
+      className={clsx('flex items-end gap-[3px]', className ?? 'h-7')}
+      role="status"
+      aria-label="Loading"
+    >
+      {bars.map((h, i) => (
+        <span
+          key={i}
+          className="animate-chart-bar w-[5px] rounded-sm"
+          style={{
+            height: `${h * 100}%`,
+            animationDelay: `${i * 70}ms`,
+            backgroundColor: 'var(--score-accent)',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function PageLoader({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-ink-500">
-      <Spinner className="h-7 w-7" />
+      <ChartLoader />
       <p className="text-sm">{label}</p>
     </div>
   )

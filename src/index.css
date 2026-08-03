@@ -408,6 +408,34 @@
     animation: alert-ping 1.4s var(--ease-out) infinite;
   }
 
+  /**
+   * The loading animation: a small bar chart building itself.
+   *
+   * A spinner says "wait" and nothing else. This is a KPI product, and a
+   * chart drawing itself says the same thing while looking like the
+   * thing being fetched — the one place decoration earns its keep is the
+   * gap where there is nothing else to look at.
+   *
+   * scaleY rather than height. A loader runs precisely when the main
+   * thread is busiest, so it must not touch layout: height would force
+   * layout, paint and composite every frame, on the frames least able to
+   * afford it. A transform is composited on its own, off the main
+   * thread, and stays smooth while the page it is waiting for parses.
+   *
+   * Each bar carries its own height so the silhouette reads as data
+   * rather than as a row of identical sticks, and the scale rides on top
+   * of that. Which is also what makes the reduced-motion version work:
+   * drop the scaling and the shape is still a chart.
+   */
+  @keyframes chart-bar {
+    0%, 100% { transform: scaleY(0.34); }
+    50%      { transform: scaleY(1); }
+  }
+  .animate-chart-bar {
+    transform-origin: bottom;
+    animation: chart-bar 1.05s var(--ease-in-out) infinite;
+  }
+
   /* The meter fills from zero on first paint, so the number lands.
 
      scaleX rather than width: width forces layout, paint and composite on
@@ -462,6 +490,20 @@
     .animate-alert-ping {
       animation: alert-blink 1.8s ease-in-out infinite;
       transform: scale(2);
+    }
+
+    /* The loader keeps its shape and loses its motion. The bars hold the
+       heights they were given and fade in turn instead of growing, so it
+       still reads as a chart and still says "working" — a loader that
+       goes completely still is indistinguishable from a page that has
+       given up. */
+    @keyframes chart-fade {
+      0%, 100% { opacity: 0.3; }
+      50%      { opacity: 1; }
+    }
+    .animate-chart-bar {
+      animation: chart-fade 1.6s ease-in-out infinite;
+      transform: none;
     }
     /* The panel still needs to announce that it arrived, so it keeps the
        fade and loses the travel. */

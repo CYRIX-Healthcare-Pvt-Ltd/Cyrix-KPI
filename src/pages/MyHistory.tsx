@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
@@ -9,7 +9,7 @@ import {
 } from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import { PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
+import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
 
 /**
@@ -56,6 +56,10 @@ function ScoreLabel({
 export default function MyHistory() {
   const { employee } = useAuth()
   const fy = currentFy()
+  // Carried here by the submission screen so the confirmation lands
+  // beside the row that has just changed rather than on a page the
+  // person is about to leave.
+  const notice = (useLocation().state as { notice?: string } | null)?.notice
   const { data: history, isLoading } = useSubmissionHistory(employee?.id, fy)
   const { data: annual } = useAnnualSummary(employee?.id, fy)
   // Which bands to print. Read off the assignment rather than off the
@@ -92,6 +96,8 @@ export default function MyHistory() {
 
   return (
     <div className="space-y-5">
+      {notice && <Alert kind="success">{notice}</Alert>}
+
       <ScoreHeader
         title="My history"
         subtitle={`FY ${fy} · April to March`}
