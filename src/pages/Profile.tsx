@@ -5,7 +5,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment, currentFy,
 } from '@/lib/queries'
-import { monthLabel } from '@/lib/fy'
 import { bandFor } from '@/lib/bands'
 import { PageLoader, StatTile } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
@@ -157,7 +156,7 @@ export default function Profile() {
           sub="of 12"
         />
         <StatTile
-          label="Band"
+          label="Performance"
           value={
             band
               ? <span className={clsx('text-xl', band.accent)}>{band.label}</span>
@@ -179,13 +178,11 @@ export default function Profile() {
           <Row label="Function">{employee.function_name}</Row>
           <Row label="Department">{employee.department}</Row>
           <Row label="Grade">{employee.grade}</Row>
-          <Row label="Location">{employee.location}</Row>
-          <Row label="Work email">{employee.work_email}</Row>
-          <Row label="Date of joining">
-            {employee.date_of_joining
-              ? monthLabel(employee.date_of_joining)
-              : null}
-          </Row>
+          {/* Location, work email and date of joining are all still on the
+              employee record — they are just not shown here. None of them
+              was populated by the HR import, so every one of them was a
+              dash, and a list of dashes reads as a broken page rather
+              than as fields nobody filled in. */}
           <Row label="Reporting manager">
             {manager ? (
               <>
