@@ -242,23 +242,23 @@ export default function Profile() {
             // Plain words. An earlier draft said "submissions answerable"
             // and "turned around in time", which is precise and means
             // nothing to the person being measured by it.
-            detailLead="Ranked on how much of your team's work is scored, then on how quickly."
+            detailLead="Ranked on how much of your team's work is scored, then on how long what is left has been waiting."
             detail={[
               ['Months your team owes',
                 ranking?.due_months != null ? String(ranking.due_months) : '—'],
               ['You have scored',
                 ranking?.scored_months != null ? String(ranking.scored_months) : '—'],
-              ['Still waiting',
-                ranking?.due_months != null && ranking?.scored_months != null
-                  ? String(ranking.due_months - ranking.scored_months)
-                  : '—'],
-              // Counting the undone months to today is the point of this
-              // figure: one nobody has touched should get worse, not drop
-              // out of the average.
-              ['Average per month',
-                ranking?.avg_age_days == null
+              // Two clocks, kept apart. Blended into one they produced
+              // 49.3 days for a manager who actually scores in under
+              // three — true, and unreadable as either fact.
+              ['Completion TAT',
+                ranking?.completion_tat == null
                   ? '—'
-                  : `${ranking.avg_age_days.toFixed(1)} days`],
+                  : `${ranking.completion_tat.toFixed(1)} days`],
+              ['Pending TAT',
+                ranking?.pending_tat == null
+                  ? 'nothing waiting'
+                  : `${ranking.pending_tat.toFixed(1)} days`],
             ]}
           />
         )}

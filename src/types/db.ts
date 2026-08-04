@@ -69,11 +69,10 @@ export interface KpiRanking {
   completion_pct: number | null
   due_months: number | null
   scored_months: number | null
-  /**
-   * Days per owed month. Taken, for a month that is done; still running,
-   * for one that is not — so a backlog ages instead of disappearing.
-   */
-  avg_age_days: number | null
+  /** Months that are scored: how long they took. */
+  completion_tat: number | null
+  /** Months that are not: how long they have waited, counted to today. */
+  pending_tat: number | null
 }
 
 export interface JobRole {
@@ -301,8 +300,10 @@ export interface KpiReportRow {
   kpi_not_set: number
   scored_pct: number | null
   avg_score: number | null
-  tm_tat: number | null
-  rm_tat: number | null
+  /** Months that are scored: how long they took. */
+  completion_tat: number | null
+  /** Months that are not: how long they have waited, counted to today. */
+  pending_tat: number | null
 }
 
 /**
