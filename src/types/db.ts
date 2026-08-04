@@ -51,14 +51,29 @@ export interface KpiRanking {
   org_of: number | null
   team_size: number
   /**
-   * Standing among managers on turnaround, fastest first — the opposite
-   * direction to the two above. Null for anyone with no reports, and for
-   * a manager who has not scored a month yet: no turnaround is not a
-   * quick one.
+   * Standing among managers on the share of their team's submissions
+   * turned around inside the allowance — ties broken by turnaround, so
+   * the sort runs in two directions at once.
+   *
+   * Null for anyone with no reports, and for a manager with nothing yet
+   * answerable. answerable / on_time_count are the two numbers the
+   * percentage came from, so the screen can show its working.
    */
-  tat_rank: number | null
-  tat_of: number | null
-  avg_tat_days: number | null
+  mgr_rank: number | null
+  mgr_of: number | null
+  /**
+   * Of every month the whole team owes — not only the ones that reached
+   * the manager. The same figure as scored_pct on their row in HR's
+   * report.
+   */
+  completion_pct: number | null
+  due_months: number | null
+  scored_months: number | null
+  /**
+   * Days per owed month. Taken, for a month that is done; still running,
+   * for one that is not — so a backlog ages instead of disappearing.
+   */
+  avg_age_days: number | null
 }
 
 export interface JobRole {

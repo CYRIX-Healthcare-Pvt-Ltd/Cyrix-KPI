@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { ArrowLeft, KeyRound, Medal, Timer, Trophy, UserRound } from 'lucide-react'
+import {
+  ArrowLeft, Info, KeyRound, Medal, Timer, Trophy, UserRound,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment, currentFy,
@@ -34,6 +37,7 @@ function ordinal(n: number): string {
  */
 function RankTile({
   label, icon: Icon, rank, of, note, emptyNote = 'No scored month yet',
+  detail, detailLead,
 }: {
   label: string
   icon: React.ComponentType<{ className?: string }>
@@ -41,12 +45,26 @@ function RankTile({
   of: number | null | undefined
   note?: string
   emptyNote?: string
+  /** Rows of working, shown on hover or tap. */
+  detail?: Array<[string, string]>
+  /** One sentence above them, saying what the rank is measuring. */
+  detailLead?: string
 }) {
+  // Tapped open on touch, where there is no hover at all. The same state
+  // also serves the keyboard, via focus-within on the button.
+  const [open, setOpen] = useState(false)
+
   return (
-    <div className="card flex flex-col p-4">
+    <div
+      className={clsx('card group relative flex flex-col p-4', detail && 'cursor-help')}
+      onClick={detail ? () => setOpen(v => !v) : undefined}
+    >
       <p className="label !mb-0 flex items-center gap-1.5">
         <Icon className="h-3.5 w-3.5 text-ink-400" />
         {label}
+        {detail && (
+          <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-300" aria-hidden />
+        )}
       </p>
       {rank == null || of == null ? (
         <>
@@ -63,6 +81,53 @@ function RankTile({
           </p>
           <p className="mt-0.5 min-h-4 text-xs text-ink-400">{note}</p>
         </>
+      )}
+
+      {/*
+        The working, on hover — and on tap, because a phone has no hover
+        and a hover-only explanation is one that does not exist there.
+
+        Hung below the tile and pinned to its own width, so it lands where
+        the eye already is instead of drifting across the row. Ignores the
+        pointer entirely: it is something to read, not to aim at, and a
+        panel that swallows clicks over the tile that opened it is a panel
+        you cannot close.
+      */}
+      {detail && (
+        <div
+          className={clsx(
+            'pointer-events-none absolute left-0 right-0 top-full z-20 mt-1.5',
+            'origin-top rounded-lg border border-ink-200 bg-white p-3 shadow-lg',
+            'transition-opacity duration-150 ease-out',
+            open
+              ? 'opacity-100'
+              : 'opacity-0 [@media(hover:hover)]:group-hover:opacity-100',
+          )}
+          role="note"
+        >
+          {detailLead && (
+            <p className="mb-2 border-b border-ink-100 pb-2 text-[11px] leading-snug text-ink-600">
+              {detailLead}
+            </p>
+          )}
+          {/* Stacked on a phone. The tile is 166px there, and a label
+              opposite its value in that width breaks "7 days from their
+              submission" across three lines with the label wrapping into
+              it. Label above value costs a line and reads. */}
+          <dl className="space-y-2 sm:space-y-1.5">
+            {detail.map(([k, v]) => (
+              <div
+                key={k}
+                className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
+              >
+                <dt className="text-[11px] leading-tight text-ink-500">{k}</dt>
+                <dd className="text-[11px] font-medium leading-tight tabular-nums text-ink-900 sm:shrink-0">
+                  {v}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
     </div>
   )
@@ -164,16 +229,37 @@ export default function Profile() {
         */}
         {isManager && (
           <RankTile
-            label="Team TAT rank"
+            label="Team scoring rank"
             icon={Timer}
-            rank={ranking?.tat_rank}
-            of={ranking?.tat_of}
+            rank={ranking?.mgr_rank}
+            of={ranking?.mgr_of}
             note={
-              ranking?.avg_tat_days == null
+              ranking?.completion_pct == null
                 ? 'among managers'
-                : `${ranking.avg_tat_days.toFixed(1)} days · among managers`
+                : `${ranking.completion_pct}% done · among managers`
             }
-            emptyNote="No month scored yet"
+            emptyNote="Nothing owed yet"
+            // Plain words. An earlier draft said "submissions answerable"
+            // and "turned around in time", which is precise and means
+            // nothing to the person being measured by it.
+            detailLead="Ranked on how much of your team's work is scored, then on how quickly."
+            detail={[
+              ['Months your team owes',
+                ranking?.due_months != null ? String(ranking.due_months) : '—'],
+              ['You have scored',
+                ranking?.scored_months != null ? String(ranking.scored_months) : '—'],
+              ['Still waiting',
+                ranking?.due_months != null && ranking?.scored_months != null
+                  ? String(ranking.due_months - ranking.scored_months)
+                  : '—'],
+              // Counting the undone months to today is the point of this
+              // figure: one nobody has touched should get worse, not drop
+              // out of the average.
+              ['Average per month',
+                ranking?.avg_age_days == null
+                  ? '—'
+                  : `${ranking.avg_age_days.toFixed(1)} days`],
+            ]}
           />
         )}
         <StatTile
