@@ -152,19 +152,26 @@ export default function Profile() {
           of={ranking?.org_of}
           note="scored across Cyrix"
         />
-        {/* Managers only. Everyone is ranked on their own score; only a
-            manager is also holding other people's months open, and this
-            is the number that says by how long. */}
+        {/*
+          Managers only. Everyone is ranked on their own score; only a
+          manager is also holding other people's months open, and this is
+          the number that says by how long.
+
+          "Team TAT" rather than plain "Turnaround", and the caption
+          names the field: the tile appears for managers and nobody else,
+          which the manager seeing it has no way to know. Saying "among
+          managers" is what turns "1st of 1" from a puzzle into a fact.
+        */}
         {isManager && (
           <RankTile
-            label="Turnaround rank"
+            label="Team TAT rank"
             icon={Timer}
             rank={ranking?.tat_rank}
             of={ranking?.tat_of}
             note={
               ranking?.avg_tat_days == null
                 ? 'among managers'
-                : `${ranking.avg_tat_days.toFixed(1)} days on average`
+                : `${ranking.avg_tat_days.toFixed(1)} days · among managers`
             }
             emptyNote="No month scored yet"
           />
