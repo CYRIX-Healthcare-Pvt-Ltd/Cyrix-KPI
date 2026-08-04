@@ -209,6 +209,26 @@
     @apply rounded-xl border border-ink-200/70 bg-white;
   }
 
+  /**
+   * Two columns, with no hole at the end.
+   *
+   * An odd number of cards in a two-column grid leaves the last one
+   * sitting beside a gap, which reads as a card that failed to load
+   * rather than as a row that ran out. It takes the full width instead.
+   *
+   * :last-child:nth-child(odd) is the whole test — an element that is
+   * both the last and in an odd position is only possible when the count
+   * itself is odd. No counting in JavaScript, and it stays right when a
+   * card is added or hidden.
+   *
+   * Scoped below lg, where the grid widens and the arithmetic changes.
+   */
+  @media (max-width: 1023.98px) {
+    .grid-fill > :last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
+
   .input {
     @apply w-full rounded-lg border border-ink-200 px-3 py-2 text-sm
            placeholder:text-ink-300 focus:outline-none focus:ring-1

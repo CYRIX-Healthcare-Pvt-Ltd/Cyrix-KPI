@@ -128,7 +128,7 @@ export default function Profile() {
           a set — reading one without the others beside it loses half the
           point. */}
       <div className={clsx(
-        'grid grid-cols-2 gap-3',
+        'grid-fill grid grid-cols-2 gap-3',
         isManager ? 'lg:grid-cols-5' : 'lg:grid-cols-4',
       )}>
         <RankTile
