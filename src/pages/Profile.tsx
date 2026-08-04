@@ -251,6 +251,13 @@ export default function Profile() {
               // Two clocks, kept apart. Blended into one they produced
               // 49.3 days for a manager who actually scores in under
               // three — true, and unreadable as either fact.
+              // Their half of the wait. A manager can be quick and still
+              // be carrying a team that sends everything in weeks late,
+              // and only this line would say so.
+              ['Team submits in',
+                ranking?.submit_tat == null
+                  ? '—'
+                  : `${ranking.submit_tat.toFixed(1)} days`],
               ['Completion TAT',
                 ranking?.completion_tat == null
                   ? '—'

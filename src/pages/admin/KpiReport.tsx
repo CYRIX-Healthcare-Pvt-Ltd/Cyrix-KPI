@@ -119,6 +119,7 @@ export default function KpiReport() {
         n === null || n === undefined ? '' : Number(Number(n).toFixed(dp))
       line['Scored %'] = at(r.scored_pct, 1)
       line.Average = at(r.avg_score, 1)
+      line['Submit TAT (days)'] = at(r.submit_tat, 1)
       line['Completion TAT (days)'] = at(r.completion_tat, 1)
       line['Pending TAT (days)'] = at(r.pending_tat, 1)
       return line
@@ -295,6 +296,9 @@ export default function KpiReport() {
                 </th>
                 <th className="px-4 py-2.5 text-right">Scored %</th>
                 <th className="px-4 py-2.5 text-right">Average</th>
+                <th className="px-4 py-2.5 text-right" title="Months the team sent in: average days from the 1st of the following month to the team member submitting. High here is a slow team, whatever the manager does next">
+                  Submit TAT
+                </th>
                 <th className="px-4 py-2.5 text-right" title="Months that are scored: average days from the 1st of the following month to the manager scoring them">
                   Completion TAT
                 </th>
@@ -306,7 +310,7 @@ export default function KpiReport() {
             <tbody className="divide-y divide-ink-100">
               {(rows ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-8 text-center text-sm text-ink-500">
+                  <td colSpan={14} className="px-4 py-8 text-center text-sm text-ink-500">
                     {isFetching ? 'Loading…' : 'Nothing matches those filters.'}
                   </td>
                 </tr>
@@ -359,6 +363,7 @@ export default function KpiReport() {
                       {/* One decimal because these are averages. A single
                           person's turnaround is always a whole number of
                           days — the halves appear only across a group. */}
+                      <Num v={r.submit_tat} decimals={1} />
                       <Num v={r.completion_tat} decimals={1} />
                       <Num v={r.pending_tat} decimals={1} />
                     </tr>

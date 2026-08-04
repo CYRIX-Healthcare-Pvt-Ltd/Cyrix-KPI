@@ -69,6 +69,8 @@ export interface KpiRanking {
   completion_pct: number | null
   due_months: number | null
   scored_months: number | null
+  /** Months the team sent in: how long they took to send them. */
+  submit_tat: number | null
   /** Months that are scored: how long they took. */
   completion_tat: number | null
   /** Months that are not: how long they have waited, counted to today. */
@@ -300,6 +302,8 @@ export interface KpiReportRow {
   kpi_not_set: number
   scored_pct: number | null
   avg_score: number | null
+  /** Months the team sent in: how long they took to send them. */
+  submit_tat: number | null
   /** Months that are scored: how long they took. */
   completion_tat: number | null
   /** Months that are not: how long they have waited, counted to today. */
