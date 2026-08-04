@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { ArrowLeft, KeyRound, Medal, Trophy, UserRound } from 'lucide-react'
+import { ArrowLeft, KeyRound, Medal, Timer, Trophy, UserRound } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment, currentFy,
@@ -33,13 +33,14 @@ function ordinal(n: number): string {
  * for. It states a position and the field it was measured against.
  */
 function RankTile({
-  label, icon: Icon, rank, of, note,
+  label, icon: Icon, rank, of, note, emptyNote = 'No scored month yet',
 }: {
   label: string
   icon: React.ComponentType<{ className?: string }>
   rank: number | null | undefined
   of: number | null | undefined
   note?: string
+  emptyNote?: string
 }) {
   return (
     <div className="card flex flex-col p-4">
@@ -50,9 +51,7 @@ function RankTile({
       {rank == null || of == null ? (
         <>
           <p className="mt-2 text-2xl font-semibold text-ink-300">—</p>
-          <p className="mt-0.5 min-h-4 text-xs text-ink-400">
-            No scored month yet
-          </p>
+          <p className="mt-0.5 min-h-4 text-xs text-ink-400">{emptyNote}</p>
         </>
       ) : (
         <>
@@ -124,11 +123,14 @@ export default function Profile() {
         scoreLabel="Year average"
       />
 
-      {/* Two across even on the narrowest phone. Stacked, these four
-          tiles pushed the details card most of a screen down, and the
-          two ranks are a pair — reading one without the other beside it
-          loses half the point. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Two across even on the narrowest phone. Stacked, these tiles
+          pushed the details card most of a screen down, and the ranks are
+          a set — reading one without the others beside it loses half the
+          point. */}
+      <div className={clsx(
+        'grid grid-cols-2 gap-3',
+        isManager ? 'lg:grid-cols-5' : 'lg:grid-cols-4',
+      )}>
         <RankTile
           label="Team rank"
           icon={Medal}
@@ -150,6 +152,23 @@ export default function Profile() {
           of={ranking?.org_of}
           note="scored across Cyrix"
         />
+        {/* Managers only. Everyone is ranked on their own score; only a
+            manager is also holding other people's months open, and this
+            is the number that says by how long. */}
+        {isManager && (
+          <RankTile
+            label="Turnaround rank"
+            icon={Timer}
+            rank={ranking?.tat_rank}
+            of={ranking?.tat_of}
+            note={
+              ranking?.avg_tat_days == null
+                ? 'among managers'
+                : `${ranking.avg_tat_days.toFixed(1)} days on average`
+            }
+            emptyNote="No month scored yet"
+          />
+        )}
         <StatTile
           label="Months scored"
           value={annual?.months_scored ?? 0}

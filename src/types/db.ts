@@ -50,6 +50,15 @@ export interface KpiRanking {
   org_rank: number | null
   org_of: number | null
   team_size: number
+  /**
+   * Standing among managers on turnaround, fastest first — the opposite
+   * direction to the two above. Null for anyone with no reports, and for
+   * a manager who has not scored a month yet: no turnaround is not a
+   * quick one.
+   */
+  tat_rank: number | null
+  tat_of: number | null
+  avg_tat_days: number | null
 }
 
 export interface JobRole {
