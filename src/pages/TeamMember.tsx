@@ -2,7 +2,7 @@ import { Fragment } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -12,6 +12,52 @@ import { PageLoader, ScorePill, StatTile, StatusBadge, Alert } from '@/component
 import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 import { sectionsOf } from '@/lib/sections'
 import type { Employee } from '@/types/db'
+
+/**
+ * One score with its bands underneath.
+ *
+ * Job role is 80 of the 100 and the rest barely moves between people, so
+ * two months at 88 can be completely different months. The split is the
+ * part a manager can act on; the total is the part that goes on a
+ * report.
+ */
+function BandCell({
+  total, job, esms, core, hasEsms, pill,
+}: {
+  total: number | null | undefined
+  job: number | null | undefined
+  esms: number | null | undefined
+  core: number | null | undefined
+  hasEsms: boolean
+  pill?: boolean
+}) {
+  const parts: Array<[string, number | null | undefined]> = [
+    ['Job', job],
+    ...(hasEsms ? [['ESMS', esms] as [string, number | null | undefined]] : []),
+    ['Core', core],
+  ]
+  return (
+    <td className="px-4 py-3 text-right">
+      {pill ? (
+        <ScorePill value={total} size="sm" />
+      ) : (
+        <span className="tabular-nums text-ink-600">{total?.toFixed(2) ?? '—'}</span>
+      )}
+      {total !== null && total !== undefined && (
+        <p className="mt-1 flex flex-wrap justify-end gap-x-2 text-[10px] leading-tight">
+          {parts.map(([label, v]) => (
+            <span key={label} className="whitespace-nowrap">
+              <span className="text-ink-400">{label}</span>{' '}
+              <span className="font-semibold tabular-nums text-ink-600">
+                {v === null || v === undefined ? '—' : v.toFixed(1)}
+              </span>
+            </span>
+          ))}
+        </p>
+      )}
+    </td>
+  )
+}
 
 export default function TeamMember() {
   const { employeeId = '' } = useParams()
@@ -36,10 +82,22 @@ export default function TeamMember() {
   if (!member) return <Alert kind="error">Team member not found.</Alert>
 
   const byMonth = new Map((history ?? []).map(s => [s.period_month, s]))
+  // Which bands this person carries, read off the KPI rather than the
+  // scores — so somebody with ESMS who has not been scored on it yet
+  // still gets the line, rather than the chart changing shape later.
+  const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
+  const hasEsms = esmsWeight > 0
+
   const chartData = fyMonths(fy).map(m => {
     const s = byMonth.get(m)
     const scored = s && (s.status === 'scored' || s.status === 'finalized')
-    return { month: monthLabel(m).split('-')[0], Total: scored ? s.final_total_score : null }
+    return {
+      month: monthLabel(m).split('-')[0],
+      Total: scored ? s.final_total_score : null,
+      'Job role': scored ? s.final_job_role_score : null,
+      ESMS: scored ? s.final_esms_score : null,
+      'Core values': scored ? s.final_core_score : null,
+    }
   })
 
   return (
@@ -80,10 +138,33 @@ export default function TeamMember() {
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
                   formatter={(v: unknown) => (typeof v === 'number' ? v.toFixed(2) : '—')}
                 />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {/* The total, and then what it is made of. A total alone
+                    cannot show a strong job role being carried by core
+                    values, or the reverse — which is the thing a manager
+                    is looking at this chart to find out.
+
+                    Only the total is labelled. Four sets of numbers on
+                    one plot collide with each other at every crossing,
+                    and the legend plus the tooltip cover the rest. */}
                 <Line
                   type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
                   dot={{ r: 3 }} connectNulls
                   label={<ScoreLabel count={chartData.length} />}
+                />
+                <Line
+                  type="monotone" dataKey="Job role" stroke="#e30613" strokeWidth={1.5}
+                  dot={{ r: 2 }} connectNulls
+                />
+                {hasEsms && (
+                  <Line
+                    type="monotone" dataKey="ESMS" stroke="#7c3aed" strokeWidth={1.5}
+                    dot={{ r: 2 }} connectNulls
+                  />
+                )}
+                <Line
+                  type="monotone" dataKey="Core values" stroke="#8a8d97" strokeWidth={1.5}
+                  dot={{ r: 2 }} connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -101,8 +182,11 @@ export default function TeamMember() {
               <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-2.5 font-medium">Month</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
+                {/* "Mine" read as the manager's own row on their own
+                    screen. It is their assessment of somebody else, and
+                    the word for that is Manager. */}
                 <th className="px-4 py-2.5 text-right font-medium">Self</th>
-                <th className="px-4 py-2.5 text-right font-medium">Mine</th>
+                <th className="px-4 py-2.5 text-right font-medium">Manager</th>
                 <th className="px-4 py-2.5 text-right font-medium">Final</th>
                 <th className="px-4 py-2.5" />
               </tr>
@@ -116,15 +200,33 @@ export default function TeamMember() {
                       {monthLabel(m)}
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={s?.status ?? null} /></td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
-                      {s?.self_total_score?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
-                      {s?.mgr_total_score?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <ScorePill value={s?.final_total_score} size="sm" />
-                    </td>
+                    {/* The total, and underneath it what it is made of.
+                        A month at 88 built on a weak job role and a full
+                        core-values score is a different conversation
+                        from one built the other way round, and the total
+                        alone cannot tell them apart. */}
+                    <BandCell
+                      total={s?.self_total_score}
+                      job={s?.self_job_role_score}
+                      esms={s?.self_esms_score}
+                      core={s?.self_core_score}
+                      hasEsms={hasEsms}
+                    />
+                    <BandCell
+                      total={s?.mgr_total_score}
+                      job={s?.mgr_job_role_score}
+                      esms={s?.mgr_esms_score}
+                      core={s?.mgr_core_score}
+                      hasEsms={hasEsms}
+                    />
+                    <BandCell
+                      total={s?.final_total_score}
+                      job={s?.final_job_role_score}
+                      esms={s?.final_esms_score}
+                      core={s?.final_core_score}
+                      hasEsms={hasEsms}
+                      pill
+                    />
                     <td className="px-4 py-3 text-right">
                       {s && (
                         <Link to={`/score/${s.id}`}

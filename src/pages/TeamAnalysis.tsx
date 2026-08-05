@@ -12,11 +12,11 @@ import {
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
 import { fyMonths, openFyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { bandFor, isWeak, trendOf, attainmentPct } from '@/lib/bands'
-import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
+import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, SECTION_SHORT } from '@/lib/sections'
 import { exportOrgStatus } from '@/lib/export'
 import { PageLoader, ScorePill, StatTile, EmptyState, Alert } from '@/components/ui'
 import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
-import type { Employee, WeakAreaRow } from '@/types/db'
+import type { Employee, WeakAreaRow, Section } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -200,16 +200,28 @@ export default function TeamAnalysis() {
     if (!attainment || !team) return []
     const byId = new Map(team.map(t => [t.id, t]))
 
-    // Per person per KRA, in month order.
-    const series = new Map<string, Array<{ month: string; pct: number }>>()
+    /*
+      Per person per KRA, in month order.
+
+      The value carries the employee, the KRA and the section, because
+      the first version of this built a key of "<id> <kra>" and split it
+      back on a space — which turned "Customer Delight" into "Customer"
+      and put a KRA that does not exist on screen. A composite key is
+      fine; recovering its parts by parsing is not.
+    */
+    const series = new Map<string, {
+      employeeId: string; kra: string; section: string
+      rows: Array<{ month: string; pct: number }>
+    }>()
     // Every KRA name a person carries — their KPI, as a fingerprint.
     const kpiOf = new Map<string, Set<string>>()
     for (const r of attainment) {
       if (r.attainment_pct === null || !SCORED.has(r.status)) continue
-      const key = `${r.employee_id} ${r.kra}`
-      const list = series.get(key) ?? []
-      list.push({ month: r.period_month, pct: r.attainment_pct })
-      series.set(key, list)
+      const key = `${r.employee_id} ${r.kra}`
+      const entry = series.get(key)
+        ?? { employeeId: r.employee_id, kra: r.kra, section: r.section, rows: [] }
+      entry.rows.push({ month: r.period_month, pct: r.attainment_pct })
+      series.set(key, entry)
       const set = kpiOf.get(r.employee_id) ?? new Set<string>()
       set.add(r.kra)
       kpiOf.set(r.employee_id, set)
@@ -236,12 +248,11 @@ export default function TeamAnalysis() {
 
     const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length
     const out: Array<{
-      member: Employee; kra: string; why: string; avg: number
+      member: Employee; kra: string; section: string; why: string; avg: number
       months: number; peers: number; peerAvg: number | null; rank: number
     }> = []
 
-    for (const [key, rows] of series) {
-      const [employeeId, kra] = key.split(' ')
+    for (const { employeeId, kra, section, rows } of series.values()) {
       const member = byId.get(employeeId)
       if (!member || rows.length === 0) continue
 
@@ -253,8 +264,9 @@ export default function TeamAnalysis() {
       // The same KRA, read only off people doing the same job.
       const sameKpi = (cohort.get(fingerprint.get(employeeId) ?? '') ?? [])
         .filter(id => id !== employeeId)
-      const peerReadings = sameKpi.flatMap(id => (series.get(`${id} ${kra}`) ?? []).map(r => r.pct))
-      const peers = sameKpi.filter(id => (series.get(`${id} ${kra}`) ?? []).length > 0).length
+      const peerRows = (id: string) => series.get(`${id} ${kra}`)?.rows ?? []
+      const peerReadings = sameKpi.flatMap(id => peerRows(id).map(r => r.pct))
+      const peers = sameKpi.filter(id => peerRows(id).length > 0).length
       const peerAvg = peerReadings.length ? mean(peerReadings) : null
       const gap = peerAvg === null ? null : avg - peerAvg
 
@@ -274,7 +286,7 @@ export default function TeamAnalysis() {
         : 'Averaging below Good on this area'
 
       out.push({
-        member, kra, why, avg, months: mine.length, peers, peerAvg,
+        member, kra, section, why, avg, months: mine.length, peers, peerAvg,
         // Falling first, then furthest behind. A slide is still
         // happening; a gap may be a job somebody simply finds hard.
         rank: (falling ? 0 : 100) + (gap === null ? 50 : Math.max(0, 50 + gap)),
@@ -486,6 +498,9 @@ export default function TeamAnalysis() {
                     </Link>
                     {' — '}
                     <span className="font-medium">{c.kra}</span>
+                    <span className="ml-1.5 text-xs font-normal text-ink-400">
+                      {SECTION_SHORT[c.section as Section] ?? c.section}
+                    </span>
                   </p>
                   <p className="mt-0.5 text-sm text-cyrixRed-700">{c.why}</p>
                   <p className="mt-0.5 text-xs text-ink-400">
