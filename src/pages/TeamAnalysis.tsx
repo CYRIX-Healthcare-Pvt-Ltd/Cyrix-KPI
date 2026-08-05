@@ -7,7 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyTeam, useTeamSubmissions, useTeamAssignments, useWeakAreas,
-  useManagerMonthStatus, currentFy,
+  useKraAttainment, useManagerMonthStatus, currentFy,
 } from '@/lib/queries'
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
 import { fyMonths, openFyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
@@ -99,6 +99,9 @@ export default function TeamAnalysis() {
   const { data: subs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
   const { data: assignments } = useTeamAssignments(ids.length ? ids : undefined, fy)
   const { data: weak } = useWeakAreas(ids.length ? ids : undefined, fy)
+  // Month by month, KRA by KRA — the only shape that can answer "which
+  // area is slipping" rather than "who is low".
+  const { data: attainment } = useKraAttainment(ids.length ? ids : undefined, fy)
   // The year average says how the team is doing; this says which months
   // are actually finished, which is the other half of the question.
   const { data: byMonth } = useManagerMonthStatus(fy, {
@@ -170,6 +173,116 @@ export default function TeamAnalysis() {
       unscored: people.filter(p => p.total === null).length,
     }
   }, [team, subs, assignments, weak, fy, month])
+
+  /**
+   * Named areas that need a conversation, and why.
+   *
+   * "Nobody is averaging below Good" was true and useless: somebody can
+   * average 84 and still be sliding on one KRA, or be a long way behind
+   * the rest of the team on the one thing they share. A manager cannot
+   * act on a total; they can act on "Athul, Board Repair, falling".
+   *
+   * Two signals, deliberately different questions:
+   *
+   *   FALLING   the last two months against the two before, on that KRA
+   *             alone — their own trend, nobody else involved.
+   *   BEHIND    their average against everybody else on the team who
+   *             carries a KRA of the same name.
+   *
+   * The peer comparison is by name, which is the only handle there is,
+   * and it is why the count of peers is printed rather than hidden: a
+   * manager's reports can hold different job roles, and two people can
+   * mean different things by the same words. Naming "the other 4" lets
+   * the reader discount it. Core values compare cleanly — that row is
+   * identical for everyone who has it.
+   */
+  const concerns = useMemo(() => {
+    if (!attainment || !team) return []
+    const byId = new Map(team.map(t => [t.id, t]))
+
+    // Per person per KRA, in month order.
+    const series = new Map<string, Array<{ month: string; pct: number }>>()
+    // Every KRA name a person carries — their KPI, as a fingerprint.
+    const kpiOf = new Map<string, Set<string>>()
+    for (const r of attainment) {
+      if (r.attainment_pct === null || !SCORED.has(r.status)) continue
+      const key = `${r.employee_id} ${r.kra}`
+      const list = series.get(key) ?? []
+      list.push({ month: r.period_month, pct: r.attainment_pct })
+      series.set(key, list)
+      const set = kpiOf.get(r.employee_id) ?? new Set<string>()
+      set.add(r.kra)
+      kpiOf.set(r.employee_id, set)
+    }
+
+    /*
+      Who is comparable to whom.
+
+      Only people whose whole KPI is the same set of KRAs. Matching one
+      KRA name at a time was the first attempt and it is not safe here: a
+      manager's reports can hold different job roles, two of them can use
+      the same words for different work, and a comparison built on that
+      produces a number that looks precise and is not. Identical KPIs are
+      genuinely the same job, so the comparison means what it says.
+    */
+    const fingerprint = new Map<string, string>()
+    for (const [id, set] of kpiOf) {
+      fingerprint.set(id, [...set].sort().join(' | '))
+    }
+    const cohort = new Map<string, string[]>()
+    for (const [id, fp] of fingerprint) {
+      cohort.set(fp, [...(cohort.get(fp) ?? []), id])
+    }
+
+    const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length
+    const out: Array<{
+      member: Employee; kra: string; why: string; avg: number
+      months: number; peers: number; peerAvg: number | null; rank: number
+    }> = []
+
+    for (const [key, rows] of series) {
+      const [employeeId, kra] = key.split(' ')
+      const member = byId.get(employeeId)
+      if (!member || rows.length === 0) continue
+
+      const ordered = [...rows].sort((a, b) => a.month.localeCompare(b.month))
+      const mine = ordered.map(r => r.pct)
+      const avg = mean(mine)
+      const trend = trendOf(mine)
+
+      // The same KRA, read only off people doing the same job.
+      const sameKpi = (cohort.get(fingerprint.get(employeeId) ?? '') ?? [])
+        .filter(id => id !== employeeId)
+      const peerReadings = sameKpi.flatMap(id => (series.get(`${id} ${kra}`) ?? []).map(r => r.pct))
+      const peers = sameKpi.filter(id => (series.get(`${id} ${kra}`) ?? []).length > 0).length
+      const peerAvg = peerReadings.length ? mean(peerReadings) : null
+      const gap = peerAvg === null ? null : avg - peerAvg
+
+      const falling = trend?.direction === 'down'
+      // Five points is roughly a band boundary at this scale, so anything
+      // smaller is noise dressed as a finding.
+      const behind = gap !== null && gap < -5 && peers > 0
+
+      if (!falling && !behind && !isWeak(avg)) continue
+
+      const why = falling && behind
+        ? `Falling ${Math.abs(trend!.delta).toFixed(0)} points, and ${Math.abs(gap!).toFixed(0)} behind the others doing this job`
+        : falling
+        ? `Falling ${Math.abs(trend!.delta).toFixed(0)} points over the last two months`
+        : behind
+        ? `${Math.abs(gap!).toFixed(0)} points behind the others doing this job`
+        : 'Averaging below Good on this area'
+
+      out.push({
+        member, kra, why, avg, months: mine.length, peers, peerAvg,
+        // Falling first, then furthest behind. A slide is still
+        // happening; a gap may be a job somebody simply finds hard.
+        rank: (falling ? 0 : 100) + (gap === null ? 50 : Math.max(0, 50 + gap)),
+      })
+    }
+
+    return out.sort((a, b) => a.rank - b.rank).slice(0, 8)
+  }, [attainment, team])
 
   /**
    * The ranking, and then the order.
@@ -349,14 +462,38 @@ export default function TeamAnalysis() {
             <AlertTriangle className="h-4 w-4 text-cyrixRed-600" />
             <h3 className="text-sm font-semibold text-ink-800">Needing support</h3>
           </div>
-          {analysis.struggling.length === 0 ? (
+          {analysis.struggling.length === 0 && concerns.length === 0 ? (
             <p className="p-4 text-sm text-emerald-800">
-              Nobody is averaging below Good.
+              Nobody is averaging below Good, and no single area is slipping.
             </p>
           ) : (
             <div className="divide-y divide-ink-100">
               {analysis.struggling.map(p => (
                 <PersonRowCard key={p.member.id} p={p} showWeak />
+              ))}
+              {/* Somebody can be averaging fine and still be sliding on one
+                  thing, or be well behind the rest of the team on it. A
+                  card that only listed people below Good said "nobody" to
+                  a manager who had four of these. */}
+              {concerns.map(c => (
+                <div key={`${c.member.id}-${c.kra}`} className="p-3.5">
+                  <p className="text-sm text-ink-900">
+                    <Link
+                      to={`/team/${c.member.id}`}
+                      className="link-accent font-medium hover:underline"
+                    >
+                      {c.member.full_name}
+                    </Link>
+                    {' — '}
+                    <span className="font-medium">{c.kra}</span>
+                  </p>
+                  <p className="mt-0.5 text-sm text-cyrixRed-700">{c.why}</p>
+                  <p className="mt-0.5 text-xs text-ink-400">
+                    {c.avg.toFixed(0)}% of the weightage over {c.months} month
+                    {c.months === 1 ? '' : 's'}
+                    {c.peers > 0 && ` · the ${c.peers} other${c.peers === 1 ? '' : 's'} with the same KPI average ${c.peerAvg!.toFixed(0)}%`}
+                  </p>
+                </div>
               ))}
             </div>
           )}

@@ -9,6 +9,7 @@ import { supabase, friendlyError } from '@/lib/supabase'
 import { useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy } from '@/lib/queries'
 import { fyMonths, monthLabel } from '@/lib/fy'
 import { PageLoader, ScorePill, StatTile, StatusBadge, Alert } from '@/components/ui'
+import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 import { sectionsOf } from '@/lib/sections'
 import type { Employee } from '@/types/db'
 
@@ -71,7 +72,7 @@ export default function TeamMember() {
           <h3 className="mb-4 text-sm font-semibold text-ink-800">Score trend</h3>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+              <LineChart data={chartData} margin={TREND_MARGIN}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#64748b' }} />
@@ -82,15 +83,7 @@ export default function TeamMember() {
                 <Line
                   type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
                   dot={{ r: 3 }} connectNulls
-                  label={({ x, y, value }: { x?: number; y?: number; value?: number | null }) =>
-                    value === null || value === undefined || x === undefined || y === undefined
-                      ? <></>
-                      : (
-                        <text x={x} y={y - 12} fill="#141519" fontSize={11}
-                              fontWeight={600} textAnchor="middle">
-                          {Number(value).toFixed(1)}
-                        </text>
-                      )}
+                  label={<ScoreLabel count={chartData.length} />}
                 />
               </LineChart>
             </ResponsiveContainer>

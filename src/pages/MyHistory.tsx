@@ -12,47 +12,7 @@ import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
-
-/**
- * Value label for a chart point, drawn in its own series' colour.
- * Recharts hands the renderer every point including the null ones, so
- * blanks are skipped rather than drawn as "0".
- */
-function ScoreLabel({
-  x, y, value, fill, dy = -10, index, count,
-}: {
-  x?: number
-  y?: number
-  value?: number | string | null
-  fill: string
-  dy?: number
-  /** Injected by recharts when it clones this element per point. */
-  index?: number
-  count?: number
-}) {
-  if (value === null || value === undefined || x === undefined || y === undefined) return null
-  const n = typeof value === 'number' ? value : Number(value)
-  if (Number.isNaN(n)) return null
-
-  // A centred label at the last point puts half its width past the plot
-  // area, where it is clipped — which is why March and the current month
-  // showed "90." instead of "90.7". The end points anchor inwards.
-  const isLast = count !== undefined && index === count - 1
-  const isFirst = index === 0
-
-  return (
-    <text
-      x={x + (isLast ? 4 : isFirst ? -4 : 0)}
-      y={y + dy}
-      fill={fill}
-      fontSize={11}
-      fontWeight={600}
-      textAnchor={isLast ? 'end' : isFirst ? 'start' : 'middle'}
-    >
-      {n.toFixed(1)}
-    </text>
-  )
-}
+import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 
 export default function MyHistory() {
   const { employee } = useAuth()
@@ -138,7 +98,7 @@ export default function MyHistory() {
           <h3 className="mb-4 text-sm font-semibold text-ink-800">Score trend</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 14, right: 16, left: -20, bottom: 0 }}>
+              <LineChart data={chartData} margin={TREND_MARGIN}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eeeef0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b6e79' }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#6b6e79' }} />

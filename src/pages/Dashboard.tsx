@@ -222,7 +222,7 @@ export default function Dashboard() {
               <Target className="h-4 w-4 text-cyrixRed-600" /> What to improve
             </h3>
             <p className="mb-3 text-xs text-ink-500">
-              Areas averaging below Good against their own weightage.
+              Areas below Good against their own weightage, and anything heading down.
             </p>
             <WeakAreas
               areas={weak ?? []}

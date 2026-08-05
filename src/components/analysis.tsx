@@ -277,26 +277,50 @@ export function TrendChip({ scores }: { scores: Array<number | null> }) {
  */
 export function WeakAreas({
   areas,
+  attainment,
   emptyMessage = 'Nothing below Good — all areas are on track.',
 }: {
   areas: WeakAreaRow[]
+  /**
+   * Month-by-month readings, so an area that is still fine but heading
+   * down can be named. "Every area is at Good or better" is true of
+   * somebody whose best KRA has dropped twenty points in two months, and
+   * it is the last thing they need to be told.
+   */
+  attainment?: KraAttainmentRow[]
   emptyMessage?: string
 }) {
   const weak = areas
     .filter(a => isWeak(a.avg_attainment_pct))
     .sort((a, b) => (a.avg_attainment_pct ?? 0) - (b.avg_attainment_pct ?? 0))
 
+  // Falling but not yet weak. Excluded from the list above so nothing is
+  // reported twice, and shown even when that list is empty.
+  const slipping = fallingAreas(attainment ?? [])
+    .filter(f => !weak.some(w => w.kra === f.kra))
+
   if (weak.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-        <Trophy className="h-4 w-4 shrink-0" />
-        {emptyMessage}
+      <div className="space-y-2">
+        {slipping.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+            <Trophy className="h-4 w-4 shrink-0" />
+            {emptyMessage}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+            <Trophy className="h-4 w-4 shrink-0" />
+            Nothing is below Good — but the areas below are heading down.
+          </div>
+        )}
+        {slipping.map(f => <SlippingRow key={f.kra} {...f} />)}
       </div>
     )
   }
 
   return (
     <ul className="space-y-2">
+      {slipping.map(f => <li key={f.kra}><SlippingRow {...f} /></li>)}
       {weak.map(a => {
         const band = bandFor(a.avg_attainment_pct) as Band
         return (
@@ -323,6 +347,63 @@ export function WeakAreas({
         )
       })}
     </ul>
+  )
+}
+
+/**
+ * Areas whose last two months are below the two before them.
+ *
+ * Averages hide this completely: a KRA at 95, 92, 78, 70 averages 84 and
+ * is called fine. The direction is the finding, so it is reported on its
+ * own terms rather than waiting for the average to sink far enough to
+ * trip the weak-area threshold.
+ */
+export function fallingAreas(rows: KraAttainmentRow[]) {
+  const byKra = new Map<string, Array<{ month: string; pct: number }>>()
+  for (const r of rows) {
+    if (r.attainment_pct === null) continue
+    if (r.status !== 'scored' && r.status !== 'finalized') continue
+    const list = byKra.get(r.kra) ?? []
+    list.push({ month: r.period_month, pct: r.attainment_pct })
+    byKra.set(r.kra, list)
+  }
+
+  const out: Array<{ kra: string; delta: number; latest: number; months: number }> = []
+  for (const [kra, list] of byKra) {
+    const ordered = [...list].sort((a, b) => a.month.localeCompare(b.month))
+    const trend = trendOf(ordered.map(r => r.pct))
+    if (trend?.direction !== 'down') continue
+    out.push({
+      kra,
+      delta: trend.delta,
+      latest: ordered[ordered.length - 1].pct,
+      months: ordered.length,
+    })
+  }
+  return out.sort((a, b) => a.delta - b.delta)
+}
+
+function SlippingRow({
+  kra, delta, latest, months,
+}: {
+  kra: string; delta: number; latest: number; months: number
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+      <TrendingDown className="h-4 w-4 shrink-0 text-amber-700" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-ink-900">{kra}</p>
+        <p className="text-xs text-amber-800">
+          Down {Math.abs(delta).toFixed(0)} points over the last two months
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-sm font-semibold tabular-nums text-ink-800">
+          {latest.toFixed(0)}%
+        </p>
+        <p className="text-[11px] text-ink-400">latest of {months}</p>
+      </div>
+    </div>
   )
 }
 
