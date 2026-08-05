@@ -41,13 +41,16 @@ export default function KpiTiming() {
     setFrom(policy.starts_from ?? '')
   }, [policy])
 
-  const closeDay = closingDay ?? 10
+  // undefined = still loading, null = deliberately off.
+  const closeDay = closingDay === undefined ? null : closingDay
 
-  const saveDay = async (day: number) => {
+  const saveDay = async (day: number | null) => {
     setNotice(null); setFailed(null)
     try {
       await setClose.mutateAsync(day)
-      setNotice(`Months now close on the ${day} of the following month.`)
+      setNotice(day === null
+        ? 'No month will close on its own. Managers finalise each one.'
+        : `Months now close on the ${day} of the following month.`)
     } catch (err) {
       setFailed(err instanceof Error ? err.message : 'Could not save that.')
     }
@@ -188,27 +191,40 @@ export default function KpiTiming() {
           <div className="flex flex-wrap items-baseline gap-2">
             <select
               id="closing-day"
-              className="input w-28"
-              value={closeDay}
-              onChange={e => saveDay(Number(e.target.value))}
+              className="input w-48"
+              value={closeDay ?? ''}
+              onChange={e => saveDay(e.target.value === '' ? null : Number(e.target.value))}
               disabled={setClose.isPending}
             >
+              <option value="">No closing date</option>
               {/* Stops at 28: a closing day of the 30th does not exist in
                   February, and a deadline that skips a month is not one. */}
               {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
-            <span className="text-sm text-ink-500">
-              of the following month
-            </span>
+            {closeDay !== null && (
+              <span className="text-sm text-ink-500">of the following month</span>
+            )}
           </div>
-          <p className="mt-2 text-xs text-ink-500">
-            July's assessment closes at the end of {closeDay} August. Until then
-            the team member can query their manager's scores; after it the month
-            becomes <strong>Final</strong> on its own — nobody has to press
-            anything. A month with an open query stays open until it is answered.
-          </p>
+          {closeDay === null ? (
+            <p className="mt-2 text-xs text-ink-500">
+              Nothing closes on its own. Managers finalise each month by hand,
+              and a team member can query their scores for as long as it is
+              open. <strong>This is what a backlog needs</strong> — an old month
+              scored today would otherwise be past its date the moment it was
+              scored, and final before anybody had read it. Set a day once the
+              old months are done.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-ink-500">
+              July's assessment closes at the end of {closeDay} August. Until
+              then the team member can query their manager's scores; after it
+              the month becomes <strong>Final</strong> on its own and nobody has
+              to press anything. A month with an open query stays open until it
+              is answered.
+            </p>
+          )}
         </div>
 
         <div className="border-t border-ink-100 pt-5">

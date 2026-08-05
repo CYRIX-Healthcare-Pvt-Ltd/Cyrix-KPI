@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
-  useSaveMonthlyTarget,
+  useSaveMonthlyTarget, useMonthClose,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import {
@@ -38,6 +38,8 @@ export default function ScoreSubmission() {
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
   const { data: openDeletion } = useOpenRequestFor('deletion', submissionId)
+  // Null means nothing closes months on its own, so somebody has to.
+  const { data: closingDay } = useMonthClose()
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
@@ -182,6 +184,18 @@ export default function ScoreSubmission() {
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit scores.')
+    }
+  }
+
+  /** Only reachable while there is no closing date — see the buttons. */
+  const onFinalize = async () => {
+    if (!submission) return
+    setError(null)
+    try {
+      await action.mutateAsync({ action: 'finalize', submissionId: submission.id })
+      setNotice('Month finalised.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not finalise.')
     }
   }
 
@@ -452,18 +466,25 @@ export default function ScoreSubmission() {
                 Submit my scores
               </button>
             )}
-            {/* No Finalise button any more. The month closes on the
-                company's closing date, so the manager's job ends when
-                they submit — and a button somebody had to remember to
-                press was leaving months in a state called "Scored" that
-                nobody could explain. Corrections stay possible right up
-                to the closing date, which is what the team member's
-                query window is for. */}
+            {/* Exactly one thing closes a month, and which one depends
+                on the setting. With a closing date, the calendar does it
+                and the manager's job ends at Submit — no button to
+                remember, no month sitting in a state nobody can explain.
+                With no closing date, nothing would ever close, so the
+                button comes back. Both at once would mean a month could
+                be final for two different reasons. */}
             {submission.status === 'scored' && (
-              <button onClick={save} disabled={busy} className="btn-primary">
-                {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                Save changes
-              </button>
+              <>
+                <button onClick={save} disabled={busy} className="btn-primary">
+                  {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                  Save changes
+                </button>
+                {closingDay === null && (
+                  <button onClick={onFinalize} disabled={busy} className="btn-secondary">
+                    <Lock className="h-4 w-4" /> Finalise this month
+                  </button>
+                )}
+              </>
             )}
             <button
               onClick={() => setShowReturn(v => !v)}

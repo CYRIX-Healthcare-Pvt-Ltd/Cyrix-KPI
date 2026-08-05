@@ -767,10 +767,12 @@ export function useMonthClose() {
     queryKey: ['month_close'],
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const rows = await unwrap<Array<{ value: { closing_day?: number } }>>(
+      const rows = await unwrap<Array<{ value: { closing_day?: number | null } }>>(
         supabase.from('app_settings').select('value').eq('key', 'month_close').limit(1),
       )
-      return rows[0]?.value?.closing_day ?? 10
+      // Null is a real answer here — SW Admin turning closing off —
+      // so it is not coalesced to a default. Only a missing row is.
+      return rows.length ? rows[0].value.closing_day ?? null : 10
     },
   })
 }
@@ -778,13 +780,14 @@ export function useMonthClose() {
 export function useSetMonthClose() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (day: number) => {
+    mutationFn: async (day: number | null) => {
       const { error } = await supabase.rpc('set_month_close', { p_closing_day: day })
       if (error) throw new Error(friendlyError(error))
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['month_close'] })
       qc.invalidateQueries({ queryKey: ['score_query_state'] })
+      qc.invalidateQueries({ queryKey: ['settle_due'] })
     },
   })
 }

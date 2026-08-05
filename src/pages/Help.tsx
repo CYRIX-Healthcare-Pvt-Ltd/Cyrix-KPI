@@ -80,7 +80,9 @@ export default function Help() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const { data: policy } = useTatPolicy()
 
-  const closingDay = useMonthClose().data ?? 10
+  // Null is a real setting — no month closes on its own — so it is not
+  // defaulted away. The manual has to describe whichever is switched on.
+  const closingDay = useMonthClose().data ?? null
   const tmDays = policy?.tm_grace_days ?? 3
   const mgrDays = policy?.manager_grace_days ?? 5
 
@@ -162,8 +164,12 @@ export default function Help() {
                 how: `They enter their own figure for each row. Your final score is the average of yours and theirs. They have ${mgrDays} days. The status then reads Manager reviewed.`,
               },
               {
-                what: 'The month closes on its own',
-                how: `Every month closes on the ${closingDay} of the month after it. Nobody presses a button. Until that day you can query the scores; after it the status becomes Final.`,
+                what: closingDay === null
+                  ? 'Your manager closes the month'
+                  : 'The month closes on its own',
+                how: closingDay === null
+                  ? 'There is no closing date at the moment, so your manager marks each month Final when they are ready. Until they do, you can still query the scores.'
+                  : `Every month closes on the ${closingDay} of the month after it. Nobody presses a button. Until that day you can query the scores; after it the status becomes Final.`,
               },
             ]}
           />
@@ -175,7 +181,10 @@ export default function Help() {
             points={[
               {
                 what: 'Raise a query',
-                how: `Open the month your manager has reviewed. Tick the rows you want looked at. Say for each one whether you want it explained, or you think it is wrong. You have until the ${closingDay} of the following month.`,
+                how: 'Open the month your manager has reviewed. Tick the rows you want looked at. Say for each one whether you want it explained, or you think it is wrong.'
+                  + (closingDay === null
+                     ? ' You can do this for as long as the month is open.'
+                     : ` You have until the ${closingDay} of the following month.`),
                 to: '/history', cta: 'Open assessments',
               },
               {
