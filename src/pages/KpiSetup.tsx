@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save, Lock,
-  Calculator, Shuffle, ArrowUp, ArrowDown, Minus,
+  Calculator, Shuffle, ArrowUp, ArrowDown, Minus, FlaskConical,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -12,9 +12,10 @@ import {
 } from '@/lib/queries'
 import type { ParseResult } from '@/lib/excel'
 import type { KpiRowDefinition, Alternate, ScoringRuleMeta } from '@/types/db'
-import type { ScoringRule } from '@/lib/scoring'
+import { calcKpiScore, type ScoringRule, type RuleParams } from '@/lib/scoring'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
+import { bandFor, attainmentPct } from '@/lib/bands'
 
 /**
  * Team members define their Job Role rows only. The remaining 20% is
@@ -563,6 +564,18 @@ function RowEditor({
                 {ruleMeta.description}
               </p>
             )}
+            {/* Only once the row has both numbers. Before that there is
+                nothing to compute, and a tester showing a dash while
+                somebody is still typing the KRA is a row taller for no
+                reason. */}
+            {row.weightage > 0 && row.target_value !== null && (
+              <RuleTester
+                weightage={row.weightage}
+                target={row.target_value}
+                rule={row.scoring_rule}
+                params={row.rule_params}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -619,6 +632,58 @@ function RowEditor({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Type a number, see what it scores.
+ *
+ * The description under the picker carries a worked example, but it uses
+ * a target of 2 and a weightage of 10, which are not this person's — so
+ * the one thing it cannot answer is "what does this rule do to MY row".
+ * This runs the same calc_kpi_score the database will run, against the
+ * target and weightage actually on the row, so agreeing to a rule and
+ * understanding it become the same moment.
+ *
+ * One line, and only where both numbers exist. Nothing is saved: it is a
+ * calculator, not a field.
+ */
+function RuleTester({
+  weightage, target, rule, params,
+}: {
+  weightage: number
+  target: number
+  rule: ScoringRule
+  params: RuleParams
+}) {
+  const [tried, setTried] = useState('')
+  const achieved = tried.trim() === '' ? null : Number(tried)
+  const score = achieved === null || Number.isNaN(achieved)
+    ? null
+    : calcKpiScore(rule, weightage, target, achieved, params)
+  const band = score === null ? null : bandFor(attainmentPct(score, weightage))
+
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-ink-200/70 pt-2.5 text-xs text-ink-600">
+      <FlaskConical className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+      <span>Try it — if I achieve</span>
+      <input
+        type="number" inputMode="decimal" step="any"
+        className="input w-24 py-1 text-xs"
+        value={tried}
+        onChange={e => setTried(e.target.value)}
+        placeholder={String(target)}
+        aria-label="A figure to try against this rule"
+      />
+      <span>against a target of {target}, I score</span>
+      {score === null ? (
+        <span className="text-ink-300">—</span>
+      ) : (
+        <span className={clsx('font-semibold tabular-nums', band?.accent)}>
+          {score.toFixed(2)} <span className="font-normal text-ink-400">of {weightage}</span>
+        </span>
+      )}
     </div>
   )
 }

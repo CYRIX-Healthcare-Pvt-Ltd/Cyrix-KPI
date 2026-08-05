@@ -46,6 +46,26 @@
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
+  /*
+    No spinner arrows on number fields.
+
+    Every number in this app is typed, never nudged — a weightage, a
+    target, a count of repairs. The arrows are two tiny hit targets
+    stacked inside the field, so on a phone they are a trap beside the
+    text cursor and on a desktop they invite somebody to click a KPI
+    target up by one for no reason. The keyboard stays numeric, which is
+    what inputMode is for.
+  */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   /* Stop iOS zooming the page when a numeric field gains focus. */
   input, select, textarea {
     font-size: 16px;
