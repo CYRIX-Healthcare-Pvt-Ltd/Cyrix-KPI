@@ -12,7 +12,7 @@ import { currentReportingMonth, monthLabel, fyMonths, isMonthOpen } from '@/lib/
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
-  ScoreHeader, TrendChip, WeakAreas, KraBars, ActionRequired,
+  ScoreHeader, WeakAreas, KraBars, ActionRequired,
 } from '@/components/analysis'
 
 const SCORED = new Set(['scored', 'finalized'])
@@ -63,8 +63,6 @@ export default function Dashboard() {
       .map(m => ({ month: m, score: byMonth.get(m)?.final_total_score ?? null }))
   }, [history, fy])
 
-  const series = useMemo(() => points.map(p => p.score), [points])
-
   if (aLoading) return <PageLoader />
 
   const kpiStatus = assignment?.assignment?.status ?? null
@@ -87,11 +85,7 @@ export default function Dashboard() {
         subtitle={`FY ${fy} · reporting on ${monthLabel(month)}`}
         score={annual?.avg_total_score}
         scoreLabel="My year average"
-      >
-        {annual?.avg_total_score !== null && annual?.avg_total_score !== undefined && (
-          <TrendChip scores={series} />
-        )}
-      </ScoreHeader>
+      />
 
       {kpiStatus === null && (
         <ActionRequired

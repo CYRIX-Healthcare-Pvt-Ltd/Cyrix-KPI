@@ -151,8 +151,14 @@ export function ScoreHeader({
         </div>
         {/* Each label in its own band's colour, so the legend explains
             the track without a key. The one being scored is brought to
-            full strength — where you are, on a scale you can see. */}
-        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-label">
+            full strength — where you are, on a scale you can see.
+
+            Label tracking is bought back on a phone. Five uppercase words
+            across 295px come to 287px of text, of which 64px is letter
+            spacing, leaving 2px between one word and the next — close
+            enough that POOR SATISFACTORY reads as one phrase. Loosened
+            again at sm, where there is room for it. */}
+        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-[0.02em] sm:tracking-label">
           {BAND_SCALE.map(({ band: b }) => (
             <span
               key={b.key}
@@ -253,9 +259,23 @@ export function BandChip({ pct }: { pct: number | null | undefined }) {
   return <span className={clsx('badge', band.chip)}>{band.label}</span>
 }
 
+/**
+ * Which way the last few months are going.
+ *
+ * Only ever shown somewhere that says what it is — the Trend column of
+ * the team table, or beside a name in a list of scores. Never under the
+ * hero meter: sitting directly below the band scale it read as a caption
+ * explaining the bar, and nobody could tell what "Steady" was steady
+ * about.
+ *
+ * Nothing at all with fewer than two months. There is no trend yet, and
+ * saying so out loud fills the space with an apology instead of leaving
+ * it empty — the number of months is already on screen everywhere this
+ * appears.
+ */
 export function TrendChip({ scores }: { scores: Array<number | null> }) {
   const trend = trendOf(scores)
-  if (!trend) return <span className="text-xs text-ink-400">Not enough months yet</span>
+  if (!trend) return null
 
   const cfg = {
     up:   { Icon: TrendingUp,   cls: 'text-emerald-700',   text: `Improving +${trend.delta}` },
