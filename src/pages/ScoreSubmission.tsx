@@ -365,13 +365,18 @@ export default function ScoreSubmission() {
 
                 <div>
                   <label className="label text-xs">My score</label>
-                  <div className="py-1.5"><ScorePill value={mgrScore(item)} /></div>
+                  <div className="py-1.5">
+                    <ScorePill value={mgrScore(item)} outOf={item.weightage} />
+                  </div>
                 </div>
 
                 <div>
                   <label className="label text-xs">Final</label>
                   <div className="py-1.5">
-                    <ScorePill value={blendScores(selfScore(item), mgrScore(item))} />
+                    <ScorePill
+                      value={blendScores(selfScore(item), mgrScore(item))}
+                      outOf={item.weightage}
+                    />
                   </div>
                 </div>
               </div>

@@ -112,6 +112,11 @@ export default function MonthlySubmission() {
   const esmsTotal = esmsRows.reduce((a, i) => a + liveScore(i), 0)
   const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
   const hasEsms = esmsRows.length > 0
+  // 20 normally, 15 for the people who also carry ESMS. Every core-value
+  // figure on this page is out of it, and it was being recomputed inline
+  // in five places — including none of the ones that needed it to colour
+  // the score correctly.
+  const coreWeight = coreRows.reduce((a, i) => a + Number(i.weightage), 0)
 
   /**
    * The blocks that are filled in by hand, in reading order.
@@ -122,8 +127,14 @@ export default function MonthlySubmission() {
    */
   const measuredBlocks = [
     {
+      // Summed from the rows rather than assumed to be 80. It always is
+      // 80, but this number now decides the colour of the block's score,
+      // and a colour derived from a constant that disagreed with the
+      // rows would be wrong in exactly the case worth catching.
       key: 'job_role', label: 'Job Role', rows: jobRows,
-      total: jobTotal, weight: 80, targetFixed: false,
+      total: jobTotal,
+      weight: jobRows.reduce((a, i) => a + Number(i.weightage), 0),
+      targetFixed: false,
     },
     ...(hasEsms ? [{
       key: 'esms', label: 'ESMS', rows: esmsRows,
@@ -317,7 +328,7 @@ export default function MonthlySubmission() {
         <StatTile
           label="Core values"
           value={coreTotal.toFixed(2)}
-          sub={`out of ${coreRows.reduce((a, i) => a + Number(i.weightage), 0)}`}
+          sub={`out of ${coreWeight}`}
         />
         <StatTile
           label={editable ? 'My total so far' : 'My total'}
@@ -349,7 +360,7 @@ export default function MonthlySubmission() {
           <h3 className="text-sm font-semibold text-ink-800">
             {block.label} <span className="font-normal text-ink-500">— {block.weight}%</span>
           </h3>
-          <ScorePill value={block.total} size="sm" />
+          <ScorePill value={block.total} outOf={block.weight} size="sm" />
         </div>
         <div className="divide-y divide-ink-100">
           {block.rows.map(item => (
@@ -409,7 +420,7 @@ export default function MonthlySubmission() {
                 <div>
                   <label className="label text-xs">My score</label>
                   <div className="py-1.5">
-                    <ScorePill value={liveScore(item)} />
+                    <ScorePill value={liveScore(item)} outOf={item.weightage} />
                     <span className="ml-1.5 text-xs text-ink-400">
                       / {item.weightage}
                     </span>
@@ -420,7 +431,7 @@ export default function MonthlySubmission() {
                   <div>
                     <label className="label text-xs">Manager</label>
                     <div className="py-1.5">
-                      <ScorePill value={item.manager_score} />
+                      <ScorePill value={item.manager_score} outOf={item.weightage} />
                     </div>
                   </div>
                 )}
@@ -439,7 +450,7 @@ export default function MonthlySubmission() {
           <h3 className="text-sm font-semibold text-ink-800">
             Alignment To Core Values{' '}
             <span className="font-normal text-ink-500">
-              — {coreRows.reduce((a, i) => a + Number(i.weightage), 0)}%
+              — {coreWeight}%
             </span>
           </h3>
           <div className="flex items-center gap-3 text-xs text-ink-500">
@@ -449,7 +460,7 @@ export default function MonthlySubmission() {
                 <> · Manager {managerCoreAverage === null ? '—' : `${managerCoreAverage.toFixed(0)}/100`}</>
               )}
             </span>
-            <ScorePill value={coreTotal} size="sm" />
+            <ScorePill value={coreTotal} outOf={coreWeight} size="sm" />
           </div>
         </div>
 
@@ -529,19 +540,19 @@ export default function MonthlySubmission() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
                   Mine
                 </span>
-                <ScorePill value={coreRows[0]?.self_score} size="sm" />
+                <ScorePill value={coreRows[0]?.self_score} outOf={coreWeight} size="sm" />
               </span>
               <span className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
                   Manager
                 </span>
-                <ScorePill value={coreRows[0]?.manager_score} size="sm" />
+                <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
               </span>
               <span className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
                   Final
                 </span>
-                <ScorePill value={coreRows[0]?.final_score} size="sm" />
+                <ScorePill value={coreRows[0]?.final_score} outOf={coreWeight} size="sm" />
               </span>
             </div>
           </div>

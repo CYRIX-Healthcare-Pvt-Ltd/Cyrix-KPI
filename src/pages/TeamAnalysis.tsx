@@ -11,7 +11,8 @@ import {
 } from '@/lib/queries'
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
 import { fyMonths, openFyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
-import { bandFor, isWeak, trendOf } from '@/lib/bands'
+import { bandFor, isWeak, trendOf, attainmentPct } from '@/lib/bands'
+import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { exportOrgStatus } from '@/lib/export'
 import { PageLoader, ScorePill, StatTile, EmptyState, Alert } from '@/components/ui'
 import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
@@ -44,6 +45,24 @@ const RANK_BY: Record<Metric, Exclude<Metric, 'all'>> = {
 
 type SortKey = Exclude<Metric, 'all'> | 'name' | 'months'
 
+/**
+ * A section score as a share of the weightage it was out of.
+ *
+ * Everything comparable in this table goes through here. Scoring 16 out
+ * of a 20-point core-values band and 14 out of a 15-point one are 80%
+ * and 93%, and the raw figures put them the other way round — which is
+ * how the band chip came to call a perfect job-role month "Very Good"
+ * and a strong core-values month "Poor".
+ */
+const share = (p: PersonRow, key: Exclude<Metric, 'all'>) =>
+  attainmentPct(p[key], p.weights[key])
+
+/** The same share, rounded for a spreadsheet cell. Blank, never zero. */
+const pctCell = (v: number | null, outOf: number) => {
+  const pct = attainmentPct(v, outOf)
+  return pct === null ? '' : Math.round(pct * 10) / 10
+}
+
 interface PersonRow {
   member: Employee
   hasEsms: boolean
@@ -51,6 +70,13 @@ interface PersonRow {
   job: number | null
   esms: number | null
   core: number | null
+  /**
+   * What each of those is out of. Job role is 80 for everyone; core
+   * values is 20, or 15 for the people who also carry ESMS. The raw
+   * scores are therefore not comparable across people, and 16 of 20 next
+   * to 14 of 15 is the case that proves it.
+   */
+  weights: Record<Exclude<Metric, 'all'>, number>
   months: number
   /** Across the whole year, whatever month is selected — a trend of one
    *  month is not a trend, so the column hides when a month is pinned. */
@@ -83,9 +109,17 @@ export default function TeamAnalysis() {
   const analysis = useMemo(() => {
     if (!team || !subs) return null
     const months = fyMonths(fy)
-    const esmsBy = new Map(
-      (assignments ?? []).map(a => [a.employee_id, Number(a.esms_weight ?? 0) > 0]),
+    const weightBy = new Map(
+      (assignments ?? []).map(a => [a.employee_id, {
+        total: 100,
+        job: Number(a.job_role_weight ?? JOB_ROLE_TOTAL),
+        esms: Number(a.esms_weight ?? 0),
+        core: Number(a.core_values_weight ?? REMAINDER_TOTAL),
+      }]),
     )
+    const DEFAULT_WEIGHTS = {
+      total: 100, job: JOB_ROLE_TOTAL, esms: 0, core: REMAINDER_TOTAL,
+    }
 
     const people: PersonRow[] = team.map(member => {
       const scored = subs.filter(s => s.employee_id === member.id && SCORED.has(s.status))
@@ -102,9 +136,11 @@ export default function TeamAnalysis() {
           : null
       }
 
+      const weights = weightBy.get(member.id) ?? DEFAULT_WEIGHTS
       return {
         member,
-        hasEsms: esmsBy.get(member.id) ?? false,
+        hasEsms: weights.esms > 0,
+        weights,
         total: mean(s => s.final_total_score),
         job: mean(s => s.final_job_role_score),
         esms: mean(s => s.final_esms_score),
@@ -146,14 +182,16 @@ export default function TeamAnalysis() {
   const rows = useMemo(() => {
     if (!analysis) return []
     const by = RANK_BY[metric]
+    // Ranked on the share earned, not the raw score — see share().
     const ranked = [...analysis.people]
-      .sort((a, b) => (b[by] ?? -1) - (a[by] ?? -1))
+      .map(p => ({ ...p, pct: share(p, by) }))
+      .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1))
       .map((p, _i, all) => ({
         ...p,
         // Ties share a place, and nobody unscored gets one at all.
-        rank: p[by] === null
+        rank: p.pct === null
           ? null
-          : (all.findIndex(o => o[by] === p[by]) + 1),
+          : (all.findIndex(o => o.pct === p.pct) + 1),
       }))
 
     if (!sortKey) return ranked
@@ -161,7 +199,7 @@ export default function TeamAnalysis() {
     const value = (p: typeof ranked[number]) =>
       sortKey === 'name' ? p.member.full_name.toLowerCase()
       : sortKey === 'months' ? p.months
-      : p[sortKey]
+      : share(p, sortKey)
 
     return [...ranked].sort((a, b) => {
       const x = value(a), y = value(b)
@@ -199,9 +237,18 @@ export default function TeamAnalysis() {
           Ecode: p.member.ecode,
           Name: p.member.full_name,
           Designation: p.member.designation ?? '',
-          ...(showCols.job ? { 'Job role': p.job ?? '' } : {}),
-          ...(showCols.esms ? { ESMS: p.esms ?? '' } : {}),
-          ...(showCols.core ? { 'Core values': p.core ?? '' } : {}),
+          // The percentage travels with every score, because a column of
+          // raw figures out of different denominators is a spreadsheet
+          // somebody will sort and draw the wrong conclusion from.
+          ...(showCols.job
+            ? { 'Job role': p.job ?? '', 'Job role %': pctCell(p.job, p.weights.job) }
+            : {}),
+          ...(showCols.esms
+            ? { ESMS: p.esms ?? '', 'ESMS %': pctCell(p.esms, p.weights.esms) }
+            : {}),
+          ...(showCols.core
+            ? { 'Core values': p.core ?? '', 'Core values %': pctCell(p.core, p.weights.core) }
+            : {}),
           ...(showCols.total ? { Total: p.total ?? '' } : {}),
           'Months scored': p.months,
           'Weak areas': p.weakAreas.map(w => w.kra).join('; '),
@@ -462,14 +509,20 @@ export default function TeamAnalysis() {
                     </Link>
                     <p className="text-xs text-ink-500">{p.member.ecode}</p>
                   </td>
-                  {showCols.job && <ScoreCell v={p.job} />}
-                  {showCols.esms && (
-                    <ScoreCell v={p.esms} muted={!p.hasEsms} />
+                  {showCols.job && (
+                    <ScoreCell v={p.job} outOf={p.weights.job} />
                   )}
-                  {showCols.core && <ScoreCell v={p.core} />}
-                  {showCols.total && <ScoreCell v={p.total} pill />}
+                  {showCols.esms && (
+                    <ScoreCell v={p.esms} outOf={p.weights.esms} muted={!p.hasEsms} />
+                  )}
+                  {showCols.core && (
+                    <ScoreCell v={p.core} outOf={p.weights.core} />
+                  )}
+                  {showCols.total && (
+                    <ScoreCell v={p.total} outOf={100} pill />
+                  )}
                   <td className="px-4 py-3">
-                    <BandChip pct={p[RANK_BY[metric]]} />
+                    <BandChip pct={p.pct} />
                   </td>
                   {!month && (
                     <td className="px-4 py-3"><TrendChip scores={p.series} /></td>
@@ -495,8 +548,9 @@ export default function TeamAnalysis() {
 
         <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-400">
           Each band is scored out of its own weightage — job role out of 80,
-          core values out of what is left. They are not comparable to each
-          other, only to the same band on somebody else.
+          core values out of 20, or 15 for anyone who also carries ESMS. The
+          rank and the band come from the percentage, not the raw score:
+          14 out of 15 beats 16 out of 20.
         </p>
       </div>
     </div>
@@ -534,23 +588,41 @@ function SortHeader({
   )
 }
 
+/**
+ * The score, and underneath it the share of the band that is.
+ *
+ * Both, because both are wanted and neither does the other's job: the
+ * raw figure is what adds up to the total on every other screen, and the
+ * percentage is the only thing comparable between a 20-point core-values
+ * band and a 15-point one. It also quietly states the denominator, which
+ * varies per person and so cannot live in the column header.
+ */
 function ScoreCell({
-  v, pill, muted,
+  v, outOf, pill, muted,
 }: {
   v: number | null
+  outOf: number
   pill?: boolean
   muted?: boolean
 }) {
+  const pct = attainmentPct(v, outOf)
   return (
     <td className="px-4 py-3 text-right">
-      {pill ? (
-        <ScorePill value={v} size="sm" />
-      ) : v === null ? (
+      {v === null ? (
         <span className="text-ink-300" title={muted ? 'Not measured on this' : undefined}>
           —
         </span>
+      ) : pill ? (
+        <ScorePill value={v} outOf={outOf} size="sm" />
       ) : (
-        <span className="font-medium tabular-nums text-ink-800">{v.toFixed(1)}</span>
+        <>
+          <span className="font-medium tabular-nums text-ink-800">{v.toFixed(1)}</span>
+          {pct !== null && (
+            <p className="text-[11px] tabular-nums text-ink-400">
+              {pct.toFixed(0)}% of {outOf}
+            </p>
+          )}
+        </>
       )}
     </td>
   )

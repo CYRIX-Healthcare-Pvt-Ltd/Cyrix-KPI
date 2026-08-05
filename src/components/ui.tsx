@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react'
-import { bandFor } from '@/lib/bands'
+import { bandFor, attainmentPct } from '@/lib/bands'
 import type { SubmissionStatus, AssignmentStatus } from '@/types/db'
 
 export function Spinner({ className }: { className?: string }) {
@@ -117,9 +117,18 @@ export function StatusBadge({
 /** A score out of 100, coloured by band. */
 export function ScorePill({
   value,
+  outOf = 100,
   size = 'md',
 }: {
   value: number | null | undefined
+  /**
+   * What this score is out of. A total is out of 100 and needs nothing;
+   * a KRA worth 20 that earned 20 is a perfect row, and judging it
+   * against 100 painted it red — the same Poor as a genuine 20/100.
+   * Every score below the total is out of its own weightage, so the
+   * band has to come from the share earned, not the raw figure.
+   */
+  outOf?: number
   size?: 'sm' | 'md' | 'lg'
 }) {
   if (value === null || value === undefined) {
@@ -128,7 +137,7 @@ export function ScorePill({
   // Colour comes from the same band scale as everything else. This used to
   // carry its own thresholds (85/70/55), so one score could be emerald here
   // and "Very Good" lime in the hero — two answers for the same number.
-  const cls = bandFor(value)?.chip ?? 'bg-ink-100 text-ink-700'
+  const cls = bandFor(attainmentPct(value, outOf))?.chip ?? 'bg-ink-100 text-ink-700'
   const sizeCls = {
     sm: 'px-2 py-0.5 text-xs',
     md: 'px-2.5 py-1 text-sm',
