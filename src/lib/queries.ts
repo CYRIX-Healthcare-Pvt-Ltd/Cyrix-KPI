@@ -191,7 +191,8 @@ export function useEditAssignmentItem() {
     mutationFn: async (args: {
       itemId: string
       patch: Partial<Pick<KpiAssignmentItem,
-        'kra' | 'kpi_description' | 'weightage' | 'target_value' | 'scoring_rule'>>
+        'kra' | 'kpi_description' | 'weightage' | 'target_value'
+        | 'scoring_rule' | 'alternates'>>
     }) => {
       const { error } = await supabase
         .from('kpi_assignment_items').update(args.patch).eq('id', args.itemId)
@@ -884,6 +885,8 @@ export interface QueryPointInput {
   item_id: string
   kind: ScoreQueryKind
   note?: string | null
+  /** Named parts of the row — the individual core values. */
+  sub_items?: string[]
   /** A file the team member picked, uploaded before the query is written. */
   file?: File | null
 }
@@ -924,6 +927,7 @@ export function useRaiseScoreQuery() {
             item_id: p.item_id,
             kind: p.kind,
             note: p.note ?? null,
+            sub_items: p.sub_items ?? [],
             evidence_path: path,
             evidence_name: p.file?.name ?? null,
           })
@@ -945,6 +949,7 @@ export function useRaiseScoreQuery() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['score_query_state'] })
       qc.invalidateQueries({ queryKey: ['score_queries'] })
+      qc.invalidateQueries({ queryKey: ['open_query_months'] })
       qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
@@ -1030,6 +1035,27 @@ export function useOpenScoreQueries(enabled: boolean) {
   })
 }
 
+/**
+ * The months that have a question hanging over them.
+ *
+ * Just the ids, so every list that draws a status badge can say "Under
+ * review" without fetching the queries themselves. Scoped by RLS: a team
+ * member gets their own, a manager gets their team's.
+ */
+export function useOpenQueryMonths(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['open_query_months'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ submission_id: string }>>(
+        supabase.from('kpi_score_queries').select('submission_id').eq('status', 'open'),
+      )
+      return new Set(rows.map(r => r.submission_id))
+    },
+  })
+}
+
 export function useAnswerScoreQuery() {
   const qc = useQueryClient()
   return useMutation({
@@ -1043,6 +1069,7 @@ export function useAnswerScoreQuery() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['score_queries'] })
       qc.invalidateQueries({ queryKey: ['score_query_state'] })
+      qc.invalidateQueries({ queryKey: ['open_query_months'] })
       qc.invalidateQueries({ queryKey: ['notifications'] })
       invalidateSubmissionViews(qc)
     },

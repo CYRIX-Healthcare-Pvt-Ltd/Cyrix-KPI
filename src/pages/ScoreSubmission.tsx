@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Undo2, Lock, Trash2 } from 'lucide-react'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
+import {
+  ArrowLeft, Check, Undo2, Lock, Trash2, MessageSquare,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
-  useSaveMonthlyTarget, useMonthClose,
+  useSaveMonthlyTarget, useMonthClose, useScoreQueryState,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import {
@@ -40,6 +42,12 @@ export default function ScoreSubmission() {
   const { data: openDeletion } = useOpenRequestFor('deletion', submissionId)
   // Null means nothing closes months on its own, so somebody has to.
   const { data: closingDay } = useMonthClose()
+  const { data: queryState } = useScoreQueryState(submissionId)
+  // Set when the manager arrived from the Queries screen, so saving can
+  // put them back where they were instead of leaving them on a form with
+  // no way back to the question they came to answer.
+  const fromQuery = (useLocation().state as { fromQuery?: string } | null)?.fromQuery
+  const openQuery = queryState?.existing_status === 'open'
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
@@ -255,6 +263,32 @@ export default function ScoreSubmission() {
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+
+      {/* Arrived from the Queries screen. The manager came here to change
+          a figure somebody asked about, so the way back has to be on the
+          screen — and it carries the score with it, because "did my
+          change do anything" is the question they will have next. */}
+      {fromQuery && openQuery && (
+        <div className="card flex flex-wrap items-center gap-3 border-amber-200 bg-amber-50 p-4">
+          <MessageSquare className="h-5 w-5 shrink-0 text-amber-700" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-amber-900">
+              You are here from a query
+            </p>
+            <p className="mt-0.5 text-sm text-amber-800">
+              Change whatever needs changing, save it, then go back and reply.
+              Your total is now <strong>{mgrTotal.toFixed(2)}</strong>
+              {submission.mgr_total_score !== null &&
+               Math.abs(submission.mgr_total_score - mgrTotal) > 0.001 && (
+                <> — it was {submission.mgr_total_score.toFixed(2)}</>
+              )}.
+            </p>
+          </div>
+          <Link to="/queries" className="btn-secondary shrink-0">
+            Back to the query
+          </Link>
+        </div>
+      )}
 
       {submission.status === 'finalized' && (
         <Alert kind="info" title="This month is final">
@@ -475,14 +509,33 @@ export default function ScoreSubmission() {
                 be final for two different reasons. */}
             {submission.status === 'scored' && (
               <>
-                <button onClick={save} disabled={busy} className="btn-primary">
+                <button
+                  onClick={async () => {
+                    if (!(await save())) return
+                    // Straight back to the question, rather than leaving
+                    // the manager on a form with nothing left to do on it.
+                    if (fromQuery) navigate('/queries')
+                    else setNotice('Saved.')
+                  }}
+                  disabled={busy}
+                  className="btn-primary"
+                >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  Save changes
+                  {fromQuery ? 'Save and go back to the query' : 'Save changes'}
                 </button>
-                {closingDay === null && (
+                {/* Offering a button that can only fail is how somebody
+                     ends up reading a database error. While a query is
+                     open the month legitimately cannot close, so the
+                     button is replaced by the thing they should do. */}
+                {closingDay === null && !openQuery && (
                   <button onClick={onFinalize} disabled={busy} className="btn-secondary">
                     <Lock className="h-4 w-4" /> Finalise this month
                   </button>
+                )}
+                {openQuery && (
+                  <Link to="/queries" className="btn-secondary">
+                    <MessageSquare className="h-4 w-4" /> Answer the query first
+                  </Link>
                 )}
               </>
             )}

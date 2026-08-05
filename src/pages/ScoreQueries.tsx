@@ -143,6 +143,7 @@ function QueryCard({ row, readOnly }: { row: ScoreQueryRow; readOnly: boolean })
         {row.submission && !readOnly && open && (
           <Link
             to={`/score/${row.submission.id}`}
+            state={{ fromQuery: row.query.id }}
             className="btn-secondary !px-2.5 !py-1.5 text-xs"
           >
             <Pencil className="h-3.5 w-3.5" /> Revise the scores
@@ -151,6 +152,35 @@ function QueryCard({ row, readOnly }: { row: ScoreQueryRow; readOnly: boolean })
       </div>
 
       <div className="space-y-3 p-4">
+        {/* What the total was when they asked, and what it is now.
+            The manager revises scores on another screen and comes back
+            here to reply, so without this they are answering from memory
+            about whether their own change landed. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-ink-50 px-3 py-2 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-label text-ink-400">
+            Manager total
+          </span>
+          <span className="tabular-nums text-ink-600">
+            {row.query.mgr_total_at_raise?.toFixed(2) ?? '—'}
+          </span>
+          <span className="text-ink-300">when asked</span>
+          {row.submission?.mgr_total_score != null && (
+            <>
+              <span className="text-ink-300">&rarr;</span>
+              <span className={clsx(
+                'font-semibold tabular-nums',
+                row.query.mgr_total_at_raise != null &&
+                Math.abs(row.submission.mgr_total_score - row.query.mgr_total_at_raise) > 0.001
+                  ? 'text-emerald-700'
+                  : 'text-ink-700',
+              )}>
+                {row.submission.mgr_total_score.toFixed(2)}
+              </span>
+              <span className="text-ink-400">now</span>
+            </>
+          )}
+        </div>
+
         {row.query.employee_note && (
           <p className="text-sm italic text-ink-700">“{row.query.employee_note}”</p>
         )}
@@ -265,6 +295,17 @@ function PointRow({
           </div>
         )}
       </div>
+
+      {(point.sub_items ?? []).length > 0 && (
+        <p className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-ink-400">Specifically:</span>
+          {point.sub_items!.map(name => (
+            <span key={name} className="badge bg-cyrixRed-50 text-cyrixRed-800">
+              {name}
+            </span>
+          ))}
+        </p>
+      )}
 
       {point.note && <p className="mt-2 text-sm text-ink-600">{point.note}</p>}
 

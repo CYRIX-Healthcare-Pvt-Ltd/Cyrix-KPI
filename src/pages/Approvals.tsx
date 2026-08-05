@@ -7,9 +7,9 @@ import {
   useScoringRules, currentFy,
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
-import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
+import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
-import type { KpiAssignment, KpiAssignmentItem, Section } from '@/types/db'
+import type { KpiAssignment, KpiAssignmentItem, Section, Alternate } from '@/types/db'
 
 export default function Approvals() {
   const { employee } = useAuth()
@@ -190,6 +190,118 @@ function ApproveAll({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * One of a row's alternatives, on the approval table.
+ *
+ * Editable for exactly the same reason the row above it is: the manager
+ * is approving this, so a typo here should not cost a round trip either.
+ * The weightage column says "same" and cannot be typed into — an
+ * alternative with its own weightage is a second row, and the year would
+ * stop totalling 100.
+ *
+ * Saving writes the whole alternates array back, because it is one jsonb
+ * column. Editing two alternatives on the same row in quick succession
+ * therefore reads the array as it was rendered — acceptable here, where
+ * one person is correcting one KPI in front of them.
+ */
+function AlternateRow({
+  item, alt, editable,
+}: {
+  item: KpiAssignmentItem
+  alt: Alternate
+  editable: boolean
+}) {
+  const edit = useEditAssignmentItem()
+  const { data: rules } = useScoringRules()
+  const [draft, setDraft] = useState(alt)
+
+  const commit = (patch: Partial<Alternate>) => {
+    const next = { ...draft, ...patch }
+    setDraft(next)
+    edit.mutate({
+      itemId: item.id,
+      patch: {
+        alternates: (item.alternates ?? []).map(a => (a.id === alt.id ? next : a)),
+      },
+    })
+  }
+
+  const marker = (
+    <span className="inline-flex items-center gap-1.5">
+      <Shuffle className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+      <span className="badge bg-ink-200 text-ink-700">or</span>
+    </span>
+  )
+
+  if (!editable) {
+    return (
+      <tr className="bg-ink-50/60">
+        <td className="py-2 pl-10 pr-4">
+          {marker}{' '}
+          <span className="font-medium text-ink-800">{draft.kra || '—'}</span>
+        </td>
+        <td className="px-4 py-2 text-ink-600">{draft.kpi_description ?? '—'}</td>
+        <td className="px-4 py-2 text-right text-ink-400">same</td>
+        <td className="px-4 py-2 text-right tabular-nums text-ink-600">
+          {draft.target_value ?? '—'}
+        </td>
+        <td className="px-4 py-2 text-xs text-ink-500">
+          {draft.scoring_rule.replace(/_/g, ' ')}
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr className="bg-amber-50/40">
+      <td className="py-1.5 pl-8 pr-2">
+        <div className="flex items-center gap-1.5">
+          {marker}
+          <input
+            className="input !py-1.5 text-sm"
+            value={draft.kra}
+            onChange={e => setDraft({ ...draft, kra: e.target.value })}
+            onBlur={e => commit({ kra: e.target.value })}
+          />
+        </div>
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          className="input !py-1.5 text-xs"
+          value={draft.kpi_description ?? ''}
+          onChange={e => setDraft({ ...draft, kpi_description: e.target.value })}
+          onBlur={e => commit({ kpi_description: e.target.value })}
+        />
+      </td>
+      <td
+        className="px-4 py-1.5 text-right text-xs text-ink-400"
+        title="An alternative shares the row's weightage — that is what makes it an alternative"
+      >
+        same
+      </td>
+      <td className="px-2 py-1.5">
+        <NumberInput
+          step="any"
+          className="input !py-1.5 w-20 text-right text-sm"
+          value={draft.target_value}
+          onValue={v => { setDraft({ ...draft, target_value: v }); commit({ target_value: v }) }}
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <select
+          className="input !py-1.5 text-xs"
+          value={draft.scoring_rule}
+          onChange={e => commit({ scoring_rule: e.target.value as Alternate['scoring_rule'] })}
+        >
+          {(rules ?? []).map(r => (
+            <option key={r.code} value={r.code}>{r.label}</option>
+          ))}
+        </select>
+      </td>
+    </tr>
   )
 }
 
@@ -430,31 +542,12 @@ function ApprovalCard({
                                 reads as another row and the weightages
                                 appear not to add up. */}
                             {(item.alternates ?? []).map(alt => (
-                              <tr key={alt.id} className="bg-ink-50/60">
-                                <td className="py-2 pl-10 pr-4">
-                                  <span className="inline-flex items-center gap-1.5">
-                                    <Shuffle className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-                                    <span className="badge bg-ink-200 text-ink-700">
-                                      or
-                                    </span>
-                                    <span className="font-medium text-ink-800">
-                                      {alt.kra || '—'}
-                                    </span>
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2 text-ink-600">
-                                  {alt.kpi_description ?? '—'}
-                                </td>
-                                <td className="px-4 py-2 text-right text-ink-400">
-                                  same
-                                </td>
-                                <td className="px-4 py-2 text-right tabular-nums text-ink-600">
-                                  {alt.target_value ?? '—'}
-                                </td>
-                                <td className="px-4 py-2 text-xs text-ink-500">
-                                  {alt.scoring_rule.replace(/_/g, ' ')}
-                                </td>
-                              </tr>
+                              <AlternateRow
+                                key={alt.id}
+                                item={item}
+                                alt={alt}
+                                editable={editing && !standard}
+                              />
                             ))}
                           </Fragment>
                         ))}

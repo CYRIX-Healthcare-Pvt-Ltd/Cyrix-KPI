@@ -61,17 +61,19 @@ export function Alert({
   children?: ReactNode
 }) {
   /*
-    An error comes to you rather than waiting to be found.
+    An error comes to you, and then stays where you can see it.
 
-    These pages are long — a month of KPI rows and five core values —
-    and the message lands at the top while the button that failed is at
-    the bottom, so the honest report of what went wrong looked exactly
-    like nothing happening at all. Scrolling it into view on appearance
-    is the fix; a sticky bar would cost a strip of every screen forever
-    to solve a problem that occurs on failure.
+    Scrolling it into view was the first attempt and was not enough: it
+    fires once, and the moment somebody scrolls back down to the button
+    that failed, the reason it failed is off screen again. On a page that
+    is a month of KPI rows and five core values, that is most of the
+    time.
 
-    Errors and warnings only. A success message that yanked the page
-    around would be punishing people for succeeding.
+    So an error also sticks. Its container is the whole page, so it stays
+    pinned under the header for as long as you are anywhere on that page
+    — the message and the button you are pressing are visible together,
+    which is the actual requirement. Only errors: a success message that
+    followed you down the page would be nagging.
   */
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -94,7 +96,14 @@ export function Alert({
     <div
       ref={ref}
       role={kind === 'error' ? 'alert' : undefined}
-      className={clsx('flex gap-3 rounded-lg border p-3.5 text-sm', styles)}
+      className={clsx(
+        'flex gap-3 rounded-lg border p-3.5 text-sm',
+        styles,
+        // top-16 clears the 56px sticky header with a little air. The
+        // shadow is what stops it looking like part of whatever it has
+        // ended up floating over.
+        kind === 'error' && 'sticky top-16 z-20 shadow-lg',
+      )}
     >
       <Icon className="mt-0.5 h-4.5 w-4.5 shrink-0" />
       <div className="min-w-0 flex-1">
@@ -188,12 +197,23 @@ const ASSIGNMENT_BADGES: Record<AssignmentStatus, { label: string; cls: string }
 export function StatusBadge({
   status,
   kind = 'submission',
+  queried = false,
 }: {
   status: SubmissionStatus | AssignmentStatus | null
   kind?: 'submission' | 'assignment'
+  /**
+   * A question is open on this month. It outranks the stored status,
+   * because "Manager reviewed" is true and unhelpful while somebody is
+   * waiting for an answer — and the month cannot close until they get
+   * one, so the badge should say the thing that is actually holding it.
+   */
+  queried?: boolean
 }) {
   if (!status) {
     return <span className="badge bg-ink-100 text-ink-500">Not started</span>
+  }
+  if (queried && (status === 'scored' || status === 'finalized')) {
+    return <span className="badge bg-amber-100 text-amber-800">Under review</span>
   }
   const map = kind === 'submission' ? SUBMISSION_BADGES : ASSIGNMENT_BADGES
   const cfg = (map as Record<string, { label: string; cls: string }>)[status]

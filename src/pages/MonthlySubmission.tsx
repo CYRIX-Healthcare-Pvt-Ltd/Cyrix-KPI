@@ -302,7 +302,10 @@ export default function MonthlySubmission() {
           <h1 className="text-xl font-semibold text-ink-900">
             {monthLabel(month)} assessment
           </h1>
-          <StatusBadge status={submission.status} />
+          <StatusBadge
+            status={submission.status}
+            queried={queryState?.existing_status === 'open'}
+          />
         </div>
       </div>
 
@@ -624,6 +627,7 @@ export default function MonthlySubmission() {
         <ScoreQueryPanel
           submissionId={submission.id}
           items={items}
+          coreValueNames={(coreValues ?? []).map(c => c.name)}
           state={queryState ?? null}
         />
       )}
@@ -727,10 +731,12 @@ export default function MonthlySubmission() {
  * refusal would otherwise be written twice and drift.
  */
 function ScoreQueryPanel({
-  submissionId, items, state,
+  submissionId, items, coreValueNames, state,
 }: {
   submissionId: string
   items: KpiSubmissionItem[]
+  /** The five values, for the nested tick boxes on the core-values row. */
+  coreValueNames: string[]
   state: ScoreQueryState | null
 }) {
   const raise = useRaiseScoreQuery()
@@ -770,6 +776,7 @@ function ScoreQueryPanel({
                 </p>
                 <p className="mt-0.5 text-xs text-ink-500">
                   {p.kind === 'disagreement' ? 'Score disputed' : 'Clarification asked'}
+                  {(p.sub_items ?? []).length > 0 && ` · ${p.sub_items!.join(', ')}`}
                   {p.evidence_name && ` · ${p.evidence_name}`}
                   {p.evidence_name && !p.evidence_path && ' (removed — window closed)'}
                 </p>
@@ -911,6 +918,46 @@ function ScoreQueryPanel({
                           </button>
                         ))}
                       </div>
+                      {/* Core values is one scored row carrying five
+                          separate judgements, so querying "core values"
+                          tells the manager nothing they can act on —
+                          they cannot see whether the argument is about
+                          Trust or about Speed of Response. Ticking the
+                          ones you mean is the difference between a
+                          complaint and a question. */}
+                      {item.section === 'core_values' && coreValueNames.length > 0 && (
+                        <div className="rounded-lg bg-white p-2.5 ring-1 ring-ink-200">
+                          <p className="mb-1.5 text-xs font-medium text-ink-600">
+                            Which ones? (optional)
+                          </p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                            {coreValueNames.map(name => {
+                              const on = (picked[item.id].sub_items ?? []).includes(name)
+                              return (
+                                <label
+                                  key={name}
+                                  className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-700"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 accent-cyrixRed-600"
+                                    checked={on}
+                                    onChange={() => {
+                                      const cur = picked[item.id].sub_items ?? []
+                                      patch(item.id, {
+                                        sub_items: on
+                                          ? cur.filter(n => n !== name)
+                                          : [...cur, name],
+                                      })
+                                    }}
+                                  />
+                                  {name}
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <textarea
                         rows={2}
                         className="input"

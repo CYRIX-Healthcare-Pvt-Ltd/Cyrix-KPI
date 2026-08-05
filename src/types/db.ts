@@ -422,6 +422,12 @@ export interface ScoreQueryPoint {
   item_id: string
   kind: ScoreQueryKind
   note: string | null
+  /**
+   * The named parts of the row this is about — the individual core
+   * values, for the core-values row. Null when the row has no parts, or
+   * when none were singled out.
+   */
+  sub_items: string[] | null
   /** Null once the window has closed and the file has been purged. */
   evidence_path: string | null
   /** Kept after the purge, so the record still says what was attached. */

@@ -7,7 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar,
-  useSettleDueMonths, currentFy,
+  useSettleDueMonths, useOpenQueryMonths, currentFy,
 } from '@/lib/queries'
 import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { exportKpiScores } from '@/lib/export'
@@ -38,6 +38,8 @@ export default function Team() {
   // pressing a button, and nothing schedules that — so reading this
   // screen is what settles anything now due.
   useSettleDueMonths(true)
+  // Which of these months have a question hanging over them.
+  const { data: queried } = useOpenQueryMonths(true)
   const ids = useMemo(() => (data?.team ?? []).map(t => t.id), [data])
   const { data: allSubs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
 
@@ -212,6 +214,7 @@ export default function Team() {
           sub={subsById.get(peek)}
           assign={assignById.get(peek)}
           month={month}
+          queried={queried}
           onClose={() => setPeek(null)}
           onRemovePhoto={() => { setPeek(null); setPhotoFor(peek) }}
         />
@@ -275,7 +278,10 @@ export default function Team() {
               </button>
 
               <div className="hidden text-right sm:block">
-                <StatusBadge status={sub?.status ?? null} />
+                <StatusBadge
+                  status={sub?.status ?? null}
+                  queried={!!sub && !!queried?.has(sub.id)}
+                />
               </div>
 
               <div className="w-24 shrink-0 text-right sm:w-32">
@@ -333,12 +339,14 @@ export default function Team() {
  * much as a desktop, and a hover card is nothing on a phone.
  */
 function MemberPeek({
-  member, sub, assign, month, onClose, onRemovePhoto,
+  member, sub, assign, month, queried, onClose, onRemovePhoto,
 }: {
   member: Employee
   sub: KpiSubmission | undefined
   assign: KpiAssignment | undefined
   month: string
+  /** Months with a question hanging over them — see useOpenQueryMonths. */
+  queried: Set<string> | undefined
   onClose: () => void
   onRemovePhoto: () => void
 }) {
@@ -384,7 +392,12 @@ function MemberPeek({
             <p className="mt-0.5 text-sm text-ink-500">
               {member.designation ?? member.ecode}
             </p>
-            <div className="mt-2"><StatusBadge status={sub?.status ?? null} /></div>
+            <div className="mt-2">
+              <StatusBadge
+                status={sub?.status ?? null}
+                queried={!!sub && !!queried?.has(sub.id)}
+              />
+            </div>
           </div>
           <button onClick={onClose} className="btn-icon shrink-0" aria-label="Close">
             <X className="h-4 w-4" />

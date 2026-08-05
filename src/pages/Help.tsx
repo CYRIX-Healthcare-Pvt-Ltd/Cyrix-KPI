@@ -193,6 +193,15 @@ export default function Help() {
                 to: '/history', cta: 'Open assessments',
               },
               {
+                what: 'Asking about one core value',
+                how: 'Core values are one score covering five things. Tick that row, then tick the ones you actually mean — Trust, Care, and so on — so your manager knows what to answer.',
+              },
+              {
+                what: 'Where to see it',
+                how: 'The month shows Under review on your Assessments list until your manager replies. Open the month to read their answer and whether the score changed.',
+                to: '/history', cta: 'Open assessments',
+              },
+              {
                 what: 'Attach proof if you have it',
                 how: 'A photo, a PDF or a sheet. Optional. It is deleted once the query is finished.',
               },

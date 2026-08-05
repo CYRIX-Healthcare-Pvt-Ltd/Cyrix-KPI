@@ -6,7 +6,7 @@ import { Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useSubmissionHistory, useAnnualSummary, useMyAssignment,
-  useSettleDueMonths, currentFy,
+  useSettleDueMonths, useOpenQueryMonths, currentFy,
 } from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
@@ -63,6 +63,7 @@ export default function MyHistory() {
   const notice = (useLocation().state as { notice?: string } | null)?.notice
   const { data: history, isLoading } = useSubmissionHistory(employee?.id, fy)
   useSettleDueMonths(true)
+  const { data: queried } = useOpenQueryMonths(true)
   const { data: annual } = useAnnualSummary(employee?.id, fy)
   // Which bands to print. Read off the assignment rather than off the
   // scores, so somebody who carries ESMS but has not been scored on it
@@ -207,7 +208,10 @@ export default function MyHistory() {
                     </td>
                     <td className="px-4 py-3">
                       {open ? (
-                        <StatusBadge status={s?.status ?? null} />
+                        <StatusBadge
+                          status={s?.status ?? null}
+                          queried={!!s && !!queried?.has(s.id)}
+                        />
                       ) : (
                         <span className="badge inline-flex items-center gap-1 bg-ink-100 text-ink-400">
                           <Lock className="h-3 w-3" /> Not yet open
