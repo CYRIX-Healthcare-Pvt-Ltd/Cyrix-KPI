@@ -576,12 +576,25 @@ export function useTeamAssignments(employeeIds: string[] | undefined, fy: string
   return useQuery({
     enabled: !!employeeIds?.length,
     queryKey: ['team_assignments', employeeIds, fy],
-    queryFn: () =>
-      unwrap<KpiAssignment[]>(
+    queryFn: async () => {
+      const assignments = await unwrap<KpiAssignment[]>(
         supabase.from('kpi_assignments').select('*')
           .in('employee_id', employeeIds!).eq('financial_year', fy)
           .in('status', ['draft', 'pending_approval', 'active', 'rejected']),
-      ),
+      )
+      if (assignments.length === 0) {
+        return { assignments, items: [] as KpiAssignmentItem[] }
+      }
+      // The rows themselves, because "who has the same KPI" has to be
+      // answered from the KPI. Answering it from the scores puts two
+      // people with identical KPIs in different groups the moment one of
+      // them has been scored on fewer rows than the other.
+      const items = await unwrap<KpiAssignmentItem[]>(
+        supabase.from('kpi_assignment_items').select('*')
+          .in('assignment_id', assignments.map(a => a.id)),
+      )
+      return { assignments, items }
+    },
   })
 }
 

@@ -97,7 +97,8 @@ export default function TeamAnalysis() {
   const { data: team, isLoading } = useMyTeam(employee?.id)
   const ids = useMemo(() => (team ?? []).map(t => t.id), [team])
   const { data: subs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
-  const { data: assignments } = useTeamAssignments(ids.length ? ids : undefined, fy)
+  const { data: kpis } = useTeamAssignments(ids.length ? ids : undefined, fy)
+  const assignments = kpis?.assignments
   const { data: weak } = useWeakAreas(ids.length ? ids : undefined, fy)
   // Month by month, KRA by KRA — the only shape that can answer "which
   // area is slipping" rather than "who is low".
@@ -213,8 +214,7 @@ export default function TeamAnalysis() {
       employeeId: string; kra: string; section: string
       rows: Array<{ month: string; pct: number }>
     }>()
-    // Every KRA name a person carries — their KPI, as a fingerprint.
-    const kpiOf = new Map<string, Set<string>>()
+
     for (const r of attainment) {
       if (r.attainment_pct === null || !SCORED.has(r.status)) continue
       const key = `${r.employee_id} ${r.kra}`
@@ -222,9 +222,26 @@ export default function TeamAnalysis() {
         ?? { employeeId: r.employee_id, kra: r.kra, section: r.section, rows: [] }
       entry.rows.push({ month: r.period_month, pct: r.attainment_pct })
       series.set(key, entry)
-      const set = kpiOf.get(r.employee_id) ?? new Set<string>()
-      set.add(r.kra)
-      kpiOf.set(r.employee_id, set)
+    }
+
+    /*
+      Every KRA a person is measured on this year, from the agreed KPI.
+
+      Built from the assignment rather than from the scores, because the
+      scores only cover months that have been done: somebody scored on
+      one month has a smaller set than a colleague scored on four, so
+      the two would be put in different groups despite having the same
+      KPI — which is how one person's peer average came out at 85% and
+      another's at 100% on the same KRA.
+    */
+    const kpiOf = new Map<string, Set<string>>()
+    const assignmentOwner = new Map((kpis?.assignments ?? []).map(a => [a.id, a.employee_id]))
+    for (const item of kpis?.items ?? []) {
+      const owner = assignmentOwner.get(item.assignment_id)
+      if (!owner) continue
+      const set = kpiOf.get(owner) ?? new Set<string>()
+      set.add(item.kra)
+      kpiOf.set(owner, set)
     }
 
     /*
@@ -273,7 +290,10 @@ export default function TeamAnalysis() {
       const falling = trend?.direction === 'down'
       // Five points is roughly a band boundary at this scale, so anything
       // smaller is noise dressed as a finding.
-      const behind = gap !== null && gap < -5 && peers > 0
+      // Two others at least. "The 1 other with the same KPI average
+      // 100%" is not an average — it is one colleague's score with a
+      // word in front of it, and it moves wildly on one more month.
+      const behind = gap !== null && gap < -5 && peers >= 2
 
       if (!falling && !behind && !isWeak(avg)) continue
 
@@ -294,7 +314,7 @@ export default function TeamAnalysis() {
     }
 
     return out.sort((a, b) => a.rank - b.rank).slice(0, 8)
-  }, [attainment, team])
+  }, [attainment, team, kpis])
 
   /**
    * The ranking, and then the order.
@@ -506,7 +526,7 @@ export default function TeamAnalysis() {
                   <p className="mt-0.5 text-xs text-ink-400">
                     {c.avg.toFixed(0)}% of the weightage over {c.months} month
                     {c.months === 1 ? '' : 's'}
-                    {c.peers > 0 && ` · the ${c.peers} other${c.peers === 1 ? '' : 's'} with the same KPI average ${c.peerAvg!.toFixed(0)}%`}
+                    {c.peers >= 2 && ` · the ${c.peers} others with the same KPI average ${c.peerAvg!.toFixed(0)}%`}
                   </p>
                 </div>
               ))}
