@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react'
 import { bandFor, attainmentPct } from '@/lib/bands'
@@ -60,6 +60,25 @@ export function Alert({
   title?: string
   children?: ReactNode
 }) {
+  /*
+    An error comes to you rather than waiting to be found.
+
+    These pages are long — a month of KPI rows and five core values —
+    and the message lands at the top while the button that failed is at
+    the bottom, so the honest report of what went wrong looked exactly
+    like nothing happening at all. Scrolling it into view on appearance
+    is the fix; a sticky bar would cost a strip of every screen forever
+    to solve a problem that occurs on failure.
+
+    Errors and warnings only. A success message that yanked the page
+    around would be punishing people for succeeding.
+  */
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (kind !== 'error' && kind !== 'warning') return
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [kind])
+
   // Informational uses the brand's ink rather than a blue — blue is not a
   // Cyrix colour, and an "FYI" panel does not need its own hue to read as
   // one. Error, warning and success keep their conventional meanings.
@@ -72,7 +91,11 @@ export function Alert({
   const Icon = { info: Info, error: AlertCircle, success: CheckCircle2, warning: AlertCircle }[kind]
 
   return (
-    <div className={clsx('flex gap-3 rounded-lg border p-3.5 text-sm', styles)}>
+    <div
+      ref={ref}
+      role={kind === 'error' ? 'alert' : undefined}
+      className={clsx('flex gap-3 rounded-lg border p-3.5 text-sm', styles)}
+    >
       <Icon className="mt-0.5 h-4.5 w-4.5 shrink-0" />
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
@@ -86,7 +109,11 @@ const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }
   draft:     { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
   submitted: { label: 'Awaiting manager',   cls: 'bg-amber-100 text-amber-800' },
   returned:  { label: 'Returned to you',    cls: 'bg-orange-100 text-orange-800' },
-  scored:    { label: 'Scored',             cls: 'bg-ink-900 text-white' },
+  // "Scored" told nobody anything: it named a database state, not a
+  // step in the process, and people asked what it meant. This is what
+  // has actually happened — the manager has been through it, and the
+  // month is now waiting out its closing date.
+  scored:    { label: 'Manager reviewed',   cls: 'bg-ink-900 text-white' },
   finalized: { label: 'Final',              cls: 'bg-emerald-100 text-emerald-800' },
 }
 

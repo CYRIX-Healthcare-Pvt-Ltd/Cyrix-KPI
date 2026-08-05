@@ -732,6 +732,64 @@ export function useManagerTat(enabled: boolean, fy: string) {
 }
 
 // ---------------------------------------------------------------------
+// Closing the month
+// ---------------------------------------------------------------------
+
+/**
+ * Closes any month whose date has come.
+ *
+ * There is no scheduler here, so months settle when somebody reads a
+ * screen that lists them — which is the moment it matters, and an unread
+ * month that has not settled is one nobody is editing either. Global
+ * rather than scoped to the caller: the rule is a date, identical for
+ * everyone, and settling only what the reader can see would make "is it
+ * final yet" depend on who last opened the app.
+ */
+export function useSettleDueMonths(enabled: boolean) {
+  const qc = useQueryClient()
+  return useQuery({
+    enabled,
+    queryKey: ['settle_due'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('settle_due_submissions')
+      if (error) return 0
+      const n = (data as number) ?? 0
+      if (n > 0) invalidateSubmissionViews(qc)
+      return n
+    },
+  })
+}
+
+/** The company-wide closing day — a day of the following month. */
+export function useMonthClose() {
+  return useQuery({
+    queryKey: ['month_close'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ value: { closing_day?: number } }>>(
+        supabase.from('app_settings').select('value').eq('key', 'month_close').limit(1),
+      )
+      return rows[0]?.value?.closing_day ?? 10
+    },
+  })
+}
+
+export function useSetMonthClose() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (day: number) => {
+      const { error } = await supabase.rpc('set_month_close', { p_closing_day: day })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['month_close'] })
+      qc.invalidateQueries({ queryKey: ['score_query_state'] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------
 // Profile photos
 // ---------------------------------------------------------------------
 

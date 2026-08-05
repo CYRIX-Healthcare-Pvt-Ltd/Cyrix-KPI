@@ -175,19 +175,13 @@ export default function ScoreSubmission() {
     if (!(await save())) return
     try {
       await action.mutateAsync({ action: 'submit_manager', submissionId: submission.id })
-      setNotice('Scores submitted. You can finalise the month when you are ready.')
+      setNotice(
+        `Submitted. ${data?.employee.full_name.split(' ')[0]} can now see your ` +
+        'scores and query them until the month closes. You can still correct ' +
+        'anything until then.',
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit scores.')
-    }
-  }
-
-  const onFinalize = async () => {
-    if (!submission) return
-    try {
-      await action.mutateAsync({ action: 'finalize', submissionId: submission.id })
-      setNotice('Month finalised.')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not finalise.')
     }
   }
 
@@ -458,16 +452,18 @@ export default function ScoreSubmission() {
                 Submit my scores
               </button>
             )}
+            {/* No Finalise button any more. The month closes on the
+                company's closing date, so the manager's job ends when
+                they submit — and a button somebody had to remember to
+                press was leaving months in a state called "Scored" that
+                nobody could explain. Corrections stay possible right up
+                to the closing date, which is what the team member's
+                query window is for. */}
             {submission.status === 'scored' && (
-              <>
-                <button onClick={onFinalize} disabled={busy} className="btn-primary">
-                  {busy ? <Spinner className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                  Finalise this month
-                </button>
-                <button onClick={save} disabled={busy} className="btn-secondary">
-                  Save changes
-                </button>
-              </>
+              <button onClick={save} disabled={busy} className="btn-primary">
+                {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                Save changes
+              </button>
             )}
             <button
               onClick={() => setShowReturn(v => !v)}

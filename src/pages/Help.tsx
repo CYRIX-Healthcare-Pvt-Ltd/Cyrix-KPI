@@ -4,7 +4,7 @@ import {
   MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useTatPolicy } from '@/lib/queries'
+import { useTatPolicy, useMonthClose } from '@/lib/queries'
 
 /**
  * What this person can do, in plain words.
@@ -80,6 +80,7 @@ export default function Help() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const { data: policy } = useTatPolicy()
 
+  const closingDay = useMonthClose().data ?? 10
   const tmDays = policy?.tm_grace_days ?? 3
   const mgrDays = policy?.manager_grace_days ?? 5
 
@@ -157,8 +158,12 @@ export default function Help() {
                 how: `Try to send it within ${tmDays} days of the month ending. After that it counts as late.`,
               },
               {
-                what: 'Your manager scores it',
-                how: `They enter their own figure for each row. Your final score is the average of yours and theirs. They have ${mgrDays} days.`,
+                what: 'Your manager reviews it',
+                how: `They enter their own figure for each row. Your final score is the average of yours and theirs. They have ${mgrDays} days. The status then reads Manager reviewed.`,
+              },
+              {
+                what: 'The month closes on its own',
+                how: `Every month closes on the ${closingDay} of the month after it. Nobody presses a button. Until that day you can query the scores; after it the status becomes Final.`,
               },
             ]}
           />
@@ -170,7 +175,7 @@ export default function Help() {
             points={[
               {
                 what: 'Raise a query',
-                how: 'Open the month your manager has scored. Tick the rows you want looked at. Say for each one whether you want it explained, or you think it is wrong.',
+                how: `Open the month your manager has reviewed. Tick the rows you want looked at. Say for each one whether you want it explained, or you think it is wrong. You have until the ${closingDay} of the following month.`,
                 to: '/history', cta: 'Open assessments',
               },
               {

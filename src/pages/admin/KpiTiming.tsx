@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Timer, Info, Save, CalendarClock } from 'lucide-react'
 import {
-  useTatPolicy, useSaveTatPolicy, currentFy, type TatPolicy,
+  useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
+  currentFy, type TatPolicy,
 } from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, StatTile } from '@/components/ui'
@@ -23,7 +24,9 @@ import { PageLoader, Alert, Spinner, StatTile } from '@/components/ui'
 export default function KpiTiming() {
   const fy = currentFy()
   const { data: policy, isLoading, error } = useTatPolicy()
+  const { data: closingDay } = useMonthClose()
   const save = useSaveTatPolicy()
+  const setClose = useSetMonthClose()
 
   const [tm, setTm] = useState('3')
   const [mgr, setMgr] = useState('5')
@@ -38,7 +41,19 @@ export default function KpiTiming() {
     setFrom(policy.starts_from ?? '')
   }, [policy])
 
-  if (isLoading) return <PageLoader label="Loading the turnaround policy…" />
+  const closeDay = closingDay ?? 10
+
+  const saveDay = async (day: number) => {
+    setNotice(null); setFailed(null)
+    try {
+      await setClose.mutateAsync(day)
+      setNotice(`Months now close on the ${day} of the following month.`)
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : 'Could not save that.')
+    }
+  }
+
+  if (isLoading) return <PageLoader label="Loading the timing rules…" />
   if (error) return <Alert kind="error">{(error as Error).message}</Alert>
 
   const tmDays = Number(tm)
@@ -162,6 +177,40 @@ export default function KpiTiming() {
           </Alert>
         )}
 
+        {/* The one date the whole company shares. Everything else on this
+            screen is about measuring lateness; this one actually closes
+            months, so it sits on its own above the rest. */}
+        <div className="border-t border-ink-100 pt-5">
+          <label className="label" htmlFor="closing-day">
+            <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
+            Month closes on
+          </label>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <select
+              id="closing-day"
+              className="input w-28"
+              value={closeDay}
+              onChange={e => saveDay(Number(e.target.value))}
+              disabled={setClose.isPending}
+            >
+              {/* Stops at 28: a closing day of the 30th does not exist in
+                  February, and a deadline that skips a month is not one. */}
+              {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            <span className="text-sm text-ink-500">
+              of the following month
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-ink-500">
+            July's assessment closes at the end of {closeDay} August. Until then
+            the team member can query their manager's scores; after it the month
+            becomes <strong>Final</strong> on its own — nobody has to press
+            anything. A month with an open query stays open until it is answered.
+          </p>
+        </div>
+
         <div className="border-t border-ink-100 pt-5">
           <label className="label" htmlFor="from-month">
             <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
@@ -213,6 +262,11 @@ export default function KpiTiming() {
           label="Manager allowance"
           value={policy?.manager_grace_days ?? '—'}
           sub="days after the month ends"
+        />
+        <StatTile
+          label="Month closes on"
+          value={closeDay}
+          sub="of the following month"
         />
         <StatTile
           label="Counting from"

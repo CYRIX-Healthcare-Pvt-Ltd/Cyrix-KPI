@@ -5,7 +5,8 @@ import {
 import { Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy,
+  useSubmissionHistory, useAnnualSummary, useMyAssignment,
+  useSettleDueMonths, currentFy,
 } from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
@@ -61,6 +62,7 @@ export default function MyHistory() {
   // person is about to leave.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
   const { data: history, isLoading } = useSubmissionHistory(employee?.id, fy)
+  useSettleDueMonths(true)
   const { data: annual } = useAnnualSummary(employee?.id, fy)
   // Which bands to print. Read off the assignment rather than off the
   // scores, so somebody who carries ESMS but has not been scored on it

@@ -6,7 +6,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar, currentFy,
+  useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar,
+  useSettleDueMonths, currentFy,
 } from '@/lib/queries'
 import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { exportKpiScores } from '@/lib/export'
@@ -33,6 +34,10 @@ export default function Team() {
   const [notice, setNotice] = useState<string | null>(null)
 
   const { data, isLoading } = useTeamMonth(employee?.id, month, fy)
+  // Months close on the company closing date rather than by somebody
+  // pressing a button, and nothing schedules that — so reading this
+  // screen is what settles anything now due.
+  useSettleDueMonths(true)
   const ids = useMemo(() => (data?.team ?? []).map(t => t.id), [data])
   const { data: allSubs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
 
@@ -414,7 +419,11 @@ function MemberPeek({
           ))}
         </dl>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/* A grid, not flex-wrap. Three buttons in a 448px dialog
+            left one stranded on its own row at half width, which reads
+            as a mistake; grid-fill gives an odd last child the full
+            width so the shape is deliberate either way. */}
+        <div className="grid-fill mt-4 grid grid-cols-2 gap-2">
           <Link to={`/team/${member.id}`} className="btn-primary">
             Full record <ChevronRight className="h-4 w-4" />
           </Link>
