@@ -2,7 +2,10 @@ import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy } from 'lucide-react'
-import { bandFor, isWeak, trendOf, WEAK_THRESHOLD, type Band } from '@/lib/bands'
+import {
+  bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
+  type Band,
+} from '@/lib/bands'
 import { SECTION_SHORT } from '@/lib/sections'
 import type { KraAttainmentRow, WeakAreaRow } from '@/types/db'
 
@@ -96,9 +99,22 @@ export function ScoreHeader({
       </div>
 
       {/* Meter across the full width, with the band thresholds marked so
-          the number has somewhere to sit rather than floating free. */}
+          the number has somewhere to sit rather than floating free.
+
+          The track carries the whole scale, dimmed: red at the bottom
+          through to green at the top. It used to be plain grey, so a
+          green bar looked like the only colour the meter had, and people
+          asked — reasonably — how they would ever know a low score looks
+          different. Now the answer is on screen: the bar is bright over
+          the part that is earned, and the rest of the scale it is sitting
+          on stays visible behind it. */}
       <div className="relative px-6 pb-6 sm:px-7 sm:pb-7">
         <div className="relative h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{ backgroundImage: bandScaleGradient() }}
+            aria-hidden
+          />
           {band && (
             <div
               className={clsx(
@@ -127,12 +143,22 @@ export function ScoreHeader({
             />
           ))}
         </div>
-        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-label text-white/25">
-          <span>Poor</span>
-          <span>Satisfactory</span>
-          <span>Good</span>
-          <span>Very Good</span>
-          <span>Excellent</span>
+        {/* Each label in its own band's colour, so the legend explains
+            the track without a key. The one being scored is brought to
+            full strength — where you are, on a scale you can see. */}
+        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-label">
+          {BAND_SCALE.map(({ band: b }) => (
+            <span
+              key={b.key}
+              style={{ color: b.hex.base }}
+              className={clsx(
+                'transition-opacity',
+                band?.key === b.key ? 'opacity-100' : 'opacity-40',
+              )}
+            >
+              {b.label}
+            </span>
+          ))}
         </div>
       </div>
 

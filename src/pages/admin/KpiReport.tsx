@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { Download, RotateCcw } from 'lucide-react'
 import {
-  useKpiReport, useReportFilterTree, currentFy, type ReportDim,
+  useKpiReport, useReportFilterTree, useTatPolicy, currentFy, type ReportDim,
 } from '@/lib/queries'
 import { openFyMonths, monthLabel } from '@/lib/fy'
 import { exportOrgStatus } from '@/lib/export'
@@ -48,6 +48,11 @@ export default function KpiReport() {
   const [groupBy, setGroupBy] = useState<ReportDim[]>(['function', 'department', 'manager'])
 
   const { data: tree } = useReportFilterTree(fy, months[0] ?? '', true)
+  // The allowance the delay figures below are measured against. Named on
+  // screen rather than assumed, because it is a setting somebody can
+  // change and a column of "late" days that never says late against what
+  // is an accusation without a rule.
+  const { data: policy } = useTatPolicy()
 
   // Each level offers only what survives the level above it, so a
   // combination that would return an empty table cannot be selected.
@@ -120,8 +125,11 @@ export default function KpiReport() {
       line['Scored %'] = at(r.scored_pct, 1)
       line.Average = at(r.avg_score, 1)
       line['Submit TAT (days)'] = at(r.submit_tat, 1)
+      line['Submit late (days)'] = at(r.submit_delay, 1)
       line['Completion TAT (days)'] = at(r.completion_tat, 1)
+      line['Completion late (days)'] = at(r.completion_delay, 1)
       line['Pending TAT (days)'] = at(r.pending_tat, 1)
+      line['Pending late (days)'] = at(r.pending_delay, 1)
       return line
     })
     const scope = [
@@ -296,13 +304,22 @@ export default function KpiReport() {
                 </th>
                 <th className="px-4 py-2.5 text-right">Scored %</th>
                 <th className="px-4 py-2.5 text-right">Average</th>
-                <th className="px-4 py-2.5 text-right" title="Months the team sent in: average days from the 1st of the following month to the team member submitting. High here is a slow team, whatever the manager does next">
+                <th
+                  className="px-4 py-2.5 text-right"
+                  title={`Months the team sent in: average days from the 1st of the following month to the team member submitting, and how much of that was past the ${policy?.tm_grace_days ?? 3}-day allowance. High here is a slow team, whatever the manager does next`}
+                >
                   Submit TAT
                 </th>
-                <th className="px-4 py-2.5 text-right" title="Months that are scored: average days from the 1st of the following month to the manager scoring them">
+                <th
+                  className="px-4 py-2.5 text-right"
+                  title={`Months that are scored: average days from the 1st of the following month to the manager scoring them, and how much of that was past the ${policy?.manager_grace_days ?? 5}-day allowance`}
+                >
                   Completion TAT
                 </th>
-                <th className="px-4 py-2.5 text-right" title="Months that are not scored — nothing submitted, or submitted and not yet scored: average days they have been waiting, counted to today">
+                <th
+                  className="px-4 py-2.5 text-right"
+                  title={`Months that are not scored — nothing submitted, or submitted and not yet scored: average days they have been waiting, counted to today, and how much of that is past the ${policy?.manager_grace_days ?? 5}-day allowance`}
+                >
                   Pending TAT
                 </th>
               </tr>
@@ -363,9 +380,9 @@ export default function KpiReport() {
                       {/* One decimal because these are averages. A single
                           person's turnaround is always a whole number of
                           days — the halves appear only across a group. */}
-                      <Num v={r.submit_tat} decimals={1} />
-                      <Num v={r.completion_tat} decimals={1} />
-                      <Num v={r.pending_tat} decimals={1} />
+                      <TatCell days={r.submit_tat} late={r.submit_delay} />
+                      <TatCell days={r.completion_tat} late={r.completion_delay} />
+                      <TatCell days={r.pending_tat} late={r.pending_delay} />
                     </tr>
                   )
                 })
@@ -378,7 +395,12 @@ export default function KpiReport() {
       <p className="text-xs text-ink-400">
         Turnaround counts days from the 1st of the month after the KPI month,
         including the day it was submitted — July's KPI submitted on 5 August
-        is 5 days.
+        is 5 days. The second figure is what is left after the cool-off
+        period: {policy?.tm_grace_days ?? 3} days for a team member,{' '}
+        {policy?.manager_grace_days ?? 5} for a manager
+        {policy?.starts_from
+          ? `, counted from ${monthLabel(policy.starts_from)} onwards`
+          : ''}. SW Admin sets both.
       </p>
     </div>
   )
@@ -409,6 +431,48 @@ function Num({
         : decimals === undefined
           ? Number(v).toLocaleString()
           : Number(v).toFixed(decimals)}
+    </td>
+  )
+}
+
+/**
+ * A turnaround figure with how much of it was late underneath.
+ *
+ * The days answer "how long does this take"; the delay answers "is
+ * anybody actually late", and they are different questions — a team
+ * averaging 4.2 days against a 3-day allowance is a rounding error, and
+ * one averaging 21 days is a problem, and both are just "days" until the
+ * allowance is subtracted. Stacked in one cell rather than split into
+ * three more columns: this table is already fourteen wide.
+ *
+ * Nothing is drawn where the counting has not started — an empty second
+ * line is the honest reading of a month outside the window, and a green
+ * "on time" there would be a claim nobody made.
+ */
+function TatCell({ days, late }: { days: number | null; late: number | null }) {
+  const empty = days === null || days === undefined || Number.isNaN(Number(days))
+  const overdue = late !== null && late !== undefined && !Number.isNaN(Number(late))
+  return (
+    <td className="px-4 py-3 text-right">
+      {empty ? (
+        <span className="text-ink-300">—</span>
+      ) : (
+        <>
+          <span className="tabular-nums text-ink-700">{Number(days).toFixed(1)}</span>
+          {overdue && (
+            <p
+              className={clsx(
+                'text-[11px] tabular-nums',
+                Number(late) > 0 ? 'text-cyrixRed-700' : 'text-emerald-700',
+              )}
+            >
+              {Number(late) > 0
+                ? `+${Number(late).toFixed(1)} late`
+                : 'within allowance'}
+            </p>
+          )}
+        </>
+      )}
     </td>
   )
 }

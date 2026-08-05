@@ -1,25 +1,77 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Trophy, TrendingDown, AlertTriangle, Users } from 'lucide-react'
+import clsx from 'clsx'
+import {
+  Trophy, TrendingDown, AlertTriangle, Users, Download, ArrowUp, ArrowDown,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyTeam, useTeamSubmissions, useWeakAreas, useManagerMonthStatus, currentFy,
+  useMyTeam, useTeamSubmissions, useTeamAssignments, useWeakAreas,
+  useManagerMonthStatus, currentFy,
 } from '@/lib/queries'
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
-import { fyMonths, isMonthOpen } from '@/lib/fy'
+import { fyMonths, openFyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { bandFor, isWeak, trendOf } from '@/lib/bands'
-import { PageLoader, ScorePill, StatTile, EmptyState } from '@/components/ui'
+import { exportOrgStatus } from '@/lib/export'
+import { PageLoader, ScorePill, StatTile, EmptyState, Alert } from '@/components/ui'
 import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
+import type { Employee, WeakAreaRow } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
+
+/**
+ * Which band the table is reporting on.
+ *
+ * 'all' shows every band this team carries side by side. Picking one
+ * narrows the table to that band alone — and the ranking with it, which
+ * is the point: "who is best" is a different question for job role than
+ * it is for the total, and a team's best performer on paper is sometimes
+ * the fourth-best at the actual job.
+ */
+type Metric = 'all' | 'total' | 'job' | 'esms' | 'core'
+
+const METRIC_LABEL: Record<Exclude<Metric, 'all'>, string> = {
+  total: 'Total',
+  job: 'Job role',
+  esms: 'ESMS',
+  core: 'Core values',
+}
+
+/** What the rank and the default sort follow, per selected band. */
+const RANK_BY: Record<Metric, Exclude<Metric, 'all'>> = {
+  all: 'total', total: 'total', job: 'job', esms: 'esms', core: 'core',
+}
+
+type SortKey = Exclude<Metric, 'all'> | 'name' | 'months'
+
+interface PersonRow {
+  member: Employee
+  hasEsms: boolean
+  total: number | null
+  job: number | null
+  esms: number | null
+  core: number | null
+  months: number
+  /** Across the whole year, whatever month is selected — a trend of one
+   *  month is not a trend, so the column hides when a month is pinned. */
+  series: Array<number | null>
+  weakAreas: WeakAreaRow[]
+}
 
 export default function TeamAnalysis() {
   const { employee } = useAuth()
   const fy = currentFy()
 
+  const [month, setMonth] = useState<string>('')      // '' = every month
+  const [metric, setMetric] = useState<Metric>('all')
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [asc, setAsc] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
   const { data: team, isLoading } = useMyTeam(employee?.id)
   const ids = useMemo(() => (team ?? []).map(t => t.id), [team])
   const { data: subs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
+  const { data: assignments } = useTeamAssignments(ids.length ? ids : undefined, fy)
   const { data: weak } = useWeakAreas(ids.length ? ids : undefined, fy)
   // The year average says how the team is doing; this says which months
   // are actually finished, which is the other half of the question.
@@ -31,44 +83,137 @@ export default function TeamAnalysis() {
   const analysis = useMemo(() => {
     if (!team || !subs) return null
     const months = fyMonths(fy)
+    const esmsBy = new Map(
+      (assignments ?? []).map(a => [a.employee_id, Number(a.esms_weight ?? 0) > 0]),
+    )
 
-    const people = team.map(member => {
-      const mine = subs.filter(s => s.employee_id === member.id && SCORED.has(s.status))
-      const byMonth = new Map(mine.map(s => [s.period_month, s]))
-      const series = months.map(m => byMonth.get(m)?.final_total_score ?? null)
-      const scored = series.filter((v): v is number => v !== null)
-      const avg = scored.length
-        ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 10) / 10
-        : null
+    const people: PersonRow[] = team.map(member => {
+      const scored = subs.filter(s => s.employee_id === member.id && SCORED.has(s.status))
+      const byPeriod = new Map(scored.map(s => [s.period_month, s]))
+      const series = months.map(m => byPeriod.get(m)?.final_total_score ?? null)
+
+      // One month or all of them, from the same rows — so the two
+      // readings can never disagree about what a month was worth.
+      const inScope = month ? scored.filter(s => s.period_month === month) : scored
+      const mean = (pick: (s: typeof scored[number]) => number | null) => {
+        const vals = inScope.map(pick).filter((v): v is number => v !== null)
+        return vals.length
+          ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+          : null
+      }
 
       return {
         member,
-        avg,
+        hasEsms: esmsBy.get(member.id) ?? false,
+        total: mean(s => s.final_total_score),
+        job: mean(s => s.final_job_role_score),
+        esms: mean(s => s.final_esms_score),
+        core: mean(s => s.final_core_score),
+        months: inScope.length,
         series,
-        monthsScored: scored.length,
-        trend: trendOf(series),
         weakAreas: (weak ?? []).filter(
           w => w.employee_id === member.id && isWeak(w.avg_attainment_pct),
         ),
       }
     })
 
-    const rated = people.filter(p => p.avg !== null)
+    const rated = people.filter(p => p.total !== null)
     const teamAvg = rated.length
-      ? Math.round((rated.reduce((a, p) => a + (p.avg ?? 0), 0) / rated.length) * 10) / 10
+      ? Math.round((rated.reduce((a, p) => a + (p.total ?? 0), 0) / rated.length) * 10) / 10
       : null
 
     return {
       people,
       teamAvg,
-      best: [...rated].sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0)).slice(0, 5),
+      anyEsms: people.some(p => p.hasEsms),
+      best: [...rated].sort((a, b) => (b.total ?? 0) - (a.total ?? 0)).slice(0, 5),
       struggling: [...rated]
-        .filter(p => isWeak(p.avg))
-        .sort((a, b) => (a.avg ?? 0) - (b.avg ?? 0)),
-      declining: rated.filter(p => p.trend?.direction === 'down'),
-      unscored: people.filter(p => p.avg === null).length,
+        .filter(p => isWeak(p.total))
+        .sort((a, b) => (a.total ?? 0) - (b.total ?? 0)),
+      declining: rated.filter(p => trendOf(p.series)?.direction === 'down'),
+      unscored: people.filter(p => p.total === null).length,
     }
-  }, [team, subs, weak, fy])
+  }, [team, subs, assignments, weak, fy, month])
+
+  /**
+   * The ranking, and then the order.
+   *
+   * Rank is always on the selected band — it is the number the filter
+   * asked about. Sorting is separate: you can rank on job role and then
+   * sort by name to find somebody, and their rank travels with them
+   * rather than being recomputed from where the row happens to sit.
+   */
+  const rows = useMemo(() => {
+    if (!analysis) return []
+    const by = RANK_BY[metric]
+    const ranked = [...analysis.people]
+      .sort((a, b) => (b[by] ?? -1) - (a[by] ?? -1))
+      .map((p, _i, all) => ({
+        ...p,
+        // Ties share a place, and nobody unscored gets one at all.
+        rank: p[by] === null
+          ? null
+          : (all.findIndex(o => o[by] === p[by]) + 1),
+      }))
+
+    if (!sortKey) return ranked
+
+    const value = (p: typeof ranked[number]) =>
+      sortKey === 'name' ? p.member.full_name.toLowerCase()
+      : sortKey === 'months' ? p.months
+      : p[sortKey]
+
+    return [...ranked].sort((a, b) => {
+      const x = value(a), y = value(b)
+      if (typeof x === 'string' && typeof y === 'string') {
+        return asc ? x.localeCompare(y) : y.localeCompare(x)
+      }
+      // Unscored last whichever way the column is pointing: a column of
+      // dashes at the top is not a sort, it is the sort giving up.
+      const nx = x === null ? null : Number(x)
+      const ny = y === null ? null : Number(y)
+      if (nx === null && ny === null) return 0
+      if (nx === null) return 1
+      if (ny === null) return -1
+      return asc ? nx - ny : ny - nx
+    })
+  }, [analysis, metric, sortKey, asc])
+
+  const showEsms = (analysis?.anyEsms ?? false) &&
+    (metric === 'all' || metric === 'esms')
+  const showCols = {
+    total: metric === 'all' || metric === 'total',
+    job: metric === 'all' || metric === 'job',
+    esms: showEsms,
+    core: metric === 'all' || metric === 'core',
+  }
+
+  const scopeLabel = month ? monthLabel(month) : 'every scored month'
+
+  const download = async () => {
+    setExportError(null)
+    try {
+      await exportOrgStatus(
+        rows.map(p => ({
+          Rank: p.rank ?? '',
+          Ecode: p.member.ecode,
+          Name: p.member.full_name,
+          Designation: p.member.designation ?? '',
+          ...(showCols.job ? { 'Job role': p.job ?? '' } : {}),
+          ...(showCols.esms ? { ESMS: p.esms ?? '' } : {}),
+          ...(showCols.core ? { 'Core values': p.core ?? '' } : {}),
+          ...(showCols.total ? { Total: p.total ?? '' } : {}),
+          'Months scored': p.months,
+          'Weak areas': p.weakAreas.map(w => w.kra).join('; '),
+        })),
+        `Cyrix-team-analysis-${fy}-${month ? monthLabel(month) : 'all-months'}` +
+        `${metric === 'all' ? '' : `-${RANK_BY[metric]}`}.xlsx`,
+        'Team analysis',
+      )
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Could not build the export.')
+    }
+  }
 
   if (isLoading) return <PageLoader />
 
@@ -80,6 +225,13 @@ export default function TeamAnalysis() {
     )
   }
   if (!analysis) return <PageLoader />
+
+  const sortOn = (key: SortKey) => {
+    if (sortKey === key) { setAsc(v => !v); return }
+    setSortKey(key)
+    // Names read A–Z; every score reads best-first.
+    setAsc(key === 'name')
+  }
 
   return (
     <div className="space-y-5">
@@ -93,7 +245,7 @@ export default function TeamAnalysis() {
       <div className="grid gap-3 sm:grid-cols-4">
         <StatTile
           label="Performing well"
-          value={analysis.people.filter(p => (p.avg ?? 0) >= 80).length}
+          value={analysis.people.filter(p => (p.total ?? 0) >= 80).length}
           sub="Very Good or better"
         />
         <StatTile
@@ -139,7 +291,7 @@ export default function TeamAnalysis() {
           ) : (
             <div className="divide-y divide-ink-100">
               {analysis.best.map(p => (
-                <PersonRow key={p.member.id} p={p} />
+                <PersonRowCard key={p.member.id} p={p} />
               ))}
             </div>
           )}
@@ -157,7 +309,7 @@ export default function TeamAnalysis() {
           ) : (
             <div className="divide-y divide-ink-100">
               {analysis.struggling.map(p => (
-                <PersonRow key={p.member.id} p={p} showWeak />
+                <PersonRowCard key={p.member.id} p={p} showWeak />
               ))}
             </div>
           )}
@@ -175,7 +327,7 @@ export default function TeamAnalysis() {
           </div>
           <div className="divide-y divide-ink-100">
             {analysis.declining.map(p => (
-              <PersonRow key={p.member.id} p={p} />
+              <PersonRowCard key={p.member.id} p={p} />
             ))}
           </div>
         </div>
@@ -187,73 +339,235 @@ export default function TeamAnalysis() {
           precise and means nothing. Weak areas are reported per person. */}
 
       <div className="card overflow-hidden">
-        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-ink-800">Everyone</h3>
+        <div className="space-y-3 border-b border-ink-200 bg-ink-50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-ink-800">Everyone</h3>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Ranked on {METRIC_LABEL[RANK_BY[metric]].toLowerCase()} across{' '}
+                {scopeLabel}.
+              </p>
+            </div>
+            <button onClick={download} className="btn-excel">
+              <Download className="h-4 w-4" /> Export this view
+            </button>
+          </div>
+
+          {/* Two controls, one row: what period, and which band. Both
+              change the rank, because a ranking that ignored the filter
+              above it would be answering a question nobody asked. */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <select
+              className="input w-full sm:w-auto"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              aria-label="Month"
+            >
+              <option value="">All months · average</option>
+              {openFyMonths(fy).reverse().map(m => (
+                <option key={m} value={m}>{monthLabel(m)} only</option>
+              ))}
+            </select>
+            <select
+              className="input w-full sm:w-auto"
+              value={metric}
+              onChange={e => {
+                setMetric(e.target.value as Metric)
+                setSortKey(null)
+              }}
+              aria-label="Which band to show"
+            >
+              <option value="all">All bands</option>
+              <option value="job">Job role only</option>
+              {analysis.anyEsms && <option value="esms">ESMS only</option>}
+              <option value="core">Core values only</option>
+              <option value="total">Total only</option>
+            </select>
+            {(month || metric !== 'all' || sortKey) && (
+              <button
+                onClick={() => { setMonth(''); setMetric('all'); setSortKey(null) }}
+                className="col-span-2 text-xs font-medium text-ink-500 hover:text-ink-900 sm:col-auto"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
+
+        {exportError && <div className="p-3"><Alert kind="error">{exportError}</Alert></div>}
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
-                <th className="px-4 py-2.5 font-medium">Team member</th>
-                <th className="px-4 py-2.5 text-right font-medium">Average</th>
+                <th className="px-3 py-2.5 text-right font-medium">#</th>
+                <SortHeader
+                  label="Team member" col="name"
+                  sortKey={sortKey} asc={asc} onSort={sortOn}
+                />
+                {showCols.job && (
+                  <SortHeader
+                    label="Job role" col="job" align="right"
+                    sortKey={sortKey} asc={asc} onSort={sortOn}
+                  />
+                )}
+                {showCols.esms && (
+                  <SortHeader
+                    label="ESMS" col="esms" align="right"
+                    sortKey={sortKey} asc={asc} onSort={sortOn}
+                  />
+                )}
+                {showCols.core && (
+                  <SortHeader
+                    label="Core values" col="core" align="right"
+                    sortKey={sortKey} asc={asc} onSort={sortOn}
+                  />
+                )}
+                {showCols.total && (
+                  <SortHeader
+                    label="Total" col="total" align="right"
+                    sortKey={sortKey} asc={asc} onSort={sortOn}
+                  />
+                )}
                 <th className="px-4 py-2.5 font-medium">Band</th>
-                <th className="px-4 py-2.5 font-medium">Trend</th>
-                <th className="px-4 py-2.5 text-right font-medium">Months</th>
+                {!month && <th className="px-4 py-2.5 font-medium">Trend</th>}
+                <SortHeader
+                  label="Months" col="months" align="right"
+                  sortKey={sortKey} asc={asc} onSort={sortOn}
+                />
                 <th className="px-4 py-2.5 font-medium">Weak areas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {analysis.people
-                .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
-                .map(p => (
-                  <tr key={p.member.id} className="hover:bg-ink-50">
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/team/${p.member.id}`}
-                        className="link-accent text-ink-900 hover:underline"
-                      >
-                        {p.member.full_name}
-                      </Link>
-                      <p className="text-xs text-ink-500">{p.member.ecode}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right"><ScorePill value={p.avg} size="sm" /></td>
-                    <td className="px-4 py-3"><BandChip pct={p.avg} /></td>
+              {rows.map(p => (
+                <tr key={p.member.id} className="hover:bg-ink-50">
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {p.rank === null ? (
+                      <span className="text-ink-300">—</span>
+                    ) : (
+                      <span className={clsx(
+                        'font-semibold',
+                        p.rank <= 3 ? 'text-ink-900' : 'text-ink-400',
+                      )}>
+                        {p.rank}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      to={`/team/${p.member.id}`}
+                      className="link-accent text-ink-900 hover:underline"
+                    >
+                      {p.member.full_name}
+                    </Link>
+                    <p className="text-xs text-ink-500">{p.member.ecode}</p>
+                  </td>
+                  {showCols.job && <ScoreCell v={p.job} />}
+                  {showCols.esms && (
+                    <ScoreCell v={p.esms} muted={!p.hasEsms} />
+                  )}
+                  {showCols.core && <ScoreCell v={p.core} />}
+                  {showCols.total && <ScoreCell v={p.total} pill />}
+                  <td className="px-4 py-3">
+                    <BandChip pct={p[RANK_BY[metric]]} />
+                  </td>
+                  {!month && (
                     <td className="px-4 py-3"><TrendChip scores={p.series} /></td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
-                      {p.monthsScored}
-                    </td>
-                    <td className="px-4 py-3">
-                      {p.weakAreas.length === 0 ? (
-                        <span className="text-xs text-ink-400">none</span>
-                      ) : (
-                        <span className="text-xs text-cyrixRed-700">
-                          {p.weakAreas.map(w => w.kra).slice(0, 2).join(', ')}
-                          {p.weakAreas.length > 2 && ` +${p.weakAreas.length - 2}`}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                  )}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-600">
+                    {p.months}
+                  </td>
+                  <td className="px-4 py-3">
+                    {p.weakAreas.length === 0 ? (
+                      <span className="text-xs text-ink-400">none</span>
+                    ) : (
+                      <span className="text-xs text-cyrixRed-700">
+                        {p.weakAreas.map(w => w.kra).slice(0, 2).join(', ')}
+                        {p.weakAreas.length > 2 && ` +${p.weakAreas.length - 2}`}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+
+        <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-400">
+          Each band is scored out of its own weightage — job role out of 80,
+          core values out of what is left. They are not comparable to each
+          other, only to the same band on somebody else.
+        </p>
       </div>
     </div>
   )
 }
 
-function PersonRow({
+/** A column header you can sort on, with the direction shown. */
+function SortHeader({
+  label, col, align = 'left', sortKey, asc, onSort,
+}: {
+  label: string
+  col: SortKey
+  align?: 'left' | 'right'
+  sortKey: SortKey | null
+  asc: boolean
+  onSort: (key: SortKey) => void
+}) {
+  const active = sortKey === col
+  return (
+    <th className={clsx('px-4 py-2.5 font-medium', align === 'right' && 'text-right')}>
+      <button
+        onClick={() => onSort(col)}
+        className={clsx(
+          'inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink-900',
+          active ? 'text-ink-900' : 'text-ink-500',
+        )}
+        aria-label={`Sort by ${label}`}
+      >
+        {label}
+        {active && (asc
+          ? <ArrowUp className="h-3 w-3" />
+          : <ArrowDown className="h-3 w-3" />)}
+      </button>
+    </th>
+  )
+}
+
+function ScoreCell({
+  v, pill, muted,
+}: {
+  v: number | null
+  pill?: boolean
+  muted?: boolean
+}) {
+  return (
+    <td className="px-4 py-3 text-right">
+      {pill ? (
+        <ScorePill value={v} size="sm" />
+      ) : v === null ? (
+        <span className="text-ink-300" title={muted ? 'Not measured on this' : undefined}>
+          —
+        </span>
+      ) : (
+        <span className="font-medium tabular-nums text-ink-800">{v.toFixed(1)}</span>
+      )}
+    </td>
+  )
+}
+
+function PersonRowCard({
   p, showWeak,
 }: {
   p: {
     member: { id: string; ecode: string; full_name: string }
-    avg: number | null
+    total: number | null
     series: Array<number | null>
     weakAreas: Array<{ kra: string; avg_attainment_pct: number | null }>
   }
   showWeak?: boolean
 }) {
-  const band = bandFor(p.avg)
+  const band = bandFor(p.total)
   return (
     <div className="flex items-center gap-3 p-3.5">
       <div className="min-w-0 flex-1">
@@ -273,7 +587,7 @@ function PersonRow({
         <div className="mt-1"><TrendChip scores={p.series} /></div>
       </div>
       <div className="text-right">
-        <ScorePill value={p.avg} />
+        <ScorePill value={p.total} />
         {band && <p className={`mt-1 text-[11px] ${band.accent}`}>{band.label}</p>}
       </div>
     </div>

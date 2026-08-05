@@ -24,6 +24,7 @@ const AdminEmployees    = lazy(() => import('@/pages/admin/AdminEmployees'))
 const AdminReports      = lazy(() => import('@/pages/admin/AdminReports'))
 const AdminRequests     = lazy(() => import('@/pages/admin/AdminRequests'))
 const SwAdmin           = lazy(() => import('@/pages/admin/SwAdmin'))
+const KpiTiming         = lazy(() => import('@/pages/admin/KpiTiming'))
 const DeletionRequests  = lazy(() => import('@/pages/DeletionRequests'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -135,6 +136,10 @@ export default function App() {
           <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
           <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
           <Route path="admin/logins" element={<RequireSw><SwAdmin /></RequireSw>} />
+          {/* When the clock starts is a rollout decision, so it sits with
+              the people who ran the rollout rather than with the people
+              the clock reports on. */}
+          <Route path="admin/timing" element={<RequireSw><KpiTiming /></RequireSw>} />
           {/* The approval chain is the reporting manager and then HR. The
               link was removed from the SW Admin nav, but a nav is not a
               permission — the route has to say so too. */}

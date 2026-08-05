@@ -9,6 +9,7 @@ import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment, currentFy,
 } from '@/lib/queries'
 import { bandFor } from '@/lib/bands'
+import { monthLabel } from '@/lib/fy'
 import { PageLoader, StatTile } from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
@@ -20,6 +21,25 @@ import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
  * you how you did against your own targets and nothing about how that
  * compares, which is the next question everybody asks.
  */
+
+/**
+ * "18.1 days · 15.1 late" — how long it took, then what that cost.
+ *
+ * The two are one line rather than two rows because they are one fact
+ * read twice: the second number is the first with the cool-off period
+ * taken off. Nothing is said about lateness where the counting has not
+ * started, rather than claiming zero.
+ */
+function tatLine(
+  days: number | null | undefined,
+  late: number | null | undefined,
+  empty = '—',
+): string {
+  if (days === null || days === undefined) return empty
+  const base = `${days.toFixed(1)} days`
+  if (late === null || late === undefined) return base
+  return late > 0 ? `${base} · ${late.toFixed(1)} late` : `${base} · on time`
+}
 
 /** 1 → 1st, 2 → 2nd, 23 → 23rd. */
 function ordinal(n: number): string {
@@ -255,17 +275,22 @@ export default function Profile() {
               // be carrying a team that sends everything in weeks late,
               // and only this line would say so.
               ['Team submits in',
-                ranking?.submit_tat == null
-                  ? '—'
-                  : `${ranking.submit_tat.toFixed(1)} days`],
+                tatLine(ranking?.submit_tat, ranking?.submit_delay)],
               ['Completion TAT',
-                ranking?.completion_tat == null
-                  ? '—'
-                  : `${ranking.completion_tat.toFixed(1)} days`],
+                tatLine(ranking?.completion_tat, ranking?.completion_delay)],
               ['Pending TAT',
-                ranking?.pending_tat == null
-                  ? 'nothing waiting'
-                  : `${ranking.pending_tat.toFixed(1)} days`],
+                tatLine(ranking?.pending_tat, ranking?.pending_delay,
+                        'nothing waiting')],
+              // The rule those "late" figures were measured against. A
+              // number that says someone is late without saying late
+              // against what is an accusation, not a metric.
+              ['Allowance',
+                `${ranking?.tm_grace_days ?? 3} days to submit · ` +
+                `${ranking?.mgr_grace_days ?? 5} to score`],
+              ...(ranking?.tat_starts_from
+                ? [['Counted from',
+                    monthLabel(ranking.tat_starts_from)] as [string, string]]
+                : []),
             ]}
           />
         )}

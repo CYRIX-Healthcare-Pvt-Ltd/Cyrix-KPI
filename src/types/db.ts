@@ -75,6 +75,19 @@ export interface KpiRanking {
   completion_tat: number | null
   /** Months that are not: how long they have waited, counted to today. */
   pending_tat: number | null
+  /**
+   * The same three clocks with the cool-off period taken off, floored at
+   * zero — how late, rather than how long. Null before the month SW
+   * Admin set the counting to start from. See set_tat_policy().
+   */
+  submit_delay: number | null
+  completion_delay: number | null
+  pending_delay: number | null
+  /** The allowance these delays were measured against, so a screen can
+   *  say where the number came from without a second round trip. */
+  tm_grace_days: number
+  mgr_grace_days: number
+  tat_starts_from: string | null
 }
 
 export interface JobRole {
@@ -308,6 +321,10 @@ export interface KpiReportRow {
   completion_tat: number | null
   /** Months that are not: how long they have waited, counted to today. */
   pending_tat: number | null
+  /** The same three, less the cool-off period: how late, not how long. */
+  submit_delay: number | null
+  completion_delay: number | null
+  pending_delay: number | null
 }
 
 /**

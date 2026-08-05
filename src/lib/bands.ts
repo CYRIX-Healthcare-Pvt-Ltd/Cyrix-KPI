@@ -100,6 +100,36 @@ export const BANDS: Band[] = [
 /** Anything below Good is what we call out as needing attention. */
 export const WEAK_THRESHOLD = 60
 
+/**
+ * The bands in score order — poor first — with the span each one covers.
+ *
+ * BANDS is written highest-first because that is the order bandFor()
+ * needs to search in. Anything drawing the scale needs the opposite, and
+ * needs to know where each band ends, which BANDS only implies.
+ */
+export const BAND_SCALE = [...BANDS].reverse().map((band, i, all) => ({
+  band,
+  // Poor's min is -Infinity, which is right for a lookup and useless for
+  // a ruler, so the bottom of the scale is 0 and the top is 100.
+  from: i === 0 ? 0 : band.min,
+  to: i === all.length - 1 ? 100 : all[i + 1].min,
+}))
+
+/**
+ * The whole 0–100 scale as one gradient, hard-edged at the thresholds.
+ *
+ * Hard stops rather than a blend: the labels underneath name five
+ * segments, and a smear would be showing a continuum under words that
+ * promise steps. Built from BANDS so the meter cannot drift from the
+ * bands it is claiming to draw.
+ */
+export const bandScaleGradient = (): string =>
+  `linear-gradient(to right, ${
+    BAND_SCALE
+      .flatMap(s => [`${s.band.hex.base} ${s.from}%`, `${s.band.hex.base} ${s.to}%`])
+      .join(', ')
+  })`
+
 export function bandFor(pct: number | null | undefined): Band | null {
   if (pct === null || pct === undefined || Number.isNaN(pct)) return null
   return BANDS.find(b => pct >= b.min) ?? BANDS[BANDS.length - 1]

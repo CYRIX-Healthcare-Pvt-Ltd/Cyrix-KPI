@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, KeyRound, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2,
+  ShieldAlert, Trash2, Timer,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -21,11 +21,17 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   end?: boolean
   badge?: number
+  /**
+   * A queue rather than a place: worth a tab while something is in it,
+   * and worth the space back when there is not.
+   */
+  queue?: boolean
 }
 
 export default function Shell() {
   const { employee, isManager, isHrAdmin, isSwAdmin, signOut } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const fy = currentFy()
 
@@ -54,10 +60,14 @@ export default function Shell() {
   const records: NavItem = {
     to: '/deletions', label: 'Records', icon: Trash2,
     badge: recordRequests ?? 0,
+    queue: true,
   }
 
-  const items: NavItem[] = isSwAdmin && !isHrAdmin
-    ? [{ to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true }]
+  const allItems: NavItem[] = isSwAdmin && !isHrAdmin
+    ? [
+        { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
+        { to: '/admin/timing', label: 'KPI Timing', icon: Timer },
+      ]
     : isHrAdmin
     ? [
         { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -71,7 +81,12 @@ export default function Shell() {
           badge: removals?.length ?? 0,
         },
         records,
-        ...(isSwAdmin ? [{ to: '/admin/logins', label: 'Logins', icon: ShieldAlert }] : []),
+        ...(isSwAdmin
+          ? [
+              { to: '/admin/logins', label: 'Logins', icon: ShieldAlert },
+              { to: '/admin/timing', label: 'KPI Timing', icon: Timer },
+            ]
+          : []),
       ]
     : [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -86,11 +101,30 @@ export default function Shell() {
         ...(isManager
           ? [
               { to: '/team', label: 'My Team', icon: Users, badge: counts?.scoring ?? 0 },
-              { to: '/approvals', label: 'Approvals', icon: CheckSquare, badge: counts?.approvals ?? 0 },
+              {
+                to: '/approvals', label: 'Approvals', icon: CheckSquare,
+                badge: counts?.approvals ?? 0, queue: true,
+              },
               records,
             ]
           : []),
       ]
+
+  /*
+    Six tabs on a 375px screen is five characters each, which is how
+    "Approvals" and "Records" ended up sharing a row with nothing in
+    either of them. A queue with an empty tray is not a destination, so
+    it gives its slot back until something arrives — and reappears with
+    a badge on it, which is a better prompt than a permanent tab nobody
+    reads.
+
+    Still shown while you are standing on it: a page whose own tab has
+    vanished underneath it is disorienting, and clearing the last item
+    in a queue is exactly when that would happen.
+  */
+  const items = allItems.filter(
+    item => !item.queue || (item.badge ?? 0) > 0 || pathname.startsWith(item.to),
+  )
 
   const handleSignOut = async () => {
     await signOut()

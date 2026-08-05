@@ -1,12 +1,12 @@
-import { useMemo } from 'react'
-import { Users, Target } from 'lucide-react'
+import { useMemo, lazy, Suspense } from 'react'
+import { Users, Target, LineChart } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useSubmissionHistory,
   currentFy,
 } from '@/lib/queries'
-import { currentReportingMonth, monthLabel, fyMonths } from '@/lib/fy'
+import { currentReportingMonth, monthLabel, fyMonths, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
@@ -14,6 +14,15 @@ import {
 } from '@/components/analysis'
 
 const SCORED = new Set(['scored', 'finalized'])
+
+// This screen is not code-split — it is the first thing everyone loads —
+// so the chart is, or recharts lands in the bundle a service engineer
+// downloads on 4G just to sign in.
+const ScoreTrend = lazy(() => import('@/components/ScoreTrend'))
+
+const ChartFallback = () => (
+  <div className="h-[200px] animate-pulse rounded-lg bg-ink-50" />
+)
 
 export default function Dashboard() {
   const { employee, isManager, isHrAdmin } = useAuth()
@@ -34,12 +43,18 @@ export default function Dashboard() {
     isManager || isHrAdmin ? employee?.id : undefined, fy,
   )
 
-  const series = useMemo(() => {
+  // Only months that have finished: a trailing run of empty months makes
+  // a three-point line look like a line that stopped.
+  const points = useMemo(() => {
     const byMonth = new Map(
       (history ?? []).filter(s => SCORED.has(s.status)).map(s => [s.period_month, s]),
     )
-    return fyMonths(fy).map(m => byMonth.get(m)?.final_total_score ?? null)
+    return fyMonths(fy)
+      .filter(m => isMonthOpen(m))
+      .map(m => ({ month: m, score: byMonth.get(m)?.final_total_score ?? null }))
   }, [history, fy])
+
+  const series = useMemo(() => points.map(p => p.score), [points])
 
   if (aLoading) return <PageLoader />
 
@@ -153,6 +168,23 @@ export default function Dashboard() {
             : `out of ${JOB_ROLE_TOTAL} and ${coreWeight}`}
         />
       </div>
+
+      {(kpiStatus === 'active' || (annual?.months_scored ?? 0) > 0) && (
+        <div className="card p-4">
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
+            <LineChart className="h-4 w-4 text-ink-400" /> My score, month by month
+          </h3>
+          <p className="mb-3 text-xs text-ink-500">
+            Final score for each finished month, on the band scale.
+          </p>
+          <Suspense fallback={<ChartFallback />}>
+            <ScoreTrend
+              points={points}
+              emptyMessage="No months scored yet — the line starts with your first one."
+            />
+          </Suspense>
+        </div>
+      )}
 
       {/* ---- what to work on ---- */}
       {(annual?.months_scored ?? 0) > 0 && (

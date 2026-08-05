@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
+  useSaveMonthlyTarget,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import {
@@ -33,11 +34,13 @@ export default function ScoreSubmission() {
   const { data: coreValues } = useCoreValues()
   const saveItems = useSaveItemValues()
   const saveRatings = useSaveCoreRatings()
+  const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
   const { data: openDeletion } = useOpenRequestFor('deletion', submissionId)
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
+  const [targets, setTargets] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [returnReason, setReturnReason] = useState('')
@@ -60,11 +63,20 @@ export default function ScoreSubmission() {
         (i.manager_achieved ?? i.self_achieved)?.toString() ?? '',
       ]),
     ))
+    setTargets(Object.fromEntries(
+      data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
+    ))
     setRatings(Object.fromEntries(
       data.ratings.map(r => [r.id, r.manager_rating ?? r.self_rating ?? '']),
     ))
     setRemarks(data.submission.manager_remarks ?? '')
   }, [data])
+
+  /** The target as currently typed, falling back to what was saved. */
+  const targetOf = (item: KpiSubmissionItem) => {
+    const t = targets[item.id]
+    return t === '' || t === undefined ? item.target_value : Number(t)
+  }
 
   const coreAverage = useMemo(
     () => averageCoreValueRatings((data?.ratings ?? []).map(r => ratings[r.id] || null)),
@@ -80,7 +92,27 @@ export default function ScoreSubmission() {
     if (raw === null) return null
     return calcKpiScore(
       item.scoring_rule as ScoringRule,
-      item.weightage, item.target_value, raw, item.rule_params as RuleParams,
+      item.weightage, targetOf(item), raw, item.rule_params as RuleParams,
+    )
+  }
+
+  /**
+   * What the team member's own figure is worth against the target as it
+   * stands now.
+   *
+   * The target is the denominator both assessments share, so moving it
+   * moves their score as well as the manager's — the database recomputes
+   * both on save. Recomputing it here too means the manager sees that
+   * happen while they type, rather than discovering it afterwards.
+   */
+  const selfScore = (item: KpiSubmissionItem) => {
+    if (item.section === 'core_values' || item.self_achieved === null) {
+      return item.self_score
+    }
+    return calcKpiScore(
+      item.scoring_rule as ScoringRule,
+      item.weightage, targetOf(item), item.self_achieved,
+      item.rule_params as RuleParams,
     )
   }
 
@@ -92,15 +124,26 @@ export default function ScoreSubmission() {
     )
   }, [data, coreValues])
 
-  const selfTotal = items.reduce((a, i) => a + (i.self_score ?? 0), 0)
+  const selfTotal = items.reduce((a, i) => a + (selfScore(i) ?? 0), 0)
   const mgrTotal = items.reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
   const finalTotal = items.reduce(
-    (a, i) => a + (blendScores(i.self_score, mgrScore(i)) ?? 0), 0,
+    (a, i) => a + (blendScores(selfScore(i), mgrScore(i)) ?? 0), 0,
   )
 
   const save = async () => {
     setError(null)
     try {
+      // Targets first, for the same reason as on the team member's own
+      // form: both achieved figures are scored against them, and the
+      // database recomputes the row on every write.
+      for (const i of items.filter(i => i.section === 'job_role')) {
+        const t = targets[i.id]
+        const next = t === '' || t === undefined ? null : Number(t)
+        if (next !== i.target_value) {
+          await saveTarget.mutateAsync({ itemId: i.id, target: next })
+        }
+      }
+
       await saveItems.mutateAsync({
         role: 'manager',
         updates: items
@@ -243,10 +286,15 @@ export default function ScoreSubmission() {
         const weight = rows.reduce((a, i) => a + Number(i.weightage), 0)
         return (
       <div key={key} className="card overflow-hidden">
-        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
             {label} <span className="font-normal text-ink-500">— {weight}%</span>
           </h3>
+          {key === 'job_role' && editable && (
+            <p className="text-xs text-ink-500">
+              Correcting a target rescores both assessments for that row.
+            </p>
+          )}
         </div>
         <div className="divide-y divide-ink-100">
           {rows.map(item => (
@@ -262,19 +310,41 @@ export default function ScoreSubmission() {
               </div>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-5">
+                {/* The manager sets the target, not just checks it. The
+                    team member can type one while the month is theirs,
+                    but the number that decides whether 42 calls is good
+                    is the manager's to know — so it is editable here for
+                    as long as the month is.
+
+                    ESMS is the exception, as it is everywhere: fixed at
+                    100 for everyone who carries it. */}
                 <div>
-                  <label className="label text-xs">Target</label>
-                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
-                    {item.target_value ?? '—'}
-                  </p>
+                  <label className="label text-xs" htmlFor={`tgt-${item.id}`}>
+                    Target {key === 'esms' && (
+                      <span className="font-normal normal-case tracking-normal text-ink-400">
+                        · fixed
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    id={`tgt-${item.id}`}
+                    type="number" inputMode="decimal" step="any"
+                    className="input"
+                    disabled={!editable || key === 'esms'}
+                    value={targets[item.id] ?? ''}
+                    onChange={e => setTargets({ ...targets, [item.id]: e.target.value })}
+                  />
                 </div>
 
                 <div>
                   <label className="label text-xs">They claimed</label>
                   <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
                     {item.self_achieved ?? '—'}
-                    <span className="ml-2 text-xs text-ink-400">
-                      = {item.self_score?.toFixed(2) ?? '—'}
+                    <span
+                      className="ml-2 text-xs text-ink-400"
+                      title="Their figure against the target as it stands now"
+                    >
+                      = {selfScore(item)?.toFixed(2) ?? '—'}
                     </span>
                   </p>
                 </div>
@@ -301,7 +371,7 @@ export default function ScoreSubmission() {
                 <div>
                   <label className="label text-xs">Final</label>
                   <div className="py-1.5">
-                    <ScorePill value={blendScores(item.self_score, mgrScore(item))} />
+                    <ScorePill value={blendScores(selfScore(item), mgrScore(item))} />
                   </div>
                 </div>
               </div>

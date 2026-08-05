@@ -537,6 +537,26 @@ export function useWeakAreas(employeeIds: string[] | undefined, fy: string) {
   })
 }
 
+/**
+ * Which bands each person carries this year.
+ *
+ * Read off the KPI rather than inferred from the scores, so a column for
+ * ESMS appears because somebody is measured on it, not because somebody
+ * has finally been scored on it.
+ */
+export function useTeamAssignments(employeeIds: string[] | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeIds?.length,
+    queryKey: ['team_assignments', employeeIds, fy],
+    queryFn: () =>
+      unwrap<KpiAssignment[]>(
+        supabase.from('kpi_assignments').select('*')
+          .in('employee_id', employeeIds!).eq('financial_year', fy)
+          .in('status', ['draft', 'pending_approval', 'active', 'rejected']),
+      ),
+  })
+}
+
 /** Every month for a set of people — the basis for exports and trends. */
 export function useTeamSubmissions(employeeIds: string[] | undefined, fy: string) {
   return useQuery({
@@ -707,6 +727,62 @@ export function useManagerTat(enabled: boolean, fy: string) {
       unwrap<ManagerTatRow[]>(
         supabase.from('v_manager_tat').select('*').eq('financial_year', fy),
       ),
+  })
+}
+
+// ---------------------------------------------------------------------
+// Turnaround policy
+// ---------------------------------------------------------------------
+
+export interface TatPolicy {
+  /** Days a team member gets after the month ends before it counts. */
+  tm_grace_days: number
+  /** Days a manager gets, from the same month boundary. */
+  manager_grace_days: number
+  /** First month turnaround is measured at all. Null = every month. */
+  starts_from: string | null
+}
+
+export const TAT_POLICY_FALLBACK: TatPolicy = {
+  tm_grace_days: 3, manager_grace_days: 5, starts_from: null,
+}
+
+/**
+ * Readable by everyone — it is the allowance they are being held to, and
+ * a deadline nobody can look up is not a deadline. Writing it goes
+ * through an RPC, because app_settings is HR's by RLS and this is SW
+ * Admin's to set.
+ */
+export function useTatPolicy() {
+  return useQuery({
+    queryKey: ['tat_policy'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ value: TatPolicy }>>(
+        supabase.from('app_settings').select('value').eq('key', 'tat_policy').limit(1),
+      )
+      return { ...TAT_POLICY_FALLBACK, ...(rows[0]?.value ?? {}) } as TatPolicy
+    },
+  })
+}
+
+export function useSaveTatPolicy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: TatPolicy) => {
+      const { error } = await supabase.rpc('set_tat_policy', {
+        p_tm_grace: p.tm_grace_days,
+        p_manager_grace: p.manager_grace_days,
+        p_starts_from: p.starts_from,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tat_policy'] })
+      // Every turnaround figure on every screen is measured against it.
+      qc.invalidateQueries({ queryKey: ['kpi_report'] })
+      qc.invalidateQueries({ queryKey: ['kpi_ranking'] })
+    },
   })
 }
 

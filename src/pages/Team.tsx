@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, ChevronRight, Download, BarChart3, UserMinus, Spline } from 'lucide-react'
+import {
+  Users, ChevronRight, Download, BarChart3, UserMinus, Spline,
+  LineChart as LineChartIcon,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useTeamMonth, useTeamSubmissions, useRemovalAction, currentFy,
@@ -11,7 +14,9 @@ import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired } from '@/components/analysis'
+import ScoreTrend from '@/components/ScoreTrend'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
+import type { KpiSubmission } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -45,6 +50,32 @@ export default function Team() {
     const perPerson = [...byPerson.values()].map(v => v.reduce((a, b) => a + b, 0) / v.length)
     return Math.round((perPerson.reduce((a, b) => a + b, 0) / perPerson.length) * 10) / 10
   }, [allSubs])
+
+  /**
+   * The team average for each finished month.
+   *
+   * Everyone who was scored that month, averaged — so a month where only
+   * two people were scored is two people's average and says so in the
+   * tooltip's month label rather than pretending to be the whole team.
+   */
+  const trend = useMemo(() => {
+    const byMonth = new Map<string, number[]>()
+    for (const s of allSubs ?? []) {
+      if (!SCORED.has(s.status) || s.final_total_score === null) continue
+      const list = byMonth.get(s.period_month) ?? []
+      list.push(s.final_total_score)
+      byMonth.set(s.period_month, list)
+    }
+    return openFyMonths(fy).map(m => {
+      const v = byMonth.get(m)
+      return {
+        month: m,
+        score: v?.length
+          ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10
+          : null,
+      }
+    })
+  }, [allSubs, fy])
 
   const download = async () => {
     setBusy(true); setError(null)
@@ -154,6 +185,19 @@ export default function Team() {
         <StatTile label="Scored" value={done} sub={`of ${team.length}`} />
       </div>
 
+      <div className="card p-4">
+        <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
+          <LineChartIcon className="h-4 w-4 text-ink-400" /> Team average, month by month
+        </h3>
+        <p className="mb-3 text-xs text-ink-500">
+          Everyone who was scored that month, averaged, on the band scale.
+        </p>
+        <ScoreTrend
+          points={trend}
+          emptyMessage="No months scored yet — the line starts with your first one."
+        />
+      </div>
+
       {removing && (
         <RemovalForm
           employeeId={removing.id}
@@ -195,8 +239,12 @@ export default function Team() {
                 <StatusBadge status={sub?.status ?? null} />
               </div>
 
-              <div className="w-16 text-right">
+              <div className="w-24 shrink-0 text-right sm:w-32">
                 <ScorePill value={sub?.final_total_score ?? sub?.self_total_score} size="sm" />
+                <SectionSplit
+                  sub={sub}
+                  hasEsms={Number(assign?.esms_weight ?? 0) > 0}
+                />
               </div>
 
               {needsScoring && sub ? (
@@ -231,6 +279,56 @@ export default function Team() {
         The page tint reflects your team's average score.
       </p>
     </div>
+  )
+}
+
+/**
+ * The bands behind a total.
+ *
+ * Job role is 80 of the 100 and core values are the rest — the same
+ * fifteen or twenty points that most people earn most months. So a total
+ * of 85 can be a strong job role, or it can be a weak one carried by the
+ * part that barely moves, and the total on its own cannot tell the two
+ * apart. This is the number a manager actually needs before a review
+ * conversation, so it travels with the total rather than being a click
+ * away.
+ *
+ * Whether ESMS is shown comes from the KPI, not from the score: somebody
+ * who carries ESMS and has not been scored on it yet gets a dash, rather
+ * than the row silently changing shape the month their first one lands.
+ */
+function SectionSplit({
+  sub, hasEsms,
+}: {
+  sub: KpiSubmission | undefined
+  hasEsms: boolean
+}) {
+  if (!sub) return null
+
+  const final = SCORED.has(sub.status)
+  const parts: Array<[string, number | null]> = [
+    ['Job', final ? sub.final_job_role_score : sub.self_job_role_score],
+    ...(hasEsms
+      ? [['ESMS', final ? sub.final_esms_score : sub.self_esms_score] as [string, number | null]]
+      : []),
+    ['Core', final ? sub.final_core_score : sub.self_core_score],
+  ]
+  if (parts.every(([, v]) => v === null)) return null
+
+  return (
+    <p
+      className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5 text-[10px] leading-tight"
+      title={final ? 'Final scores by band' : 'Self assessment by band'}
+    >
+      {parts.map(([label, v]) => (
+        <span key={label} className="whitespace-nowrap">
+          <span className="text-ink-400">{label}</span>{' '}
+          <span className="font-semibold tabular-nums text-ink-600">
+            {v === null ? '—' : v.toFixed(1)}
+          </span>
+        </span>
+      ))}
+    </p>
   )
 }
 
