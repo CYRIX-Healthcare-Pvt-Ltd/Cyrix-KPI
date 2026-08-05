@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, Info, KeyRound, Medal, Timer, Trophy, UserRound,
+  ArrowLeft, BookOpen, Info, KeyRound, Medal, Timer, Trophy, UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -365,12 +365,22 @@ export default function Profile() {
         </div>
       </div>
 
-      <Link
-        to="/change-password"
-        className="btn-secondary btn-press inline-flex"
-      >
-        <KeyRound className="h-4 w-4" /> Change my password
-      </Link>
+      {/* Beside the password, because this is where somebody comes when
+          the question is about themselves rather than about a number. */}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          to="/help"
+          className="btn-secondary btn-press inline-flex"
+        >
+          <BookOpen className="h-4 w-4" /> What I can do
+        </Link>
+        <Link
+          to="/change-password"
+          className="btn-secondary btn-press inline-flex"
+        >
+          <KeyRound className="h-4 w-4" /> Change my password
+        </Link>
+      </div>
     </div>
   )
 }

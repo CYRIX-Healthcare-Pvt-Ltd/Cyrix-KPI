@@ -27,6 +27,7 @@ const SwAdmin           = lazy(() => import('@/pages/admin/SwAdmin'))
 const KpiTiming         = lazy(() => import('@/pages/admin/KpiTiming'))
 const DeletionRequests  = lazy(() => import('@/pages/DeletionRequests'))
 const ScoreQueries      = lazy(() => import('@/pages/ScoreQueries'))
+const Help              = lazy(() => import('@/pages/Help'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
@@ -125,6 +126,9 @@ export default function App() {
           {/* Everyone has a record, including HR and SW Admin — the page
               shows a rank only to those the system actually appraises. */}
           <Route path="me" element={<Profile />} />
+          {/* Everyone, whatever their role — the page is what THIS login
+              can do, so it has to exist for every login there is. */}
+          <Route path="help" element={<Help />} />
 
           <Route path="team" element={<RequireManager><Team /></RequireManager>} />
           <Route path="team/analysis" element={<RequireManager><TeamAnalysis /></RequireManager>} />
