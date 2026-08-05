@@ -375,6 +375,11 @@ export default function Help() {
             how: 'If your KPI has alternatives on that row, pick the right one at the top of it. Changing it clears what you typed on that row, because it was counting something else.',
           },
           {
+            what: 'It says others doing my job score higher',
+            how: 'That is an average of everybody with the same KPI as you, and only ever shows when at least three of you have been scored. You are never shown one person, and nobody is shown yours.',
+            to: '/', cta: 'Open dashboard',
+          },
+          {
             what: 'What do the colours mean?',
             how: 'Red is Poor, orange Satisfactory, amber Good, lime Very Good, green Excellent. Each score is coloured against what it was out of, not out of 100.',
           },

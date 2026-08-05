@@ -4,7 +4,8 @@ import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
-  usePendingApprovals, useWeakAreas, useKraAttainment, useSubmissionHistory,
+  usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
+  useSubmissionHistory,
   currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonths, isMonthOpen } from '@/lib/fy'
@@ -40,6 +41,10 @@ export default function Dashboard() {
   const { data: history } = useSubmissionHistory(employee?.id, fy)
   const { data: weak } = useWeakAreas(myIds, fy)
   const { data: attainment } = useKraAttainment(myIds, fy)
+  // Server-side: RLS will not let this client read a colleague's scores,
+  // so the comparison has to be computed where they are readable and
+  // come back as an average.
+  const { data: benchmark } = useKraBenchmark(employee?.id, fy)
   const { data: teamData } = useTeamMonth(
     isManager || isHrAdmin ? employee?.id : undefined, month, fy,
   )
@@ -222,10 +227,12 @@ export default function Dashboard() {
               <Target className="h-4 w-4 text-cyrixRed-600" /> What to improve
             </h3>
             <p className="mb-3 text-xs text-ink-500">
-              Areas below Good against their own weightage, and anything heading down.
+              Areas below Good, anything heading down, and where others doing your job are ahead.
             </p>
             <WeakAreas
               areas={weak ?? []}
+              attainment={attainment ?? []}
+              benchmark={benchmark ?? []}
               emptyMessage="Every area is at Good or better — keep it up."
             />
           </div>

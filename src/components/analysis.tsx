@@ -1,13 +1,15 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy } from 'lucide-react'
+import {
+  TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy, Users,
+} from 'lucide-react'
 import {
   bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
   type Band,
 } from '@/lib/bands'
 import { SECTION_SHORT } from '@/lib/sections'
-import type { KraAttainmentRow, WeakAreaRow } from '@/types/db'
+import type { KraAttainmentRow, WeakAreaRow, KraBenchmarkRow } from '@/types/db'
 
 /** Built once — it is the same five stops on every hero on every screen. */
 const SCALE = bandScaleGradient()
@@ -278,6 +280,7 @@ export function TrendChip({ scores }: { scores: Array<number | null> }) {
 export function WeakAreas({
   areas,
   attainment,
+  benchmark,
   emptyMessage = 'Nothing below Good — all areas are on track.',
 }: {
   areas: WeakAreaRow[]
@@ -288,6 +291,11 @@ export function WeakAreas({
    * it is the last thing they need to be told.
    */
   attainment?: KraAttainmentRow[]
+  /**
+   * Where you stand against people with the same KPI. An average and a
+   * headcount from the server — see my_kra_benchmark(). Never a name.
+   */
+  benchmark?: KraBenchmarkRow[]
   emptyMessage?: string
 }) {
   const weak = areas
@@ -298,6 +306,17 @@ export function WeakAreas({
   // reported twice, and shown even when that list is empty.
   const slipping = fallingAreas(attainment ?? [])
     .filter(f => !weak.some(w => w.kra === f.kra))
+
+  // Behind the people doing the same job. Five points is roughly a band
+  // boundary at this scale; below that it is noise. Not repeated where
+  // the area is already listed as weak or falling — one area, one line.
+  const behind = (benchmark ?? [])
+    .filter(b =>
+      b.my_avg !== null && b.peer_avg !== null &&
+      b.my_avg < b.peer_avg - 5 &&
+      !weak.some(w => w.kra === b.kra) &&
+      !slipping.some(f => f.kra === b.kra))
+    .sort((a, b) => (a.my_avg! - a.peer_avg!) - (b.my_avg! - b.peer_avg!))
 
   if (weak.length === 0) {
     return (
@@ -314,6 +333,7 @@ export function WeakAreas({
           </div>
         )}
         {slipping.map(f => <SlippingRow key={f.kra} {...f} />)}
+        {behind.map(b => <BehindRow key={b.kra} {...b} />)}
       </div>
     )
   }
@@ -321,6 +341,7 @@ export function WeakAreas({
   return (
     <ul className="space-y-2">
       {slipping.map(f => <li key={f.kra}><SlippingRow {...f} /></li>)}
+      {behind.map(b => <li key={b.kra}><BehindRow {...b} /></li>)}
       {weak.map(a => {
         const band = bandFor(a.avg_attainment_pct) as Band
         return (
@@ -381,6 +402,37 @@ export function fallingAreas(rows: KraAttainmentRow[]) {
     })
   }
   return out.sort((a, b) => a.delta - b.delta)
+}
+
+/**
+ * You against everybody with the same KPI, on one area.
+ *
+ * Deliberately an average and a headcount and nothing else. The point is
+ * to say "there is room here", not to let somebody work out what a named
+ * colleague scored — which is why the server refuses to answer at all
+ * for a group of fewer than three.
+ */
+function BehindRow({
+  kra, my_avg, peer_avg, peers,
+}: KraBenchmarkRow) {
+  const gap = (peer_avg ?? 0) - (my_avg ?? 0)
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-ink-200 p-3">
+      <Users className="h-4 w-4 shrink-0 text-ink-400" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-ink-900">{kra}</p>
+        <p className="text-xs text-ink-500">
+          The {peers} others doing this job average {peer_avg!.toFixed(0)}%
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-sm font-semibold tabular-nums text-ink-800">
+          {my_avg!.toFixed(0)}%
+        </p>
+        <p className="text-[11px] text-ink-400">{gap.toFixed(0)} behind</p>
+      </div>
+    </div>
+  )
 }
 
 function SlippingRow({

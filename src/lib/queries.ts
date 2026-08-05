@@ -9,6 +9,7 @@ import type {
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
   ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
   ScoreQuery, ScoreQueryPoint, ScoreQueryState, ScoreQueryKind,
+  KraBenchmarkRow,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -550,6 +551,28 @@ export function useKraAttainment(employeeIds: string[] | undefined, fy: string) 
           .in('employee_id', employeeIds!).eq('financial_year', fy)
           .order('period_month'),
       ),
+  })
+}
+
+/**
+ * Where you stand on each KRA against people doing the same job.
+ *
+ * Server-side because it has to be: a team member can read their own
+ * scores and nobody else's, so no query this client could make would
+ * produce a peer average. The RPC returns an average and a count.
+ */
+export function useKraBenchmark(employeeId: string | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeId,
+    queryKey: ['kra_benchmark', employeeId, fy],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('my_kra_benchmark', {
+        p_employee_id: employeeId,
+        p_financial_year: fy,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as KraBenchmarkRow[]
+    },
   })
 }
 

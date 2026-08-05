@@ -517,6 +517,23 @@ export interface KraAttainmentRow {
   band: string | null
 }
 
+/**
+ * How you compare on one KRA, against people with the same KPI.
+ *
+ * An average and a headcount, never a name and never one person's
+ * score — see my_kra_benchmark(). Nothing is returned at all unless at
+ * least two other people are in the group.
+ */
+export interface KraBenchmarkRow {
+  kra: string
+  section: Section
+  my_avg: number | null
+  peer_avg: number | null
+  /** People, not readings. */
+  peers: number
+  my_months: number
+}
+
 export interface WeakAreaRow {
   employee_id: string
   financial_year: string
