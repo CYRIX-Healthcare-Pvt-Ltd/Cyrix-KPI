@@ -10,7 +10,9 @@ import {
 } from '@/lib/queries'
 import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
+import {
+  Alert, PageLoader, StatTile, StatusBadge, BandCell,
+} from '@/components/ui'
 import { ScoreHeader } from '@/components/analysis'
 import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 
@@ -181,17 +183,32 @@ export default function MyHistory() {
                     {/* A month that is not open cannot legitimately hold a
                         score, so nothing is shown even if stale draft rows
                         exist from before the gate was added. */}
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
-                      {open ? s?.self_total_score?.toFixed(2) ?? '—' : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-600">
-                      {open ? s?.mgr_total_score?.toFixed(2) ?? '—' : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {open
-                        ? <ScorePill value={s?.final_total_score} size="sm" />
-                        : <span className="text-ink-300">—</span>}
-                    </td>
+                    {/* The same split the manager sees on their side.
+                        Somebody reading their own record should not have
+                        to take "88" on trust while the person scoring
+                        them can see what it is made of. */}
+                    <BandCell
+                      total={open ? s?.self_total_score : null}
+                      job={s?.self_job_role_score}
+                      esms={s?.self_esms_score}
+                      core={s?.self_core_score}
+                      hasEsms={hasEsms}
+                    />
+                    <BandCell
+                      total={open ? s?.mgr_total_score : null}
+                      job={s?.mgr_job_role_score}
+                      esms={s?.mgr_esms_score}
+                      core={s?.mgr_core_score}
+                      hasEsms={hasEsms}
+                    />
+                    <BandCell
+                      total={open ? s?.final_total_score : null}
+                      job={s?.final_job_role_score}
+                      esms={s?.final_esms_score}
+                      core={s?.final_core_score}
+                      hasEsms={hasEsms}
+                      pill
+                    />
                     <td className="px-4 py-3 text-right">
                       {open ? (
                         <Link

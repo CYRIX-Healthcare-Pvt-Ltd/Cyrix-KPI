@@ -258,6 +258,57 @@ export function ScorePill({
   )
 }
 
+/**
+ * One score, with the bands it is made of underneath.
+ *
+ * Job role is 80 of the 100 and the rest barely moves between people, so
+ * two months at 88 can be completely different months — one built on a
+ * weak job role and a full core-values score, one the other way round.
+ * The split is the part somebody can act on; the total is the part that
+ * goes on a report. Both belong in the same cell.
+ *
+ * Whether ESMS is shown comes from the KPI rather than from the score,
+ * so a person who carries it and has not been scored on it yet gets a
+ * dash instead of the table quietly changing shape later.
+ */
+export function BandCell({
+  total, job, esms, core, hasEsms, pill,
+}: {
+  total: number | null | undefined
+  job: number | null | undefined
+  esms: number | null | undefined
+  core: number | null | undefined
+  hasEsms: boolean
+  pill?: boolean
+}) {
+  const parts: Array<[string, number | null | undefined]> = [
+    ['Job', job],
+    ...(hasEsms ? [['ESMS', esms] as [string, number | null | undefined]] : []),
+    ['Core', core],
+  ]
+  return (
+    <td className="px-4 py-3 text-right">
+      {pill ? (
+        <ScorePill value={total} size="sm" />
+      ) : (
+        <span className="tabular-nums text-ink-600">{total?.toFixed(2) ?? '—'}</span>
+      )}
+      {total !== null && total !== undefined && (
+        <p className="mt-1 flex flex-wrap justify-end gap-x-2 text-[10px] leading-tight">
+          {parts.map(([label, v]) => (
+            <span key={label} className="whitespace-nowrap">
+              <span className="text-ink-400">{label}</span>{' '}
+              <span className="font-semibold tabular-nums text-ink-600">
+                {v === null || v === undefined ? '—' : v.toFixed(1)}
+              </span>
+            </span>
+          ))}
+        </p>
+      )}
+    </td>
+  )
+}
+
 export function EmptyState({
   icon: Icon,
   title,

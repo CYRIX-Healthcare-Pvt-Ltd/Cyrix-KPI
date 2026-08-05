@@ -8,56 +8,12 @@ import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy } from '@/lib/queries'
 import { fyMonths, monthLabel } from '@/lib/fy'
-import { PageLoader, ScorePill, StatTile, StatusBadge, Alert } from '@/components/ui'
+import {
+  PageLoader, ScorePill, StatTile, StatusBadge, Alert, BandCell,
+} from '@/components/ui'
 import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 import { sectionsOf } from '@/lib/sections'
 import type { Employee } from '@/types/db'
-
-/**
- * One score with its bands underneath.
- *
- * Job role is 80 of the 100 and the rest barely moves between people, so
- * two months at 88 can be completely different months. The split is the
- * part a manager can act on; the total is the part that goes on a
- * report.
- */
-function BandCell({
-  total, job, esms, core, hasEsms, pill,
-}: {
-  total: number | null | undefined
-  job: number | null | undefined
-  esms: number | null | undefined
-  core: number | null | undefined
-  hasEsms: boolean
-  pill?: boolean
-}) {
-  const parts: Array<[string, number | null | undefined]> = [
-    ['Job', job],
-    ...(hasEsms ? [['ESMS', esms] as [string, number | null | undefined]] : []),
-    ['Core', core],
-  ]
-  return (
-    <td className="px-4 py-3 text-right">
-      {pill ? (
-        <ScorePill value={total} size="sm" />
-      ) : (
-        <span className="tabular-nums text-ink-600">{total?.toFixed(2) ?? '—'}</span>
-      )}
-      {total !== null && total !== undefined && (
-        <p className="mt-1 flex flex-wrap justify-end gap-x-2 text-[10px] leading-tight">
-          {parts.map(([label, v]) => (
-            <span key={label} className="whitespace-nowrap">
-              <span className="text-ink-400">{label}</span>{' '}
-              <span className="font-semibold tabular-nums text-ink-600">
-                {v === null || v === undefined ? '—' : v.toFixed(1)}
-              </span>
-            </span>
-          ))}
-        </p>
-      )}
-    </td>
-  )
-}
 
 export default function TeamMember() {
   const { employeeId = '' } = useParams()
