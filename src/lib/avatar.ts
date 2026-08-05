@@ -6,21 +6,18 @@
  * 5 KB of base64, which is small enough to live on the employee row and
  * arrive with the team list rather than costing a signed URL per face.
  *
- * On what this checks, and what it deliberately does not:
+ * On judging the picture: this asks the browser whether it can see a
+ * face, and nothing else. No colour rules, no texture rules, no
+ * guessing at sunglasses — the reporting manager can take a photo down
+ * with a reason, so the only job here is catching somebody who has
+ * plainly picked the wrong file.
  *
- * It rejects things that are plainly not photographs — a solid colour, a
- * logo, a screenshot of text, something too small to be a face. Those
- * are cheap to spot and nobody argues with the result.
- *
- * It does NOT try to decide whether the picture shows a person, or
- * whether they are wearing sunglasses. Face detection in a browser means
- * either a multi-megabyte model on a mobile connection, or the native
- * FaceDetector API, which most browsers here do not have. And every
- * cheap trick for "are the eyes covered" comes down to how dark a region
- * is, which produces different answers for different skin and hair
- * colours. A check that fails more often for some people than others has
- * no place in an appraisal system, so that judgement belongs to the
- * reporting manager, who is looking at these faces anyway.
+ * And it never refuses on that basis. Face detection is not available in
+ * every browser, and no detector finds every face — turbans, beards,
+ * head coverings, a three-quarter angle, poor light. A hard block would
+ * lock real people out of their own profile to save a manager one
+ * click, so a picture with no face found is a warning somebody can
+ * override, and the manager remains the actual gate.
  */
 
 /** Drawn small everywhere; 128 covers a 2× display at 64px. */
@@ -28,92 +25,51 @@ export const AVATAR_SIZE = 128
 export const AVATAR_QUALITY = 0.7
 /** Matches the constraint on employees.avatar. */
 export const AVATAR_MAX_CHARS = 65536
-
-export interface ImageStats {
-  width: number
-  height: number
-  /** Distinct quantised colours found. A logo has very few. */
-  colours: number
-  /** Mean absolute difference between neighbouring pixels, 0–255. */
-  detail: number
-}
-
-export interface AvatarCheck {
-  ok: boolean
-  problem?: string
-}
+/** Smaller than this and there is nothing to recognise. */
+export const AVATAR_MIN_SOURCE = 64
 
 /**
- * Is this plausibly a photograph?
+ * What the browser made of it.
  *
- * Two signals, both about texture rather than content. A photograph of
- * anything has thousands of slightly different colours and a lot of
- * small local variation. A logo, a solid colour, a screenshot of a
- * document or a blank frame has neither.
- *
- * The thresholds are deliberately loose. This is here to catch somebody
- * uploading their company logo, not to grade photography — and a check
- * that rejects a real photo is worse than one that lets a bad photo
- * through, because the manager can remove a bad photo and nobody can
- * argue with a refusal.
+ * 'unknown' is not a failure — it is most browsers. Firefox and Safari
+ * have no FaceDetector at all, and desktop Chrome keeps it behind a
+ * flag; it is Chrome on Android, which is most of this team's phones,
+ * where the answer actually arrives.
  */
-export function checkImageStats(s: ImageStats): AvatarCheck {
-  if (s.width < 64 || s.height < 64) {
-    return { ok: false, problem: 'That picture is too small — use one at least 64 pixels across.' }
-  }
-  // Eight, not twenty-four. Quantising to 5 bits a channel leaves a
-  // greyscale photograph a maximum of 32 distinct values and often far
-  // fewer, so a higher bar here refuses black-and-white portraits — which
-  // the test below caught, and which is exactly the kind of refusal
-  // nobody could have argued with because it would have looked like a
-  // rule rather than a mistake.
-  if (s.colours < 8) {
-    return { ok: false, problem: 'That looks like a graphic or a solid colour rather than a photo.' }
-  }
-  // Texture carries the weight instead. A flat two-tone logo has only
-  // its one edge; any photograph has variation everywhere.
-  if (s.detail < 4) {
-    return { ok: false, problem: 'That picture is almost blank. Use a clear photo of your face.' }
-  }
-  return { ok: true }
+export type FaceVerdict = 'face' | 'no-face' | 'unknown'
+
+interface FaceDetectorLike {
+  detect(source: CanvasImageSource): Promise<unknown[]>
 }
+type FaceDetectorCtor = new (opts?: {
+  fastMode?: boolean
+  maxDetectedFaces?: number
+}) => FaceDetectorLike
+
+/** Only 'no-face' is worth saying anything about. */
+export const shouldWarnAboutFace = (v: FaceVerdict) => v === 'no-face'
+
+export const faceWarning =
+  'We could not see a face in that picture. Use a clear photo of yourself — ' +
+  'or carry on if you are sure, and your manager will see it either way.'
 
 /**
- * Colour count and local detail, from raw RGBA pixels.
+ * Asks the browser whether there is a face here.
  *
- * Colours are quantised to 5 bits a channel before counting, so camera
- * noise across a plain wall does not read as thousands of colours. The
- * detail figure is the mean absolute luma difference to the pixel on the
- * right, which is a cheap stand-in for "how much is going on here".
+ * Every failure path returns 'unknown' on purpose. The constructor can
+ * exist and then throw on use, the model can be unavailable, the call
+ * can reject — and every one of those means "we do not know", which is
+ * not the same as "there is no face" and must never be treated as it.
  */
-export function statsFromPixels(
-  data: Uint8ClampedArray, width: number, height: number,
-): ImageStats {
-  const seen = new Set<number>()
-  let diff = 0
-  let n = 0
-
-  const luma = (i: number) =>
-    0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4
-      seen.add(
-        ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3),
-      )
-      if (x + 1 < width) {
-        diff += Math.abs(luma(i) - luma(i + 4))
-        n++
-      }
-    }
-  }
-
-  return {
-    width,
-    height,
-    colours: seen.size,
-    detail: n === 0 ? 0 : diff / n,
+export async function detectFace(source: CanvasImageSource): Promise<FaceVerdict> {
+  const Ctor = (globalThis as { FaceDetector?: FaceDetectorCtor }).FaceDetector
+  if (typeof Ctor !== 'function') return 'unknown'
+  try {
+    const detector = new Ctor({ fastMode: true, maxDetectedFaces: 3 })
+    const faces = await detector.detect(source)
+    return faces.length > 0 ? 'face' : 'no-face'
+  } catch {
+    return 'unknown'
   }
 }
 
@@ -133,7 +89,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 
 export interface AvatarResult {
   dataUrl: string
-  stats: ImageStats
+  face: FaceVerdict
   /** Bytes of the original, for the "we shrank it from X" line. */
   originalBytes: number
 }
@@ -145,6 +101,10 @@ export interface AvatarResult {
  * square face rather than a squashed one. Quality steps down if the
  * first pass comes out over the column's cap — which a busy 128px
  * photograph occasionally does at 0.7.
+ *
+ * The face check runs against the full-size image rather than the 128px
+ * square: a detector has more to work with, and the crop may well have
+ * taken the top of somebody's head off.
  */
 export async function fileToAvatar(file: File): Promise<AvatarResult> {
   if (!file.type.startsWith('image/')) {
@@ -154,6 +114,11 @@ export async function fileToAvatar(file: File): Promise<AvatarResult> {
   const img = await loadImage(file)
   const side = Math.min(img.naturalWidth, img.naturalHeight)
   if (side === 0) throw new Error('That file could not be opened as an image.')
+  if (img.naturalWidth < AVATAR_MIN_SOURCE || img.naturalHeight < AVATAR_MIN_SOURCE) {
+    throw new Error(
+      `That picture is too small — use one at least ${AVATAR_MIN_SOURCE} pixels across.`,
+    )
+  }
 
   const canvas = document.createElement('canvas')
   canvas.width = AVATAR_SIZE
@@ -168,17 +133,7 @@ export async function fileToAvatar(file: File): Promise<AvatarResult> {
     0, 0, AVATAR_SIZE, AVATAR_SIZE,
   )
 
-  const pixels = ctx.getImageData(0, 0, AVATAR_SIZE, AVATAR_SIZE)
-  const stats = {
-    ...statsFromPixels(pixels.data, AVATAR_SIZE, AVATAR_SIZE),
-    // Report the original dimensions: "too small" is about what they
-    // picked, not about the square this just drew.
-    width: img.naturalWidth,
-    height: img.naturalHeight,
-  }
-
-  const check = checkImageStats(stats)
-  if (!check.ok) throw new Error(check.problem)
+  const face = await detectFace(img)
 
   let quality = AVATAR_QUALITY
   let dataUrl = canvas.toDataURL('image/jpeg', quality)
@@ -190,7 +145,7 @@ export async function fileToAvatar(file: File): Promise<AvatarResult> {
     throw new Error('That picture will not compress small enough. Try a simpler one.')
   }
 
-  return { dataUrl, stats, originalBytes: file.size }
+  return { dataUrl, face, originalBytes: file.size }
 }
 
 /** "1.8 MB" / "6 KB" — for telling somebody what just happened to their photo. */

@@ -13,7 +13,9 @@ import { bandFor } from '@/lib/bands'
 import { monthLabel } from '@/lib/fy'
 import { PageLoader, StatTile, Alert, Spinner } from '@/components/ui'
 import Avatar from '@/components/Avatar'
-import { fileToAvatar, humanBytes, dataUrlBytes } from '@/lib/avatar'
+import {
+  fileToAvatar, humanBytes, dataUrlBytes, shouldWarnAboutFace,
+} from '@/lib/avatar'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import type { Employee } from '@/types/db'
@@ -167,10 +169,11 @@ function RankTile({
  * is why there is no upload progress bar here — there is nothing to wait
  * for.
  *
- * The checks refuse things that are plainly not photographs. They do not
- * try to judge whether it is a suitable picture of you; that is your
- * reporting manager's call, and they can take it down with a reason,
- * which you will see here.
+ * The only check is whether the browser can see a face, and it never
+ * refuses — no detector finds every face, and most browsers cannot even
+ * look. Whether it is a suitable picture of you is your reporting
+ * manager's call, and they can take it down with a reason, which you
+ * will see here.
  */
 function AvatarCard({ employee }: { employee: Employee }) {
   // AuthContext holds the employee row in plain state rather than in the
@@ -182,17 +185,31 @@ function AvatarCard({ employee }: { employee: Employee }) {
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
+  /** Held back when no face was found, so it can be confirmed or dropped. */
+  const [pending, setPending] = useState<
+    { dataUrl: string; originalBytes: number } | null
+  >(null)
+
+  const save = async (dataUrl: string, originalBytes: number) => {
+    await setAvatar.mutateAsync(dataUrl)
+    await refresh()
+    setPending(null)
+    setNote(
+      `Saved — ${humanBytes(originalBytes)} compressed to ` +
+      `${humanBytes(dataUrlBytes(dataUrl))}.`,
+    )
+  }
+
   const pick = async (file: File | undefined) => {
     if (!file) return
-    setError(null); setNote(null); setBusy(true)
+    setError(null); setNote(null); setPending(null); setBusy(true)
     try {
-      const { dataUrl, originalBytes } = await fileToAvatar(file)
-      await setAvatar.mutateAsync(dataUrl)
-      await refresh()
-      setNote(
-        `Saved — ${humanBytes(originalBytes)} compressed to ` +
-        `${humanBytes(dataUrlBytes(dataUrl))}.`,
-      )
+      const { dataUrl, face, originalBytes } = await fileToAvatar(file)
+      // A warning, never a refusal. No detector finds every face, and
+      // most browsers here cannot even look — so the picture is held for
+      // one confirmation rather than rejected.
+      if (shouldWarnAboutFace(face)) setPending({ dataUrl, originalBytes })
+      else await save(dataUrl, originalBytes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not use that picture.')
     } finally {
@@ -243,6 +260,37 @@ function AvatarCard({ employee }: { employee: Employee }) {
           </div>
         </div>
       </div>
+
+      {pending && (
+        <div className="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <img
+            src={pending.dataUrl}
+            alt="The picture you picked"
+            className="h-16 w-16 shrink-0 rounded-full object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-amber-900">
+              We could not see a face in that picture
+            </p>
+            <p className="mt-0.5 text-sm text-amber-800">
+              Use a clear photo of yourself. If you are sure this one is
+              right, carry on — your manager sees it either way.
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <button
+                onClick={() => save(pending.dataUrl, pending.originalBytes)}
+                disabled={busy || setAvatar.isPending}
+                className="btn-secondary"
+              >
+                Use it anyway
+              </button>
+              <button onClick={() => setPending(null)} className="btn-secondary">
+                Pick another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {employee.avatar_removed_reason && (
         <div className="mt-3">
