@@ -1,13 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { ArrowLeft, Send, Save, Lock, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, Paperclip, CheckCircle2,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
-  useOpenRequestFor, useRequestAction, currentFy,
+  useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
+  useScoreQueries, currentFy, type QueryPointInput,
 } from '@/lib/queries'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
@@ -16,7 +19,7 @@ import {
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
-import type { KpiSubmissionItem } from '@/types/db'
+import type { KpiSubmissionItem, ScoreQueryState } from '@/types/db'
 
 export default function MonthlySubmission() {
   const { month = '' } = useParams()
@@ -48,6 +51,7 @@ export default function MonthlySubmission() {
   const editable = submission?.status === 'draft' || submission?.status === 'returned'
 
   const { data: openDeletion } = useOpenRequestFor('deletion', submission?.id)
+  const { data: queryState } = useScoreQueryState(submission?.id)
 
   // Seed local state once the server data lands.
   useEffect(() => {
@@ -591,6 +595,19 @@ export default function MonthlySubmission() {
         </div>
       )}
 
+      {/* Questioning the score, once the manager has given one. Sits
+          above the deletion panel deliberately: "I do not understand row
+          three" is the thing somebody actually wants, and until now the
+          only button on this screen was the one that destroys the whole
+          month. */}
+      {isScored && (
+        <ScoreQueryPanel
+          submissionId={submission.id}
+          items={items}
+          state={queryState ?? null}
+        />
+      )}
+
       {/* Once submitted a team member can no longer edit, so a month sent
           in by mistake is withdrawn rather than corrected — with their
           manager and then HR approving. Available on finalised months too:
@@ -669,6 +686,281 @@ export default function MonthlySubmission() {
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Questioning the score.
+ *
+ * "Raise a query" rather than "Object": it has to cover both the person
+ * who does not understand row three and the person who thinks it is
+ * wrong, and a button that makes you declare a dispute before you can
+ * ask a question means the question does not get asked. Which of the two
+ * it is gets said per row, where it is useful, because those need
+ * different replies.
+ *
+ * Everything about whether the panel is offered comes from the database
+ * — see score_query_state(). The rule and the sentence explaining a
+ * refusal would otherwise be written twice and drift.
+ */
+function ScoreQueryPanel({
+  submissionId, items, state,
+}: {
+  submissionId: string
+  items: KpiSubmissionItem[]
+  state: ScoreQueryState | null
+}) {
+  const raise = useRaiseScoreQuery()
+  const { data: mine } = useScoreQueries(!!state?.existing_id)
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const [picked, setPicked] = useState<Record<string, QueryPointInput>>({})
+  const [error, setError] = useState<string | null>(null)
+
+  const existing = mine?.find(r => r.query.submission_id === submissionId)
+
+  // ---- already raised ----
+  if (state?.existing_id) {
+    const answered = state.existing_status === 'answered'
+    return (
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <MessageSquare className="h-4 w-4 text-ink-400" />
+          <h3 className="text-sm font-semibold text-ink-800">Your query</h3>
+          <span className={clsx(
+            'badge ml-auto',
+            answered ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+          )}>
+            {answered ? 'Answered' : 'With your manager'}
+          </span>
+        </div>
+        <div className="space-y-3 p-4">
+          {existing?.query.employee_note && (
+            <p className="text-sm italic text-ink-700">“{existing.query.employee_note}”</p>
+          )}
+          {existing?.points.map(p => {
+            const item = items.find(i => i.id === p.item_id)
+            return (
+              <div key={p.id} className="rounded-lg border border-ink-200 p-3">
+                <p className="text-sm font-medium text-ink-900">
+                  {item?.kra ?? 'A row of this month'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  {p.kind === 'disagreement' ? 'Score disputed' : 'Clarification asked'}
+                  {p.evidence_name && ` · ${p.evidence_name}`}
+                  {p.evidence_name && !p.evidence_path && ' (removed — window closed)'}
+                </p>
+                {p.note && <p className="mt-1 text-sm text-ink-600">{p.note}</p>}
+              </div>
+            )
+          })}
+          {answered && existing?.query.manager_response && (
+            <div className="rounded-lg bg-ink-50 p-3">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-ink-500">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Your manager's reply
+              </p>
+              <p className="mt-1 text-sm text-ink-800">{existing.query.manager_response}</p>
+              <p className="mt-1.5 text-xs text-ink-500">
+                {existing.query.score_changed
+                  ? 'The score was changed as a result.'
+                  : 'The score was left as it was.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ---- cannot raise one ----
+  if (!state?.can_raise) {
+    if (!state?.reason) return null
+    return (
+      <p className="px-1 text-xs text-ink-400">
+        <MessageSquare className="mr-1.5 inline h-3.5 w-3.5" />
+        {state.reason}.
+      </p>
+    )
+  }
+
+  const chosen = Object.values(picked)
+  const daysLeft = state.days_left ?? 0
+
+  const toggle = (item: KpiSubmissionItem) => {
+    setPicked(prev => {
+      const next = { ...prev }
+      if (next[item.id]) delete next[item.id]
+      else next[item.id] = { item_id: item.id, kind: 'clarification', note: '' }
+      return next
+    })
+  }
+
+  const patch = (id: string, p: Partial<QueryPointInput>) =>
+    setPicked(prev => ({ ...prev, [id]: { ...prev[id], ...p } }))
+
+  const submit = async () => {
+    setError(null)
+    try {
+      await raise.mutateAsync({ submissionId, note, points: chosen })
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send that.')
+    }
+  }
+
+  return (
+    <div className="card p-4">
+      {!open ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink-900">
+              Something here not right?
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Ask your manager about any row they scored — for an explanation,
+              or because you think the figure is wrong.{' '}
+              <span className="whitespace-nowrap">
+                {daysLeft < 1
+                  ? 'Less than a day left'
+                  : `${Math.floor(daysLeft)} day${Math.floor(daysLeft) === 1 ? '' : 's'} left`}
+                {' '}of {state.window_days}.
+              </span>
+            </p>
+          </div>
+          <button onClick={() => setOpen(true)} className="btn-secondary">
+            <MessageSquare className="h-4 w-4" /> Raise a query
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="font-medium text-ink-900">Raise a query on this month</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Tick the rows you want looked at — at least one. You get one
+              query per month, so put everything in this one.
+            </p>
+          </div>
+
+          {error && <Alert kind="error">{error}</Alert>}
+
+          <div className="divide-y divide-ink-100 rounded-lg border border-ink-200">
+            {items.map(item => {
+              const on = !!picked[item.id]
+              return (
+                <div key={item.id} className="p-3">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0 accent-cyrixRed-600"
+                      checked={on}
+                      onChange={() => toggle(item)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-ink-900">
+                        {item.kra}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-ink-500">
+                        Worth {item.weightage} · your manager scored{' '}
+                        {item.manager_score?.toFixed(2) ?? '—'}
+                        {item.self_score !== null && ` · you claimed ${item.self_score.toFixed(2)}`}
+                      </span>
+                    </span>
+                  </label>
+
+                  {on && (
+                    <div className="mt-3 space-y-2 pl-7">
+                      <div className="flex flex-wrap gap-2">
+                        {(['clarification', 'disagreement'] as const).map(k => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => patch(item.id, { kind: k })}
+                            className={clsx(
+                              'btn-press rounded-lg px-3 py-1.5 text-xs font-medium ring-1',
+                              picked[item.id].kind === k
+                                ? 'bg-ink-900 text-white ring-ink-900'
+                                : 'bg-white text-ink-600 ring-ink-200 hover:bg-ink-50',
+                            )}
+                          >
+                            {k === 'clarification'
+                              ? 'Explain this to me'
+                              : 'I think this is wrong'}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        rows={2}
+                        className="input"
+                        value={picked[item.id].note ?? ''}
+                        onChange={e => patch(item.id, { note: e.target.value })}
+                        placeholder={
+                          picked[item.id].kind === 'disagreement'
+                            ? 'e.g. The service log shows 53 repairs, not 48'
+                            : 'e.g. What was counted here?'
+                        }
+                      />
+                      <label className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
+                        <span className="btn-secondary !px-2.5 !py-1.5 !text-xs">
+                          <Paperclip className="h-3.5 w-3.5" /> Attach proof
+                        </span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls"
+                          onChange={e =>
+                            patch(item.id, { file: e.target.files?.[0] ?? null })}
+                        />
+                        {picked[item.id].file
+                          ? <span className="text-ink-700">{picked[item.id].file!.name}</span>
+                          : <span>Optional · PDF, image or spreadsheet, up to 5 MB</span>}
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div>
+            <label className="label text-xs" htmlFor="query-note">
+              Anything else (optional)
+            </label>
+            <textarea
+              id="query-note"
+              rows={2}
+              className="input"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Context for your manager"
+            />
+          </div>
+
+          <p className="text-xs text-ink-400">
+            Your manager is notified, and the month cannot be finalised until
+            they reply. Anything you attach is deleted once the {state.window_days}{' '}
+            days are up and the query has been answered.
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={submit}
+              disabled={chosen.length === 0 || raise.isPending}
+              className="btn-primary"
+            >
+              {raise.isPending && <Spinner className="h-4 w-4" />}
+              Send to my manager
+              {chosen.length > 0 && ` · ${chosen.length} row${chosen.length === 1 ? '' : 's'}`}
+            </button>
+            <button
+              onClick={() => { setOpen(false); setPicked({}); setError(null) }}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>

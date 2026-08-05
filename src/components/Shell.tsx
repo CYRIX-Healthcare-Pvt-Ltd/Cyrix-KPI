@@ -4,12 +4,12 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, KeyRound, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, Timer,
+  ShieldAlert, Trash2, Timer, MessageSquare,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   usePendingCounts, useRemovalRequests, useAnnualSummary,
-  usePendingRecordRequests, currentFy,
+  usePendingRecordRequests, useOpenScoreQueries, currentFy,
 } from '@/lib/queries'
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
@@ -40,6 +40,7 @@ export default function Shell() {
   )
   const { data: removals } = useRemovalRequests('pending')
   const { data: recordRequests } = usePendingRecordRequests(isManager || isHrAdmin)
+  const { data: openQueries } = useOpenScoreQueries(isManager && !isHrAdmin)
 
   // Set here rather than on the dashboard so the tint survives navigation —
   // every screen carries the signed-in person's band, not just the one that
@@ -63,6 +64,14 @@ export default function Shell() {
     queue: true,
   }
 
+  // A queue like the others: it appears when somebody has asked
+  // something, and takes its slot back when nobody has.
+  const queries: NavItem = {
+    to: '/queries', label: 'Queries', icon: MessageSquare,
+    badge: openQueries ?? 0,
+    queue: true,
+  }
+
   const allItems: NavItem[] = isSwAdmin && !isHrAdmin
     ? [
         { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
@@ -80,6 +89,11 @@ export default function Shell() {
           to: '/admin/requests', label: 'Leavers', icon: UserMinus,
           badge: removals?.length ?? 0,
         },
+        // HR watches every query, and never answers one. Always present
+        // rather than badge-gated: it is an oversight surface, and an
+        // oversight surface that only appears when something is wrong is
+        // one nobody knows exists.
+        { to: '/admin/queries', label: 'Queries', icon: MessageSquare },
         records,
         ...(isSwAdmin
           ? [
@@ -105,6 +119,7 @@ export default function Shell() {
                 to: '/approvals', label: 'Approvals', icon: CheckSquare,
                 badge: counts?.approvals ?? 0, queue: true,
               },
+              queries,
               records,
             ]
           : []),

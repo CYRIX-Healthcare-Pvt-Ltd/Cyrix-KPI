@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Bell, CalendarCheck, CheckCircle2, CheckSquare, ClipboardList,
-  Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
+  MessageSquare, Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -59,6 +59,14 @@ const CATALOGUE: Record<NotificationKind, Entry> = {
     body: 'Your team have sent theirs in. The manager score is yours to enter.',
     href: '/team',
   },
+  // Above the record requests: this one is somebody waiting on an answer
+  // about their own appraisal, and the month cannot close until it comes.
+  score_query: {
+    icon: MessageSquare, priority: 3, action: true,
+    title: n => `${plural(n, 'query')} about your scoring`,
+    body: 'A team member has asked about rows you scored. The month stays open until you reply.',
+    href: '/queries',
+  },
   records_manager: {
     icon: Trash2, priority: 3, action: true,
     title: n => `${plural(n, 'record request')} for you`,
@@ -101,6 +109,12 @@ const CATALOGUE: Record<NotificationKind, Entry> = {
     icon: CalendarCheck, priority: 9, action: false,
     title: n => `${plural(n, 'month')} scored`,
     body: 'Your manager has finished. The result is on your record.',
+    href: '/history',
+  },
+  score_query_answered: {
+    icon: MessageSquare, priority: 10, action: false,
+    title: n => `${plural(n, 'query')} answered`,
+    body: 'Your manager has replied to what you asked about.',
     href: '/history',
   },
 }

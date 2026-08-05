@@ -8,6 +8,7 @@ import type {
   OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
   ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
+  ScoreQuery, ScoreQueryPoint, ScoreQueryState, ScoreQueryKind,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -728,6 +729,230 @@ export function useManagerTat(enabled: boolean, fy: string) {
         supabase.from('v_manager_tat').select('*').eq('financial_year', fy),
       ),
   })
+}
+
+// ---------------------------------------------------------------------
+// Score queries — a team member questioning how a month was scored
+// ---------------------------------------------------------------------
+
+export const EVIDENCE_BUCKET = 'kpi-evidence'
+
+/** Whether the button should be offered, straight from the rule. */
+export function useScoreQueryState(submissionId: string | undefined) {
+  return useQuery({
+    enabled: !!submissionId,
+    queryKey: ['score_query_state', submissionId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('score_query_state', {
+        p_submission_id: submissionId,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return ((data ?? [])[0] ?? null) as ScoreQueryState | null
+    },
+  })
+}
+
+export interface QueryPointInput {
+  item_id: string
+  kind: ScoreQueryKind
+  note?: string | null
+  /** A file the team member picked, uploaded before the query is written. */
+  file?: File | null
+}
+
+/**
+ * Raises the query, evidence first.
+ *
+ * The files go up before the row exists, because a query that references
+ * an upload which then failed is worse than an upload with no query —
+ * the second is a stray object the purge will never find, and the first
+ * is a broken link in an argument about somebody's appraisal. Anything
+ * already uploaded is removed if a later one fails.
+ */
+export function useRaiseScoreQuery() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      submissionId: string
+      note?: string | null
+      points: QueryPointInput[]
+    }) => {
+      const uploaded: string[] = []
+      try {
+        const payload = []
+        for (const p of args.points) {
+          let path: string | null = null
+          if (p.file) {
+            // Scoped by submission: the storage policy reads the first
+            // folder segment to decide whose month this is.
+            const safe = p.file.name.replace(/[^\w.\- ]+/g, '_').slice(-80)
+            path = `${args.submissionId}/${p.item_id}/${Date.now()}-${safe}`
+            const { error } = await supabase.storage
+              .from(EVIDENCE_BUCKET).upload(path, p.file, { upsert: false })
+            if (error) throw new Error(friendlyError(error))
+            uploaded.push(path)
+          }
+          payload.push({
+            item_id: p.item_id,
+            kind: p.kind,
+            note: p.note ?? null,
+            evidence_path: path,
+            evidence_name: p.file?.name ?? null,
+          })
+        }
+
+        const { error } = await supabase.rpc('raise_score_query', {
+          p_submission_id: args.submissionId,
+          p_note: args.note ?? null,
+          p_points: payload,
+        })
+        if (error) throw new Error(friendlyError(error))
+      } catch (err) {
+        if (uploaded.length) {
+          await supabase.storage.from(EVIDENCE_BUCKET).remove(uploaded)
+        }
+        throw err
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['score_query_state'] })
+      qc.invalidateQueries({ queryKey: ['score_queries'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+export interface ScoreQueryRow {
+  query: ScoreQuery
+  points: ScoreQueryPoint[]
+  employee: Employee | undefined
+  submission: KpiSubmission | undefined
+  items: KpiSubmissionItem[]
+}
+
+/**
+ * Every query the signed-in person is allowed to see, newest first.
+ *
+ * One hook for both readings — a manager gets their team's, HR gets the
+ * lot — because RLS decides that, not the caller. HR's screen is
+ * read-only by role, not by asking a different question.
+ */
+export function useScoreQueries(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['score_queries'],
+    refetchInterval: 60_000,
+    queryFn: async (): Promise<ScoreQueryRow[]> => {
+      const queries = await unwrap<ScoreQuery[]>(
+        supabase.from('kpi_score_queries').select('*')
+          .order('raised_at', { ascending: false }),
+      )
+      if (queries.length === 0) return []
+
+      const ids = queries.map(q => q.id)
+      const subIds = [...new Set(queries.map(q => q.submission_id))]
+      const empIds = [...new Set(queries.map(q => q.employee_id))]
+
+      const [points, people, submissions, items] = await Promise.all([
+        unwrap<ScoreQueryPoint[]>(
+          supabase.from('kpi_score_query_points').select('*').in('query_id', ids),
+        ),
+        unwrap<Employee[]>(
+          supabase.from('employees').select('*').in('id', empIds),
+        ),
+        unwrap<KpiSubmission[]>(
+          supabase.from('kpi_submissions').select('*').in('id', subIds),
+        ),
+        unwrap<KpiSubmissionItem[]>(
+          supabase.from('kpi_submission_items').select('*')
+            .in('submission_id', subIds).order('sort_order'),
+        ),
+      ])
+
+      const byPerson = new Map(people.map(p => [p.id, p]))
+      const bySub = new Map(submissions.map(s => [s.id, s]))
+      return queries.map(query => ({
+        query,
+        points: points.filter(p => p.query_id === query.id),
+        employee: byPerson.get(query.employee_id),
+        submission: bySub.get(query.submission_id),
+        items: items.filter(i => i.submission_id === query.submission_id),
+      }))
+    },
+  })
+}
+
+/**
+ * The nav badge. Counted in SQL, and scoped by RLS rather than by this
+ * query — a manager's own policy is what limits it to their team.
+ */
+export function useOpenScoreQueries(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['open_score_queries'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('kpi_score_queries')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'open')
+      if (error) throw new Error(friendlyError(error))
+      return count ?? 0
+    },
+  })
+}
+
+export function useAnswerScoreQuery() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { queryId: string; response: string }) => {
+      const { error } = await supabase.rpc('answer_score_query', {
+        p_query_id: args.queryId,
+        p_response: args.response,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['score_queries'] })
+      qc.invalidateQueries({ queryKey: ['score_query_state'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+      invalidateSubmissionViews(qc)
+    },
+  })
+}
+
+/** A short-lived link to one attachment. Private bucket, so never a URL. */
+export async function evidenceUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(EVIDENCE_BUCKET).createSignedUrl(path, 120)
+  if (error) throw new Error(friendlyError(error))
+  return data.signedUrl
+}
+
+/**
+ * Deletes evidence whose window has closed on a query already answered.
+ *
+ * Two steps on purpose: removing the row from storage.objects would
+ * leave the file itself behind, so the Storage API does the deleting and
+ * the database is only told afterwards. Run when a manager or HR opens
+ * the queries screen — there is no scheduler in this system, and tying
+ * it to the screen that lists them means it runs about as often as
+ * anybody looks.
+ */
+export async function purgeExpiredEvidence(): Promise<number> {
+  const { data, error } = await supabase.rpc('expired_query_evidence')
+  if (error) return 0
+  const rows = (data ?? []) as Array<{ query_id: string; path: string }>
+  if (rows.length === 0) return 0
+
+  const { error: rmError } = await supabase.storage
+    .from(EVIDENCE_BUCKET).remove(rows.map(r => r.path))
+  if (rmError) return 0
+
+  await supabase.rpc('mark_query_evidence_purged', {
+    p_query_ids: [...new Set(rows.map(r => r.query_id))],
+  })
+  return rows.length
 }
 
 // ---------------------------------------------------------------------

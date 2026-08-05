@@ -342,6 +342,7 @@ export type NotificationKind =
   | 'month_returned' | 'month_scored'
   | 'approvals' | 'scoring' | 'records_manager'
   | 'records_hr' | 'leavers'
+  | 'score_query' | 'score_query_answered'
 
 export interface NotificationRow {
   kind: NotificationKind
@@ -350,6 +351,61 @@ export interface NotificationRow {
   /** The newest of them. What "unread" is measured against. */
   latest: string
   unread: boolean
+}
+
+/**
+ * A team member questioning how a month was scored.
+ *
+ * One per month, raised inside a window that opens when the manager
+ * first scores and closes seven days later. See raise_score_query().
+ */
+export type ScoreQueryStatus = 'open' | 'answered'
+
+/** Whether the point needs explaining or is being disputed. */
+export type ScoreQueryKind = 'clarification' | 'disagreement'
+
+export interface ScoreQuery {
+  id: string
+  submission_id: string
+  employee_id: string
+  manager_id: string | null
+  raised_at: string
+  /** Frozen when raised — changing the setting cannot move it. */
+  window_closes_at: string
+  status: ScoreQueryStatus
+  employee_note: string | null
+  /** The manager's total at the moment it was raised. */
+  mgr_total_at_raise: number | null
+  answered_at: string | null
+  answered_by: string | null
+  manager_response: string | null
+  /** Computed from the snapshot, not claimed by the manager. */
+  score_changed: boolean
+  evidence_purged_at: string | null
+  created_at: string
+}
+
+export interface ScoreQueryPoint {
+  id: string
+  query_id: string
+  item_id: string
+  kind: ScoreQueryKind
+  note: string | null
+  /** Null once the window has closed and the file has been purged. */
+  evidence_path: string | null
+  /** Kept after the purge, so the record still says what was attached. */
+  evidence_name: string | null
+}
+
+/** Whether the button should be there, and if not, why not. */
+export interface ScoreQueryState {
+  can_raise: boolean
+  reason: string | null
+  closes_at: string | null
+  days_left: number | null
+  window_days: number
+  existing_id: string | null
+  existing_status: ScoreQueryStatus | null
 }
 
 /** One row per manager per month — see v_manager_month_status. */

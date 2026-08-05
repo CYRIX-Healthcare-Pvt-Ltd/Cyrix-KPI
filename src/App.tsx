@@ -26,6 +26,7 @@ const AdminRequests     = lazy(() => import('@/pages/admin/AdminRequests'))
 const SwAdmin           = lazy(() => import('@/pages/admin/SwAdmin'))
 const KpiTiming         = lazy(() => import('@/pages/admin/KpiTiming'))
 const DeletionRequests  = lazy(() => import('@/pages/DeletionRequests'))
+const ScoreQueries      = lazy(() => import('@/pages/ScoreQueries'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
@@ -146,6 +147,18 @@ export default function App() {
           <Route
             path="deletions"
             element={<RequireManager><DeletionRequests /></RequireManager>}
+          />
+          {/* The same screen twice, and the difference is the whole
+              point: the manager answers, HR watches. Read-only is passed
+              in rather than inferred, so a route can never accidentally
+              hand HR a reply box on somebody else's team. */}
+          <Route
+            path="queries"
+            element={<RequireManager><ScoreQueries /></RequireManager>}
+          />
+          <Route
+            path="admin/queries"
+            element={<RequireHr><ScoreQueries readOnly /></RequireHr>}
           />
         </Route>
 
