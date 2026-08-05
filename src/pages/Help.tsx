@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
-  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle,
+  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy } from '@/lib/queries'
@@ -208,6 +208,16 @@ export default function Help() {
               to: '/queries', cta: 'Open queries',
             },
             {
+              what: 'Look somebody up quickly',
+              how: 'Tap a name or a face on My Team for a quick look — who they are, this month, and how each part scored — without leaving the list.',
+              to: '/team', cta: 'Open my team',
+            },
+            {
+              what: 'Remove an unsuitable photo',
+              how: 'If somebody uses a picture that is not a clear photo of their face, take it down from the quick look. You have to give a reason, and they are shown it so they can put up another.',
+              to: '/team', cta: 'Open my team',
+            },
+            {
               what: 'See how the team is doing',
               how: 'Team analysis shows everybody ranked, with job role and core values separately. You can pick one month or the whole year, and download it.',
               to: '/team/analysis', cta: 'Open team analysis',
@@ -276,6 +286,35 @@ export default function Help() {
         />
       )}
 
+      {/* Everyone, whatever their role — HR and SW Admin have a profile
+          and a photo like anybody else, even though neither is scored. */}
+      <Section
+        icon={UserRound}
+        title="Your profile"
+        lead="Click your own name at the top of any screen to get here."
+        points={[
+          {
+            what: 'Add a photo of yourself',
+            how: 'Pick any picture from your phone. It is shrunk on your phone before it is sent, so it stays small even on a slow connection. Your face then shows beside your name everywhere in the app.',
+            to: '/me', cta: 'Open my profile',
+          },
+          {
+            what: 'If your photo disappears',
+            how: 'Your reporting manager can remove it, and they have to give a reason. You will see the reason on your profile, and you can add another one straight away.',
+          },
+          {
+            what: 'Change your password',
+            how: 'Any time you like. Nobody can read your password, not even SW Admin.',
+            to: '/change-password', cta: 'Change my password',
+          },
+          ...(appraised ? [{
+            what: 'See where you stand',
+            how: 'Your profile shows your rank in your team and across Cyrix, out of the people who have been scored.',
+            to: '/me', cta: 'Open my profile',
+          }] : []),
+        ]}
+      />
+
       <Section
         icon={HelpCircle}
         title="Things people ask"
@@ -299,6 +338,10 @@ export default function Help() {
               how: 'No. One query per month, so put everything into the one you raise.',
             },
           ] : []),
+          {
+            what: 'It says it cannot see a face in my photo',
+            how: 'That is a warning, not a refusal — you can carry on. Some phones cannot check at all, and no check spots every face.',
+          },
           {
             what: 'What do the colours mean?',
             how: 'Red is Poor, orange Satisfactory, amber Good, lime Very Good, green Excellent. Each score is coloured against what it was out of, not out of 100.',
