@@ -172,9 +172,27 @@ export interface KpiAssignment {
   rejection_reason: string | null
 }
 
+/**
+ * Another thing the same row could measure in a given month.
+ *
+ * No weightage of its own — it borrows the row's, which is the whole
+ * point. One with its own weightage would be a second row, and the year
+ * would stop totalling 100.
+ */
+export interface Alternate {
+  id: string
+  kra: string
+  kpi_description: string | null
+  target_value: number | null
+  target_unit?: string | null
+  scoring_rule: ScoringRule
+  rule_params: RuleParams
+}
+
 export interface KpiAssignmentItem extends KpiRowDefinition {
   id: string
   assignment_id: string
+  alternates: Alternate[]
 }
 
 export interface KpiSubmission {
@@ -211,6 +229,8 @@ export interface KpiSubmissionItem extends KpiRowDefinition {
   id: string
   submission_id: string
   assignment_item_id: string | null
+  /** Which alternative is in play this month. Null is the row as written. */
+  alternate_id: string | null
   self_achieved: number | null
   self_score: number | null
   self_remarks: string | null

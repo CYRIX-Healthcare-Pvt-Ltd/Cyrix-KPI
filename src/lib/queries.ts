@@ -129,7 +129,8 @@ export function useSaveAssignmentRows() {
     mutationFn: async (args: {
       employeeId: string
       fy: string
-      rows: KpiRowDefinition[]
+      /** Alternates ride along on the row — see migration 0040. */
+      rows: Array<KpiRowDefinition & { alternates?: unknown[] }>
       sourceTemplateId?: string | null
       existingAssignmentId?: string | null
       /** Does this person carry the ESMS obligation? */
@@ -212,6 +213,31 @@ export function useSaveMonthlyTarget() {
         .from('kpi_submission_items')
         .update({ target_value: args.target })
         .eq('id', args.itemId)
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submission'] })
+      qc.invalidateQueries({ queryKey: ['submission_by_id'] })
+    },
+  })
+}
+
+/**
+ * Switches one month's row to one of its alternatives, or back.
+ *
+ * An RPC because the guard freezes the KRA and the scoring rule for the
+ * year — correctly, since those are the agreed contract. This is not a
+ * new definition, it is a choice between definitions already approved,
+ * and the server is where that difference can actually be checked.
+ */
+export function useUseAlternate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { itemId: string; alternateId: string | null }) => {
+      const { error } = await supabase.rpc('use_alternate', {
+        p_item_id: args.itemId,
+        p_alternate_id: args.alternateId,
+      })
       if (error) throw new Error(friendlyError(error))
     },
     onSuccess: () => {

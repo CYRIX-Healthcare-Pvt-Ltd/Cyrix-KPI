@@ -131,6 +131,11 @@ export default function Help() {
                 to: '/my-kpi', cta: 'Open my KPI',
               },
               {
+                what: 'If a row measures something different some months',
+                how: 'Use Add an alternative on that row. Same weightage, different KRA and target. Each month you pick which one applied.',
+                to: '/my-kpi', cta: 'Open my KPI',
+              },
+              {
                 what: 'Send it to your manager',
                 how: 'Your manager has to approve it. You cannot start any month until they do.',
               },
@@ -355,6 +360,10 @@ export default function Help() {
           {
             what: 'It says it cannot see a face in my photo',
             how: 'That is a warning, not a refusal — you can carry on. Some phones cannot check at all, and no check spots every face.',
+          },
+          {
+            what: 'My row measures something else this month',
+            how: 'If your KPI has alternatives on that row, pick the right one at the top of it. Changing it clears what you typed on that row, because it was counting something else.',
           },
           {
             what: 'What do the colours mean?',

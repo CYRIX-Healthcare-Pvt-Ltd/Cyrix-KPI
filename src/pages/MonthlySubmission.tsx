@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, Paperclip, CheckCircle2,
+  Shuffle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -10,7 +11,7 @@ import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
-  useScoreQueries, currentFy, type QueryPointInput,
+  useScoreQueries, useUseAlternate, currentFy, type QueryPointInput,
 } from '@/lib/queries'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
@@ -19,7 +20,7 @@ import {
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
-import type { KpiSubmissionItem, ScoreQueryState } from '@/types/db'
+import type { KpiSubmissionItem, ScoreQueryState, Alternate } from '@/types/db'
 
 export default function MonthlySubmission() {
   const { month = '' } = useParams()
@@ -121,6 +122,14 @@ export default function MonthlySubmission() {
   // in five places — including none of the ones that needed it to colour
   // the score correctly.
   const coreWeight = coreRows.reduce((a, i) => a + Number(i.weightage), 0)
+
+  // What each row could measure instead, keyed by the KPI row it came
+  // from. Read off the assignment rather than the month, because the
+  // choice is between things agreed for the year.
+  const altsByItem = useMemo(
+    () => new Map((assignmentData?.items ?? []).map(i => [i.id, i.alternates ?? []])),
+    [assignmentData],
+  )
 
   /**
    * The blocks that are filled in by hand, in reading order.
@@ -380,6 +389,17 @@ export default function MonthlySubmission() {
                   {item.weightage}%
                 </span>
               </div>
+
+              {/* This row can measure more than one thing, and which one
+                  changes by month. Only shown where a choice actually
+                  exists — a picker with one option in it is a control
+                  that teaches people to ignore pickers. */}
+              <AlternatePicker
+                item={item}
+                alternates={altsByItem.get(item.assignment_item_id ?? '') ?? []}
+                editable={editable}
+                onError={setError}
+              />
 
               <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 {/* Targets legitimately move month to month — a call quota
@@ -962,6 +982,61 @@ function ScoreQueryPanel({
             </button>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Which of this row's alternatives is being measured this month.
+ *
+ * Changing it clears whatever figure was entered, because that number
+ * was an answer to a different question — carrying it over silently is
+ * how a target of 100 ends up scored against a figure counted for
+ * something else entirely.
+ */
+function AlternatePicker({
+  item, alternates, editable, onError,
+}: {
+  item: KpiSubmissionItem
+  alternates: Alternate[]
+  editable: boolean
+  onError: (msg: string) => void
+}) {
+  const pick = useUseAlternate()
+  if (alternates.length === 0) return null
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-ink-50 p-2.5">
+      <Shuffle className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+      <label className="text-xs font-medium text-ink-600" htmlFor={`alt-${item.id}`}>
+        This month this row is
+      </label>
+      <select
+        id={`alt-${item.id}`}
+        className="input w-auto min-w-48 flex-1 bg-white py-1.5 text-sm"
+        disabled={!editable || pick.isPending}
+        value={item.alternate_id ?? ''}
+        onChange={async e => {
+          try {
+            await pick.mutateAsync({
+              itemId: item.id,
+              alternateId: e.target.value || null,
+            })
+          } catch (err) {
+            onError(err instanceof Error ? err.message : 'Could not switch that row.')
+          }
+        }}
+      >
+        <option value="">{item.kra}</option>
+        {alternates.map(a => (
+          <option key={a.id} value={a.id}>{a.kra || 'Alternative'}</option>
+        ))}
+      </select>
+      {editable && (
+        <span className="text-xs text-ink-400">
+          Changing this clears what you have entered on the row.
+        </span>
       )}
     </div>
   )

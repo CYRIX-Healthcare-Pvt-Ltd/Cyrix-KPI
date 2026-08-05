@@ -1,13 +1,17 @@
 import { useState, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save, Lock } from 'lucide-react'
+import clsx from 'clsx'
+import {
+  Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save, Lock,
+  Calculator, Shuffle, ArrowUp, ArrowDown, Minus,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSaveAssignmentRows, useAssignmentAction,
   useScoringRules, useTemplatesForRole, useCoreValues, currentFy,
 } from '@/lib/queries'
 import type { ParseResult } from '@/lib/excel'
-import type { KpiRowDefinition } from '@/types/db'
+import type { KpiRowDefinition, Alternate, ScoringRuleMeta } from '@/types/db'
 import type { ScoringRule } from '@/lib/scoring'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
@@ -19,7 +23,26 @@ import { Alert, PageLoader, Spinner } from '@/components/ui'
  * the system, so they are shown here for reference and are not editable.
  */
 
-type Draft = KpiRowDefinition & { _key: string; _inferred?: boolean }
+type Draft = KpiRowDefinition & {
+  _key: string
+  _inferred?: boolean
+  /** Other things this row could measure — see migration 0040. */
+  alternates: Alternate[]
+}
+
+/**
+ * Which way is good, said with a colour and an arrow.
+ *
+ * "Higher is better" and "lower is better" are opposite meanings wearing
+ * the same sentence shape, and this control was the quietest on a form
+ * where it decides the most — whether beating a target earns anything,
+ * and whether going over is good or bad.
+ */
+const DIRECTION = {
+  higher_better: { label: 'Higher is better', icon: ArrowUp, chip: 'bg-emerald-100 text-emerald-800' },
+  lower_better:  { label: 'Lower is better',  icon: ArrowDown, chip: 'bg-cyrixRed-100 text-cyrixRed-800' },
+  neutral:       { label: 'Rated',            icon: Minus, chip: 'bg-ink-100 text-ink-700' },
+} as const
 
 const blankRow = (sortOrder: number): Draft => ({
   _key: crypto.randomUUID(),
@@ -32,6 +55,7 @@ const blankRow = (sortOrder: number): Draft => ({
   scoring_rule: 'higher_capped',
   rule_params: {},
   sort_order: sortOrder,
+  alternates: [],
 })
 
 export default function KpiSetup() {
@@ -104,6 +128,7 @@ export default function KpiSetup() {
         scoring_rule: r.scoring_rule,
         rule_params: r.rule_params,
         sort_order: r.sort_order,
+        alternates: [],
         _inferred: r.rule_inferred,
       })))
 
@@ -140,6 +165,7 @@ export default function KpiSetup() {
       kra: i.kra, kpi_description: i.kpi_description,
       weightage: i.weightage, target_value: i.target_value, target_unit: i.target_unit,
       scoring_rule: i.scoring_rule, rule_params: i.rule_params, sort_order: i.sort_order,
+      alternates: [],
     })))
     setNotice(`Loaded the standard “${roleTemplate?.template?.name}” rows. Adjust anything that differs for you.`)
   }
@@ -415,7 +441,7 @@ function RowEditor({
   row, rules, onChange, onRemove,
 }: {
   row: Draft
-  rules: Array<{ code: string; label: string; description: string }>
+  rules: ScoringRuleMeta[]
   onChange: (patch: Partial<Draft>) => void
   onRemove: () => void
 }) {
@@ -466,49 +492,209 @@ function RowEditor({
           />
         </div>
 
+        {/*
+          Boxed and tinted, because this was the quietest control on the
+          form and the most consequential. It decides whether 60 out of a
+          target of 50 is full marks or a bonus, and whether going over is
+          good or bad — and it sat in the same grey helper text as
+          everything else, so people picked whatever was already selected.
+
+          The direction gets an arrow and a colour of its own: "higher is
+          better" and "lower is better" are opposite meanings sharing a
+          sentence shape, and an arrow says which one before the sentence
+          is read.
+        */}
         <div className="sm:col-span-8">
-          <label className="label text-xs">
-            How is it scored?
-            {row._inferred && (
-              <span className="ml-2 font-normal text-amber-700">— guessed, please confirm</span>
+          <div className={clsx(
+            'rounded-lg border p-3',
+            row._inferred
+              ? 'border-amber-300 bg-amber-50'
+              : 'border-ink-200 bg-ink-50/70',
+          )}>
+            <label className="label mb-1.5 flex flex-wrap items-center gap-2 text-xs">
+              <Calculator className="h-3.5 w-3.5 text-ink-400" />
+              How is it scored?
+              {ruleMeta && (
+                <span className={clsx(
+                  'badge gap-1 normal-case tracking-normal',
+                  DIRECTION[ruleMeta.direction].chip,
+                )}>
+                  {(() => {
+                    const Icon = DIRECTION[ruleMeta.direction].icon
+                    return <Icon className="h-3 w-3" />
+                  })()}
+                  {DIRECTION[ruleMeta.direction].label}
+                </span>
+              )}
+              {row._inferred && (
+                <span className="font-semibold text-amber-800">
+                  guessed — please check
+                </span>
+              )}
+            </label>
+            <select
+              className="input bg-white"
+              value={row.scoring_rule}
+              onChange={e => {
+                const rule = e.target.value as ScoringRule
+                onChange({
+                  scoring_rule: rule,
+                  _inferred: false,
+                  // The behaviour each rule promises, set from the choice
+                  // rather than asked for separately. "Can exceed weightage"
+                  // means no ceiling; "can go negative" means exactly that,
+                  // and the label would be a lie if a hidden default clamped
+                  // it at zero.
+                  rule_params: {
+                    ...row.rule_params,
+                    max_multiplier: undefined,
+                    allow_negative: rule === 'lower_linear' ? true : undefined,
+                    floor: undefined,
+                  },
+                })
+              }}
+            >
+              {rules.map(r => (
+                <option key={r.code} value={r.code}>{r.label}</option>
+              ))}
+            </select>
+            {ruleMeta && (
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-600">
+                {ruleMeta.description}
+              </p>
             )}
-          </label>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- alternatives ---- */}
+      {row.alternates.length > 0 && (
+        <div className="mt-3 space-y-3 border-l-2 border-ink-200 pl-4">
+          <p className="text-xs text-ink-500">
+            Some months this row measures something else instead. Same{' '}
+            <strong>{row.weightage}%</strong> either way — only one applies in
+            any month, and the person picks which when they fill it in.
+          </p>
+          {row.alternates.map((alt, i) => (
+            <AlternateEditor
+              key={alt.id}
+              alt={alt}
+              rules={rules}
+              index={i}
+              onChange={patch => onChange({
+                alternates: row.alternates.map(a =>
+                  a.id === alt.id ? { ...a, ...patch } : a),
+              })}
+              onRemove={() => onChange({
+                alternates: row.alternates.filter(a => a.id !== alt.id),
+              })}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <button
+          onClick={onRemove}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-cyrixRed-700 hover:text-cyrixRed-800"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Remove this row
+        </button>
+        {/* Same weight of text as Remove, deliberately: they are the two
+            things you can do to a row, and one of them being a button
+            would make it look like the expected next step. Five is the
+            cap the column enforces. */}
+        {row.alternates.length < 5 && (
+          <button
+            onClick={() => onChange({
+              alternates: [...row.alternates, {
+                id: `alt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                kra: '', kpi_description: '', target_value: null,
+                scoring_rule: row.scoring_rule, rule_params: row.rule_params,
+              }],
+            })}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-ink-900"
+          >
+            <Shuffle className="h-3.5 w-3.5" /> Add an alternative
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A different thing the same row could measure.
+ *
+ * No weightage field: taking the parent's is the whole idea. If an
+ * alternative could carry its own, it would be a second row, the year
+ * would stop totalling 100, and the thing this exists to avoid would be
+ * back.
+ */
+function AlternateEditor({
+  alt, rules, index, onChange, onRemove,
+}: {
+  alt: Alternate
+  rules: ScoringRuleMeta[]
+  index: number
+  onChange: (patch: Partial<Alternate>) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="rounded-lg border border-ink-200 bg-white p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
+          Alternative {index + 1}
+        </p>
+        <button
+          onClick={onRemove}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-cyrixRed-700 hover:text-cyrixRed-800"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Remove
+        </button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-12">
+        <div className="sm:col-span-4">
+          <label className="label text-xs">KRA</label>
+          <input
+            className="input"
+            value={alt.kra}
+            onChange={e => onChange({ kra: e.target.value })}
+            placeholder="What is measured instead"
+          />
+        </div>
+        <div className="sm:col-span-8">
+          <label className="label text-xs">KPI — measurable parameter</label>
+          <input
+            className="input"
+            value={alt.kpi_description ?? ''}
+            onChange={e => onChange({ kpi_description: e.target.value })}
+          />
+        </div>
+        <div className="sm:col-span-3">
+          <label className="label text-xs">Target</label>
+          <input
+            type="number" inputMode="decimal" step="any"
+            className="input"
+            value={alt.target_value ?? ''}
+            onChange={e => onChange({
+              target_value: e.target.value === '' ? null : Number(e.target.value),
+            })}
+          />
+        </div>
+        <div className="sm:col-span-9">
+          <label className="label text-xs">How is it scored?</label>
           <select
             className="input"
-            value={row.scoring_rule}
-            onChange={e => {
-              const rule = e.target.value as ScoringRule
-              onChange({
-                scoring_rule: rule,
-                _inferred: false,
-                // The behaviour each rule promises, set from the choice
-                // rather than asked for separately. "Can exceed weightage"
-                // means no ceiling; "can go negative" means exactly that,
-                // and the label would be a lie if a hidden default clamped
-                // it at zero.
-                rule_params: {
-                  ...row.rule_params,
-                  max_multiplier: undefined,
-                  allow_negative: rule === 'lower_linear' ? true : undefined,
-                  floor: undefined,
-                },
-              })
-            }}
+            value={alt.scoring_rule}
+            onChange={e => onChange({ scoring_rule: e.target.value as ScoringRule })}
           >
             {rules.map(r => (
               <option key={r.code} value={r.code}>{r.label}</option>
             ))}
           </select>
-          {ruleMeta && <p className="mt-1 text-xs text-ink-500">{ruleMeta.description}</p>}
         </div>
       </div>
-
-      <button
-        onClick={onRemove}
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-cyrixRed-700 hover:text-cyrixRed-800"
-      >
-        <Trash2 className="h-3.5 w-3.5" /> Remove this row
-      </button>
     </div>
   )
 }
