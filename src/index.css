@@ -507,12 +507,34 @@
     animation: score-fill var(--dur-ui) var(--ease-out);
   }
 
+  /* The score meter reveals rather than grows.
+   *
+   * scaleX was right while the fill was one flat colour and wrong the
+   * moment it became the band scale: scaling squashes the gradient, so
+   * the boundary between Poor and Satisfactory landed at 34% of a bar
+   * whose tick mark says 40%. clip-path leaves the gradient laid out at
+   * full width and hides the part not earned yet, so every threshold
+   * sits where the tick says it does.
+   *
+   * The end state is the element's own inline clip-path, so the
+   * animation has nothing to hold after it finishes and needs no
+   * forwards — switching it off leaves the bar exactly where it belongs.
+   */
+  @keyframes score-reveal {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0 var(--fill-rest, 0%) 0 0); }
+  }
+  .animate-score-reveal {
+    animation: score-reveal var(--dur-ui) var(--ease-out);
+  }
+
   /* Reduced motion means fewer and gentler, not none. Everything that
      travels across the screen stops; the aurora keeps a slow opacity
      breathe so the panel does not go dead. */
   @media (prefers-reduced-motion: reduce) {
     .animate-score-sweep,
-    .animate-score-fill {
+    .animate-score-fill,
+    .animate-score-reveal {
       animation: none;
     }
 

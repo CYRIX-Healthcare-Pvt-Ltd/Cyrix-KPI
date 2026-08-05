@@ -9,6 +9,9 @@ import {
 import { SECTION_SHORT } from '@/lib/sections'
 import type { KraAttainmentRow, WeakAreaRow } from '@/types/db'
 
+/** Built once — it is the same five stops on every hero on every screen. */
+const SCALE = bandScaleGradient()
+
 /**
  * A page header washed in the colour of the score it reports on.
  *
@@ -110,36 +113,37 @@ export function ScoreHeader({
           on stays visible behind it. */}
       <div className="relative px-6 pb-6 sm:px-7 sm:pb-7">
         <div className="relative h-1.5 overflow-hidden rounded-full bg-white/10">
+          {/* The rest of the scale, dimmed — where this score could go. */}
           <div
-            className="absolute inset-0 opacity-30"
-            style={{ backgroundImage: bandScaleGradient() }}
+            className="absolute inset-0 opacity-25"
+            style={{ backgroundImage: SCALE }}
             aria-hidden
           />
           {band && (
             <div
-              className={clsx(
-                'animate-score-fill absolute inset-y-0 left-0 w-full origin-left overflow-hidden rounded-full',
-                band.onDark.bar,
-              )}
+              className="animate-score-reveal absolute inset-0 overflow-hidden rounded-full"
               style={{
-                // scaleX rather than width: a transform is composited on its
-                // own, where width would force layout and paint each frame.
-                transform: `scaleX(${pct / 100})`,
-                transition: 'transform var(--dur-ui) var(--ease-out)',
+                // The same gradient, full strength, laid out across the
+                // whole track and clipped at the score. Clipped rather
+                // than scaled: scaling would drag the band boundaries off
+                // the tick marks that mark them.
+                backgroundImage: SCALE,
+                ['--fill-rest' as string]: `${100 - pct}%`,
+                clipPath: 'inset(0 var(--fill-rest) 0 0)',
+                transition: 'clip-path var(--dur-ui) var(--ease-out)',
               }}
             >
-              {/* Light travelling along the fill. Not counter-scaled: the
-                  sweep animates its own transform, which would override an
-                  inline one, and a soft gradient squashed to ~88% reads no
-                  differently. */}
+              {/* Light travelling along the earned part. */}
               <span className="animate-score-sweep absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
             </div>
           )}
-          {[40, 60, 80, 90].map(t => (
+          {/* Read off the same scale as the gradient, so a threshold and
+              its tick mark cannot end up in different places. */}
+          {BAND_SCALE.slice(1).map(({ band: b, from }) => (
             <span
-              key={t}
+              key={b.key}
               className="absolute inset-y-0 w-px bg-ink-950/60"
-              style={{ left: `${t}%` }}
+              style={{ left: `${from}%` }}
             />
           ))}
         </div>
