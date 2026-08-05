@@ -1,5 +1,6 @@
 import { useMemo, lazy, Suspense } from 'react'
-import { Users, Target, LineChart } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
@@ -32,7 +33,10 @@ export default function Dashboard() {
 
   const { data: assignment, isLoading: aLoading } = useMyAssignment(employee?.id, fy)
   const { data: submission } = useSubmission(employee?.id, month)
-  const { data: annual } = useAnnualSummary(employee?.id, fy)
+  // isSuccess, not just the data: without it the "new here" line below
+  // flashes on for every returning person in the moment before their
+  // year average lands.
+  const { data: annual, isSuccess: annualLoaded } = useAnnualSummary(employee?.id, fy)
   const { data: history } = useSubmissionHistory(employee?.id, fy)
   const { data: weak } = useWeakAreas(myIds, fy)
   const { data: attainment } = useKraAttainment(myIds, fy)
@@ -128,6 +132,30 @@ export default function Dashboard() {
           to={`/submission/${month}`}
           cta={sub ? 'Continue' : 'Start Now'}
         />
+      )}
+
+      {/* Under whatever is shouting, not instead of it.
+
+          The profile page is where "what is this and what do I do" gets
+          answered, and clicking your own name to find that out is not
+          obvious to somebody who has just been given a login. So the
+          offer comes to them, in the window where they need it, and
+          leaves on its own the month their first score lands — no
+          dismiss button, because "have you been scored yet" is a better
+          test of whether somebody is still new than asking them. */}
+      {annualLoaded && (annual?.months_scored ?? 0) === 0 && (
+        <Link to="/help" className="card card-interactive flex items-center gap-3 p-4">
+          <BookOpen className="h-5 w-5 shrink-0 text-ink-400" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-ink-900">
+              New here? See what you can do
+            </span>
+            <span className="block text-sm text-ink-500">
+              A short page about your own login — what to do each month, and when.
+            </span>
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-ink-400" />
+        </Link>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
