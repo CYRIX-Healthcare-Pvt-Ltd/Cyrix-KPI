@@ -2,17 +2,21 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BookOpen, Info, KeyRound, Medal, Timer, Trophy, UserRound,
+  ArrowLeft, BookOpen, Camera, Info, KeyRound, Medal, Timer, Trophy, UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment, currentFy,
+  useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment,
+  useSetMyAvatar, currentFy,
 } from '@/lib/queries'
 import { bandFor } from '@/lib/bands'
 import { monthLabel } from '@/lib/fy'
-import { PageLoader, StatTile } from '@/components/ui'
+import { PageLoader, StatTile, Alert, Spinner } from '@/components/ui'
+import Avatar from '@/components/Avatar'
+import { fileToAvatar, humanBytes, dataUrlBytes } from '@/lib/avatar'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
+import type { Employee } from '@/types/db'
 
 /**
  * Your own record: who you are, who you report to, and where you stand.
@@ -149,6 +153,107 @@ function RankTile({
           </dl>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Your photo.
+ *
+ * Everything is done in the browser before anything is sent: squared
+ * off, scaled to 128px and saved as a middling JPEG, which turns a 2 MB
+ * phone picture into about 5 KB. That is small enough to sit on the
+ * employee row and arrive with every list that already reads it, which
+ * is why there is no upload progress bar here — there is nothing to wait
+ * for.
+ *
+ * The checks refuse things that are plainly not photographs. They do not
+ * try to judge whether it is a suitable picture of you; that is your
+ * reporting manager's call, and they can take it down with a reason,
+ * which you will see here.
+ */
+function AvatarCard({ employee }: { employee: Employee }) {
+  // AuthContext holds the employee row in plain state rather than in the
+  // query cache, so invalidating queries is not enough — the header and
+  // this card both read it from there and would keep the old face.
+  const { refresh } = useAuth()
+  const setAvatar = useSetMyAvatar()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return
+    setError(null); setNote(null); setBusy(true)
+    try {
+      const { dataUrl, originalBytes } = await fileToAvatar(file)
+      await setAvatar.mutateAsync(dataUrl)
+      await refresh()
+      setNote(
+        `Saved — ${humanBytes(originalBytes)} compressed to ` +
+        `${humanBytes(dataUrlBytes(dataUrl))}.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not use that picture.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    setError(null); setNote(null); setBusy(true)
+    try {
+      await setAvatar.mutateAsync(null)
+      await refresh()
+      setNote('Photo removed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove it.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card p-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <Avatar name={employee.full_name} src={employee.avatar} size="xl" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink-900">My photo</p>
+          <p className="mt-0.5 text-sm text-ink-500">
+            A clear picture of your face. It is shrunk on your phone before
+            it is sent, so it stays small.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className="btn-secondary btn-press cursor-pointer">
+              {busy ? <Spinner className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+              {employee.avatar ? 'Change photo' : 'Add a photo'}
+              <input
+                type="file"
+                className="hidden"
+                accept="image/*"
+                disabled={busy}
+                onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }}
+              />
+            </label>
+            {employee.avatar && (
+              <button onClick={clear} disabled={busy} className="btn-secondary">
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {employee.avatar_removed_reason && (
+        <div className="mt-3">
+          <Alert kind="warning" title="Your manager removed your photo">
+            <p className="italic">“{employee.avatar_removed_reason}”</p>
+            <p className="mt-1">Add another one whenever you are ready.</p>
+          </Alert>
+        </div>
+      )}
+      {error && <div className="mt-3"><Alert kind="error">{error}</Alert></div>}
+      {note && <div className="mt-3"><Alert kind="success">{note}</Alert></div>}
     </div>
   )
 }
@@ -364,6 +469,8 @@ export default function Profile() {
           </Link>
         </div>
       </div>
+
+      <AvatarCard employee={employee} />
 
       {/* Beside the password, because this is where somebody comes when
           the question is about themselves rather than about a number. */}

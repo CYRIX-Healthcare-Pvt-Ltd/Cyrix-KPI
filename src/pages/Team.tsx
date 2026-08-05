@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Users, ChevronRight, Download, BarChart3, UserMinus, Spline,
+  Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff,
   LineChart as LineChartIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useTeamMonth, useTeamSubmissions, useRemovalAction, currentFy,
+  useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar, currentFy,
 } from '@/lib/queries'
 import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { exportKpiScores } from '@/lib/export'
@@ -15,8 +15,9 @@ import {
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired } from '@/components/analysis'
 import ScoreTrend from '@/components/ScoreTrend'
+import Avatar from '@/components/Avatar'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
-import type { KpiSubmission } from '@/types/db'
+import type { KpiSubmission, KpiAssignment, Employee } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
 
@@ -25,6 +26,8 @@ export default function Team() {
   const fy = currentFy()
   const [month, setMonth] = useState(currentReportingMonth())
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
+  const [peek, setPeek] = useState<string | null>(null)
+  const [photoFor, setPhotoFor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -198,6 +201,28 @@ export default function Team() {
         />
       </div>
 
+      {peek && (
+        <MemberPeek
+          member={team.find(t => t.id === peek)!}
+          sub={subsById.get(peek)}
+          assign={assignById.get(peek)}
+          month={month}
+          onClose={() => setPeek(null)}
+          onRemovePhoto={() => { setPeek(null); setPhotoFor(peek) }}
+        />
+      )}
+
+      {photoFor && (
+        <PhotoRemovalForm
+          member={team.find(t => t.id === photoFor)!}
+          onClose={() => setPhotoFor(null)}
+          onDone={name => {
+            setPhotoFor(null)
+            setNotice(`${name}'s photo has been removed. They are told why.`)
+          }}
+        />
+      )}
+
       {removing && (
         <RemovalForm
           employeeId={removing.id}
@@ -218,22 +243,31 @@ export default function Team() {
 
           return (
             <div key={member.id} className="flex items-center gap-3 p-4 hover:bg-ink-50">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">
-                {member.full_name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-ink-900">{member.full_name}</p>
-                <p className="truncate text-xs text-ink-500">
-                  {member.ecode}
-                  {member.designation && ` · ${member.designation}`}
-                </p>
-                {assign?.status !== 'active' && (
-                  <p className="mt-1 text-xs text-amber-700">
-                    KPI {assign ? assign.status.replace('_', ' ') : 'not set up'}
-                  </p>
-                )}
-              </div>
+              {/* The face and the name are one target, opening a quick
+                  look rather than a page. The chevron beside them still
+                  goes to the full record — a peek and a visit are
+                  different intentions and deserve different buttons. */}
+              <button
+                onClick={() => setPeek(member.id)}
+                className="btn-press flex min-w-0 flex-1 items-center gap-3 text-left"
+                aria-label={`Quick look at ${member.full_name}`}
+              >
+                <Avatar name={member.full_name} src={member.avatar} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-ink-900">
+                    {member.full_name}
+                  </span>
+                  <span className="block truncate text-xs text-ink-500">
+                    {member.ecode}
+                    {member.designation && ` · ${member.designation}`}
+                  </span>
+                  {assign?.status !== 'active' && (
+                    <span className="mt-1 block text-xs text-amber-700">
+                      KPI {assign ? assign.status.replace('_', ' ') : 'not set up'}
+                    </span>
+                  )}
+                </span>
+              </button>
 
               <div className="hidden text-right sm:block">
                 <StatusBadge status={sub?.status ?? null} />
@@ -278,6 +312,190 @@ export default function Team() {
         <Spline className="h-3.5 w-3.5" />
         The page tint reflects your team's average score.
       </p>
+    </div>
+  )
+}
+
+/**
+ * A quick look at one person, without leaving the list.
+ *
+ * The chevron beside each row already goes to their full record. Most of
+ * the time a manager does not want the record — they want to remember
+ * who this is and how the month is going, and a page load in and a page
+ * load back for that is why nobody ever clicks.
+ *
+ * A dialog rather than a hover card: this list is used on a phone as
+ * much as a desktop, and a hover card is nothing on a phone.
+ */
+function MemberPeek({
+  member, sub, assign, month, onClose, onRemovePhoto,
+}: {
+  member: Employee
+  sub: KpiSubmission | undefined
+  assign: KpiAssignment | undefined
+  month: string
+  onClose: () => void
+  onRemovePhoto: () => void
+}) {
+  // Escape closes it, because a dialog that only closes by aiming at a
+  // small × is a dialog people feel trapped in.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const esms = Number(assign?.esms_weight ?? 0)
+  const final = sub ? SCORED.has(sub.status) : false
+  const rows: Array<[string, React.ReactNode]> = [
+    ['Employee code', member.ecode],
+    ['Designation', member.designation],
+    ['Department', member.department],
+    ['Function', member.function_name],
+    ['Grade', member.grade],
+    ['KPI for the year', assign
+      ? assign.status.replace('_', ' ')
+      : <span className="text-amber-700">not set up</span>],
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-ink-950/40 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`About ${member.full_name}`}
+    >
+      {/* Full width and bottom-anchored on a phone, a card on a desktop.
+          Stops the click so tapping inside does not close it. */}
+      <div
+        className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-4">
+          <Avatar name={member.full_name} src={member.avatar} size="lg" />
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-semibold text-ink-900">{member.full_name}</p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              {member.designation ?? member.ecode}
+            </p>
+            <div className="mt-2"><StatusBadge status={sub?.status ?? null} /></div>
+          </div>
+          <button onClick={onClose} className="btn-icon shrink-0" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-ink-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
+            {monthLabel(month)}
+          </p>
+          <div className="mt-2 flex items-baseline gap-3">
+            <ScorePill value={sub?.final_total_score ?? sub?.self_total_score} size="lg" />
+            <SectionSplit sub={sub} hasEsms={esms > 0} />
+          </div>
+          {sub && !final && (
+            <p className="mt-1.5 text-xs text-ink-500">
+              Self assessment only — not scored yet.
+            </p>
+          )}
+        </div>
+
+        <dl className="mt-4 divide-y divide-ink-100 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex items-baseline gap-4 py-2">
+              <dt className="w-36 shrink-0 text-xs font-semibold uppercase tracking-label text-ink-500">
+                {k}
+              </dt>
+              <dd className="min-w-0 flex-1 text-ink-900">
+                {v ?? <span className="text-ink-300">—</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to={`/team/${member.id}`} className="btn-primary">
+            Full record <ChevronRight className="h-4 w-4" />
+          </Link>
+          {sub?.status === 'submitted' && (
+            <Link to={`/score/${sub.id}`} className="btn-secondary">
+              Score {monthLabel(month)}
+            </Link>
+          )}
+          {member.avatar && (
+            <button onClick={onRemovePhoto} className="btn-secondary !text-cyrixRed-700">
+              <ImageOff className="h-4 w-4" /> Remove photo
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Taking a photo down.
+ *
+ * A reason is required, and the person is shown it on their own profile
+ * — the screen they would go to in order to put another one up. A
+ * picture that silently disappears is how somebody concludes the app
+ * lost it.
+ */
+function PhotoRemovalForm({
+  member, onClose, onDone,
+}: {
+  member: Employee
+  onClose: () => void
+  onDone: (name: string) => void
+}) {
+  const remove = useRemoveAvatar()
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setError(null)
+    try {
+      await remove.mutateAsync({ employeeId: member.id, reason })
+      onDone(member.full_name)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove that photo.')
+    }
+  }
+
+  return (
+    <div className="card space-y-3 border-cyrixRed-200 p-4">
+      <div>
+        <h3 className="font-medium text-ink-900">
+          Remove {member.full_name}'s photo?
+        </h3>
+        <p className="mt-0.5 text-sm text-ink-500">
+          They will see your reason on their own profile and can upload
+          another one.
+        </p>
+      </div>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <input
+        className="input"
+        value={reason}
+        onChange={e => setReason(e.target.value)}
+        placeholder="e.g. Please use a clear photo of your face, without sunglasses"
+        autoFocus
+      />
+
+      <div className="flex gap-2">
+        <button
+          onClick={submit}
+          disabled={!reason.trim() || remove.isPending}
+          className="btn-danger"
+        >
+          {remove.isPending && <Spinner className="h-4 w-4" />}
+          Remove the photo
+        </button>
+        <button onClick={onClose} className="btn-secondary">Cancel</button>
+      </div>
     </div>
   )
 }

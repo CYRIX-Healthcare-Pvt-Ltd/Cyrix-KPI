@@ -732,6 +732,47 @@ export function useManagerTat(enabled: boolean, fy: string) {
 }
 
 // ---------------------------------------------------------------------
+// Profile photos
+// ---------------------------------------------------------------------
+
+/**
+ * Both writes go through a definer function rather than an RLS policy on
+ * employees: that table holds reporting lines and job roles, and opening
+ * it to self-update so one column can be written is how somebody ends up
+ * able to change who they report to.
+ */
+export function useSetMyAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (dataUrl: string | null) => {
+      const { error } = await supabase.rpc('set_my_avatar', { p_data: dataUrl })
+      if (error) throw new Error(friendlyError(error))
+    },
+    // Every list that draws a face reads the employee row, so they all
+    // go — the header, the team grid, the analysis table.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['team'] })
+      qc.invalidateQueries({ queryKey: ['manager'] })
+      qc.invalidateQueries({ queryKey: ['me'] })
+    },
+  })
+}
+
+export function useRemoveAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { employeeId: string; reason: string }) => {
+      const { error } = await supabase.rpc('remove_avatar', {
+        p_employee_id: args.employeeId,
+        p_reason: args.reason,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
+  })
+}
+
+// ---------------------------------------------------------------------
 // Score queries — a team member questioning how a month was scored
 // ---------------------------------------------------------------------
 

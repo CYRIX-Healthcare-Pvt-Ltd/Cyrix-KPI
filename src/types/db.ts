@@ -31,6 +31,17 @@ export interface Employee {
   is_active: boolean
   auth_user_id: string | null
   must_change_password: boolean
+  /**
+   * A 128px square JPEG as a base64 data URL — small enough to travel
+   * with the row rather than costing a signed URL per face. Null when
+   * nobody has set one, and null again once a manager has taken it down.
+   */
+  avatar: string | null
+  avatar_updated_at: string | null
+  /** Set when a manager removed it. Shown to the person, so they know. */
+  avatar_removed_at: string | null
+  avatar_removed_by: string | null
+  avatar_removed_reason: string | null
 }
 
 /**

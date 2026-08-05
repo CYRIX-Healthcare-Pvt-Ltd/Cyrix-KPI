@@ -13,6 +13,7 @@ import {
 } from '@/lib/queries'
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
+import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
 
 interface NavItem {
@@ -146,9 +147,6 @@ export default function Shell() {
     navigate('/login', { replace: true })
   }
 
-  const initials = (employee?.full_name ?? '?')
-    .split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()
-
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-ink-200 bg-white">
@@ -204,9 +202,7 @@ export default function Shell() {
                   {isHrAdmin && ' · HR Admin'}
                 </span>
               </span>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">
-                {initials}
-              </span>
+              <Avatar name={employee?.full_name} src={employee?.avatar} size="sm" />
             </NavLink>
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}
