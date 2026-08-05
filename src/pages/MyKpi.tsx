@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, FileSpreadsheet, PencilRuler } from 'lucide-react'
+import { Pencil, FileSpreadsheet, PencilRuler, Shuffle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useScoringRules, useOpenRequestFor, useRequestAction, currentFy,
@@ -113,6 +113,40 @@ export default function MyKpi() {
                 <p className="mt-2 text-xs text-ink-400">
                   {rules?.find(r => r.code === item.scoring_rule)?.label ?? item.scoring_rule}
                 </p>
+
+                {/* The other things this row can be. Indented under it and
+                    marked "or", because the weightage is shared — three
+                    entries at 20% that all read as separate rows would
+                    look like a KPI totalling more than 100. */}
+                {(item.alternates ?? []).length > 0 && (
+                  <div className="mt-3 space-y-2 border-l-2 border-ink-200 pl-3">
+                    <p className="text-xs text-ink-500">
+                      Some months this row measures something else instead. Same{' '}
+                      {item.weightage}% either way — you pick which one when you
+                      fill the month in.
+                    </p>
+                    {item.alternates.map(alt => (
+                      <div key={alt.id} className="flex flex-wrap items-baseline gap-2">
+                        <span className="badge bg-ink-100 text-ink-600">
+                          <Shuffle className="mr-1 h-3 w-3" /> or
+                        </span>
+                        <span className="text-sm font-medium text-ink-800">
+                          {alt.kra || '—'}
+                        </span>
+                        {alt.kpi_description && (
+                          <span className="text-sm text-ink-500">
+                            · {alt.kpi_description}
+                          </span>
+                        )}
+                        {alt.target_value !== null && (
+                          <span className="text-xs text-ink-400">
+                            target {alt.target_value}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

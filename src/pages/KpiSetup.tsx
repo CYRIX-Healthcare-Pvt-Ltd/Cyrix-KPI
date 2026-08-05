@@ -14,7 +14,9 @@ import type { ParseResult } from '@/lib/excel'
 import type { KpiRowDefinition, Alternate, ScoringRuleMeta } from '@/types/db'
 import { calcKpiScore, type ScoringRule, type RuleParams } from '@/lib/scoring'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
-import { Alert, PageLoader, Spinner } from '@/components/ui'
+import {
+  Alert, PageLoader, Spinner, NumberInput, cleanNumberText,
+} from '@/components/ui'
 import { bandFor, attainmentPct } from '@/lib/bands'
 
 /**
@@ -473,23 +475,19 @@ function RowEditor({
 
         <div className="sm:col-span-2">
           <label className="label text-xs">Weightage %</label>
-          <input
-            type="number" inputMode="decimal" min={0} max={100} step="any"
-            className="input"
+          <NumberInput
+            min={0} max={100} step="any"
             value={row.weightage}
-            onChange={e => onChange({ weightage: Number(e.target.value) })}
+            onValue={v => onChange({ weightage: v ?? 0 })}
           />
         </div>
 
         <div className="sm:col-span-2">
           <label className="label text-xs">Target</label>
-          <input
-            type="number" inputMode="decimal" step="any"
-            className="input"
-            value={row.target_value ?? ''}
-            onChange={e => onChange({
-              target_value: e.target.value === '' ? null : Number(e.target.value),
-            })}
+          <NumberInput
+            step="any"
+            value={row.target_value}
+            onValue={v => onChange({ target_value: v })}
           />
         </div>
 
@@ -672,7 +670,7 @@ function RuleTester({
         type="number" inputMode="decimal" step="any"
         className="input w-24 py-1 text-xs"
         value={tried}
-        onChange={e => setTried(e.target.value)}
+        onChange={e => setTried(cleanNumberText(e.target.value))}
         placeholder={String(target)}
         aria-label="A figure to try against this rule"
       />
@@ -738,13 +736,10 @@ function AlternateEditor({
         </div>
         <div className="sm:col-span-3">
           <label className="label text-xs">Target</label>
-          <input
-            type="number" inputMode="decimal" step="any"
-            className="input"
-            value={alt.target_value ?? ''}
-            onChange={e => onChange({
-              target_value: e.target.value === '' ? null : Number(e.target.value),
-            })}
+          <NumberInput
+            step="any"
+            value={alt.target_value}
+            onValue={v => onChange({ target_value: v })}
           />
         </div>
         <div className="sm:col-span-9">

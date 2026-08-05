@@ -1,9 +1,10 @@
 import { useState, Fragment } from 'react'
-import { CheckSquare, Check, X, Pencil, CheckCheck } from 'lucide-react'
+import { CheckSquare, Check, X, Pencil, CheckCheck, Shuffle } from 'lucide-react'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  usePendingApprovals, useAssignmentAction, useEditAssignmentItem, currentFy,
+  usePendingApprovals, useAssignmentAction, useEditAssignmentItem,
+  useScoringRules, currentFy,
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
@@ -206,6 +207,9 @@ function EditableRow({
   editable: boolean
 }) {
   const edit = useEditAssignmentItem()
+  // Cached for the session, so asking here rather than threading it down
+  // through three components costs nothing.
+  const { data: rules } = useScoringRules()
   const [draft, setDraft] = useState(item)
 
   const commit = (patch: Partial<KpiAssignmentItem>) => {
@@ -215,7 +219,8 @@ function EditableRow({
       next.kra !== item.kra ||
       next.kpi_description !== item.kpi_description ||
       next.weightage !== item.weightage ||
-      next.target_value !== item.target_value
+      next.target_value !== item.target_value ||
+      next.scoring_rule !== item.scoring_rule
     if (changed) {
       edit.mutate({
         itemId: item.id,
@@ -224,6 +229,11 @@ function EditableRow({
           kpi_description: next.kpi_description,
           weightage: next.weightage,
           target_value: next.target_value,
+          // The manager's to correct as much as the target is, and more
+          // consequential: the wrong rule scores every month of the year
+          // in the wrong direction, and the team member picking it was
+          // often guessing — or had it guessed for them by the importer.
+          scoring_rule: next.scoring_rule,
         },
       })
     }
@@ -284,8 +294,23 @@ function EditableRow({
           })}
         />
       </td>
-      <td className="px-4 py-2.5 text-xs text-ink-400">
-        {draft.scoring_rule.replace(/_/g, ' ')}
+      <td className="px-2 py-1.5">
+        <select
+          className="input !py-1.5 text-xs"
+          value={draft.scoring_rule}
+          onChange={e => {
+            const rule = e.target.value as KpiAssignmentItem['scoring_rule']
+            // Same reset as the setup form: each rule carries its own
+            // promise about ceilings and negatives, and leaving the old
+            // row's parameters behind would make the label a lie.
+            setDraft({ ...draft, scoring_rule: rule })
+            commit({ scoring_rule: rule })
+          }}
+        >
+          {(rules ?? []).map(r => (
+            <option key={r.code} value={r.code}>{r.label}</option>
+          ))}
+        </select>
       </td>
     </tr>
   )
@@ -388,14 +413,50 @@ function ApprovalCard({
                           </td>
                         </tr>
                         {items.filter(i => i.section === section).map(item => (
-                          <EditableRow
-                            key={item.id}
-                            item={item}
-                            // The standard bands are the same for everyone
-                            // who has them, so a manager approving one
-                            // person cannot quietly reword them.
-                            editable={editing && !standard}
-                          />
+                          <Fragment key={item.id}>
+                            <EditableRow
+                              item={item}
+                              // The standard bands are the same for everyone
+                              // who has them, so a manager approving one
+                              // person cannot quietly reword them.
+                              editable={editing && !standard}
+                            />
+                            {/* An alternative is part of what is being
+                                approved — the same weightage measuring
+                                something else in some months — so it has
+                                to be on the table the manager reads
+                                before pressing Approve. Indented and
+                                tinted rather than listed flat, or it
+                                reads as another row and the weightages
+                                appear not to add up. */}
+                            {(item.alternates ?? []).map(alt => (
+                              <tr key={alt.id} className="bg-ink-50/60">
+                                <td className="py-2 pl-10 pr-4">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <Shuffle className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                                    <span className="badge bg-ink-200 text-ink-700">
+                                      or
+                                    </span>
+                                    <span className="font-medium text-ink-800">
+                                      {alt.kra || '—'}
+                                    </span>
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-ink-600">
+                                  {alt.kpi_description ?? '—'}
+                                </td>
+                                <td className="px-4 py-2 text-right text-ink-400">
+                                  same
+                                </td>
+                                <td className="px-4 py-2 text-right tabular-nums text-ink-600">
+                                  {alt.target_value ?? '—'}
+                                </td>
+                                <td className="px-4 py-2 text-xs text-ink-500">
+                                  {alt.scoring_rule.replace(/_/g, ' ')}
+                                </td>
+                              </tr>
+                            ))}
+                          </Fragment>
                         ))}
                       </Fragment>
                     ))}
@@ -408,9 +469,9 @@ function ApprovalCard({
 
                 {editing && (
                   <Alert kind="info">
-                    Editing directly. Small corrections are saved as you leave each
-                    field — no need to send the whole KPI back. Sending it back is
-                    still the right move for anything the team member should rethink.
+                    Editing directly. Changes are saved as you leave each field —
+                    no need to send the whole KPI back. Sending it back is still the
+                    right move for anything the team member should rethink.
                   </Alert>
                 )}
 
@@ -429,7 +490,7 @@ function ApprovalCard({
                       className="btn-secondary"
                     >
                       <Pencil className="h-4 w-4" />
-                      {editing ? 'Done editing' : 'Make small edits'}
+                      {editing ? 'Done editing' : 'Edit'}
                     </button>
                     <button onClick={() => setRejecting(true)} className="btn-secondary">
                       <X className="h-4 w-4" /> Send back

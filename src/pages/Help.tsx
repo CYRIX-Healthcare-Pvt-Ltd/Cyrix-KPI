@@ -213,7 +213,7 @@ export default function Help() {
           points={[
             {
               what: 'Approve their KPI',
-              how: 'Nobody on your team can start a month until you approve their KPI for the year.',
+              how: 'Nobody on your team can start a month until you approve their KPI for the year. Use Edit to correct a KRA, a weightage, a target or how a row is scored before you approve — it saves as you go, so a typo does not cost a round trip.',
               to: '/approvals', cta: 'Open approvals',
             },
             {

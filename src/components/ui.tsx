@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react'
 import { bandFor, attainmentPct } from '@/lib/bands'
@@ -102,6 +102,66 @@ export function Alert({
         {children && <div className={clsx(title && 'mt-1')}>{children}</div>}
       </div>
     </div>
+  )
+}
+
+/**
+ * "040" → "40", and nothing else.
+ *
+ * Leading zeros pile up because these fields start at 0 and people type
+ * after it. Only zeros with a digit behind them go, so "0" survives,
+ * "0.5" survives, and a minus sign keeps its place — anything more
+ * aggressive would eat the "4." somebody is halfway through typing as
+ * "4.5".
+ */
+export const cleanNumberText = (raw: string) =>
+  raw.replace(/^(-?)0+(?=\d)/, '$1')
+
+/**
+ * A number field that shows what it holds.
+ *
+ * React does not correct the displayed text on an input of type="number"
+ * when the two are only loosely unequal — its check is `node.value !=
+ * value`, and "040" loosely equals 40 — so a field bound to a number
+ * keeps whatever string the typing left behind. Holding the text here
+ * and canonicalising it on the way through is what makes the display and
+ * the value agree.
+ *
+ * The effect re-syncs only when the model has genuinely moved elsewhere,
+ * such as an Excel import or a template load. Without that guard it
+ * would fight every keystroke.
+ */
+export function NumberInput({
+  value, onValue, className, ...rest
+}: {
+  value: number | null
+  onValue: (v: number | null) => void
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'>) {
+  const [text, setText] = useState(value === null ? '' : String(value))
+
+  useEffect(() => {
+    const parsed = text.trim() === '' ? null : Number(text)
+    if (parsed === value) return
+    setText(value === null ? '' : String(value))
+    // Deliberately keyed on the model alone: reacting to text as well
+    // would make every keystroke a candidate for being overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  return (
+    <input
+      {...rest}
+      type="number"
+      inputMode="decimal"
+      className={className ?? 'input'}
+      value={text}
+      onChange={e => {
+        const next = cleanNumberText(e.target.value)
+        setText(next)
+        const n = next.trim() === '' ? null : Number(next)
+        onValue(n === null || Number.isNaN(n) ? null : n)
+      }}
+    />
   )
 }
 
