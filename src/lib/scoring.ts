@@ -239,3 +239,17 @@ export function computeTotals(
     final: anyManagerScored ? build(finalOf) : null,
   }
 }
+
+/**
+ * How far below somebody's own assessment a manager may score without
+ * explaining themselves.
+ *
+ * Points on the total out of 100, not a percentage of it, and not per
+ * row: a row worth 5% marked one unit lower is a large proportional cut
+ * and nothing anybody needs a paragraph about. The total is the number
+ * the team member sees and the number they would otherwise query.
+ *
+ * Mirrored in migration 0045 as `cut_at`, which is the one that actually
+ * enforces it. If this moves, move that.
+ */
+export const SCORE_CUT_POINTS = 5

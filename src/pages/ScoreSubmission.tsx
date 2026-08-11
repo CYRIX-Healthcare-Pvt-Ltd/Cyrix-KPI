@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Check, Undo2, Lock, Trash2, MessageSquare,
 } from 'lucide-react'
+import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
@@ -12,7 +13,7 @@ import {
 import { monthLabel } from '@/lib/fy'
 import {
   calcKpiScore, averageCoreValueRatings, blendScores, RATING_SCALE,
-  type ScoringRule, type RuleParams,
+  SCORE_CUT_POINTS, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile,
@@ -53,6 +54,7 @@ export default function ScoreSubmission() {
   const [targets, setTargets] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
+  const [cutReason, setCutReason] = useState('')
   const [returnReason, setReturnReason] = useState('')
   const [showReturn, setShowReturn] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -80,6 +82,7 @@ export default function ScoreSubmission() {
       data.ratings.map(r => [r.id, r.manager_rating ?? r.self_rating ?? '']),
     ))
     setRemarks(data.submission.manager_remarks ?? '')
+    setCutReason(data.submission.score_cut_reason ?? '')
   }, [data])
 
   /** The target as currently typed, falling back to what was saved. */
@@ -140,6 +143,14 @@ export default function ScoreSubmission() {
     (a, i) => a + (blendScores(selfScore(i), mgrScore(i)) ?? 0), 0,
   )
 
+  /**
+   * How far below their own assessment this lands, live as the manager
+   * types rather than from the saved row — so the box appears while the
+   * score is being decided, not after it has been submitted and refused.
+   */
+  const cutGap = selfTotal - mgrTotal
+  const needsCutReason = cutGap > SCORE_CUT_POINTS && !cutReason.trim()
+
   const save = async () => {
     setError(null)
     try {
@@ -184,7 +195,11 @@ export default function ScoreSubmission() {
     if (!submission) return
     if (!(await save())) return
     try {
-      await action.mutateAsync({ action: 'submit_manager', submissionId: submission.id })
+      await action.mutateAsync({
+        action: 'submit_manager',
+        submissionId: submission.id,
+        reason: cutReason.trim() || undefined,
+      })
       setNotice(
         `Submitted. ${data?.employee.full_name.split(' ')[0]} can now see your ` +
         'scores and query them until the month closes. You can still correct ' +
@@ -317,6 +332,36 @@ export default function ScoreSubmission() {
           tone="brand"
         />
       </div>
+
+      {/* A materially lower score, explained where it happens.
+          Between the totals and the rows on purpose: it is about the
+          number directly above it, and a manager who scrolls past the
+          tiles has already seen the gap by the time they read this.
+
+          One column, full width, generous target. The temptation is to
+          put the figure and the box side by side, which on a phone gives
+          a textarea about forty characters wide for the most important
+          sentence on the screen. */}
+      {editable && cutGap > SCORE_CUT_POINTS && (
+        <ScoreCutPrompt
+          gap={cutGap}
+          name={data.employee.full_name.split(' ')[0]}
+          value={cutReason}
+          onChange={setCutReason}
+        />
+      )}
+
+      {/* What was said last time, once it is no longer editable. The
+          manager should be able to see their own reasoning without
+          opening the team member's view of it. */}
+      {!editable && submission.score_cut_reason && (
+        <div className="card p-4">
+          <p className="text-xs font-medium text-ink-500">
+            Reason given for the lower score
+          </p>
+          <p className="mt-1 text-sm text-ink-700">{submission.score_cut_reason}</p>
+        </div>
+      )}
 
       {/* ---- the scored rows, side by side: job role, then ESMS ---- */}
       {SCORED_SECTIONS.map(({ key, label }) => {
@@ -495,9 +540,14 @@ export default function ScoreSubmission() {
         <div className="space-y-3">
           <div className="sticky bottom-16 flex flex-wrap gap-2 md:bottom-0">
             {submission.status === 'submitted' && (
-              <button onClick={onSubmitScores} disabled={busy} className="btn-primary">
+              <button
+                onClick={onSubmitScores}
+                disabled={busy || needsCutReason}
+                className="btn-primary"
+                title={needsCutReason ? 'Say why the score is lower first' : undefined}
+              >
                 {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                Submit my scores
+                {needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
               </button>
             )}
             {/* Exactly one thing closes a month, and which one depends

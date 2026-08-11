@@ -444,6 +444,10 @@ export function useSubmissionAction() {
 
       const params: Record<string, unknown> = { p_submission_id: args.submissionId }
       if (args.action === 'return') params.p_reason = args.reason ?? ''
+      // Only required when the manager is scoring materially below the
+      // self assessment — the server decides that, and refuses if it is
+      // needed and missing.
+      if (args.action === 'submit_manager') params.p_reason = args.reason ?? null
 
       const { error } = await supabase.rpc(fn, params)
       if (error) throw new Error(friendlyError(error))

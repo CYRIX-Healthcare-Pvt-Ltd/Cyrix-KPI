@@ -174,6 +174,10 @@ export default function Help() {
                 how: `They enter their own figure for each row. Your final score is the average of yours and theirs. They have ${mgrDays} days. The status then reads Manager reviewed.`,
               },
               {
+                what: 'If their score is a lot lower than yours',
+                how: 'More than 5 points below what you gave yourself and they have to write why before they can submit. You see that reason on the month, next to the score.',
+              },
+              {
                 what: closingDay === null
                   ? 'Your manager closes the month'
                   : 'The month closes on its own',
@@ -241,6 +245,11 @@ export default function Help() {
               to: '/team', cta: 'Open my team',
             },
             {
+              what: 'Say why if you score much lower',
+              how: 'If your total is more than 5 points below what they gave themselves, the app asks for a reason and will not let you submit without one. They see it with their score. It saves a query later.',
+              to: '/team', cta: 'Open my team',
+            },
+            {
               what: 'Answer their queries',
               how: 'If someone questions a score, you get a tab and a badge. Reply, and change the score first if it needs changing. The month stays open until you do.',
               to: '/queries', cta: 'Open queries',
@@ -263,6 +272,16 @@ export default function Help() {
             {
               what: 'See what the team total is made of',
               how: 'My Team and Team analysis both show the team average split into job role, core values and ESMS. Each is a percentage of its own weightage, so they can be compared — 14 out of 15 is better than 16 out of 20.',
+              to: '/team', cta: 'Open my team',
+            },
+            {
+              what: 'See whether the team is bunched or spread',
+              how: 'On My Team, switch the chart to Bell curve. It shows where everybody sits across the range, with one dot per person. Filter it by month and by job role, core values or ESMS. An average of 77 can be everybody at 77 or half at 60 and half at 94.',
+              to: '/team', cta: 'Open my team',
+            },
+            {
+              what: 'Change the month somebody starts from',
+              how: 'Open their record from My Team. The start month is at the bottom with their KPI, and you can change it there. It will not go past a month they have already been scored on.',
               to: '/team', cta: 'Open my team',
             },
             {
@@ -371,6 +390,11 @@ export default function Help() {
               what: 'Why can I not submit anything?',
               how: 'Your KPI for the year is probably not approved yet. Check with your manager.',
               to: '/my-kpi', cta: 'Check my KPI',
+            },
+            {
+              what: 'Where do I see which month my KPI starts from?',
+              how: 'On My KPI, at the top, above your KRAs. If it looks wrong, ask your manager — they can change it.',
+              to: '/my-kpi', cta: 'Open my KPI',
             },
             {
               what: 'It asked me which month my KPI starts from',

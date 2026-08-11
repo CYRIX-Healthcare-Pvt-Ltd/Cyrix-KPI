@@ -216,6 +216,12 @@ export interface KpiSubmission {
   return_reason: string | null
   employee_remarks: string | null
   manager_remarks: string | null
+  /**
+   * Why the manager scored materially below the self assessment.
+   * Required above SCORE_CUT_POINTS, and shown to the team member —
+   * see migration 0045.
+   */
+  score_cut_reason: string | null
   self_job_role_score: number | null
   /** Null for anyone who carries no ESMS — not zero, it does not apply. */
   self_esms_score: number | null

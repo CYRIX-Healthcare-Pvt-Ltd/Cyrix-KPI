@@ -9,8 +9,7 @@ import {
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
-import { monthLabel } from '@/lib/fy'
-import { StartMonthSelect } from '@/components/StartMonth'
+import { StartMonthBanner } from '@/components/StartMonth'
 import type { KpiAssignment, KpiAssignmentItem, Section, Alternate } from '@/types/db'
 
 export default function Approvals() {
@@ -518,27 +517,15 @@ function ApprovalCard({
             <div className="p-6 text-center"><Spinner className="mx-auto h-5 w-5 text-ink-400" /></div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink-100 bg-amber-50/40 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink-900">
-                    This KPI starts from
-                  </p>
-                  <p className="mt-0.5 text-xs text-ink-500">
-                    {startsFrom
-                      ? `${monthLabel(startsFrom)} onwards. Earlier months are not asked for.`
-                      : `${name.split(' ')[0]} is not assessed on anything before this.`}
-                  </p>
-                </div>
-                <div className="ml-auto flex items-center gap-2">
-                  {setStart.isPending && <Spinner className="h-4 w-4 text-ink-400" />}
-                  <StartMonthSelect
-                    fy={assignment.financial_year}
-                    value={startsFrom}
-                    onChange={chooseStart}
-                    placeholder="Choose a month"
-                    className="input w-auto"
-                  />
-                </div>
+              <div className="border-b border-ink-100 p-4">
+                <StartMonthBanner
+                  fy={assignment.financial_year}
+                  startsFrom={assignment.starts_from}
+                  who={name.split(' ')[0]}
+                  editable
+                  busy={setStart.isPending}
+                  onChange={chooseStart}
+                />
               </div>
 
               <div className="overflow-x-auto">

@@ -1,23 +1,25 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts'
 import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
-import { useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy } from '@/lib/queries'
+import {
+  useSubmissionHistory, useAnnualSummary, useMyAssignment, useSetKpiStart, currentFy,
+} from '@/lib/queries'
+import { StartMonthBanner } from '@/components/StartMonth'
 import { fyMonthsFrom, monthLabel } from '@/lib/fy'
 import {
   PageLoader, ScorePill, StatTile, StatusBadge, Alert, BandCell,
 } from '@/components/ui'
-import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
-import { sectionsOf } from '@/lib/sections'
+import BandTrend from '@/components/BandTrend'
+import { sectionsOf, JOB_ROLE_TOTAL } from '@/lib/sections'
 import type { Employee } from '@/types/db'
 
 export default function TeamMember() {
   const { employeeId = '' } = useParams()
   const fy = currentFy()
+  const setStart = useSetKpiStart()
+  const [startError, setStartError] = useState<string | null>(null)
 
   const { data: member, isLoading } = useQuery({
     enabled: !!employeeId,
@@ -52,11 +54,11 @@ export default function TeamMember() {
     const s = byMonth.get(m)
     const scored = s && (s.status === 'scored' || s.status === 'finalized')
     return {
-      month: monthLabel(m).split('-')[0],
-      Total: scored ? s.final_total_score : null,
-      'Job role': scored ? s.final_job_role_score : null,
-      ESMS: scored ? s.final_esms_score : null,
-      'Core values': scored ? s.final_core_score : null,
+      month: m,
+      total: scored ? s.final_total_score : null,
+      job: scored ? s.final_job_role_score : null,
+      esms: scored ? s.final_esms_score : null,
+      core: scored ? s.final_core_score : null,
     }
   })
 
@@ -85,50 +87,16 @@ export default function TeamMember() {
         <StatTile label="Lowest" value={annual?.lowest_month?.toFixed(1) ?? '—'} />
       </div>
 
-      {chartData.some(d => d.Total !== null) && (
+      {chartData.some(d => d.total !== null) && (
         <div className="card p-4">
-          <h3 className="mb-4 text-sm font-semibold text-ink-800">Score trend</h3>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={TREND_MARGIN}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  formatter={(v: unknown) => (typeof v === 'number' ? v.toFixed(2) : '—')}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {/* The total, and then what it is made of. A total alone
-                    cannot show a strong job role being carried by core
-                    values, or the reverse — which is the thing a manager
-                    is looking at this chart to find out.
-
-                    Only the total is labelled. Four sets of numbers on
-                    one plot collide with each other at every crossing,
-                    and the legend plus the tooltip cover the rest. */}
-                <Line
-                  type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
-                  dot={{ r: 3 }} connectNulls
-                  label={<ScoreLabel count={chartData.length} />}
-                />
-                <Line
-                  type="monotone" dataKey="Job role" stroke="#e30613" strokeWidth={1.5}
-                  dot={{ r: 2 }} connectNulls
-                />
-                {hasEsms && (
-                  <Line
-                    type="monotone" dataKey="ESMS" stroke="#7c3aed" strokeWidth={1.5}
-                    dot={{ r: 2 }} connectNulls
-                  />
-                )}
-                <Line
-                  type="monotone" dataKey="Core values" stroke="#8a8d97" strokeWidth={1.5}
-                  dot={{ r: 2 }} connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-800">Score trend</h3>
+          <p className="mb-3 text-xs text-ink-500">
+            The total, and what it is made of. Job role is out of{' '}
+            {JOB_ROLE_TOTAL} and core values out of{' '}
+            {100 - JOB_ROLE_TOTAL - esmsWeight}
+            {hasEsms && `, with ESMS out of ${esmsWeight}`}.
+          </p>
+          <BandTrend points={chartData} hasEsms={hasEsms} />
         </div>
       )}
 
@@ -204,6 +172,30 @@ export default function TeamMember() {
       </div>
 
       {/* their KPI structure, for context while scoring */}
+      {assignment?.assignment && (
+        <>
+          {/* The manager's place to fix this. It is the only screen that
+              shows one person's whole year, which is where somebody
+              notices the start month is wrong — and the approval screen
+              is gone by then, because the KPI is already approved. */}
+          <StartMonthBanner
+            fy={fy}
+            startsFrom={startsFrom}
+            who={member.full_name.split(' ')[0]}
+            editable
+            busy={setStart.isPending}
+            onChange={month => {
+              setStartError(null)
+              setStart.mutate(
+                { assignmentId: assignment.assignment!.id, month },
+                { onError: e => setStartError(e.message) },
+              )
+            }}
+          />
+          {startError && <Alert kind="error">{startError}</Alert>}
+        </>
+      )}
+
       {assignment?.items.length ? (
         <div className="card overflow-hidden">
           <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">

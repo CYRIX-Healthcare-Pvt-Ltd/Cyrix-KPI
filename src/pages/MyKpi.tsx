@@ -9,6 +9,7 @@ import {
   Alert, PageLoader, StatusBadge, EmptyState, Spinner,
 } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
+import { StartMonthBanner } from '@/components/StartMonth'
 import type { Section } from '@/types/db'
 
 export default function MyKpi() {
@@ -78,6 +79,12 @@ export default function MyKpi() {
           />
         </>
       )}
+
+      {/* Above the rows, because it decides which months the rows are
+          ever asked about. Read-only here: the manager owns this, and a
+          team member quietly moving their own start month would be
+          moving the months they are measured on. */}
+      <StartMonthBanner fy={fy} startsFrom={assignment.starts_from} />
 
       {/* The bands this person actually has. ESMS is absent for anyone
           who does not carry it, rather than shown as an empty 0%. */}

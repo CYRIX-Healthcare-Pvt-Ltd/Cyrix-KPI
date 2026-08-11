@@ -5,6 +5,7 @@ import {
   ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, Paperclip, CheckCircle2,
   Shuffle,
 } from 'lucide-react'
+import { ScoreCutNotice } from '@/components/ScoreCutReason'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -368,6 +369,21 @@ export default function MonthlySubmission() {
           />
         </div>
       ) : null}
+
+      {/* Why the manager's figure is lower, next to the figure rather
+          than at the bottom with the remarks. It is the answer to the
+          question the number just raised, and somebody who has to scroll
+          past six KRAs to find it has already decided to raise a query.
+
+          Its own card, stacked, one column — the reason is prose and
+          gets the full width to be prose in. */}
+      {submission.score_cut_reason &&
+       (submission.status === 'scored' || submission.status === 'finalized') && (
+        <ScoreCutNotice
+          reason={submission.score_cut_reason}
+          canQuery={submission.status === 'scored'}
+        />
+      )}
 
       {/* ---- the rows entered by hand: job role, then ESMS ---- */}
       {measuredBlocks.map(block => (

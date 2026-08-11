@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff,
-  LineChart as LineChartIcon,
+  Sigma, LineChart as LineChartIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -15,14 +16,25 @@ import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired, TeamBands } from '@/components/analysis'
-import { teamBandShare } from '@/lib/bands'
+import BellCurve from '@/components/BellCurve'
+import { teamBandShare, attainmentPct } from '@/lib/bands'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import ScoreTrend from '@/components/ScoreTrend'
+import BandTrend from '@/components/BandTrend'
 import Avatar from '@/components/Avatar'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 import type { KpiSubmission, KpiAssignment, Employee } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
+
+/** Which band the bell curve is plotting. */
+type BellMetric = 'total' | 'job' | 'esms' | 'core'
+
+const METRIC_LABEL: Record<BellMetric, string> = {
+  total: 'Total',
+  job: 'Job role',
+  esms: 'ESMS',
+  core: 'Core values',
+}
 
 export default function Team() {
   const { employee } = useAuth()
@@ -34,6 +46,9 @@ export default function Team() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [chartTab, setChartTab] = useState<'trend' | 'bell'>('trend')
+  const [bellMonth, setBellMonth] = useState('')
+  const [bellMetric, setBellMetric] = useState<BellMetric>('total')
 
   const { data, isLoading } = useTeamMonth(employee?.id, month, fy)
   // Months close on the company closing date rather than by somebody
@@ -95,6 +110,49 @@ export default function Team() {
   }, [allSubs, data])
 
   /**
+   * One figure per person for the bell curve.
+   *
+   * Always a percentage of the band being plotted, never raw points —
+   * core values is 20 for most people and 15 for anyone carrying ESMS,
+   * so a distribution of raw core scores would put two different scales
+   * on one axis and draw a second hump that is an artefact of the
+   * weighting rather than of anybody's performance.
+   */
+  const bellValues = useMemo(() => {
+    const weightsOf = (id: string) => {
+      const a = (data?.assignments ?? []).find(x => x.employee_id === id)
+      return {
+        total: 100,
+        job: Number(a?.job_role_weight ?? JOB_ROLE_TOTAL),
+        esms: Number(a?.esms_weight ?? 0),
+        core: Number(a?.core_values_weight ?? REMAINDER_TOTAL),
+      }
+    }
+    const pick = (s: KpiSubmission) => ({
+      total: s.final_total_score,
+      job: s.final_job_role_score,
+      esms: s.final_esms_score,
+      core: s.final_core_score,
+    }[bellMetric])
+
+    const out: number[] = []
+    for (const member of data?.team ?? []) {
+      const rows = (allSubs ?? []).filter(s =>
+        s.employee_id === member.id
+        && SCORED.has(s.status)
+        && (!bellMonth || s.period_month === bellMonth))
+      const w = weightsOf(member.id)[bellMetric]
+      const pcts = rows
+        .map(s => attainmentPct(pick(s), w))
+        .filter((v): v is number => v !== null)
+      // Their own average first, so somebody scored on six months is one
+      // person on this chart rather than six.
+      if (pcts.length) out.push(pcts.reduce((a, b) => a + b, 0) / pcts.length)
+    }
+    return out
+  }, [allSubs, data, bellMonth, bellMetric])
+
+  /**
    * The team average for each finished month.
    *
    * Everyone who was scored that month, averaged — so a month where only
@@ -102,20 +160,30 @@ export default function Team() {
    * tooltip's month label rather than pretending to be the whole team.
    */
   const trend = useMemo(() => {
-    const byMonth = new Map<string, number[]>()
+    const byMonth = new Map<string, KpiSubmission[]>()
     for (const s of allSubs ?? []) {
       if (!SCORED.has(s.status) || s.final_total_score === null) continue
       const list = byMonth.get(s.period_month) ?? []
-      list.push(s.final_total_score)
+      list.push(s)
       byMonth.set(s.period_month, list)
     }
+    // Raw points, not shares. Job role out of 80 and core values out of
+    // 20 keep the lines apart on the plot; converting both to
+    // percentages would stack three lines in the seventies.
+    const avg = (rows: KpiSubmission[], pick: (s: KpiSubmission) => number | null) => {
+      const vals = rows.map(pick).filter((v): v is number => v !== null)
+      return vals.length
+        ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+        : null
+    }
     return openFyMonths(fy).map(m => {
-      const v = byMonth.get(m)
+      const rows = byMonth.get(m) ?? []
       return {
         month: m,
-        score: v?.length
-          ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10
-          : null,
+        total: avg(rows, s => s.final_total_score),
+        job: avg(rows, s => s.final_job_role_score),
+        esms: avg(rows, s => s.final_esms_score),
+        core: avg(rows, s => s.final_core_score),
       }
     })
   }, [allSubs, fy])
@@ -252,17 +320,93 @@ export default function Team() {
         />
       </div>
 
+      {/* Two views of the same scores, answering different questions:
+          are we improving, and are we bunched or spread. Tabs rather
+          than two stacked cards — they are alternatives, and a manager
+          reads one at a time. */}
       <div className="card p-4">
-        <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
-          <LineChartIcon className="h-4 w-4 text-ink-400" /> Team average, month by month
-        </h3>
-        <p className="mb-3 text-xs text-ink-500">
-          Everyone who was scored that month, averaged, on the band scale.
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div
+            className="flex rounded-lg bg-ink-100 p-0.5"
+            role="tablist"
+            aria-label="Team chart"
+          >
+            {([
+              ['trend', 'Team average', LineChartIcon],
+              ['bell', 'Bell curve', Sigma],
+            ] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={chartTab === key}
+                onClick={() => setChartTab(key)}
+                className={clsx(
+                  'btn-press flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  chartTab === key
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink-500 hover:text-ink-800',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Only the bell curve's own filters, and only when it is the
+              one on screen. Full width on a phone so two selects never
+              end up squeezed into half a row each. */}
+          {chartTab === 'bell' && (
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <select
+                className="input w-full sm:w-auto"
+                value={bellMonth}
+                onChange={e => setBellMonth(e.target.value)}
+                aria-label="Month"
+              >
+                <option value="">All months · average</option>
+                {openFyMonths(fy).reverse().map(m => (
+                  <option key={m} value={m}>{monthLabel(m)} only</option>
+                ))}
+              </select>
+              <select
+                className="input w-full sm:w-auto"
+                value={bellMetric}
+                onChange={e => setBellMetric(e.target.value as BellMetric)}
+                aria-label="Which band to plot"
+              >
+                <option value="total">Total</option>
+                <option value="job">Job role</option>
+                {bandShare.anyEsms && <option value="esms">ESMS</option>}
+                <option value="core">Core values</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        <p className="mb-3 mt-3 text-xs text-ink-500">
+          {chartTab === 'trend'
+            ? 'Everyone who was scored that month, averaged, on the band scale.'
+            : `Where the team sits on ${METRIC_LABEL[bellMetric].toLowerCase()}, ` +
+              `${bellMonth ? `for ${monthLabel(bellMonth)}` : 'averaged over the year'}. ` +
+              'Each dot on the axis is one person.'}
         </p>
-        <ScoreTrend
-          points={trend}
-          emptyMessage="No months scored yet — the line starts with your first one."
-        />
+
+        {chartTab === 'trend' ? (
+          <BandTrend
+            points={trend}
+            hasEsms={bandShare.anyEsms}
+            emptyMessage="No months scored yet — the lines start with your first one."
+          />
+        ) : (
+          <BellCurve
+            values={bellValues}
+            emptyMessage={
+              bellMonth
+                ? `Fewer than three people have been scored for ${monthLabel(bellMonth)}, so there is no spread to draw yet.`
+                : 'Fewer than three people have been scored yet, so there is no spread to draw.'
+            }
+          />
+        )}
       </div>
 
       {peek && (
@@ -435,9 +579,17 @@ function MemberPeek({
     ['Department', member.department],
     ['Function', member.function_name],
     ['Grade', member.grade],
+    // The badge rather than the raw column: status.replace('_', ' ') put
+    // "active" and "pending approval" on screen in database spelling,
+    // which is not what any of these are called anywhere else in the app.
     ['KPI for the year', assign
-      ? assign.status.replace('_', ' ')
-      : <span className="text-amber-700">not set up</span>],
+      ? <StatusBadge status={assign.status} kind="assignment" />
+      : <span className="text-amber-700">Not set up</span>],
+    ['KPI starts from', assign
+      ? (assign.starts_from
+          ? monthLabel(assign.starts_from)
+          : <span className="text-amber-700">Not set yet</span>)
+      : '—'],
   ]
 
   return (
