@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  bandFor, attainmentPct, BAND_SCALE, bandScaleGradient, teamBandShare,
+  bandFor, attainmentPct, BANDS, BAND_SCALE, bandScaleGradient, teamBandShare,
 } from './bands'
 
 /**
@@ -85,8 +85,49 @@ describe('the band scale the meter draws', () => {
     // Two stops per band — one to open it, one to close it — so the
     // colour does not smear across a threshold the ticks say is sharp.
     expect(g.match(/%/g)?.length).toBe(BAND_SCALE.length * 2)
-    expect(g).toContain('#e30613 0%')
-    expect(g).toContain('#10b981 100%')
+    // Read off BANDS rather than pinned to particular hexes. The palette
+    // is a judgement that gets revisited — Good moved from amber to lime
+    // once HR pointed out it means "doing the job as expected" — and a
+    // test that fails on a colour change is testing the wrong thing. What
+    // must hold is that the ramp covers the whole scale, lowest band at
+    // the left edge and highest at the right.
+    const lowest = BAND_SCALE[0].band.hex.base
+    const highest = BAND_SCALE[BAND_SCALE.length - 1].band.hex.base
+    expect(g).toContain(`${lowest} 0%`)
+    expect(g).toContain(`${highest} 100%`)
+  })
+
+  it('paints everything from Good upward as some kind of green', () => {
+    // The point of the ramp, and the thing most likely to be undone by
+    // accident: Good is where the person is doing the job as expected,
+    // so only the two bands genuinely below expectation carry a warning
+    // colour. Hue in HSL — 60°–180° is the green half of the wheel.
+    const hueOf = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      if (max === min) return 0
+      const d = max - min
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+      return ((h * 60) + 360) % 360
+    }
+
+    for (const key of ['good', 'veryGood', 'excellent'] as const) {
+      const band = BANDS.find(b => b.key === key)!
+      const hue = hueOf(band.hex.base)
+      expect(hue, `${band.label} is not a green (hue ${Math.round(hue)}°)`)
+        .toBeGreaterThan(60)
+      expect(hue).toBeLessThan(180)
+    }
+
+    for (const key of ['poor', 'satisfactory'] as const) {
+      const band = BANDS.find(b => b.key === key)!
+      const hue = hueOf(band.hex.base)
+      // Red sits at the seam of the wheel — Cyrix red is 356°, not 0° —
+      // so warm means the arc through red, not simply a small number.
+      const warm = hue < 60 || hue > 300
+      expect(warm, `${band.label} should read as a warning (hue ${Math.round(hue)}°)`)
+        .toBe(true)
+    }
   })
 })
 

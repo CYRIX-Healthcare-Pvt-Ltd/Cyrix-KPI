@@ -39,20 +39,56 @@ export interface Band {
   }
 }
 
+/*
+  Why the colour break sits at 60 and not at 80.
+
+  HR's reading of the scale, and the right one: Good means the person is
+  doing the job as their manager expected. Good used to be amber — the
+  colour every dashboard on earth uses for "attention required" — so
+  somebody meeting expectations was shown the same colour as somebody
+  who is not.
+
+  The app already disagreed with itself about this. WEAK_THRESHOLD is 60,
+  and everything that flags a problem — "areas below Good", the weak
+  areas list, "nobody is averaging below Good" — measures from there. The
+  words said four of the five bands were positive; the colours said three
+  of the five were warnings.
+
+  So the ramp is red → amber → lime → green → emerald: one alarm, one
+  caution, three shades of on-track. Colour changes where meaning
+  changes, and only the two bands that are genuinely below expectation
+  are coloured like it.
+
+  Every surface reads from here — the meter, the pills, the chips, the
+  hero, the trend chart, the bell curve — so this is the only place it
+  needs saying. The database stores labels and thresholds only.
+*/
 export const BANDS: Band[] = [
   {
     key: 'excellent', label: 'Excellent', min: 90,
-    hex: { base: '#10b981', soft: '#d1fae5', strong: '#065f46' },
-    chip: 'bg-emerald-100 text-emerald-800',
-    accent: 'text-emerald-700', wash: 'from-emerald-50', bar: 'bg-emerald-500',
+    hex: { base: '#059669', soft: '#d1fae5', strong: '#064e3b' },
+    chip: 'bg-emerald-100 text-emerald-900',
+    accent: 'text-emerald-800', wash: 'from-emerald-50', bar: 'bg-emerald-600',
     onDark: {
-      text: 'text-emerald-400', bar: 'bg-emerald-400',
-      chip: 'bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30',
+      // Lighter than the light-mode base: #059669 on black is a smudge.
+      text: 'text-emerald-300', bar: 'bg-emerald-400',
+      chip: 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-400/30',
       glow: 'bg-emerald-500/20',
     },
   },
   {
     key: 'veryGood', label: 'Very Good', min: 80,
+    hex: { base: '#22c55e', soft: '#dcfce7', strong: '#166534' },
+    chip: 'bg-green-100 text-green-800',
+    accent: 'text-green-700', wash: 'from-green-50', bar: 'bg-green-500',
+    onDark: {
+      text: 'text-green-400', bar: 'bg-green-400',
+      chip: 'bg-green-400/15 text-green-300 ring-1 ring-green-400/30',
+      glow: 'bg-green-500/20',
+    },
+  },
+  {
+    key: 'good', label: 'Good', min: 60,
     hex: { base: '#84cc16', soft: '#ecfccb', strong: '#3f6212' },
     chip: 'bg-lime-100 text-lime-900',
     accent: 'text-lime-800', wash: 'from-lime-50', bar: 'bg-lime-500',
@@ -63,7 +99,7 @@ export const BANDS: Band[] = [
     },
   },
   {
-    key: 'good', label: 'Good', min: 60,
+    key: 'satisfactory', label: 'Satisfactory', min: 40,
     hex: { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
     chip: 'bg-amber-100 text-amber-800',
     accent: 'text-amber-700', wash: 'from-amber-50', bar: 'bg-amber-500',
@@ -71,17 +107,6 @@ export const BANDS: Band[] = [
       text: 'text-amber-400', bar: 'bg-amber-400',
       chip: 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30',
       glow: 'bg-amber-500/20',
-    },
-  },
-  {
-    key: 'satisfactory', label: 'Satisfactory', min: 40,
-    hex: { base: '#f97316', soft: '#ffedd5', strong: '#9a3412' },
-    chip: 'bg-orange-100 text-orange-800',
-    accent: 'text-orange-700', wash: 'from-orange-50', bar: 'bg-orange-500',
-    onDark: {
-      text: 'text-orange-400', bar: 'bg-orange-400',
-      chip: 'bg-orange-400/15 text-orange-300 ring-1 ring-orange-400/30',
-      glow: 'bg-orange-500/20',
     },
   },
   {

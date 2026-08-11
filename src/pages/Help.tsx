@@ -429,7 +429,7 @@ export default function Help() {
           },
           {
             what: 'What do the colours mean?',
-            how: 'Red is Poor, orange Satisfactory, amber Good, lime Very Good, green Excellent. Each score is coloured against what it was out of, not out of 100.',
+            how: 'Red is Poor and yellow is Satisfactory — those two are below what your manager expects. Good, Very Good and Excellent are all green, getting deeper as the score rises, because Good already means you are doing the job as expected. Each score is coloured against what it was out of, not out of 100.',
           },
           {
             what: 'I forgot my password',

@@ -59,7 +59,14 @@ export function ScoreHeader({
         </div>
       )}
 
-      <div className="relative flex flex-wrap items-end justify-between gap-6 p-6 sm:p-7">
+      {/* Side by side once there is room, stacked before that.
+
+          The score block kept text-right when it wrapped underneath the
+          title, so its three lines aligned to a right edge of their own
+          — one as wide as the widest of them — and every line above the
+          score sat indented from the card's left margin while lining up
+          with nothing. Left on a phone, right beside the title. */}
+      <div className="relative flex flex-wrap items-end justify-between gap-4 p-6 sm:gap-6 sm:p-7">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">{title}</h1>
           {subtitle && (
@@ -68,7 +75,7 @@ export function ScoreHeader({
         </div>
 
         {score !== null && score !== undefined && band ? (
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <p className="text-[11px] font-semibold uppercase tracking-label text-white/40">
               {scoreLabel}
             </p>
@@ -91,7 +98,7 @@ export function ScoreHeader({
             </span>
           </div>
         ) : (
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <p className="text-[11px] font-semibold uppercase tracking-label text-white/40">
               {scoreLabel}
             </p>
@@ -149,28 +156,45 @@ export function ScoreHeader({
             />
           ))}
         </div>
-        {/* Each label in its own band's colour, so the legend explains
-            the track without a key. The one being scored is brought to
-            full strength — where you are, on a scale you can see.
+        {/*
+          Each name over the band it names.
 
-            Label tracking is bought back on a phone. Five uppercase words
-            across 295px come to 287px of text, of which 64px is letter
-            spacing, leaving 2px between one word and the next — close
-            enough that POOR SATISFACTORY reads as one phrase. Loosened
-            again at sm, where there is room for it. */}
-        <div className="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-[0.02em] sm:tracking-label">
-          {BAND_SCALE.map(({ band: b }) => (
-            <span
-              key={b.key}
-              style={{ color: b.hex.base }}
-              className={clsx(
-                'transition-opacity',
-                band?.key === b.key ? 'opacity-100' : 'opacity-40',
-              )}
-            >
-              {b.label}
-            </span>
-          ))}
+          These were spread evenly with justify-between, and the bands
+          are not even: Poor is forty points wide and Very Good is ten.
+          So SATISFACTORY was printed at the quarter mark, which is deep
+          inside Poor's red, and every label after it was wrong too. The
+          legend was describing a scale the bar was not drawing.
+
+          Centred on each band's own span now, with the last anchored to
+          the right edge so it cannot hang off it.
+
+          Gone entirely on a phone. The five names cannot fit where they
+          belong — Very Good and Excellent share the last tenth of the
+          width, about 30px, and need 120px between them — and nothing
+          is lost by dropping them, because the band this score is in is
+          already named on the chip beside the number. The bar keeps its
+          colours and its tick marks either way.
+        */}
+        <div className="relative mt-2 hidden h-4 text-[10px] font-medium uppercase tracking-[0.02em] md:block">
+          {BAND_SCALE.map(({ band: b, from, to }, i) => {
+            const last = i === BAND_SCALE.length - 1
+            return (
+              <span
+                key={b.key}
+                className={clsx(
+                  'absolute whitespace-nowrap transition-opacity',
+                  !last && '-translate-x-1/2',
+                  band?.key === b.key ? 'opacity-100' : 'opacity-40',
+                )}
+                style={{
+                  color: b.hex.base,
+                  ...(last ? { right: 0 } : { left: `${(from + to) / 2}%` }),
+                }}
+              >
+                {b.label}
+              </span>
+            )
+          })}
         </div>
       </div>
 
