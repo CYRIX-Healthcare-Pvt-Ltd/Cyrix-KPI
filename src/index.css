@@ -170,6 +170,25 @@
     background-color: #1a5c38;
   }
 
+  /*
+    Team analysis. Its own colour because it is the one control on this
+    screen that leaves it — everything else filters or exports what is
+    already here — and because the alternative was a third button in
+    Excel's green, which would have read as a second export.
+
+    Violet rather than any of the score colours on purpose. Nothing about
+    a navigation button should look like a band.
+  */
+  .btn-analysis {
+    @apply btn whitespace-nowrap px-3 text-[13px] text-white
+           ring-1 ring-inset ring-white/10 sm:px-4 sm:text-sm;
+    background-color: #6d28d9;
+  }
+  .btn-analysis:hover:not(:disabled),
+  .btn-analysis:focus-visible:not(:disabled) {
+    background-color: #5b21b6;
+  }
+
   /**
    * A <select> on the hero.
    *

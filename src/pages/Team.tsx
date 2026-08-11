@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff,
-  Sigma, LineChart as LineChartIcon,
+  Sigma, CalendarDays, LineChart as LineChartIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -292,32 +292,7 @@ export default function Team() {
         subtitle={`${team.length} member${team.length === 1 ? '' : 's'} · FY ${fy}`}
         score={teamAvg}
         scoreLabel="Team average"
-      >
-        {/* Two columns on a phone: the month picker spans both, then the
-            two actions sit side by side at equal width. A plain flex-wrap
-            row left them ragged, breaking after one button on one width
-            and after two on the next. */}
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <select
-            className="select-on-dark col-span-2 sm:w-auto"
-            value={month}
-            onChange={e => setMonth(e.target.value)}
-            aria-label="Month"
-          >
-            {/* Completed months only — a month in progress cannot be assessed. */}
-            {openFyMonths(fy).reverse().map(m => (
-              <option key={m} value={m}>{monthLabel(m)}</option>
-            ))}
-          </select>
-          <Link to="/team/analysis" className="btn-on-dark">
-            <BarChart3 className="h-4 w-4" /> Team analysis
-          </Link>
-          <button onClick={download} className="btn-excel" disabled={busy}>
-            {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-            Export to Excel
-          </button>
-        </div>
-      </ScoreHeader>
+      />
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
@@ -337,25 +312,6 @@ export default function Team() {
       )}
 
       <TeamBands share={bandShare} label={`Team average by band · FY ${fy}`} />
-
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
-        <StatTile
-          label="Waiting for my score"
-          value={awaiting}
-          tone={awaiting > 0 ? 'brand' : 'default'}
-        />
-        <StatTile label="Not submitted yet" value={notStarted} />
-        {/* Out of the people this month applies to, not out of the whole
-            team — otherwise a fully scored month reads as 14 of 16
-            because two of them had not joined yet. */}
-        <StatTile
-          label="Scored"
-          value={done}
-          sub={covered.length === team.length
-            ? `of ${team.length}`
-            : `of ${covered.length} · ${team.length - covered.length} start later`}
-        />
-      </div>
 
       {/* Two views of the same scores, answering different questions:
           are we improving, and are we bunched or spread. Tabs rather
@@ -450,6 +406,80 @@ export default function Team() {
             }
           />
         )}
+      </div>
+
+      {/*
+        The line between the year and one month of it.
+
+        The month picker lived in the hero, three cards above the only
+        things it changed, so it read as a filter on the whole screen —
+        and it is not: the score, the band split and both charts above
+        are the whole year and do not move when it does. Sitting here it
+        governs exactly what follows it, and the caption says so rather
+        than leaving somebody to work it out by watching numbers fail to
+        change.
+
+        The two actions ride along because this is the row a manager
+        reaches for when they are done reading and want to do something.
+      */}
+      <div className="card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
+              <CalendarDays className="h-4 w-4 text-ink-500" />
+            </span>
+            <div className="min-w-0">
+              <label
+                htmlFor="team-month"
+                className="block text-[11px] font-semibold uppercase tracking-label text-ink-400"
+              >
+                Showing
+              </label>
+              <select
+                id="team-month"
+                className="input mt-1 w-auto"
+                value={month}
+                onChange={e => setMonth(e.target.value)}
+              >
+                {/* Completed months only — a month in progress cannot be assessed. */}
+                {openFyMonths(fy).reverse().map(m => (
+                  <option key={m} value={m}>{monthLabel(m)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Two columns on a phone so they are equal width and neither
+              strands the other on its own line. */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <Link to="/team/analysis" className="btn-analysis">
+              <BarChart3 className="h-4 w-4" /> Team analysis
+            </Link>
+            <button onClick={download} className="btn-excel" disabled={busy}>
+              {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+              Export to Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
+        <StatTile
+          label="Waiting for my score"
+          value={awaiting}
+          tone={awaiting > 0 ? 'brand' : 'default'}
+        />
+        <StatTile label="Not submitted yet" value={notStarted} />
+        {/* Out of the people this month applies to, not out of the whole
+            team — otherwise a fully scored month reads as 14 of 16
+            because two of them had not joined yet. */}
+        <StatTile
+          label="Scored"
+          value={done}
+          sub={covered.length === team.length
+            ? `of ${team.length}`
+            : `of ${covered.length} · ${team.length - covered.length} start later`}
+        />
       </div>
 
       {peek && (

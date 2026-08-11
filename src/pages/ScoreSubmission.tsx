@@ -538,7 +538,7 @@ export default function ScoreSubmission() {
       {/* ---- actions ---- */}
       {editable && (
         <div className="space-y-3">
-          <div className="sticky bottom-16 flex flex-wrap gap-2 md:bottom-0">
+          <div className="sticky bottom-16 flex flex-wrap gap-2 lg:bottom-0">
             {submission.status === 'submitted' && (
               <button
                 onClick={onSubmitScores}

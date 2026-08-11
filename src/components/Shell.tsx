@@ -153,7 +153,7 @@ export default function Shell() {
       <header className="sticky top-0 z-30 border-b border-ink-200 bg-white">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
           <button
-            className="btn-icon md:hidden"
+            className="btn-icon lg:hidden"
             onClick={() => setMenuOpen(v => !v)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           >
@@ -168,7 +168,12 @@ export default function Shell() {
             </span>
           </div>
 
-          <nav className="ml-6 hidden items-center gap-1 md:flex">
+          {/* lg, not md. Between the two the tabs, the name and three
+              icon buttons are wider than the bar, so the whole page
+              scrolled sideways — and HR carries more tabs than anyone,
+              so trimming padding would only move the width it breaks at.
+              The bottom nav covers tablets instead. */}
+          <nav className="ml-6 hidden items-center gap-1 lg:flex">
             {items.map(item => (
               <NavLink
                 key={item.to}
@@ -194,7 +199,12 @@ export default function Shell() {
               aria-label="My profile"
               title="My profile"
             >
-              <span className="hidden text-right sm:block">
+              {/* lg, not sm. The desktop nav appears at md, and between md
+                  and lg the tabs plus the name plus three icon buttons are
+                  wider than the bar — the page scrolled sideways by about
+                  the width of this block. The avatar stays, and it is the
+                  same link. */}
+              <span className="hidden text-right lg:block">
                 <span className="block text-sm font-medium leading-tight text-ink-900">
                   {employee?.full_name}
                 </span>
@@ -228,7 +238,7 @@ export default function Shell() {
         </div>
 
         {menuOpen && (
-          <nav className="border-t border-ink-200 bg-white px-3 py-2 md:hidden">
+          <nav className="border-t border-ink-200 bg-white px-3 py-2 lg:hidden">
             {items.map(item => (
               <NavLink
                 key={item.to}
@@ -255,12 +265,12 @@ export default function Shell() {
       */}
       <main
         style={scopeStyle}
-        className="mx-auto max-w-7xl px-4 py-6 pb-24 md:pb-6"
+        className="mx-auto max-w-7xl px-4 py-6 pb-24 lg:pb-6"
       >
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-white md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-white lg:hidden">
         <div
           className="grid"
           style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}

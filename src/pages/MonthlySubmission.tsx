@@ -623,7 +623,7 @@ export default function MonthlySubmission() {
       </div>
 
       {editable && (
-        <div className="sticky bottom-16 flex flex-wrap gap-2 md:bottom-0">
+        <div className="sticky bottom-16 flex flex-wrap gap-2 lg:bottom-0">
           <button onClick={onSubmit} disabled={busy} className="btn-primary">
             {busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
             Submit to manager
