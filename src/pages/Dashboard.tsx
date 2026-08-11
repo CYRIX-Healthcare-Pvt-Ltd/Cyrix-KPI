@@ -8,7 +8,7 @@ import {
   useSubmissionHistory,
   currentFy,
 } from '@/lib/queries'
-import { currentReportingMonth, monthLabel, fyMonths, isMonthOpen } from '@/lib/fy'
+import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
@@ -52,21 +52,29 @@ export default function Dashboard() {
     isManager || isHrAdmin ? employee?.id : undefined, fy,
   )
 
+  const startsFrom = assignment?.assignment?.starts_from ?? null
+
   // Only months that have finished: a trailing run of empty months makes
-  // a three-point line look like a line that stopped.
-  const points = useMemo(() => {
-    const byMonth = new Map(
-      (history ?? []).filter(s => SCORED.has(s.status)).map(s => [s.period_month, s]),
-    )
-    return fyMonths(fy)
-      .filter(m => isMonthOpen(m))
-      .map(m => ({ month: m, score: byMonth.get(m)?.final_total_score ?? null }))
-  }, [history, fy])
+  // a three-point line look like a line that stopped. And only months
+  // this KPI covers — a June joiner's line used to open with two gaps
+  // that read as two months they had missed.
+  const points = useMemo(
+    () => {
+      const byMonth = new Map(
+        (history ?? []).filter(s => SCORED.has(s.status)).map(s => [s.period_month, s]),
+      )
+      return openFyMonthsFrom(fy, startsFrom)
+        .map(m => ({ month: m, score: byMonth.get(m)?.final_total_score ?? null }))
+    },
+    [history, fy, startsFrom],
+  )
 
   if (aLoading) return <PageLoader />
 
   const kpiStatus = assignment?.assignment?.status ?? null
   const sub = submission?.submission ?? null
+  // Is the month being reported on one this KPI covers at all?
+  const monthInScope = !startsFrom || month >= startsFrom
 
   const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
   const hasEsms = esmsWeight > 0
@@ -123,7 +131,9 @@ export default function Dashboard() {
         />
       )}
 
-      {kpiStatus === 'active' && (!sub || sub.status === 'draft') && (
+      {/* Not before the KPI starts. Somebody joining in September was
+          being told every month since April was overdue. */}
+      {kpiStatus === 'active' && monthInScope && (!sub || sub.status === 'draft') && (
         <ActionRequired
           eyebrow="Assessment Due"
           title={`${monthLabel(month)} has not been submitted`}
@@ -157,10 +167,15 @@ export default function Dashboard() {
         </Link>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
         <StatTile
           label={`${monthLabel(month)} status`}
-          value={<StatusBadge status={sub?.status ?? null} />}
+          value={monthInScope
+            ? <StatusBadge status={sub?.status ?? null} />
+            : <span className="text-sm text-ink-400">Not yours</span>}
+          sub={monthInScope || !startsFrom
+            ? undefined
+            : `Your KPI starts in ${monthLabel(startsFrom)}`}
         />
         <StatTile
           label={`${monthLabel(month)} score`}
@@ -252,7 +267,7 @@ export default function Dashboard() {
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-800">
             <Users className="h-4 w-4" /> My team
           </h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
             <StatTile label="Team members" value={teamData?.team.length ?? 0} />
             <StatTile
               label="Awaiting my scoring"

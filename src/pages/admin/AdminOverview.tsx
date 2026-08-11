@@ -97,7 +97,7 @@ export default function AdminOverview() {
         </Alert>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
         <StatTile
           label="KPIs approved"
           value={stats.byStatus.active ?? 0}

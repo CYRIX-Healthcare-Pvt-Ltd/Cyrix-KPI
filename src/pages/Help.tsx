@@ -136,6 +136,11 @@ export default function Help() {
                 to: '/my-kpi', cta: 'Open my KPI',
               },
               {
+                what: 'Say which month it starts from',
+                how: 'April if you were here all year. If you joined later, pick the month you joined. The months before it are not asked for and do not count as missing.',
+                to: '/my-kpi', cta: 'Open my KPI',
+              },
+              {
                 what: 'Send it to your manager',
                 how: 'Your manager has to approve it. You cannot start any month until they do.',
               },
@@ -226,6 +231,11 @@ export default function Help() {
               to: '/approvals', cta: 'Open approvals',
             },
             {
+              what: 'Set the month their KPI starts from',
+              how: 'On the approval screen. Somebody who joined in June is not asked for April or May, and does not show as missing them. You can fix it later too, as long as they have not already been scored on an earlier month.',
+              to: '/approvals', cta: 'Open approvals',
+            },
+            {
               what: 'Score their months',
               how: 'Enter your own figure against each row. You can also correct the target, because you are the one who knows the right number. Changing a target changes both scores.',
               to: '/team', cta: 'Open my team',
@@ -249,6 +259,11 @@ export default function Help() {
               what: 'See how the team is doing',
               how: 'Team analysis shows everybody ranked, with job role and core values separately. You can pick one month or the whole year, and download it.',
               to: '/team/analysis', cta: 'Open team analysis',
+            },
+            {
+              what: 'See what the team total is made of',
+              how: 'My Team and Team analysis both show the team average split into job role, core values and ESMS. Each is a percentage of its own weightage, so they can be compared — 14 out of 15 is better than 16 out of 20.',
+              to: '/team', cta: 'Open my team',
             },
             {
               what: 'Flag somebody who has left',
@@ -356,6 +371,15 @@ export default function Help() {
               what: 'Why can I not submit anything?',
               how: 'Your KPI for the year is probably not approved yet. Check with your manager.',
               to: '/my-kpi', cta: 'Check my KPI',
+            },
+            {
+              what: 'It asked me which month my KPI starts from',
+              how: 'Because nobody had said yet, and until somebody does you are counted as owing every month since April. Pick the month you joined if you joined this year, April if you did not. Your manager can correct it.',
+            },
+            {
+              what: 'Why are the first months of the year missing from my history?',
+              how: 'Your KPI starts later than April, so those months are not yours. Any month you have actually been scored on is always shown.',
+              to: '/history', cta: 'Open assessments',
             },
             {
               what: 'I sent the wrong month in',

@@ -259,7 +259,7 @@ export default function KpiReport() {
       </div>
 
       {/* ---- totals for whatever is currently selected ---- */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-6">
         <Tile
           label={month === YTD ? 'Person-months' : 'People'}
           value={totals.team}

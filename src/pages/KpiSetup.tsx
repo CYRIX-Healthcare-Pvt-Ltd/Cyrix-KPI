@@ -7,9 +7,11 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyAssignment, useSaveAssignmentRows, useAssignmentAction,
+  useMyAssignment, useSaveAssignmentRows, useAssignmentAction, useSetKpiStart,
   useScoringRules, useTemplatesForRole, useCoreValues, currentFy,
 } from '@/lib/queries'
+import { defaultStartMonth, fyMonths } from '@/lib/fy'
+import { StartMonthSelect, StartMonthNote } from '@/components/StartMonth'
 import type { ParseResult } from '@/lib/excel'
 import type { KpiRowDefinition, Alternate, ScoringRuleMeta } from '@/types/db'
 import { calcKpiScore, type ScoringRule, type RuleParams } from '@/lib/scoring'
@@ -73,6 +75,7 @@ export default function KpiSetup() {
   const { data: roleTemplate } = useTemplatesForRole(employee?.job_role_id, fy)
   const saveRows = useSaveAssignmentRows()
   const action = useAssignmentAction()
+  const setStart = useSetKpiStart()
 
   const [rows, setRows] = useState<Draft[] | null>(null)
   const [parseInfo, setParseInfo] = useState<ParseResult | null>(null)
@@ -81,10 +84,19 @@ export default function KpiSetup() {
   // null until the saved answer is known, so a draft that already has
   // ESMS does not flash as unticked and then correct itself.
   const [esmsChoice, setEsmsChoice] = useState<boolean | null>(null)
+  const [startChoice, setStartChoice] = useState<string | null>(null)
 
   const assignment = data?.assignment ?? null
   const locked = assignment?.status === 'pending_approval' || assignment?.status === 'active'
   const esms = esmsChoice ?? Number(assignment?.esms_weight ?? 0) > 0
+  // Saved answer, else the month they joined, else April. Never blank —
+  // an unanswerable-looking question is how you get twelve people
+  // guessing, and the joining date is already known.
+  const startMonth = startChoice
+    ?? assignment?.starts_from
+    ?? defaultStartMonth(fy, employee?.date_of_joining)
+  // Its position in the year is exactly how many months it skips.
+  const skippedMonths = Math.max(0, fyMonths(fy).indexOf(startMonth))
   const coreWeight = esms ? REMAINDER_TOTAL - ESMS_WEIGHT : REMAINDER_TOTAL
 
   // Only job role rows are editable; core values are filtered out entirely.
@@ -177,7 +189,7 @@ export default function KpiSetup() {
     if (!employee) return null
     setError(null)
     try {
-      return await saveRows.mutateAsync({
+      const id = await saveRows.mutateAsync({
         employeeId: employee.id,
         fy,
         existingAssignmentId: assignment?.id ?? null,
@@ -188,6 +200,11 @@ export default function KpiSetup() {
           return { ...r, sort_order: idx + 1 }
         }),
       })
+      // After the rows, because it needs the assignment the first save
+      // creates. Validation refuses to submit without it, so a draft
+      // saved here is already answerable.
+      await setStart.mutateAsync({ assignmentId: id, month: startMonth })
+      return id
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')
       return null
@@ -198,9 +215,9 @@ export default function KpiSetup() {
     const id = await persist()
     if (id) {
       setNotice('Saved as a draft. Nothing has been sent to your manager yet.')
-      // Back to reading from the saved assignment, both of them, so what
-      // is on screen is what is in the database.
-      setRows(null); setEsmsChoice(null)
+      // Back to reading from the saved assignment, all three of them, so
+      // what is on screen is what is in the database.
+      setRows(null); setEsmsChoice(null); setStartChoice(null)
     }
   }
 
@@ -236,7 +253,7 @@ export default function KpiSetup() {
     )
   }
 
-  const busy = saveRows.isPending || action.isPending
+  const busy = saveRows.isPending || action.isPending || setStart.isPending
 
   return (
     <div className="space-y-5">
@@ -304,6 +321,33 @@ export default function KpiSetup() {
 
       {working.length > 0 && (
         <>
+          {/* Asked before the rows, because it decides which months the
+              rows are ever asked about. A June joiner who leaves this at
+              April spends the year with two blanks on their record and
+              two rows on their manager's chase list. */}
+          <div className="card p-4">
+            <label
+              htmlFor="kpi-start-month"
+              className="block text-sm font-semibold text-ink-800"
+            >
+              This KPI starts from
+            </label>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StartMonthSelect
+                id="kpi-start-month"
+                fy={fy}
+                value={startMonth}
+                onChange={setStartChoice}
+              />
+              {skippedMonths > 0 && (
+                <span className="badge bg-amber-100 text-amber-800">
+                  {skippedMonths} earlier month{skippedMonths === 1 ? '' : 's'} not assessed
+                </span>
+              )}
+            </div>
+            <StartMonthNote />
+          </div>
+
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
               <h3 className="text-sm font-semibold text-ink-800">

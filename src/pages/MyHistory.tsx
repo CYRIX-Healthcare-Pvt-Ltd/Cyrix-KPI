@@ -8,7 +8,9 @@ import {
   useSubmissionHistory, useAnnualSummary, useMyAssignment,
   useSettleDueMonths, useOpenQueryMonths, currentFy,
 } from '@/lib/queries'
-import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
+import {
+  fyMonthsFrom, openFyMonthsFrom, monthLabel, isMonthOpen,
+} from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import {
   Alert, PageLoader, StatTile, StatusBadge, BandCell,
@@ -43,8 +45,11 @@ export default function MyHistory() {
 
   const byMonth = new Map((history ?? []).map(s => [s.period_month, s]))
 
-  const chartData = fyMonths(fy)
-    .filter(m => isMonthOpen(m))
+  // Months this KPI actually covers. A June joiner's history opened with
+  // two empty rows that looked exactly like two months they had skipped.
+  const startsFrom = assignment?.assignment?.starts_from ?? null
+
+  const chartData = openFyMonthsFrom(fy, startsFrom)
     .map(m => {
       const s = byMonth.get(m)
       const scored = s && (s.status === 'scored' || s.status === 'finalized')
@@ -70,7 +75,7 @@ export default function MyHistory() {
         scoreLabel="Year average"
       />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
         <StatTile label="Months scored" value={annual?.months_scored ?? 0} sub="of 12" />
         <StatTile label="Best month" value={annual?.highest_month?.toFixed(1) ?? '—'} />
         <StatTile label="Lowest month" value={annual?.lowest_month?.toFixed(1) ?? '—'} />
@@ -153,7 +158,7 @@ export default function MyHistory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {fyMonths(fy).map(m => {
+              {fyMonthsFrom(fy, startsFrom).map(m => {
                 const s = byMonth.get(m)
                 // A month that has not finished cannot be assessed yet.
                 const open = isMonthOpen(m)

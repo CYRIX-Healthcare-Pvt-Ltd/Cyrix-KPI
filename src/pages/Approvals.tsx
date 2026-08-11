@@ -3,12 +3,14 @@ import { CheckSquare, Check, X, Pencil, CheckCheck, Shuffle } from 'lucide-react
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  usePendingApprovals, useAssignmentAction, useEditAssignmentItem,
+  usePendingApprovals, useAssignmentAction, useEditAssignmentItem, useSetKpiStart,
   useScoringRules, currentFy,
 } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
+import { monthLabel } from '@/lib/fy'
+import { StartMonthSelect } from '@/components/StartMonth'
 import type { KpiAssignment, KpiAssignmentItem, Section, Alternate } from '@/types/db'
 
 export default function Approvals() {
@@ -443,10 +445,26 @@ function ApprovalCard({
 }) {
   const assignmentId = assignment.id
   const action = useAssignmentAction()
+  const setStart = useSetKpiStart()
   const [rejecting, setRejecting] = useState(false)
   const [editing, setEditing] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Every KPI agreed before this question existed has no answer, and the
+  // manager is the one who knows it — so it is asked here, and Approve
+  // waits for it. The server refuses either way; disabling the button
+  // just means the manager finds out before pressing it rather than
+  // after.
+  const startsFrom = assignment.starts_from ?? ''
+  const chooseStart = async (month: string) => {
+    setError(null)
+    try {
+      await setStart.mutateAsync({ assignmentId, month })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not set the start month.')
+    }
+  }
 
   const { data: items } = useQuery({
     enabled: expanded,
@@ -500,6 +518,29 @@ function ApprovalCard({
             <div className="p-6 text-center"><Spinner className="mx-auto h-5 w-5 text-ink-400" /></div>
           ) : (
             <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink-100 bg-amber-50/40 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink-900">
+                    This KPI starts from
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {startsFrom
+                      ? `${monthLabel(startsFrom)} onwards. Earlier months are not asked for.`
+                      : `${name.split(' ')[0]} is not assessed on anything before this.`}
+                  </p>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  {setStart.isPending && <Spinner className="h-4 w-4 text-ink-400" />}
+                  <StartMonthSelect
+                    fy={assignment.financial_year}
+                    value={startsFrom}
+                    onChange={chooseStart}
+                    placeholder="Choose a month"
+                    className="input w-auto"
+                  />
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -572,11 +613,12 @@ function ApprovalCard({
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => run('approve')}
-                      disabled={action.isPending}
+                      disabled={action.isPending || !startsFrom}
                       className="btn-primary"
+                      title={startsFrom ? undefined : 'Set the start month first'}
                     >
                       {action.isPending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                      Approve
+                      {startsFrom ? 'Approve' : 'Set the start month first'}
                     </button>
                     <button
                       onClick={() => setEditing(v => !v)}

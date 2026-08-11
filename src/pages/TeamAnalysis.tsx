@@ -11,11 +11,11 @@ import {
 } from '@/lib/queries'
 import { MonthStatusTable, MonthStatusLegend } from '@/components/MonthStatus'
 import { fyMonths, openFyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
-import { bandFor, isWeak, trendOf, attainmentPct } from '@/lib/bands'
+import { bandFor, isWeak, trendOf, attainmentPct, teamBandShare } from '@/lib/bands'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, SECTION_SHORT } from '@/lib/sections'
 import { exportOrgStatus } from '@/lib/export'
 import { PageLoader, ScorePill, StatTile, EmptyState, Alert } from '@/components/ui'
-import { ScoreHeader, TrendChip, BandChip } from '@/components/analysis'
+import { ScoreHeader, TrendChip, BandChip, TeamBands } from '@/components/analysis'
 import type { Employee, WeakAreaRow, Section } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
@@ -166,6 +166,15 @@ export default function TeamAnalysis() {
       people,
       teamAvg,
       anyEsms: people.some(p => p.hasEsms),
+      // Each person's figures are already averaged over whatever the
+      // month filter selected, so one entry each is exactly the
+      // per-person-then-team averaging the total above uses. It also
+      // means the split follows the filter rather than quietly
+      // reporting the whole year underneath a single-month table.
+      bandShare: teamBandShare(people.map(p => ({
+        weights: { job: p.weights.job, esms: p.weights.esms, core: p.weights.core },
+        months: [{ job: p.job, esms: p.esms, core: p.core, total: p.total }],
+      }))),
       best: [...rated].sort((a, b) => (b.total ?? 0) - (a.total ?? 0)).slice(0, 5),
       struggling: [...rated]
         .filter(p => isWeak(p.total))
@@ -434,7 +443,7 @@ export default function TeamAnalysis() {
         scoreLabel="Team average"
       />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
         <StatTile
           label="Performing well"
           value={analysis.people.filter(p => (p.total ?? 0) >= 80).length}
@@ -456,6 +465,11 @@ export default function TeamAnalysis() {
           sub={`of ${team.length}`}
         />
       </div>
+
+      <TeamBands
+        share={analysis.bandShare}
+        label={`Team average by band · ${scopeLabel}`}
+      />
 
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">

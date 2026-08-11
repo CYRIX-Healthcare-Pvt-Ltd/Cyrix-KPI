@@ -14,7 +14,9 @@ import { exportKpiScores } from '@/lib/export'
 import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
-import { ScoreHeader, ActionRequired } from '@/components/analysis'
+import { ScoreHeader, ActionRequired, TeamBands } from '@/components/analysis'
+import { teamBandShare } from '@/lib/bands'
+import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import ScoreTrend from '@/components/ScoreTrend'
 import Avatar from '@/components/Avatar'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
@@ -60,6 +62,37 @@ export default function Team() {
     const perPerson = [...byPerson.values()].map(v => v.reduce((a, b) => a + b, 0) / v.length)
     return Math.round((perPerson.reduce((a, b) => a + b, 0) / perPerson.length) * 10) / 10
   }, [allSubs])
+
+  /**
+   * The same year the hero reports on, split into the bands it is made
+   * of. Weights come from each person's own assignment, because core
+   * values is 20% for most people and 15% for anyone carrying ESMS.
+   */
+  const bandShare = useMemo(() => {
+    const byEmp = new Map<string, KpiSubmission[]>()
+    for (const s of allSubs ?? []) {
+      if (!SCORED.has(s.status)) continue
+      const list = byEmp.get(s.employee_id) ?? []
+      list.push(s)
+      byEmp.set(s.employee_id, list)
+    }
+    return teamBandShare((data?.team ?? []).map(m => {
+      const a = (data?.assignments ?? []).find(x => x.employee_id === m.id)
+      return {
+        weights: {
+          job: Number(a?.job_role_weight ?? JOB_ROLE_TOTAL),
+          esms: Number(a?.esms_weight ?? 0),
+          core: Number(a?.core_values_weight ?? REMAINDER_TOTAL),
+        },
+        months: (byEmp.get(m.id) ?? []).map(s => ({
+          job: s.final_job_role_score,
+          esms: s.final_esms_score,
+          core: s.final_core_score,
+          total: s.final_total_score,
+        })),
+      }
+    }))
+  }, [allSubs, data])
 
   /**
    * The team average for each finished month.
@@ -122,13 +155,26 @@ export default function Team() {
     )
   }
 
-  const waiting = team.filter(t => subsById.get(t.id)?.status === 'submitted')
+  /**
+   * Is this month one that person's KPI covers?
+   *
+   * A June joiner was counted as "not submitted" for April and May, which
+   * is a chase list with two names on it that nobody can act on. Read off
+   * their own assignment, so it answers per person and per month.
+   */
+  const inScope = (memberId: string) => {
+    const from = assignById.get(memberId)?.starts_from
+    return !from || month >= from
+  }
+
+  const covered = team.filter(t => inScope(t.id))
+  const waiting = covered.filter(t => subsById.get(t.id)?.status === 'submitted')
   const awaiting = waiting.length
-  const notStarted = team.filter(t => {
+  const notStarted = covered.filter(t => {
     const s = subsById.get(t.id)
     return !s || s.status === 'draft'
   }).length
-  const done = team.filter(t => SCORED.has(subsById.get(t.id)?.status ?? '')).length
+  const done = covered.filter(t => SCORED.has(subsById.get(t.id)?.status ?? '')).length
 
   // The call to action has to land on something to score. It pointed at
   // /team — the page it is already on — so the button did nothing.
@@ -185,14 +231,25 @@ export default function Team() {
         />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <TeamBands share={bandShare} label={`Team average by band · FY ${fy}`} />
+
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile
           label="Waiting for my score"
           value={awaiting}
           tone={awaiting > 0 ? 'brand' : 'default'}
         />
         <StatTile label="Not submitted yet" value={notStarted} />
-        <StatTile label="Scored" value={done} sub={`of ${team.length}`} />
+        {/* Out of the people this month applies to, not out of the whole
+            team — otherwise a fully scored month reads as 14 of 16
+            because two of them had not joined yet. */}
+        <StatTile
+          label="Scored"
+          value={done}
+          sub={covered.length === team.length
+            ? `of ${team.length}`
+            : `of ${covered.length} · ${team.length - covered.length} start later`}
+        />
       </div>
 
       <div className="card p-4">
@@ -248,6 +305,12 @@ export default function Team() {
           const sub = subsById.get(member.id)
           const assign = assignById.get(member.id)
           const needsScoring = sub?.status === 'submitted'
+          // The month this KPI begins, when that is still ahead of the
+          // month being shown — null the rest of the time, which is most
+          // of the time.
+          const startsLater = assign?.starts_from && month < assign.starts_from
+            ? assign.starts_from
+            : null
 
           return (
             <div key={member.id} className="flex items-center gap-3 p-4 hover:bg-ink-50">
@@ -278,10 +341,16 @@ export default function Team() {
               </button>
 
               <div className="hidden text-right sm:block">
-                <StatusBadge
-                  status={sub?.status ?? null}
-                  queried={!!sub && !!queried?.has(sub.id)}
-                />
+                {startsLater ? (
+                  <span className="badge bg-ink-100 text-ink-500">
+                    From {monthLabel(startsLater)}
+                  </span>
+                ) : (
+                  <StatusBadge
+                    status={sub?.status ?? null}
+                    queried={!!sub && !!queried?.has(sub.id)}
+                  />
+                )}
               </div>
 
               <div className="w-24 shrink-0 text-right sm:w-32">

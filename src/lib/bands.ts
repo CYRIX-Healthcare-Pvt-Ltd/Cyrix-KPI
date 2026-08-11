@@ -142,6 +142,69 @@ export const isWeak = (pct: number | null | undefined) =>
 export const attainmentPct = (score: number | null, weightage: number) =>
   weightage > 0 && score !== null ? (score / weightage) * 100 : null
 
+export interface BandWeights { job: number; esms: number; core: number }
+
+/** One month's scores, in the raw points each band is marked out of. */
+export interface BandScores {
+  job: number | null
+  esms: number | null
+  core: number | null
+  total: number | null
+}
+
+/** The same four, as a share of what each was out of. */
+export interface BandShare extends BandScores {
+  /** How many people are behind these figures. */
+  people: number
+  /** Does anybody here carry ESMS at all? */
+  anyEsms: boolean
+}
+
+const mean = (values: Array<number | null>): number | null => {
+  const real = values.filter((v): v is number => v !== null && Number.isFinite(v))
+  return real.length ? real.reduce((a, b) => a + b, 0) / real.length : null
+}
+
+/**
+ * A team's average in each band, as a percentage of that band.
+ *
+ * Percentages rather than points, because the bands are not the same size
+ * for everybody: core values is worth 20 to most people and 15 to anyone
+ * carrying ESMS, so averaging the raw scores of a mixed team produces a
+ * figure that is out of nothing in particular. 14 out of 15 and 16 out of
+ * 20 are 93% and 80%, and that comparison is the entire reason a manager
+ * looks at this.
+ *
+ * Averaged per person first and then across people, which is how the
+ * team average on the same screen is built — otherwise somebody scored
+ * on six months counts twice as much as somebody scored on three.
+ */
+export function teamBandShare(
+  people: Array<{ weights: BandWeights; months: BandScores[] }>,
+): BandShare {
+  const each = people
+    .map(p => ({
+      job: mean(p.months.map(m => attainmentPct(m.job, p.weights.job))),
+      esms: mean(p.months.map(m => attainmentPct(m.esms, p.weights.esms))),
+      core: mean(p.months.map(m => attainmentPct(m.core, p.weights.core))),
+      // Out of 100 by construction — the three bands always total it.
+      total: mean(p.months.map(m => m.total)),
+    }))
+    // Somebody with no scored month at all is not a zero, they are
+    // absent. Including them would drag the team's figure down for not
+    // having been assessed yet.
+    .filter(p => p.job !== null || p.esms !== null || p.core !== null || p.total !== null)
+
+  return {
+    job: mean(each.map(p => p.job)),
+    esms: mean(each.map(p => p.esms)),
+    core: mean(each.map(p => p.core)),
+    total: mean(each.map(p => p.total)),
+    people: each.length,
+    anyEsms: people.some(p => p.weights.esms > 0),
+  }
+}
+
 /**
  * Direction of travel across the last few months. Compares the most
  * recent two against the two before, so a single soft month doesn't

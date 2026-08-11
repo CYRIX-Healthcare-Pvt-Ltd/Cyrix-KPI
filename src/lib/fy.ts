@@ -66,3 +66,53 @@ export function isMonthOpen(monthIso: string, today = new Date()): boolean {
 export function openFyMonths(fyCode: string, today = new Date()): string[] {
   return fyMonths(fyCode).filter(m => isMonthOpen(m, today))
 }
+
+/**
+ * The months a particular KPI covers.
+ *
+ * Somebody who joined in June owes nothing for April and May, and listing
+ * those months put two permanent blanks on their record and two people on
+ * their manager's chase list. `startsFrom` is null until somebody says —
+ * see migration 0043 — and null means the whole year, which is what the
+ * app did before the question was asked.
+ *
+ * Dates are ISO month-starts throughout, so a string compare is a date
+ * compare and there is no timezone to get wrong.
+ */
+export function fyMonthsFrom(
+  fyCode: string,
+  startsFrom: string | null | undefined,
+): string[] {
+  const months = fyMonths(fyCode)
+  if (!startsFrom) return months
+  return months.filter(m => m >= startsFrom)
+}
+
+/**
+ * The month to offer first when asking where a KPI starts.
+ *
+ * Somebody who joined mid-year almost always means the month they
+ * joined, and the system already knows it — so the question arrives with
+ * the likely answer in it rather than as an empty box. Anyone who joined
+ * before this year gets April, which is the whole year.
+ */
+export function defaultStartMonth(
+  fyCode: string,
+  dateOfJoining?: string | null,
+): string {
+  const months = fyMonths(fyCode)
+  if (!dateOfJoining) return months[0]
+  // Sliced, not parsed: new Date('2026-06-01') is midnight UTC, which is
+  // 31 May in Asia/Kolkata and would offer the wrong month.
+  const joined = `${dateOfJoining.slice(0, 7)}-01`
+  return months.includes(joined) ? joined : months[0]
+}
+
+/** Assessable today, and inside this KPI's own window. */
+export function openFyMonthsFrom(
+  fyCode: string,
+  startsFrom: string | null | undefined,
+  today = new Date(),
+): string[] {
+  return fyMonthsFrom(fyCode, startsFrom).filter(m => isMonthOpen(m, today))
+}

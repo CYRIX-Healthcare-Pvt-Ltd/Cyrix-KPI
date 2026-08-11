@@ -307,7 +307,7 @@ export default function ScoreSubmission() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile label="Self assessment" value={selfTotal.toFixed(2)} sub="out of 100" />
         <StatTile label="My assessment" value={mgrTotal.toFixed(2)} sub="out of 100" />
         <StatTile

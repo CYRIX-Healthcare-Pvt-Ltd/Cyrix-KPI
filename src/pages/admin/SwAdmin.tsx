@@ -284,7 +284,7 @@ export default function SwAdmin() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
         <StatTile label="Total accounts" value={data?.length ?? 0} />
         <StatTile
           label="On issued default"

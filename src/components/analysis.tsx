@@ -6,9 +6,9 @@ import {
 } from 'lucide-react'
 import {
   bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
-  type Band,
+  type Band, type BandShare,
 } from '@/lib/bands'
-import { SECTION_SHORT } from '@/lib/sections'
+import { SECTION_SHORT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import type { KraAttainmentRow, WeakAreaRow, KraBenchmarkRow } from '@/types/db'
 
 /** Built once — it is the same five stops on every hero on every screen. */
@@ -248,6 +248,80 @@ export function ActionRequired({
         >
           {cta}
         </Link>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the team's total is actually made of.
+ *
+ * A team average of 77 can be a strong job role carried down by core
+ * values or the reverse, and those are opposite conversations. The total
+ * repeats the hero above it on purpose: without it the three shares have
+ * nothing to be shares of, and the eye has to go back up to find it.
+ *
+ * Every figure is a percentage of its own band — see teamBandShare — so
+ * they are comparable to each other and to the total, which is the one
+ * thing raw points could never be.
+ */
+export function TeamBands({
+  share, label = 'Team average by band',
+}: {
+  share: BandShare
+  label?: string
+}) {
+  const parts: Array<[string, number | null, number | null]> = [
+    ['Job role', share.job, JOB_ROLE_TOTAL],
+    ...(share.anyEsms
+      ? [['ESMS', share.esms, null] as [string, number | null, null]]
+      : []),
+    ['Core values', share.core, null],
+    ['Total', share.total, 100],
+  ]
+
+  return (
+    <div className="card p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink-800">{label}</h3>
+        <p className="text-xs text-ink-500">
+          {share.people === 0
+            ? 'Nobody scored yet'
+            : `Averaged across ${share.people} scored ${
+                share.people === 1 ? 'person' : 'people'}`}
+        </p>
+      </div>
+
+      {/* Two per row on a phone — four of these side by side at 375px
+          leaves about 70px each, which a figure like 93.3% does not fit
+          into. The odd one out takes the full row. */}
+      <div className={clsx(
+        'mt-3 grid grid-cols-2 gap-3 grid-pairs',
+        parts.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
+      )}>
+        {parts.map(([name, pct, outOf]) => {
+          const band = bandFor(pct)
+          return (
+            <div key={name} className="min-w-0">
+              <p className="truncate text-[11px] font-medium uppercase tracking-label text-ink-400">
+                {name}
+              </p>
+              <p className={clsx(
+                'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
+                band ? band.accent : 'text-ink-300',
+              )}>
+                {pct === null ? '—' : `${pct.toFixed(1)}%`}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-ink-400">
+                {/* The denominator only where it is the same for
+                    everybody. Core values is 20 for most people and 15
+                    for anyone carrying ESMS, so printing one number
+                    there would be wrong for half the team. */}
+                {outOf ? `of ${outOf}%` : 'of its weightage'}
+              </p>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -13,6 +13,7 @@ import {
 } from '@/lib/queries'
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
+import StartMonthPrompt from './StartMonthPrompt'
 import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
 
@@ -290,6 +291,11 @@ export default function Shell() {
           ))}
         </div>
       </nav>
+
+      {/* Outside main, above the nav: it is a question about the account
+          rather than about whichever screen happens to be open, and it
+          renders nothing at all once answered. */}
+      <StartMonthPrompt />
     </div>
   )
 }

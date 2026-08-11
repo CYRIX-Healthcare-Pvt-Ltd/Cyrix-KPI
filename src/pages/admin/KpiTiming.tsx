@@ -268,7 +268,7 @@ export default function KpiTiming() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile
           label="Team member allowance"
           value={policy?.tm_grace_days ?? '—'}

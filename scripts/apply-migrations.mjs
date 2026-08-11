@@ -42,6 +42,12 @@ const client = new pg.Client({
   ssl: { rejectUnauthorized: false },
 })
 
+// Every migration here ends in a `do $$ ... raise notice $$` self-test, and
+// those notices were being thrown away — so a test that quietly took its
+// "skipped, no data to check" branch looked exactly like one that passed.
+const notices = []
+client.on('notice', n => { if (n.message) notices.push(n.message) })
+
 const sha = s => createHash('sha256').update(s).digest('hex').slice(0, 16)
 
 try {
@@ -81,6 +87,7 @@ try {
     }
 
     process.stdout.write(`  + ${file} ... `)
+    notices.length = 0
     try {
       await client.query('begin')
       await client.query(sql)
@@ -90,6 +97,7 @@ try {
       )
       await client.query('commit')
       console.log('ok')
+      for (const m of notices) console.log(`      ${m}`)
       ran++
     } catch (err) {
       await client.query('rollback')

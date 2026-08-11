@@ -67,7 +67,7 @@ export default function ScoreQueries({ readOnly = false }: { readOnly?: boolean 
         </Alert>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile
           label="Waiting for a reply"
           value={open.length}

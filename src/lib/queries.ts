@@ -249,6 +249,35 @@ export function useUseAlternate() {
   })
 }
 
+/**
+ * Which month this KPI starts from.
+ *
+ * An RPC rather than a column update because the rules do not match the
+ * rest of the row: the KPI's contents freeze on approval, but this stays
+ * settable afterwards — every KPI in the system predates the column, and
+ * those answers have to be collected from people whose KPI is already
+ * active. The server checks it never moves past a month already assessed.
+ */
+export function useSetKpiStart() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { assignmentId: string; month: string }) => {
+      const { error } = await supabase.rpc('set_kpi_start', {
+        p_assignment_id: args.assignmentId,
+        p_starts_from: args.month,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assignment'] })
+      qc.invalidateQueries({ queryKey: ['approval_items'] })
+      qc.invalidateQueries({ queryKey: ['pending_approvals'] })
+      qc.invalidateQueries({ queryKey: ['team'] })
+      qc.invalidateQueries({ queryKey: ['manager_month_status'] })
+    },
+  })
+}
+
 export function useAssignmentAction() {
   const qc = useQueryClient()
   return useMutation({

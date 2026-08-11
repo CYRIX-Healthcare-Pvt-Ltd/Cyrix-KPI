@@ -165,6 +165,12 @@ export interface KpiAssignment {
   core_values_weight: number
   /** 5 for the people who carry ESMS, 0 for everyone else. */
   esms_weight: number
+  /**
+   * First month this KPI is expected for — '2026-06-01' for a June
+   * joiner. Null means nobody has said yet, which is why the app asks:
+   * a KPI with no start month is chased from April.
+   */
+  starts_from: string | null
   submitted_at: string | null
   submitted_by: string | null
   approved_at: string | null

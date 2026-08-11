@@ -73,6 +73,27 @@
 }
 
 @layer components {
+  /*
+    Figure cards, two to a row on a phone.
+
+    One per row wasted the whole width on a two-digit number and pushed
+    everything below it off the screen — four tiles were four scrolls.
+    Two fit comfortably; the labels are short by design.
+
+    An odd last card takes the full row rather than sitting half-width
+    beside a gap, which reads as a card that failed to load. Only below
+    sm, where the column count is 2 and "odd" means anything; above it
+    the grid states its own columns and the last child behaves.
+  */
+  .grid-pairs > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  @media (min-width: 640px) {
+    .grid-pairs > :last-child:nth-child(odd) {
+      grid-column: auto;
+    }
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
            text-sm font-medium disabled:cursor-not-allowed

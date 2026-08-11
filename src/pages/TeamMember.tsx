@@ -7,7 +7,7 @@ import {
 import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { useSubmissionHistory, useAnnualSummary, useMyAssignment, currentFy } from '@/lib/queries'
-import { fyMonths, monthLabel } from '@/lib/fy'
+import { fyMonthsFrom, monthLabel } from '@/lib/fy'
 import {
   PageLoader, ScorePill, StatTile, StatusBadge, Alert, BandCell,
 } from '@/components/ui'
@@ -43,8 +43,12 @@ export default function TeamMember() {
   // still gets the line, rather than the chart changing shape later.
   const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
   const hasEsms = esmsWeight > 0
+  // Months this person's KPI covers. Before this, a manager looking at a
+  // June joiner saw April and May sitting empty on their record.
+  const startsFrom = assignment?.assignment?.starts_from ?? null
+  const months = fyMonthsFrom(fy, startsFrom)
 
-  const chartData = fyMonths(fy).map(m => {
+  const chartData = months.map(m => {
     const s = byMonth.get(m)
     const scored = s && (s.status === 'scored' || s.status === 'finalized')
     return {
@@ -70,7 +74,7 @@ export default function TeamMember() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
         <StatTile
           label={`FY ${fy} average`}
           value={<ScorePill value={annual?.avg_total_score} size="lg" />}
@@ -148,7 +152,7 @@ export default function TeamMember() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {fyMonths(fy).map(m => {
+              {months.map(m => {
                 const s = byMonth.get(m)
                 return (
                   <tr key={m} className="hover:bg-ink-50">
