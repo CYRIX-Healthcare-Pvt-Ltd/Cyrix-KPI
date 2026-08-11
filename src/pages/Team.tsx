@@ -36,6 +36,18 @@ const METRIC_LABEL: Record<BellMetric, string> = {
   core: 'Core values',
 }
 
+/**
+ * Where each band's axis starts when nobody is below it.
+ *
+ * A scored team lives in the top part of its band, so starting every
+ * chart at zero spends half the width drawing an empty floor. These are
+ * the points below which somebody would be a genuine outlier — and the
+ * axis drops past them on its own when there is one.
+ */
+const BELL_FLOOR: Record<BellMetric, number> = {
+  total: 40, job: 20, core: 0, esms: 0,
+}
+
 export default function Team() {
   const { employee } = useAuth()
   const fy = currentFy()
@@ -118,7 +130,7 @@ export default function Team() {
    * on one axis and draw a second hump that is an artefact of the
    * weighting rather than of anybody's performance.
    */
-  const bellValues = useMemo(() => {
+  const bell = useMemo(() => {
     const weightsOf = (id: string) => {
       const a = (data?.assignments ?? []).find(x => x.employee_id === id)
       return {
@@ -135,21 +147,46 @@ export default function Team() {
       core: s.final_core_score,
     }[bellMetric])
 
-    const out: number[] = []
+    // Their own average first, so somebody scored on six months is one
+    // person on this chart rather than six.
+    const people: Array<{ weight: number; value: number }> = []
     for (const member of data?.team ?? []) {
       const rows = (allSubs ?? []).filter(s =>
         s.employee_id === member.id
         && SCORED.has(s.status)
         && (!bellMonth || s.period_month === bellMonth))
-      const w = weightsOf(member.id)[bellMetric]
-      const pcts = rows
-        .map(s => attainmentPct(pick(s), w))
-        .filter((v): v is number => v !== null)
-      // Their own average first, so somebody scored on six months is one
-      // person on this chart rather than six.
-      if (pcts.length) out.push(pcts.reduce((a, b) => a + b, 0) / pcts.length)
+      const vals = rows.map(pick).filter((v): v is number => v !== null)
+      if (vals.length) {
+        people.push({
+          weight: weightsOf(member.id)[bellMetric],
+          value: vals.reduce((a, b) => a + b, 0) / vals.length,
+        })
+      }
     }
-    return out
+
+    /*
+      Points, not shares — core values is out of 20 and that is the
+      number on everybody's screen, so an axis running to 100 was
+      answering a question nobody asked.
+
+      Except when the band is not the same size for the whole team.
+      Core values is 20 for most people and 15 for anyone carrying ESMS,
+      and plotting both as raw points would draw the 15s to the left of
+      the 20s for reasons that have nothing to do with performance. That
+      case falls back to shares, and the caption says so.
+    */
+    const weights = new Set(people.map(p => p.weight).filter(w => w > 0))
+    const mixed = weights.size > 1
+    const outOf = mixed ? 100 : ([...weights][0] ?? 100)
+
+    return {
+      mixed,
+      outOf,
+      floor: mixed ? 40 : BELL_FLOOR[bellMetric],
+      values: people
+        .map(p => (mixed ? attainmentPct(p.value, p.weight) : p.value))
+        .filter((v): v is number => v !== null),
+    }
   }, [allSubs, data, bellMonth, bellMetric])
 
   /**
@@ -386,9 +423,13 @@ export default function Team() {
         <p className="mb-3 mt-3 text-xs text-ink-500">
           {chartTab === 'trend'
             ? 'Everyone who was scored that month, averaged, on the band scale.'
-            : `Where the team sits on ${METRIC_LABEL[bellMetric].toLowerCase()}, ` +
+            : `Where the team sits on ${METRIC_LABEL[bellMetric].toLowerCase()}` +
+              `${bell.mixed ? ', as a share of each person\'s own weightage' : ` out of ${bell.outOf}`}, ` +
               `${bellMonth ? `for ${monthLabel(bellMonth)}` : 'averaged over the year'}. ` +
-              'Each dot on the axis is one person.'}
+              'Each dot on the axis is one person.' +
+              (bell.mixed
+                ? ' Shares rather than points here, because this band is not the same size for everyone on the team.'
+                : '')}
         </p>
 
         {chartTab === 'trend' ? (
@@ -399,7 +440,9 @@ export default function Team() {
           />
         ) : (
           <BellCurve
-            values={bellValues}
+            values={bell.values}
+            outOf={bell.outOf}
+            floor={bell.floor}
             emptyMessage={
               bellMonth
                 ? `Fewer than three people have been scored for ${monthLabel(bellMonth)}, so there is no spread to draw yet.`

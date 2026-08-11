@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, ComposedChart, Area, Scatter, XAxis, YAxis,
   Tooltip, ReferenceArea, ReferenceLine, Cell,
 } from 'recharts'
-import { bandFor, BAND_SCALE } from '@/lib/bands'
+import { bandFor, attainmentPct, BAND_SCALE } from '@/lib/bands'
 
 /** A smooth curve needs a shape to be smooth about. */
 const MIN_PEOPLE = 3
@@ -14,24 +14,31 @@ const MIN_PEOPLE = 3
  */
 const phi = (z: number) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)
 
+/** Round numbers a person would choose for an axis. */
+const STEPS = [0.5, 1, 2, 5, 10, 20, 25]
+const niceStep = (raw: number) => STEPS.find(s => s >= raw) ?? 25
+
 /**
  * How wide each person's contribution is spread.
  *
- * Silverman's rule scaled to the sample, with a floor. Without the floor
- * a tight team produces a spike two points wide, which is arithmetically
- * honest and reads as a broken chart; with it, sixteen people make a
- * recognisable bell. The floor is in score points, so it means the same
- * thing on every team.
+ * Silverman's rule scaled to the sample, with a floor: without one, a
+ * tight team produces a spike two points wide, which is arithmetically
+ * honest and reads as a broken chart.
+ *
+ * The floor is a share of the band rather than a fixed number of points,
+ * because this chart now plots core values out of 20 as readily as a
+ * total out of 100, and five points of smoothing on a twenty point band
+ * is most of the band.
  */
-function bandwidth(values: number[]): number {
+function bandwidth(values: number[], outOf: number): number {
   const n = values.length
   const mean = values.reduce((a, b) => a + b, 0) / n
   const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / n)
-  return Math.max(5, 1.06 * sd * Math.pow(n, -1 / 5))
+  return Math.max(outOf * 0.035, 1.06 * sd * Math.pow(n, -1 / 5))
 }
 
 /**
- * Where a team sits across the score range.
+ * Where a team sits across a band's range.
  *
  * The month-by-month line answers "are we improving". This answers the
  * other question a manager has, which the line cannot: is the team
@@ -46,15 +53,28 @@ function bandwidth(values: number[]): number {
  *
  * Colour runs along the x axis on the band scale, so the part of the
  * curve sitting over Poor is red and the part over Excellent is green,
- * and the shape can be read without checking the axis.
+ * and the shape can be read without checking the axis. The stops are
+ * mapped through the visible window rather than assumed to be at 0–100,
+ * or an axis running 20 to 80 would paint Good where Satisfactory is.
  */
 export default function BellCurve({
   values,
+  outOf,
+  floor,
   height = 220,
   emptyMessage = 'Not enough scored people yet.',
 }: {
-  /** One figure per person, 0–100. */
+  /** One figure per person, in the band's own points. */
   values: number[]
+  /** What that band is marked out of — 100, 80, 20, 5. */
+  outOf: number
+  /**
+   * Where the axis starts when the data allows. Most of a scored team
+   * sits in the top half of its band, so starting at zero spends half
+   * the width drawing an empty floor. It drops below this on its own if
+   * somebody is down there.
+   */
+  floor: number
   height?: number
   emptyMessage?: string
 }) {
@@ -62,32 +82,49 @@ export default function BellCurve({
     const clean = values.filter(v => Number.isFinite(v))
     if (clean.length < MIN_PEOPLE) return null
 
-    const h = bandwidth(clean)
+    const step = niceStep(outOf / 10)
+    const min = Math.min(...clean)
+
+    // Only ever widens, never narrows: somebody at 27 out of 100 pulls
+    // the axis down to 20 rather than being drawn on the edge of it.
+    const lo = min < floor
+      ? Math.max(0, Math.floor((min - step / 2) / step) * step)
+      : floor
+    const hi = outOf
+    const span = hi - lo
+
+    const h = bandwidth(clean, outOf)
     const n = clean.length
     const mean = clean.reduce((a, b) => a + b, 0) / n
 
-    // Every whole point of the scale. 101 points is cheap and removes
-    // any question of the peak landing between samples.
-    const curve = Array.from({ length: 101 }, (_, x) => ({
-      x,
-      density: clean.reduce((sum, v) => sum + phi((x - v) / h), 0) / (n * h),
-    }))
+    const curve = Array.from({ length: 101 }, (_, i) => {
+      const x = lo + (span * i) / 100
+      return {
+        x,
+        density: clean.reduce((sum, v) => sum + phi((x - v) / h), 0) / (n * h),
+      }
+    })
 
     const perBand = BAND_SCALE.map(({ band, from, to }) => ({
       band,
-      // Half-open so somebody on exactly 80 is counted once, in the band
-      // that starts at 80 — the same rule bandFor uses.
-      count: clean.filter(v => v >= from && (to === 100 ? v <= to : v < to)).length,
+      // Boundaries are percentages of the band; the readings are points.
+      lo: (from / 100) * outOf,
+      hi: (to / 100) * outOf,
+      count: clean.filter(v => {
+        const pct = attainmentPct(v, outOf) ?? 0
+        return pct >= from && (to === 100 ? pct <= to : pct < to)
+      }).length,
     }))
 
+    const ticks: number[] = []
+    for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(Math.round(t * 100) / 100)
+
     return {
-      curve,
-      mean,
+      curve, mean, lo, hi, ticks, perBand,
       people: n,
-      perBand,
       dots: clean.map(v => ({ x: v, y: 0 })),
     }
-  }, [values])
+  }, [values, outOf, floor])
 
   if (!model) {
     return (
@@ -101,54 +138,67 @@ export default function BellCurve({
   }
 
   const peak = Math.max(...model.curve.map(p => p.density))
+  const span = model.hi - model.lo
+  /** A band boundary's position across the visible window, 0–1. */
+  const at = (raw: number) => Math.min(1, Math.max(0, (raw - model.lo) / span))
+  const fmt = (v: number) =>
+    outOf === 100 ? `${v}%` : `${Math.round(v * 10) / 10}`
 
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={model.curve}
-          margin={{ top: 16, right: 12, left: 0, bottom: 0 }}
+          // Left and right room for the end ticks. At left: 0 the first
+          // label is centred on the axis origin and half of it lands
+          // outside the plot, so recharts drops it — the axis opened at
+          // 40 and the lowest number on it read 50.
+          margin={{ top: 16, right: 16, left: 14, bottom: 0 }}
         >
           <defs>
             {/* Hard stops at the thresholds, from the same BAND_SCALE the
-                meter and the trend chart draw. The gradient maps to the
-                path's own box, and the curve is evaluated from 0 to 100,
-                so the box is the full width of the scale and the colours
-                land exactly on their band boundaries. */}
+                meter and the trend chart draw, positioned through the
+                window actually on screen. The gradient maps to the path's
+                own box, and the curve spans the whole window, so the box
+                is the window. */}
             <linearGradient id="bellStroke" x1="0" y1="0" x2="1" y2="0">
-              {BAND_SCALE.flatMap(({ band, from, to }) => [
-                <stop key={`${band.key}-a`} offset={`${from}%`} stopColor={band.hex.base} />,
-                <stop key={`${band.key}-b`} offset={`${to}%`} stopColor={band.hex.base} />,
+              {model.perBand.flatMap(({ band, lo, hi }) => [
+                <stop key={`${band.key}-a`} offset={`${at(lo) * 100}%`}
+                      stopColor={band.hex.base} />,
+                <stop key={`${band.key}-b`} offset={`${at(hi) * 100}%`}
+                      stopColor={band.hex.base} />,
               ])}
             </linearGradient>
             <linearGradient id="bellFill" x1="0" y1="0" x2="1" y2="0">
-              {BAND_SCALE.flatMap(({ band, from, to }) => [
-                <stop key={`${band.key}-a`} offset={`${from}%`}
+              {model.perBand.flatMap(({ band, lo, hi }) => [
+                <stop key={`${band.key}-a`} offset={`${at(lo) * 100}%`}
                       stopColor={band.hex.base} stopOpacity={0.18} />,
-                <stop key={`${band.key}-b`} offset={`${to}%`}
+                <stop key={`${band.key}-b`} offset={`${at(hi) * 100}%`}
                       stopColor={band.hex.base} stopOpacity={0.18} />,
               ])}
             </linearGradient>
           </defs>
 
-          {/* The bands behind everything, at a whisper, so the boundaries
-              are visible where the curve is flat. */}
-          {BAND_SCALE.map(({ band, from, to }) => (
-            <ReferenceArea
-              key={band.key}
-              x1={from} x2={to}
-              fill={band.hex.base}
-              fillOpacity={0.05}
-              strokeOpacity={0}
-            />
-          ))}
+          {/* The bands behind everything, at a whisper. Clipped to the
+              window, so a band left off the axis is not drawn at all. */}
+          {model.perBand
+            .filter(b => b.hi > model.lo)
+            .map(({ band, lo, hi }) => (
+              <ReferenceArea
+                key={band.key}
+                x1={Math.max(lo, model.lo)} x2={hi}
+                fill={band.hex.base}
+                fillOpacity={0.05}
+                strokeOpacity={0}
+              />
+            ))}
 
           <XAxis
             dataKey="x"
             type="number"
-            domain={[0, 100]}
-            ticks={[0, 20, 40, 60, 80, 100]}
-            tickFormatter={v => `${v}%`}
+            domain={[model.lo, model.hi]}
+            ticks={model.ticks}
+            tickFormatter={fmt}
             tick={{ fontSize: 11, fill: '#6b6e79' }}
             axisLine={{ stroke: '#d8d9dd' }}
             tickLine={false}
@@ -160,10 +210,9 @@ export default function BellCurve({
 
           <Tooltip
             cursor={{ stroke: '#b9bbc3', strokeDasharray: '3 3' }}
-            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #d8d9dd' }}
             content={({ active, label }) => {
               if (!active || typeof label !== 'number') return null
-              const band = bandFor(label)
+              const band = bandFor(attainmentPct(label, outOf))
               const row = model.perBand.find(b => b.band.key === band?.key)
               if (!band || !row) return null
               return (
@@ -185,7 +234,7 @@ export default function BellCurve({
             stroke="#141519"
             strokeDasharray="4 3"
             label={{
-              value: `avg ${model.mean.toFixed(1)}%`,
+              value: `avg ${fmt(Math.round(model.mean * 10) / 10)}`,
               position: 'top',
               fontSize: 11,
               fill: '#141519',
@@ -207,7 +256,7 @@ export default function BellCurve({
               built from, and with a small team you can count them. */}
           <Scatter data={model.dots} dataKey="y" isAnimationActive={false}>
             {model.dots.map((d, i) => (
-              <Cell key={i} fill={bandFor(d.x)?.hex.base ?? '#8a8d97'} />
+              <Cell key={i} fill={bandFor(attainmentPct(d.x, outOf))?.hex.base ?? '#8a8d97'} />
             ))}
           </Scatter>
         </ComposedChart>
