@@ -7,7 +7,7 @@ import {
   useSubmissionHistory, useAnnualSummary, useMyAssignment, useSetKpiStart, currentFy,
 } from '@/lib/queries'
 import { StartMonthBanner } from '@/components/StartMonth'
-import { fyMonthsFrom, monthLabel } from '@/lib/fy'
+import { fyMonthsFrom, openFyMonthsFrom, monthLabel } from '@/lib/fy'
 import {
   PageLoader, ScorePill, StatTile, StatusBadge, Alert, BandCell,
 } from '@/components/ui'
@@ -50,7 +50,12 @@ export default function TeamMember() {
   const startsFrom = assignment?.assignment?.starts_from ?? null
   const months = fyMonthsFrom(fy, startsFrom)
 
-  const chartData = months.map(m => {
+  // Only months that have finished. The table below lists the whole year
+  // on purpose — it is the record, and a month still to come is a row
+  // waiting to be filled — but a chart cannot draw a month that has not
+  // happened, so plotting all twelve left the line stopping a third of
+  // the way across an axis that ran to March.
+  const chartData = openFyMonthsFrom(fy, startsFrom).map(m => {
     const s = byMonth.get(m)
     const scored = s && (s.status === 'scored' || s.status === 'finalized')
     return {
