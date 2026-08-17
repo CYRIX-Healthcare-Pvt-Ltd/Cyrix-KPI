@@ -1,5 +1,6 @@
 import { useMemo, useState, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
+import clsx from 'clsx'
 import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -59,7 +60,7 @@ export default function Dashboard() {
 
   // Read once per mount. Opening the manual is a navigation away from
   // here and back, so the card is gone the next time this screen loads.
-  const [seenHelp] = useState(hasSeenHelp)
+  const [seenHelp] = useState(() => hasSeenHelp(employee?.id))
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.
   const otherLangs = READY_LANGS
@@ -88,6 +89,15 @@ export default function Dashboard() {
   const sub = submission?.submission ?? null
   // Is the month being reported on one this KPI covers at all?
   const monthInScope = !startsFrom || month >= startsFrom
+  /**
+   * No working KPI yet — not written, waiting on a manager, or sent
+   * back. Everything on this screen is empty in that state and none of
+   * it explains itself, so the manual stays offered and stays loud until
+   * there is something to be measured against. Not retired by having
+   * read it once: somebody who skimmed it before their KPI existed is
+   * exactly who needs it again now.
+   */
+  const gettingStarted = kpiStatus !== 'active'
 
   const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
   const hasEsms = esmsWeight > 0
@@ -165,22 +175,47 @@ export default function Dashboard() {
           leaves on its own the month their first score lands — no
           dismiss button, because "have you been scored yet" is a better
           test of whether somebody is still new than asking them. */}
-      {!seenHelp && (
-        <Link to="/help" className="card card-interactive flex items-center gap-3 p-4">
-          <BookOpen className="h-5 w-5 shrink-0 text-violet-600" />
+      {(gettingStarted || !seenHelp) && (
+        <Link
+          to="/help"
+          className={clsx(
+            'card card-interactive flex items-center gap-3 p-4',
+            // Loud for as long as somebody has no working KPI. That is
+            // the window where every question they have is answered on
+            // that page and none of it is obvious from this screen — and
+            // it is the one moment the quiet version was competing with a
+            // black panel shouting SET UP MY KPI directly above it.
+            gettingStarted && 'border-violet-300 bg-violet-50 sm:p-5',
+          )}
+        >
+          <span className={clsx(
+            'flex shrink-0 items-center justify-center rounded-full',
+            gettingStarted ? 'h-10 w-10 bg-violet-100' : 'h-5 w-5',
+          )}>
+            <BookOpen className="h-5 w-5 text-violet-600" />
+          </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-ink-900">
-              New here? See what you can do
+            <span className={clsx(
+              'block font-medium',
+              gettingStarted ? 'text-base text-violet-900' : 'text-sm text-ink-900',
+            )}>
+              {gettingStarted
+                ? 'Not sure what any of this means? Read the manual first'
+                : 'New here? See what you can do'}
             </span>
-            <span className="block text-sm text-ink-500">
+            <span className={clsx(
+              'block text-sm',
+              gettingStarted ? 'text-violet-800' : 'text-ink-500',
+            )}>
               A short page about your own login — what to do each month, and
               when.
-              {otherLangs && (
-                <> You can read it in {otherLangs} too.</>
-              )}
+              {otherLangs && <> You can read it in {otherLangs} too.</>}
             </span>
           </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-ink-400" />
+          <ArrowRight className={clsx(
+            'h-4 w-4 shrink-0',
+            gettingStarted ? 'text-violet-600' : 'text-ink-400',
+          )} />
         </Link>
       )}
 

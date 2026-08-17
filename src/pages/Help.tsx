@@ -119,7 +119,8 @@ export default function Help() {
 
   // Reaching this page is the whole point of the card on the dashboard,
   // so the card retires itself here rather than needing a dismiss.
-  useEffect(markHelpSeen, [])
+  const myId = employee?.id
+  useEffect(() => { markHelpSeen(myId) }, [myId])
 
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
