@@ -1,10 +1,14 @@
 import { Link } from 'react-router-dom'
+import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
   MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, UserRound,
+  Languages,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy, useMonthClose } from '@/lib/queries'
+import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
+import { HELP } from '@/lib/help-strings'
 
 /**
  * What this person can do, in plain words.
@@ -14,7 +18,7 @@ import { useTatPolicy, useMonthClose } from '@/lib/queries'
  * most of the time, in their second language. Short sentences. One idea
  * a line. No word doing two jobs.
  *
- * Two things make it a manual worth having rather than a page nobody
+ * Three things make it a manual worth having rather than a page nobody
  * reads:
  *
  *   It is about YOU. The sections come from the same role flags the
@@ -26,6 +30,15 @@ import { useTatPolicy, useMonthClose } from '@/lib/queries'
  *   reading it and doing it are the same gesture. A step that only
  *   names a screen is a step somebody has to go hunting for.
  *
+ *   It can be read in Malayalam. "Second language" is the whole premise
+ *   of the writing above, and the honest conclusion of that premise is
+ *   that plain English is still English. The words the software itself
+ *   prints stay English inside the translated sentence — see i18n.ts —
+ *   because the reader has to find them on a screen afterwards.
+ *
+ * Every word lives in help-strings.ts. Nothing user-facing is typed in
+ * this file, so a sentence cannot exist in one language only.
+ *
  * The rules at the bottom are the ones people get caught by — the
  * questions that get asked out loud. They are stated once, here, and
  * the numbers in them come from the live settings rather than from
@@ -36,6 +49,11 @@ interface Point {
   what: string
   how: string
   to?: string
+  /**
+   * Deliberately not translated: it names a button or a tab that is
+   * itself in English. "Open my KPI" translated is a signpost pointing
+   * at words that do not exist.
+   */
   cta?: string
 }
 
@@ -50,7 +68,7 @@ function Section({
   return (
     <section className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-        <Icon className="h-4 w-4 text-ink-400" />
+        <Icon className="h-4 w-4 shrink-0 text-ink-400" />
         <h2 className="text-sm font-semibold text-ink-800">{title}</h2>
       </div>
       <div className="p-4">
@@ -79,6 +97,7 @@ function Section({
 export default function Help() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const { data: policy } = useTatPolicy()
+  const [lang, setLang] = useLang()
 
   // Null is a real setting — no month closes on its own — so it is not
   // defaulted away. The manual has to describe whichever is switched on.
@@ -86,23 +105,28 @@ export default function Help() {
   const tmDays = policy?.tm_grace_days ?? 3
   const mgrDays = policy?.manager_grace_days ?? 5
 
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    say(HELP[key], lang, vars)
+
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
   // to submit one.
   const appraised = !isHrAdmin && !(isSwAdmin && !isHrAdmin)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    // lang on the container, not the document: the navigation and the
+    // rest of the app stay English whatever this is set to.
+    <div lang={lang} className="mx-auto max-w-3xl space-y-5">
       <div>
         <Link
           to="/me"
           className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to my profile
+          <ArrowLeft className="h-4 w-4" /> {t('page.back')}
         </Link>
         <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold tracking-tight text-ink-900">
-          <BookOpen className="h-6 w-6 text-cyrixRed-600" />
-          What I can do
+          <BookOpen className="h-6 w-6 shrink-0 text-cyrixRed-600" />
+          {t('page.title')}
         </h1>
         <p className="mt-1 text-sm text-ink-500">
           {employee?.full_name} · {employee?.ecode}
@@ -112,112 +136,90 @@ export default function Help() {
         </p>
       </div>
 
+      {/* Only the languages the manual is actually finished in. A picker
+          offering Hindi and then rendering English reads as broken; not
+          offering it reads as not added yet, which is the truth. */}
+      {READY_LANGS.length > 1 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500">
+            <Languages className="h-4 w-4 text-ink-400" />
+            {t('page.readIn')}
+          </span>
+          <div className="flex rounded-lg bg-ink-100 p-0.5" role="group">
+            {READY_LANGS.map(l => (
+              <button
+                key={l.code}
+                onClick={() => setLang(l.code as Lang)}
+                aria-pressed={lang === l.code}
+                className={clsx(
+                  'btn-press rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  lang === l.code
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink-500 hover:text-ink-800',
+                )}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
-        This page only lists what <strong>your</strong> login can do. If a
-        colleague can see something you cannot, it is because their job is
-        different, not because something is broken.
+        {t('page.scopeBefore')} <strong>{t('page.scopeStrong')}</strong>{' '}
+        {t('page.scopeAfter')}
       </div>
 
       {appraised && (
         <>
           <Section
             icon={ClipboardList}
-            title="1. Your KPI for the year"
-            lead="This is the list of things you are measured on. It is agreed once a year."
+            title={t('s1.title')}
+            lead={t('s1.lead')}
             points={[
-              {
-                what: 'Write your KPI',
-                how: 'List your job role targets. Job role is 80 marks. Core values is the other 20. If you also have ESMS, core values becomes 15 and ESMS is 5.',
-                to: '/my-kpi', cta: 'Open my KPI',
-              },
-              {
-                what: 'If a row measures something different some months',
-                how: 'Use Add an alternative on that row. Same weightage, different KRA and target. Each month you pick which one applied.',
-                to: '/my-kpi', cta: 'Open my KPI',
-              },
-              {
-                what: 'Say which month it starts from',
-                how: 'April if you were here all year. If you joined later, pick the month you joined. The months before it are not asked for and do not count as missing.',
-                to: '/my-kpi', cta: 'Open my KPI',
-              },
-              {
-                what: 'Send it to your manager',
-                how: 'Your manager has to approve it. You cannot start any month until they do.',
-              },
-              {
-                what: 'If it comes back',
-                how: 'Your manager may send it back with a reason. Change it and send it again.',
-              },
+              { what: t('s1.p1.what'), how: t('s1.p1.how'), to: '/my-kpi', cta: 'Open my KPI' },
+              { what: t('s1.p2.what'), how: t('s1.p2.how'), to: '/my-kpi', cta: 'Open my KPI' },
+              { what: t('s1.p3.what'), how: t('s1.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
+              { what: t('s1.p4.what'), how: t('s1.p4.how') },
+              { what: t('s1.p5.what'), how: t('s1.p5.how') },
             ]}
           />
 
           <Section
             icon={CalendarCheck}
-            title="2. Every month"
-            lead="You do this once a month, for the month that has just finished."
+            title={t('s2.title')}
+            lead={t('s2.lead')}
             points={[
+              { what: t('s2.p1.what'), how: t('s2.p1.how'), to: '/history', cta: 'Open assessments' },
+              { what: t('s2.p2.what'), how: t('s2.p2.how') },
+              { what: t('s2.p3.what'), how: t('s2.p3.how', { tmDays }) },
+              { what: t('s2.p4.what'), how: t('s2.p4.how', { mgrDays }) },
+              { what: t('s2.p5.what'), how: t('s2.p5.how') },
               {
-                what: 'Enter what you achieved',
-                how: 'Put the real number against each target. The app works out the score for you.',
-                to: '/history', cta: 'Open assessments',
-              },
-              {
-                what: 'Rate yourself on the core values',
-                how: 'Five values. Pick a rating for each one.',
-              },
-              {
-                what: 'Send it to your manager',
-                how: `Try to send it within ${tmDays} days of the month ending. After that it counts as late.`,
-              },
-              {
-                what: 'Your manager reviews it',
-                how: `They enter their own figure for each row. Your final score is the average of yours and theirs. They have ${mgrDays} days. The status then reads Manager reviewed.`,
-              },
-              {
-                what: 'If their score is a lot lower than yours',
-                how: 'More than 5 points below what you gave yourself and they have to write why before they can submit. You see that reason on the month, next to the score.',
-              },
-              {
-                what: closingDay === null
-                  ? 'Your manager closes the month'
-                  : 'The month closes on its own',
-                how: closingDay === null
-                  ? 'There is no closing date at the moment, so your manager marks each month Final when they are ready. Until they do, you can still query the scores.'
-                  : `Every month closes on the ${closingDay} of the month after it. Nobody presses a button. Until that day you can query the scores; after it the status becomes Final.`,
+                what: t(closingDay === null ? 's2.p6.what.open' : 's2.p6.what.day'),
+                how: t(closingDay === null ? 's2.p6.how.open' : 's2.p6.how.day',
+                       { closingDay: closingDay ?? '' }),
               },
             ]}
           />
 
           <Section
             icon={MessageSquare}
-            title="3. If you do not agree with a score"
-            lead="You do not have to just accept it. Ask."
+            title={t('s3.title')}
+            lead={t('s3.lead')}
             points={[
               {
-                what: 'Raise a query',
-                how: 'Open the month your manager has reviewed. Tick the rows you want looked at. Say for each one whether you want it explained, or you think it is wrong.'
-                  + (closingDay === null
-                     ? ' You can do this for as long as the month is open.'
-                     : ` You have until the ${closingDay} of the following month.`),
+                what: t('s3.p1.what'),
+                how: `${t('s3.p1.how.base')} ${
+                  closingDay === null
+                    ? t('s3.p1.how.open')
+                    : t('s3.p1.how.day', { closingDay })}`,
                 to: '/history', cta: 'Open assessments',
               },
-              {
-                what: 'Asking about one core value',
-                how: 'Core values are one score covering five things. Tick that row, then tick the ones you actually mean — Trust, Care, and so on — so your manager knows what to answer.',
-              },
-              {
-                what: 'Where to see it',
-                how: 'The month shows Under review on your Assessments list until your manager replies. Open the month to read their answer and whether the score changed.',
-                to: '/history', cta: 'Open assessments',
-              },
-              {
-                what: 'Attach proof if you have it',
-                how: 'A photo, a PDF or a sheet. Optional. It is deleted once the query is finished.',
-              },
-              {
-                what: 'What happens next',
-                how: 'Your manager is told straight away. The month cannot be closed until they reply. You will see their answer, and whether the score was changed.',
-              },
+              { what: t('s3.p2.what'), how: t('s3.p2.how') },
+              { what: t('s3.p3.what'), how: t('s3.p3.how'), to: '/history', cta: 'Open assessments' },
+              { what: t('s3.p4.what'), how: t('s3.p4.how') },
+              { what: t('s3.p5.what'), how: t('s3.p5.how') },
             ]}
           />
         </>
@@ -226,69 +228,21 @@ export default function Help() {
       {isManager && !isHrAdmin && (
         <Section
           icon={Users}
-          title={appraised ? '4. Because you have a team' : 'Your team'}
-          lead="Everything above is still yours to do. These are extra."
+          title={t(appraised ? 'team.title.num' : 'team.title.plain')}
+          lead={t('team.lead')}
           points={[
-            {
-              what: 'Approve their KPI',
-              how: 'Nobody on your team can start a month until you approve their KPI for the year. Use Edit to correct a KRA, a weightage, a target or how a row is scored before you approve — it saves as you go, so a typo does not cost a round trip.',
-              to: '/approvals', cta: 'Open approvals',
-            },
-            {
-              what: 'Set the month their KPI starts from',
-              how: 'On the approval screen. Somebody who joined in June is not asked for April or May, and does not show as missing them. You can fix it later too, as long as they have not already been scored on an earlier month.',
-              to: '/approvals', cta: 'Open approvals',
-            },
-            {
-              what: 'Score their months',
-              how: 'Enter your own figure against each row. You can also correct the target, because you are the one who knows the right number. Changing a target changes both scores.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'Say why if you score much lower',
-              how: 'If your total is more than 5 points below what they gave themselves, the app asks for a reason and will not let you submit without one. They see it with their score. It saves a query later.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'Answer their queries',
-              how: 'If someone questions a score, you get a tab and a badge. Reply, and change the score first if it needs changing. The month stays open until you do.',
-              to: '/queries', cta: 'Open queries',
-            },
-            {
-              what: 'Look somebody up quickly',
-              how: 'Tap a name or a face on My Team for a quick look — who they are, this month, and how each part scored — without leaving the list.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'Remove an unsuitable photo',
-              how: 'If somebody uses a picture that is not a clear photo of their face, take it down from the quick look. You have to give a reason, and they are shown it so they can put up another.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'See how the team is doing',
-              how: 'Team analysis shows everybody ranked, with job role and core values separately. You can pick one month or the whole year, and download it.',
-              to: '/team/analysis', cta: 'Open team analysis',
-            },
-            {
-              what: 'See what the team total is made of',
-              how: 'My Team and Team analysis both show the team average split into job role, core values and ESMS. Each is a percentage of its own weightage, so they can be compared — 14 out of 15 is better than 16 out of 20.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'See whether the team is bunched or spread',
-              how: 'On My Team, switch the chart to Bell curve. It shows where everybody sits across the range, with one dot per person. Filter it by month and by job role, core values or ESMS. An average of 77 can be everybody at 77 or half at 60 and half at 94.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'Change the month somebody starts from',
-              how: 'Open their record from My Team. The start month is at the bottom with their KPI, and you can change it there. It will not go past a month they have already been scored on.',
-              to: '/team', cta: 'Open my team',
-            },
-            {
-              what: 'Flag somebody who has left',
-              how: 'Send it to HR. They deactivate the person. You cannot do it yourself.',
-              to: '/team', cta: 'Open my team',
-            },
+            { what: t('team.p1.what'), how: t('team.p1.how'), to: '/approvals', cta: 'Open approvals' },
+            { what: t('team.p2.what'), how: t('team.p2.how'), to: '/approvals', cta: 'Open approvals' },
+            { what: t('team.p3.what'), how: t('team.p3.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p4.what'), how: t('team.p4.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p5.what'), how: t('team.p5.how'), to: '/queries', cta: 'Open queries' },
+            { what: t('team.p6.what'), how: t('team.p6.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p7.what'), how: t('team.p7.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p8.what'), how: t('team.p8.how'), to: '/team/analysis', cta: 'Open team analysis' },
+            { what: t('team.p9.what'), how: t('team.p9.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p10.what'), how: t('team.p10.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p11.what'), how: t('team.p11.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p12.what'), how: t('team.p12.how'), to: '/team', cta: 'Open my team' },
           ]}
         />
       )}
@@ -296,34 +250,14 @@ export default function Help() {
       {isHrAdmin && (
         <Section
           icon={CheckSquare}
-          title="What HR can do"
-          lead="You run the system. You are not scored by it."
+          title={t('hr.title')}
+          lead={t('hr.lead')}
           points={[
-            {
-              what: 'See where everybody is',
-              how: 'Who has a KPI, who has submitted, who has been scored, and how late each side is.',
-              to: '/admin/reports', cta: 'Open reports',
-            },
-            {
-              what: 'Manage employees',
-              how: 'Reporting lines, departments and who is active.',
-              to: '/admin/employees', cta: 'Open employees',
-            },
-            {
-              what: 'Watch the queries',
-              how: 'Every score somebody has questioned, and how it was answered. View only — the reporting manager answers it.',
-              to: '/admin/queries', cta: 'Open queries',
-            },
-            {
-              what: 'Decide record requests',
-              how: 'Deleting a month, or reopening a KPI. The manager approves first, then you.',
-              to: '/deletions', cta: 'Open records',
-            },
-            {
-              what: 'Process leavers',
-              how: 'A manager flags somebody who has resigned. You deactivate them.',
-              to: '/admin/requests', cta: 'Open leavers',
-            },
+            { what: t('hr.p1.what'), how: t('hr.p1.how'), to: '/admin/reports', cta: 'Open reports' },
+            { what: t('hr.p2.what'), how: t('hr.p2.how'), to: '/admin/employees', cta: 'Open employees' },
+            { what: t('hr.p3.what'), how: t('hr.p3.how'), to: '/admin/queries', cta: 'Open queries' },
+            { what: t('hr.p4.what'), how: t('hr.p4.how'), to: '/deletions', cta: 'Open records' },
+            { what: t('hr.p5.what'), how: t('hr.p5.how'), to: '/admin/requests', cta: 'Open leavers' },
           ]}
         />
       )}
@@ -331,19 +265,11 @@ export default function Help() {
       {isSwAdmin && (
         <Section
           icon={ShieldAlert}
-          title="What SW Admin can do"
-          lead="You look after logins and timing. You cannot see anybody's scores."
+          title={t('sw.title')}
+          lead={t('sw.lead')}
           points={[
-            {
-              what: 'Fix a login',
-              how: "Reset somebody's password back to their employee code. You cannot read a password — nobody can.",
-              to: '/admin/logins', cta: 'Open logins',
-            },
-            {
-              what: 'Set the timing rules',
-              how: 'How many days each side gets before a month counts as late, and which month to start counting from.',
-              to: '/admin/timing', cta: 'Open KPI timing',
-            },
+            { what: t('sw.p1.what'), how: t('sw.p1.how'), to: '/admin/logins', cta: 'Open logins' },
+            { what: t('sw.p2.what'), how: t('sw.p2.how'), to: '/admin/timing', cta: 'Open KPI timing' },
           ]}
         />
       )}
@@ -352,96 +278,42 @@ export default function Help() {
           and a photo like anybody else, even though neither is scored. */}
       <Section
         icon={UserRound}
-        title="Your profile"
-        lead="Click your own name at the top of any screen to get here."
+        title={t('prof.title')}
+        lead={t('prof.lead')}
         points={[
-          {
-            what: 'Add a photo of yourself',
-            how: 'Pick any picture from your phone. It is shrunk on your phone before it is sent, so it stays small even on a slow connection. Your face then shows beside your name everywhere in the app.',
-            to: '/me', cta: 'Open my profile',
-          },
-          {
-            what: 'If your photo disappears',
-            how: 'Your reporting manager can remove it, and they have to give a reason. You will see the reason on your profile, and you can add another one straight away.',
-          },
-          {
-            what: 'Change your password',
-            how: 'Any time you like. Nobody can read your password, not even SW Admin.',
-            to: '/change-password', cta: 'Change my password',
-          },
-          ...(appraised ? [{
-            what: 'See where you stand',
-            how: 'Your profile shows your rank in your team and across Cyrix, out of the people who have been scored.',
-            to: '/me', cta: 'Open my profile',
-          }] : []),
+          { what: t('prof.p1.what'), how: t('prof.p1.how'), to: '/me', cta: 'Open my profile' },
+          { what: t('prof.p2.what'), how: t('prof.p2.how') },
+          { what: t('prof.p3.what'), how: t('prof.p3.how'), to: '/change-password', cta: 'Change my password' },
+          ...(appraised
+            ? [{ what: t('prof.p4.what'), how: t('prof.p4.how'), to: '/me', cta: 'Open my profile' }]
+            : []),
         ]}
       />
 
       <Section
         icon={HelpCircle}
-        title="Things people ask"
+        title={t('ask.title')}
         points={[
-          {
-            what: 'Why can I not open this month?',
-            how: 'A month can only be assessed after it has finished. July opens on 1 August.',
-          },
+          { what: t('ask.p1.what'), how: t('ask.p1.how') },
           ...(appraised ? [
-            {
-              what: 'Why can I not submit anything?',
-              how: 'Your KPI for the year is probably not approved yet. Check with your manager.',
-              to: '/my-kpi', cta: 'Check my KPI',
-            },
-            {
-              what: 'Where do I see which month my KPI starts from?',
-              how: 'On My KPI, at the top, above your KRAs. If it looks wrong, ask your manager — they can change it.',
-              to: '/my-kpi', cta: 'Open my KPI',
-            },
-            {
-              what: 'It asked me which month my KPI starts from',
-              how: 'Because nobody had said yet, and until somebody does you are counted as owing every month since April. Pick the month you joined if you joined this year, April if you did not. Your manager can correct it.',
-            },
-            {
-              what: 'Why are the first months of the year missing from my history?',
-              how: 'Your KPI starts later than April, so those months are not yours. Any month you have actually been scored on is always shown.',
-              to: '/history', cta: 'Open assessments',
-            },
-            {
-              what: 'I sent the wrong month in',
-              how: 'Ask for it to be deleted. Your manager reviews it, then HR. Nothing is removed until both agree.',
-            },
-            {
-              what: 'Can I query a score twice?',
-              how: 'No. One query per month, so put everything into the one you raise.',
-            },
+            { what: t('ask.p2.what'), how: t('ask.p2.how'), to: '/my-kpi', cta: 'Check my KPI' },
+            { what: t('ask.p3.what'), how: t('ask.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
+            { what: t('ask.p4.what'), how: t('ask.p4.how') },
+            { what: t('ask.p5.what'), how: t('ask.p5.how'), to: '/history', cta: 'Open assessments' },
+            { what: t('ask.p6.what'), how: t('ask.p6.how') },
+            { what: t('ask.p7.what'), how: t('ask.p7.how') },
           ] : []),
-          {
-            what: 'It says it cannot see a face in my photo',
-            how: 'That is a warning, not a refusal — you can carry on. Some phones cannot check at all, and no check spots every face.',
-          },
-          {
-            what: 'My row measures something else this month',
-            how: 'If your KPI has alternatives on that row, pick the right one at the top of it. Changing it clears what you typed on that row, because it was counting something else.',
-          },
-          {
-            what: 'It says others doing my job score higher',
-            how: 'That is an average of everybody with the same KPI as you, and only ever shows when at least three of you have been scored. You are never shown one person, and nobody is shown yours.',
-            to: '/', cta: 'Open dashboard',
-          },
-          {
-            what: 'What do the colours mean?',
-            how: 'Red is Poor and yellow is Satisfactory — those two are below what your manager expects. Good, Very Good and Excellent are all green, getting deeper as the score rises, because Good already means you are doing the job as expected. Each score is coloured against what it was out of, not out of 100.',
-          },
-          {
-            what: 'I forgot my password',
-            how: 'Ask SW Admin to reset it. It goes back to your employee code.',
-            to: '/change-password', cta: 'Change my password',
-          },
+          { what: t('ask.p8.what'), how: t('ask.p8.how') },
+          { what: t('ask.p9.what'), how: t('ask.p9.how') },
+          { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },
+          { what: t('ask.p11.what'), how: t('ask.p11.how') },
+          { what: t('ask.p12.what'), how: t('ask.p12.how'), to: '/change-password', cta: 'Change my password' },
         ]}
       />
 
       <div className="flex flex-wrap gap-2">
         <Link to="/me" className="btn-secondary btn-press">
-          <ArrowLeft className="h-4 w-4" /> Back to my profile
+          <ArrowLeft className="h-4 w-4" /> {t('page.back')}
         </Link>
         {isSwAdmin && (
           <Link to="/admin/timing" className="btn-secondary btn-press">
