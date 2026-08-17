@@ -240,7 +240,9 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
         aria-haspopup="dialog"
         title="Notifications"
       >
-        <Bell className="h-4.5 w-4.5" />
+        {/* Amber like every other "something is waiting on you" in the
+            app. The red count on top of it means unread specifically. */}
+        <Bell className={clsx('h-4.5 w-4.5', unreadCount > 0 ? 'text-amber-500' : 'text-amber-600')} />
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}

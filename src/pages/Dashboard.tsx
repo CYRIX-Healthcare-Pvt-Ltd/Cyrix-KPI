@@ -1,4 +1,4 @@
-import { useMemo, lazy, Suspense } from 'react'
+import { useMemo, useState, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -10,6 +10,8 @@ import {
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
+import { hasSeenHelp } from '@/lib/seenHelp'
+import { READY_LANGS } from '@/lib/i18n'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
   ScoreHeader, WeakAreas, KraBars, ActionRequired,
@@ -34,10 +36,11 @@ export default function Dashboard() {
 
   const { data: assignment, isLoading: aLoading } = useMyAssignment(employee?.id, fy)
   const { data: submission } = useSubmission(employee?.id, month)
-  // isSuccess, not just the data: without it the "new here" line below
-  // flashes on for every returning person in the moment before their
-  // year average lands.
-  const { data: annual, isSuccess: annualLoaded } = useAnnualSummary(employee?.id, fy)
+  // The "new here" card no longer waits on this. It used to key off the
+  // number of scored months, which meant waiting for the query and
+  // flashing on for a moment for everybody; whether the manual has been
+  // opened is known before the first render.
+  const { data: annual } = useAnnualSummary(employee?.id, fy)
   const { data: history } = useSubmissionHistory(employee?.id, fy)
   const { data: weak } = useWeakAreas(myIds, fy)
   const { data: attainment } = useKraAttainment(myIds, fy)
@@ -53,6 +56,16 @@ export default function Dashboard() {
   )
 
   const startsFrom = assignment?.assignment?.starts_from ?? null
+
+  // Read once per mount. Opening the manual is a navigation away from
+  // here and back, so the card is gone the next time this screen loads.
+  const [seenHelp] = useState(hasSeenHelp)
+  // Named in their own scripts, and built from the list rather than
+  // typed out, so adding a language cannot leave this sentence stale.
+  const otherLangs = READY_LANGS
+    .filter(l => l.code !== 'en')
+    .map(l => l.label)
+    .join(', ')
 
   // Only months that have finished: a trailing run of empty months makes
   // a three-point line look like a line that stopped. And only months
@@ -152,15 +165,19 @@ export default function Dashboard() {
           leaves on its own the month their first score lands — no
           dismiss button, because "have you been scored yet" is a better
           test of whether somebody is still new than asking them. */}
-      {annualLoaded && (annual?.months_scored ?? 0) === 0 && (
+      {!seenHelp && (
         <Link to="/help" className="card card-interactive flex items-center gap-3 p-4">
-          <BookOpen className="h-5 w-5 shrink-0 text-ink-400" />
+          <BookOpen className="h-5 w-5 shrink-0 text-violet-600" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-ink-900">
               New here? See what you can do
             </span>
             <span className="block text-sm text-ink-500">
-              A short page about your own login — what to do each month, and when.
+              A short page about your own login — what to do each month, and
+              when.
+              {otherLangs && (
+                <> You can read it in {otherLangs} too.</>
+              )}
             </span>
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-ink-400" />

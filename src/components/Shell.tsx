@@ -17,6 +17,36 @@ import StartMonthPrompt from './StartMonthPrompt'
 import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
 
+/**
+ * What each tab's icon is coloured, by what the tab is for.
+ *
+ * Not decoration — the colours are the ones the rest of the app already
+ * uses for these meanings, so a tab is recognisable before the label is
+ * read. Green is somewhere work gets completed, amber is somewhere
+ * something is waiting on you, red is somewhere things get taken away,
+ * and the neutral ones are places you go to look rather than to act.
+ *
+ * Keyed by route so it is one list rather than a colour repeated beside
+ * every icon in four separate arrays. A route with no entry gets the
+ * plain icon colour, which is a fine default rather than a bug.
+ */
+const NAV_TINT: Record<string, string> = {
+  '/':                 'text-sky-600',      // overview
+  '/my-kpi':           'text-violet-600',   // the year's agreement
+  '/history':          'text-emerald-600',  // the monthly job, done
+  '/team':             'text-indigo-600',   // people
+  '/approvals':        'text-emerald-600',  // approve — go
+  '/queries':          'text-amber-600',    // somebody is waiting
+  '/deletions':        'text-cyrixRed-600', // records removed
+  '/admin':            'text-sky-600',
+  '/admin/employees':  'text-indigo-600',   // people
+  '/admin/reports':    'text-sky-600',      // looking, not acting
+  '/admin/requests':   'text-cyrixRed-600', // leavers
+  '/admin/queries':    'text-amber-600',
+  '/admin/logins':     'text-cyrixRed-600', // security
+  '/admin/timing':     'text-amber-600',    // deadlines
+}
+
 interface NavItem {
   to: string
   label: string
@@ -181,7 +211,7 @@ export default function Shell() {
                 end={item.end}
                 className="nav-link"
               >
-                <item.icon className="h-4 w-4" />
+                <item.icon className={clsx('h-4 w-4', NAV_TINT[item.to])} />
                 {item.label}
                 <Badge count={item.badge} />
               </NavLink>
@@ -224,7 +254,9 @@ export default function Shell() {
               aria-label="Change password"
               title="Change password"
             >
-              <KeyRound className="h-4.5 w-4.5" />
+              {/* A key is the thing you change; leaving is the thing you
+                  cannot undo by clicking again. Same logic as the tabs. */}
+              <KeyRound className="h-4.5 w-4.5 text-sky-600" />
             </NavLink>
             <button
               onClick={handleSignOut}
@@ -232,7 +264,7 @@ export default function Shell() {
               aria-label="Sign out"
               title="Sign out"
             >
-              <LogOut className="h-4.5 w-4.5" />
+              <LogOut className="h-4.5 w-4.5 text-cyrixRed-600" />
             </button>
           </div>
         </div>
@@ -247,7 +279,7 @@ export default function Shell() {
                 onClick={() => setMenuOpen(false)}
                 className="nav-link !py-3"
               >
-                <item.icon className="h-4.5 w-4.5" />
+                <item.icon className={clsx('h-4.5 w-4.5', NAV_TINT[item.to])} />
                 {item.label}
                 <Badge count={item.badge} />
               </NavLink>
@@ -289,7 +321,7 @@ export default function Shell() {
               }
             >
               <span className="relative">
-                <item.icon className="h-5 w-5" />
+                <item.icon className={clsx('h-5 w-5', NAV_TINT[item.to])} />
                 {!!item.badge && item.badge > 0 && (
                   <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">
                     {item.badge > 99 ? '99+' : item.badge}

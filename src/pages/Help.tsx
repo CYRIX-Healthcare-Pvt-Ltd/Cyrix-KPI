@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
@@ -9,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy, useMonthClose } from '@/lib/queries'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
+import { markHelpSeen } from '@/lib/seenHelp'
 
 /**
  * What this person can do, in plain words.
@@ -58,9 +60,16 @@ interface Point {
 }
 
 function Section({
-  icon: Icon, title, lead, points,
+  icon: Icon, tint, title, lead, points,
 }: {
   icon: React.ComponentType<{ className?: string }>
+  /**
+   * The same colour language as the navigation: green where work gets
+   * finished, amber where somebody is waiting, red where things are
+   * taken away, neutral where you are only looking. A reader scanning
+   * for "the bit about disagreeing with a score" finds the amber one.
+   */
+  tint: string
   title: string
   lead?: string
   points: Point[]
@@ -68,7 +77,7 @@ function Section({
   return (
     <section className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-        <Icon className="h-4 w-4 shrink-0 text-ink-400" />
+        <Icon className={clsx('h-4 w-4 shrink-0', tint)} />
         <h2 className="text-sm font-semibold text-ink-800">{title}</h2>
       </div>
       <div className="p-4">
@@ -107,6 +116,10 @@ export default function Help() {
 
   const t = (key: string, vars?: Record<string, string | number>) =>
     say(HELP[key], lang, vars)
+
+  // Reaching this page is the whole point of the card on the dashboard,
+  // so the card retires itself here rather than needing a dismiss.
+  useEffect(markHelpSeen, [])
 
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
@@ -174,6 +187,7 @@ export default function Help() {
         <>
           <Section
             icon={ClipboardList}
+            tint="text-violet-600"
             title={t('s1.title')}
             lead={t('s1.lead')}
             points={[
@@ -187,6 +201,7 @@ export default function Help() {
 
           <Section
             icon={CalendarCheck}
+            tint="text-emerald-600"
             title={t('s2.title')}
             lead={t('s2.lead')}
             points={[
@@ -205,6 +220,7 @@ export default function Help() {
 
           <Section
             icon={MessageSquare}
+            tint="text-amber-600"
             title={t('s3.title')}
             lead={t('s3.lead')}
             points={[
@@ -228,6 +244,7 @@ export default function Help() {
       {isManager && !isHrAdmin && (
         <Section
           icon={Users}
+          tint="text-indigo-600"
           title={t(appraised ? 'team.title.num' : 'team.title.plain')}
           lead={t('team.lead')}
           points={[
@@ -250,6 +267,7 @@ export default function Help() {
       {isHrAdmin && (
         <Section
           icon={CheckSquare}
+          tint="text-emerald-600"
           title={t('hr.title')}
           lead={t('hr.lead')}
           points={[
@@ -265,6 +283,7 @@ export default function Help() {
       {isSwAdmin && (
         <Section
           icon={ShieldAlert}
+          tint="text-cyrixRed-600"
           title={t('sw.title')}
           lead={t('sw.lead')}
           points={[
@@ -278,6 +297,7 @@ export default function Help() {
           and a photo like anybody else, even though neither is scored. */}
       <Section
         icon={UserRound}
+        tint="text-sky-600"
         title={t('prof.title')}
         lead={t('prof.lead')}
         points={[
@@ -292,6 +312,7 @@ export default function Help() {
 
       <Section
         icon={HelpCircle}
+        tint="text-ink-400"
         title={t('ask.title')}
         points={[
           { what: t('ask.p1.what'), how: t('ask.p1.how') },

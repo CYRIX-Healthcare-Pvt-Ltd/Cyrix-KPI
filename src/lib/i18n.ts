@@ -32,8 +32,8 @@ export const LANGS: Array<{
 }> = [
   { code: 'en', label: 'English',   english: 'English',   ready: true },
   { code: 'ml', label: 'മലയാളം',    english: 'Malayalam', ready: true },
-  { code: 'hi', label: 'हिन्दी',      english: 'Hindi',     ready: false },
-  { code: 'te', label: 'తెలుగు',      english: 'Telugu',    ready: false },
+  { code: 'hi', label: 'हिन्दी',      english: 'Hindi',     ready: true },
+  { code: 'te', label: 'తెలుగు',      english: 'Telugu',    ready: true },
 ]
 
 export const READY_LANGS = LANGS.filter(l => l.ready)
