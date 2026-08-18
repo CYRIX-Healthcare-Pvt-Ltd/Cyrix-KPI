@@ -26,7 +26,15 @@ export interface RuleParams {
   floor?: number
   /** For higher_uncapped: ceiling as a multiple of the weightage (1.2 = 120%). */
   max_multiplier?: number
-  /** For lower_linear when target is 0: flat penalty per unit over. */
+  /**
+   * For lower_linear: points off for each unit over the target.
+   *
+   * Points on the total out of 100, which is what makes a row worth no
+   * weightage at all still able to do something: "one complaint a month
+   * is allowed, each one after that costs 2%". Set, it replaces the
+   * proportional slice at every target — including 0, which is the only
+   * place it used to apply.
+   */
   penalty_per_unit?: number
   /** For banded: thresholds, evaluated on achieved/target as a percentage. */
   bands?: Array<{ min_pct: number; award_pct: number }>
@@ -34,7 +42,15 @@ export interface RuleParams {
   default_award_pct?: number
 }
 
-const round4 = (n: number) => Math.round(n * 1e4) / 1e4
+const round4 = (n: number) => {
+  const r = Math.round(n * 1e4) / 1e4
+  // Negative zero is a real value in JavaScript, and (-0).toFixed(2) is
+  // the string "-0.00". A penalty row that took nothing off — weightage
+  // 0 minus a slice of 0 — lands there, so a clean month would have been
+  // shown as a deduction. Postgres numeric has no such value, so this is
+  // also what keeps the two engines agreeing.
+  return r === 0 ? 0 : r
+}
 
 /**
  * Score one KPI row.
@@ -82,12 +98,28 @@ export function calcKpiScore(
       else result = wt * (target / achieved)
       break
 
-    case 'lower_linear':
-      if (target === null || target === undefined) result = 0
-      else if (achieved <= target) result = wt
-      else if (target === 0) result = wt - achieved * (params.penalty_per_unit ?? wt)
-      else result = wt * (1 - (achieved - target) / target)
+    case 'lower_linear': {
+      if (target === null || target === undefined) { result = 0; break }
+      if (achieved <= target) { result = wt; break }
+      const over = achieved - target
+      // A stated penalty wins at every target. The proportional slice is
+      // a share of the weightage, so on a row carrying no weightage it
+      // is a share of nothing — which is how "max 1 complaint" rows came
+      // to be worth 0 whatever happened. A figure in points has
+      // something to take away from.
+      //
+      // Zero is not a penalty, it is the absence of one, so it reads as
+      // unset rather than as "takes nothing off" — otherwise a row could
+      // carry a rule that provably never fires and still look configured.
+      const perUnit = params.penalty_per_unit
+      if (perUnit != null && perUnit > 0) result = wt - over * perUnit
+      // Target 0 has no proportional base either. Falling back to the
+      // weightage means one over wipes the row out, which is the
+      // behaviour that shipped and is kept for rows relying on it.
+      else if (target === 0) result = wt - over * wt
+      else result = wt * (1 - over / target)
       break
+    }
 
     case 'banded': {
       if (!target) { result = 0; break }
@@ -116,10 +148,134 @@ export function calcKpiScore(
     }
   }
 
+  // The rule named on screen is "can go negative", so it can, unless the
+  // row says otherwise. It used to depend on a flag the setup form
+  // remembered to set and the Excel importer did not, which made the
+  // label true or false depending on where the row came from.
+  const allowNegative = params.allow_negative ?? rule === 'lower_linear'
+
   if (params.floor != null) result = Math.max(result, params.floor)
-  else if (!params.allow_negative) result = Math.max(result, 0)
+  else if (!allowNegative) result = Math.max(result, 0)
 
   return round4(result)
+}
+
+/**
+ * What a rule is allowed to do to a score, said in one or two marks.
+ *
+ * The picker's description is three sentences of prose with a worked
+ * example on somebody else's numbers, and it appears in exactly one
+ * place — the setup form. Everywhere the row is seen afterwards, on the
+ * approval screen, the monthly assessment and the manager's scoring, the
+ * rule is a lowercase phrase in grey and the reader has no way to tell
+ * that this row can quietly take points off the total.
+ *
+ * So the three things worth knowing get a colour each, and they travel
+ * with the row:
+ *
+ *   grey   the score stops at the weightage and cannot go below zero
+ *   green  beating the target earns more than the weightage
+ *   red    going over the target takes points off, past zero if it must
+ *
+ * Never more than two marks. The ceiling and the floor are the whole
+ * story, and a row of chips is as unreadable as the sentence it replaced.
+ */
+export type TraitTone = 'capped' | 'bonus' | 'penalty'
+
+export interface RuleTrait {
+  tone: TraitTone
+  /** Short enough for a chip. */
+  label: string
+  /** The same thing said properly, for a tooltip. */
+  detail: string
+}
+
+const pct = (n: number) => `${round4(n)}%`
+
+export function ruleTraits(
+  rule: ScoringRule,
+  weightage: number,
+  params: RuleParams = {},
+): RuleTrait[] {
+  const wt = weightage ?? 0
+  const capped: RuleTrait = {
+    tone: 'capped',
+    label: `Capped at ${pct(wt)}`,
+    detail: `Beating the target earns nothing extra — this row stops at ${pct(wt)} — and it cannot go below zero.`,
+  }
+
+  // Same reading as the engine: 0% off per unit is no penalty at all.
+  const penalty = rule === 'lower_linear'
+    && params.penalty_per_unit != null
+    && params.penalty_per_unit > 0
+      ? params.penalty_per_unit
+      : null
+
+  // The one thing a row carrying no weightage can still do.
+  if (penalty !== null) {
+    return [
+      ...(wt > 0 ? [capped] : []),
+      {
+        tone: 'penalty',
+        label: `−${pct(penalty)} per unit over`,
+        detail: `Every unit over the target takes ${pct(penalty)} off the total score, and keeps taking it — this row can pull the total down.`,
+      },
+    ]
+  }
+
+  // Nothing to weigh and nothing to take off. Whichever rule is named,
+  // the arithmetic is a share of zero: this row cannot move the total in
+  // either direction, all year.
+  if (wt === 0) {
+    return [{
+      tone: 'capped',
+      label: 'Nothing to score',
+      detail: 'This row is worth 0%, so it cannot change the total either way. Give it a weightage — or, on a penalty row, a % to take off for each one over the target.',
+    }]
+  }
+
+  switch (rule) {
+    case 'higher_uncapped':
+      return [params.max_multiplier != null
+        ? {
+            tone: 'bonus',
+            label: `Up to ${pct(wt * params.max_multiplier)}`,
+            detail: `Beating the target earns more than the ${pct(wt)} weightage, as far as ${pct(wt * params.max_multiplier)}.`,
+          }
+        : {
+            tone: 'bonus',
+            label: `Can pass ${pct(wt)}`,
+            detail: `Beating the target keeps earning past the ${pct(wt)} weightage, with no ceiling.`,
+          }]
+
+    // A working penalty is already handled above; what is left is the
+    // proportional slice, which keeps going after it runs out.
+    case 'lower_linear':
+      return [capped, {
+        tone: 'penalty',
+        label: 'Can go below zero',
+        detail: `Every unit over the target removes an equal slice of the ${pct(wt)}. Enough of them take this row past zero, which comes off the total.`,
+      }]
+
+    case 'lower_penalty':
+      return [{
+        tone: 'capped',
+        label: `Capped at ${pct(wt)}`,
+        detail: `At or under the target earns the full ${pct(wt)}. Going over reduces it, gently, and never below zero.`,
+      }]
+
+    case 'boolean':
+      return [{
+        tone: 'capped',
+        label: 'All or nothing',
+        detail: `Done earns the full ${pct(wt)}; not done earns nothing.`,
+      }]
+
+    // higher_capped, banded and rating_scale all stop at the weightage
+    // and all floor at zero.
+    default:
+      return [capped]
+  }
 }
 
 /** Excellent=100 … Poor=20, matching the template's nested IF chain. */

@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useId } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Upload, FileSpreadsheet, Trash2, Plus, ArrowLeft, Send, Save, Lock,
-  Calculator, Shuffle, ArrowUp, ArrowDown, Minus, FlaskConical,
+  Calculator, Shuffle, ArrowUp, ArrowDown, Minus, FlaskConical, TrendingDown,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/lib/queries'
 import { defaultStartMonth, fyMonths } from '@/lib/fy'
 import { StartMonthSelect, StartMonthNote } from '@/components/StartMonth'
+import RuleTraits from '@/components/RuleTraits'
 import type { ParseResult } from '@/lib/excel'
 import type { KpiRowDefinition, Alternate, ScoringRuleMeta } from '@/types/db'
 import { calcKpiScore, type ScoringRule, type RuleParams } from '@/lib/scoring'
@@ -108,10 +109,21 @@ export default function KpiSetup() {
   }, [rows, data])
 
   const jobTotal = working.reduce((a, b) => a + (Number(b.weightage) || 0), 0)
+  /**
+   * A penalty row with neither a weightage nor a % off the total cannot
+   * change a score in either direction, whatever happens all year. Two
+   * of them are live today and neither owner knows. It is one field to
+   * fix, so it is worth stopping for rather than mentioning.
+   */
+  const inert = working.filter(r =>
+    r.scoring_rule === 'lower_linear' &&
+    Number(r.weightage) === 0 &&
+    !(Number(r.rule_params.penalty_per_unit) > 0))
   const valid =
     jobTotal === JOB_ROLE_TOTAL &&
     working.length > 0 &&
-    working.every(r => r.kra.trim() !== '')
+    working.every(r => r.kra.trim() !== '') &&
+    inert.length === 0
 
   const update = (key: string, patch: Partial<Draft>) =>
     setRows(working.map(r => (r._key === key ? { ...r, ...patch } : r)))
@@ -462,6 +474,13 @@ export default function KpiSetup() {
                   </li>
                 )}
                 {working.some(r => !r.kra.trim()) && <li>Every row needs a KRA name.</li>}
+                {inert.map(r => (
+                  <li key={r._key}>
+                    “{r.kra.trim() || 'Untitled row'}” is worth 0% and takes nothing
+                    off, so it cannot change your score whatever happens. Say how
+                    much each one over the target should cost, or remove the row.
+                  </li>
+                ))}
               </ul>
             </Alert>
           )}
@@ -569,6 +588,13 @@ function RowEditor({
                   {DIRECTION[ruleMeta.direction].label}
                 </span>
               )}
+              {/* What it can do to a score: past the weightage, stopped
+                  at it, or below zero and into the total. */}
+              <RuleTraits
+                rule={row.scoring_rule}
+                weightage={row.weightage}
+                params={row.rule_params}
+              />
               {row._inferred && (
                 <span className="font-semibold text-amber-800">
                   guessed — please check
@@ -593,6 +619,11 @@ function RowEditor({
                     max_multiplier: undefined,
                     allow_negative: rule === 'lower_linear' ? true : undefined,
                     floor: undefined,
+                    // A "% off the total per one over" belongs to this
+                    // rule alone. Carried onto any other it is dead
+                    // weight that the marks would still be reading.
+                    penalty_per_unit:
+                      rule === 'lower_linear' ? row.rule_params.penalty_per_unit : undefined,
                   },
                 })
               }}
@@ -606,11 +637,31 @@ function RowEditor({
                 {ruleMeta.description}
               </p>
             )}
-            {/* Only once the row has both numbers. Before that there is
+
+            {/* The figure that lets a row with no weightage of its own
+                still count for something. */}
+            {row.scoring_rule === 'lower_linear' && (
+              <PenaltyPerUnit
+                weightage={row.weightage}
+                value={row.rule_params.penalty_per_unit ?? null}
+                onValue={v => onChange({
+                  rule_params: {
+                    ...row.rule_params,
+                    penalty_per_unit: v ?? undefined,
+                  },
+                })}
+              />
+            )}
+
+            {/* Only once the row has a target. Before that there is
                 nothing to compute, and a tester showing a dash while
                 somebody is still typing the KRA is a row taller for no
-                reason. */}
-            {row.weightage > 0 && row.target_value !== null && (
+                reason.
+
+                The weightage is deliberately not part of the test. A
+                penalty row is worth 0% on purpose, and that is precisely
+                the row nobody believes until they watch it take 4% off. */}
+            {row.target_value !== null && (
               <RuleTester
                 weightage={row.weightage}
                 target={row.target_value}
@@ -679,7 +730,65 @@ function RowEditor({
 }
 
 /**
- * Type a number, see what it scores.
+ * How much a row takes off the total for each one over the target.
+ *
+ * The rule's other setting is a proportional slice of the weightage,
+ * which is a share of nothing on a row deliberately worth 0% — and worth
+ * 0% is the whole point of a row like "monthly maximum one complaint".
+ * It is not a share of the 80%; it exists to take something away when
+ * the thing happens. So the amount is asked for in points off the total,
+ * which is the number the person actually sees at the end of the month.
+ */
+function PenaltyPerUnit({
+  weightage, value, onValue,
+}: {
+  weightage: number
+  value: number | null
+  onValue: (v: number | null) => void
+}) {
+  const id = `penalty-${useId()}`
+  // Nought per cent off is not a small penalty, it is no penalty — the
+  // row would carry a rule that can never fire. So it counts as unset
+  // everywhere: here, in the marks, and in the engine.
+  const idle = !(Number(value) > 0)
+
+  return (
+    <div className="mt-2.5 border-t border-ink-200/70 pt-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-600">
+        <TrendingDown className="h-3.5 w-3.5 shrink-0 text-cyrixRed-500" />
+        <label htmlFor={id}>Each one over the target takes</label>
+        <span className="relative">
+          <NumberInput
+            id={id}
+            min={1} step="any"
+            className="input w-24 py-1 pr-6 text-xs"
+            value={value}
+            onValue={onValue}
+            placeholder="2"
+          />
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400">
+            %
+          </span>
+        </span>
+        <span>off my total</span>
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
+        {weightage === 0
+          ? idle
+            // The state the two live penalty rows are in, and the reason
+            // neither has ever moved a total.
+            ? 'This row is worth 0%, so this figure is the only thing it can do. Without it the row scores nothing whatever happens.'
+            : 'Staying within the target costs nothing. This row earns no marks of its own — it only takes them off when the target is passed.'
+          : idle
+            ? `Leave this blank to take a proportional slice off this row's own ${weightage}% instead.`
+            : `Taken off the whole score, not only this row's ${weightage}%.`}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Type a number, see what it does.
  *
  * The description under the picker carries a worked example, but it uses
  * a target of 2 and a weightage of 10, which are not this person's — so
@@ -688,7 +797,7 @@ function RowEditor({
  * target and weightage actually on the row, so agreeing to a rule and
  * understanding it become the same moment.
  *
- * One line, and only where both numbers exist. Nothing is saved: it is a
+ * One line, and only where a target exists. Nothing is saved: it is a
  * calculator, not a field.
  */
 function RuleTester({
@@ -718,12 +827,27 @@ function RuleTester({
         placeholder={String(target)}
         aria-label="A figure to try against this rule"
       />
-      <span>against a target of {target}, I score</span>
+      <span>against a target of {target},</span>
       {score === null ? (
         <span className="text-ink-300">—</span>
+      ) : weightage === 0 ? (
+        /*
+          A row worth nothing cannot score, so "0.00 of 0" is true and
+          useless. What it can do is cost, and that is the sentence: the
+          figure people are trying to picture is the one that comes off
+          the 90 they were expecting.
+        */
+        score < 0 ? (
+          <span className="font-semibold tabular-nums text-cyrixRed-700">
+            {(-score).toFixed(2)}% comes off my total
+          </span>
+        ) : (
+          <span className="font-semibold text-emerald-700">nothing comes off my total</span>
+        )
       ) : (
         <span className={clsx('font-semibold tabular-nums', band?.accent)}>
-          {score.toFixed(2)} <span className="font-normal text-ink-400">of {weightage}</span>
+          I score {score.toFixed(2)}{' '}
+          <span className="font-normal text-ink-400">of {weightage}</span>
         </span>
       )}
     </div>

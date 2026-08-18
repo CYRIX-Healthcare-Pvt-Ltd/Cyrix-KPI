@@ -193,7 +193,10 @@ export function useEditAssignmentItem() {
       itemId: string
       patch: Partial<Pick<KpiAssignmentItem,
         'kra' | 'kpi_description' | 'weightage' | 'target_value'
-        | 'scoring_rule' | 'alternates'>>
+        // rule_params carries the % a penalty row takes off the total,
+        // which is as much the manager's to correct as the target is —
+        // and more consequential, since it comes off the whole score.
+        | 'scoring_rule' | 'rule_params' | 'alternates'>>
     }) => {
       const { error } = await supabase
         .from('kpi_assignment_items').update(args.patch).eq('id', args.itemId)

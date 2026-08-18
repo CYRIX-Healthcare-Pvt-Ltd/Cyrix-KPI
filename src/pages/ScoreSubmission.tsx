@@ -4,6 +4,7 @@ import {
   ArrowLeft, Check, Undo2, Lock, Trash2, MessageSquare,
 } from 'lucide-react'
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
+import RuleTraits from '@/components/RuleTraits'
 import { supabase } from '@/lib/supabase'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
@@ -393,7 +394,18 @@ export default function ScoreSubmission() {
                     <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
                   )}
                 </div>
-                <span className="badge bg-ink-100 text-ink-600">{item.weightage}%</span>
+                {/* Beside the weightage rather than under the fields:
+                    a row that can take points off the total is not the
+                    same kind of row as one worth 10%, and the manager is
+                    about to type the figure that decides it. */}
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                  <RuleTraits
+                    rule={item.scoring_rule as ScoringRule}
+                    weightage={item.weightage}
+                    params={item.rule_params as RuleParams}
+                  />
+                  <span className="badge bg-ink-100 text-ink-600">{item.weightage}%</span>
+                </div>
               </div>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-5">

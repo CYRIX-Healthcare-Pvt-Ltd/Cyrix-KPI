@@ -10,6 +10,7 @@ import {
 } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
 import { StartMonthBanner } from '@/components/StartMonth'
+import RuleTraits from '@/components/RuleTraits'
 import type { Section } from '@/types/db'
 
 export default function MyKpi() {
@@ -117,9 +118,16 @@ export default function MyKpi() {
                     {item.weightage}%
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-ink-400">
-                  {rules?.find(r => r.code === item.scoring_rule)?.label ?? item.scoring_rule}
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                  <RuleTraits
+                    rule={item.scoring_rule}
+                    weightage={item.weightage}
+                    params={item.rule_params}
+                  />
+                  <p className="text-xs text-ink-400">
+                    {rules?.find(r => r.code === item.scoring_rule)?.label ?? item.scoring_rule}
+                  </p>
+                </div>
 
                 {/* The other things this row can be. Indented under it and
                     marked "or", because the weightage is shared — three

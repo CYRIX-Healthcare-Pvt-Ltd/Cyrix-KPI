@@ -299,6 +299,29 @@
     --tw-ring-color: var(--score-accent);
   }
 
+  /*
+    No stepper arrows on number fields.
+
+    They are the wrong control for this form. Weightage and target take
+    decimals and are typed, not nudged, so the arrows are never the way
+    anyone enters a figure — they only sit in the field taking a third of
+    a box already down to 90px in the two-column mobile grid, right where
+    the value should be. Scrolling over a focused field no longer changes
+    it either (src/lib/numberFields.ts); this removes the other way to
+    move a number without meaning to.
+
+    Keyboard up/down still works — that one takes a deliberate press.
+  */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   .label {
     @apply mb-1.5 block text-xs font-semibold uppercase tracking-label text-ink-500;
   }

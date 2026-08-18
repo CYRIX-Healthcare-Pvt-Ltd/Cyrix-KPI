@@ -1,5 +1,7 @@
 import { useState, Fragment } from 'react'
-import { CheckSquare, Check, X, Pencil, CheckCheck, Shuffle } from 'lucide-react'
+import {
+  CheckSquare, Check, X, Pencil, CheckCheck, Shuffle, TrendingDown,
+} from 'lucide-react'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -10,6 +12,7 @@ import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
 import { StartMonthBanner } from '@/components/StartMonth'
+import RuleTraits from '@/components/RuleTraits'
 import type { KpiAssignment, KpiAssignmentItem, Section, Alternate } from '@/types/db'
 
 export default function Approvals() {
@@ -251,6 +254,12 @@ function AlternateRow({
         </td>
         <td className="px-4 py-2 text-xs text-ink-500">
           {draft.scoring_rule.replace(/_/g, ' ')}
+          <RuleTraits
+            className="mt-1.5"
+            rule={draft.scoring_rule}
+            weightage={item.weightage}
+            params={draft.rule_params}
+          />
         </td>
       </tr>
     )
@@ -333,7 +342,8 @@ function EditableRow({
       next.kpi_description !== item.kpi_description ||
       next.weightage !== item.weightage ||
       next.target_value !== item.target_value ||
-      next.scoring_rule !== item.scoring_rule
+      next.scoring_rule !== item.scoring_rule ||
+      next.rule_params !== item.rule_params
     if (changed) {
       edit.mutate({
         itemId: item.id,
@@ -347,6 +357,7 @@ function EditableRow({
           // in the wrong direction, and the team member picking it was
           // often guessing — or had it guessed for them by the importer.
           scoring_rule: next.scoring_rule,
+          rule_params: next.rule_params,
         },
       })
     }
@@ -361,6 +372,15 @@ function EditableRow({
         <td className="px-4 py-2.5 text-right tabular-nums">{draft.target_value ?? '—'}</td>
         <td className="px-4 py-2.5 text-xs text-ink-500">
           {draft.scoring_rule.replace(/_/g, ' ')}
+          {/* A row worth 0% that quietly takes 2% off every month reads
+              as an empty weightage column and nothing else. This is
+              where the manager either notices it or approves it. */}
+          <RuleTraits
+            className="mt-1.5"
+            rule={draft.scoring_rule}
+            weightage={draft.weightage}
+            params={draft.rule_params}
+          />
         </td>
       </tr>
     )
@@ -415,15 +435,49 @@ function EditableRow({
             const rule = e.target.value as KpiAssignmentItem['scoring_rule']
             // Same reset as the setup form: each rule carries its own
             // promise about ceilings and negatives, and leaving the old
-            // row's parameters behind would make the label a lie.
-            setDraft({ ...draft, scoring_rule: rule })
-            commit({ scoring_rule: rule })
+            // row's parameters behind would make the label a lie. The
+            // comment said this before the params column was editable
+            // here; now it is, so it is also true.
+            commit({
+              scoring_rule: rule,
+              rule_params: rule === 'lower_linear'
+                ? { ...draft.rule_params, allow_negative: true }
+                : {},
+            })
           }}
         >
           {(rules ?? []).map(r => (
             <option key={r.code} value={r.code}>{r.label}</option>
           ))}
         </select>
+
+        {/* How much this row takes off the total per one over target.
+            Editable for the same reason the weightage is: the manager
+            is the one who knows what a complaint is worth, and sending
+            the whole KPI back over one figure costs a week. */}
+        {draft.scoring_rule === 'lower_linear' && (
+          <label className="mt-1.5 flex items-center gap-1 text-[11px] text-ink-500">
+            <TrendingDown className="h-3 w-3 shrink-0 text-cyrixRed-500" />
+            <span className="whitespace-nowrap">each over −</span>
+            <NumberInput
+              min={1} step="any"
+              className="input !py-1 w-14 text-right text-xs"
+              value={draft.rule_params?.penalty_per_unit ?? null}
+              onValue={v => commit({
+                rule_params: { ...draft.rule_params, penalty_per_unit: v ?? undefined },
+              })}
+              aria-label="Percent off the total for each one over the target"
+            />
+            <span>%</span>
+          </label>
+        )}
+
+        <RuleTraits
+          className="mt-1.5"
+          rule={draft.scoring_rule}
+          weightage={draft.weightage}
+          params={draft.rule_params}
+        />
       </td>
     </tr>
   )

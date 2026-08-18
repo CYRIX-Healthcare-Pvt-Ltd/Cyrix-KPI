@@ -6,6 +6,7 @@ import {
   Shuffle,
 } from 'lucide-react'
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
+import RuleTraits from '@/components/RuleTraits'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -480,7 +481,11 @@ export default function MonthlySubmission() {
                 )}
               </div>
 
-              <RuleHint rule={item.scoring_rule as ScoringRule} />
+              <RuleHint
+                rule={item.scoring_rule as ScoringRule}
+                weightage={item.weightage}
+                params={item.rule_params as RuleParams}
+              />
             </div>
           ))}
         </div>
@@ -1114,16 +1119,34 @@ function BackLink() {
 }
 
 /** Tells the person entering a number which direction is good. */
-function RuleHint({ rule }: { rule: ScoringRule }) {
+function RuleHint({
+  rule, weightage, params,
+}: {
+  rule: ScoringRule
+  weightage: number
+  params: RuleParams
+}) {
+  const penalty = params.penalty_per_unit
   const hint = {
     higher_capped: 'Higher is better. Hitting the target earns the full weightage; going beyond adds nothing more.',
     higher_uncapped: 'Higher is better. Exceeding the target can earn more than the weightage.',
     lower_penalty: 'Lower is better. Going over the target reduces this score.',
-    lower_linear: 'Lower is better. Every unit over the target cuts into this score.',
+    lower_linear: penalty != null
+      // The one row where the consequence is not confined to the row,
+      // and where the reader is about to type the figure that triggers
+      // it. Saying the number is the difference between a rule and a
+      // surprise.
+      ? `Lower is better. Staying within the target costs nothing; every one over takes ${penalty}% off your total.`
+      : 'Lower is better. Every unit over the target cuts into this score.',
     banded: 'Scored in bands against the target.',
     boolean: 'Enter 1 if done, 0 if not.',
     rating_scale: 'Scored from the core value ratings.',
   }[rule]
 
-  return <p className="mt-2 text-xs text-ink-400">{hint}</p>
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <RuleTraits rule={rule} weightage={weightage} params={params} />
+      <p className="text-xs text-ink-400">{hint}</p>
+    </div>
+  )
 }
