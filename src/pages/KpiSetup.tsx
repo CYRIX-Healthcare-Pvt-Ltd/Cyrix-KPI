@@ -110,15 +110,27 @@ export default function KpiSetup() {
 
   const jobTotal = working.reduce((a, b) => a + (Number(b.weightage) || 0), 0)
   /**
-   * A penalty row with neither a weightage nor a % off the total cannot
-   * change a score in either direction, whatever happens all year. Two
-   * of them are live today and neither owner knows. It is one field to
-   * fix, so it is worth stopping for rather than mentioning.
+   * A penalty row that cannot change a score in either direction,
+   * whatever happens all year.
+   *
+   * Two are live today and neither owner knows — both "PR Cancellation",
+   * both worth 0%, one with no target and one with no % to take off. The
+   * row looks configured, carries a rule with "can go negative" in its
+   * name, and has never moved a total. Each is one field away from
+   * working, so it is worth stopping for rather than mentioning.
    */
-  const inert = working.filter(r =>
-    r.scoring_rule === 'lower_linear' &&
-    Number(r.weightage) === 0 &&
-    !(Number(r.rule_params.penalty_per_unit) > 0))
+  const inert = working
+    .filter(r => r.scoring_rule === 'lower_linear')
+    .map(r => ({
+      row: r,
+      why: r.target_value === null
+        // No target means no allowance to be over, so nothing ever fires.
+        ? 'has no target, so nothing is ever over it'
+        : Number(r.weightage) === 0 && !(Number(r.rule_params.penalty_per_unit) > 0)
+          ? 'is worth 0% and takes nothing off'
+          : null,
+    }))
+    .filter((x): x is { row: Draft; why: string } => x.why !== null)
   const valid =
     jobTotal === JOB_ROLE_TOTAL &&
     working.length > 0 &&
@@ -474,11 +486,11 @@ export default function KpiSetup() {
                   </li>
                 )}
                 {working.some(r => !r.kra.trim()) && <li>Every row needs a KRA name.</li>}
-                {inert.map(r => (
-                  <li key={r._key}>
-                    “{r.kra.trim() || 'Untitled row'}” is worth 0% and takes nothing
-                    off, so it cannot change your score whatever happens. Say how
-                    much each one over the target should cost, or remove the row.
+                {inert.map(({ row, why }) => (
+                  <li key={row._key}>
+                    “{row.kra.trim() || 'Untitled row'}” {why}, so it cannot change
+                    your score whatever happens. Set a target and how much each one
+                    over it should cost, or remove the row.
                   </li>
                 ))}
               </ul>
