@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMyAssignment, useSetKpiStart, currentFy } from '@/lib/queries'
 import { defaultStartMonth, fyMonths, monthLabel } from '@/lib/fy'
 import { Alert, Spinner } from '@/components/ui'
 import { StartMonthSelect } from './StartMonth'
+import { needsStartMonth } from '@/lib/startMonth'
 
 /**
  * The one question every existing KPI is missing.
@@ -23,20 +25,14 @@ import { StartMonthSelect } from './StartMonth'
 export default function StartMonthPrompt() {
   const { employee } = useAuth()
   const fy = currentFy()
+  const { pathname } = useLocation()
   const { data } = useMyAssignment(employee?.id, fy)
   const setStart = useSetKpiStart()
   const [month, setMonth] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const assignment = data?.assignment ?? null
-  // Rejected KPIs are excluded: that person is going back into setup,
-  // where the question is asked in context and with the rows in front of
-  // them. A modal on top of that is one interruption too many.
-  const needsAnswer = !!assignment
-    && assignment.starts_from === null
-    && assignment.status !== 'rejected'
-
-  if (!needsAnswer) return null
+  if (!assignment || !needsStartMonth(assignment, pathname)) return null
 
   const chosen = month ?? defaultStartMonth(fy, employee?.date_of_joining)
   const skipped = Math.max(0, fyMonths(fy).indexOf(chosen))

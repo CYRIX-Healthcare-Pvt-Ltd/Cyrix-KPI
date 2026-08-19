@@ -136,6 +136,21 @@ export function useSaveAssignmentRows() {
       existingAssignmentId?: string | null
       /** Does this person carry the ESMS obligation? */
       esms: boolean
+      /**
+       * The month this KPI begins, stamped on at creation.
+       *
+       * Not left for set_kpi_start to fill in a moment later, because
+       * this mutation refreshes every screen when it lands: an
+       * assignment that exists for one round trip with no start month is
+       * a real answer to "does anyone still need to be asked", and the
+       * prompt in the Shell would rightly appear — for the second it
+       * took the next call to finish, in front of the person who had
+       * just answered the question on the form.
+       *
+       * set_kpi_start still runs afterwards. It owns the validation and
+       * the audit entry; this only closes the window.
+       */
+      startsFrom?: string | null
     }) => {
       let assignmentId = args.existingAssignmentId ?? null
 
@@ -146,6 +161,7 @@ export function useSaveAssignmentRows() {
             financial_year: args.fy,
             source_template_id: args.sourceTemplateId ?? null,
             status: 'draft',
+            starts_from: args.startsFrom ?? null,
           }).select(),
         )
         assignmentId = created[0].id

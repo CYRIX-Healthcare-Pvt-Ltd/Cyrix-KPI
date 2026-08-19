@@ -219,6 +219,10 @@ export default function KpiSetup() {
         existingAssignmentId: assignment?.id ?? null,
         sourceTemplateId: roleTemplate?.template?.id ?? null,
         esms,
+        // Carried into the insert so a brand-new assignment is never
+        // saved without one, not even for the moment between this call
+        // and the next.
+        startsFrom: startMonth,
         rows: working.map(({ _key, _inferred, ...r }, idx) => {
           void _key; void _inferred
           return { ...r, sort_order: idx + 1 }
