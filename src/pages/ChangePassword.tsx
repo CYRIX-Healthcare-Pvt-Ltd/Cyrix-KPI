@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { MailCheck, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Alert, Spinner } from '@/components/ui'
+import { requestOtp, submitOtp } from '@/lib/passwordOtp'
 
 const MIN_LENGTH = 8
 
@@ -10,34 +12,77 @@ export default function ChangePassword() {
   const navigate = useNavigate()
   const [pw, setPw] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   // Only a forced visit when the setting is on; otherwise this page is
   // reached voluntarily from the header and offers a way back.
   const forced = forcePasswordChange && (employee?.must_change_password ?? false)
 
+  /**
+   * Whether a code is asked for at all.
+   *
+   * Two exemptions, and both are the difference between a safeguard and
+   * a locked door.
+   *
+   * A forced change is somebody signed in with their employee code as
+   * their password, who cannot use the app until they pick a real one.
+   * Putting an emailed code in front of that would strand every one of
+   * them — and today that is all 1,148, because not one employee record
+   * has an address on it yet.
+   *
+   * The same reasoning, softer, for anybody with no address on file: the
+   * code cannot be sent, so requiring it would take away a thing they
+   * can do today and give nothing back. It degrades to exactly the old
+   * behaviour and turns itself on the moment HR adds their address.
+   */
+  const onRecord = (employee?.work_email ?? '').trim()
+  const verify = !forced && onRecord !== ''
+
+  const passwordProblem = (): string | null => {
+    if (pw.length < MIN_LENGTH) return `Use at least ${MIN_LENGTH} characters.`
+    if (pw !== confirm) return 'The two passwords do not match.'
+    if (employee && pw.toLowerCase() === employee.ecode.toLowerCase()) {
+      return 'Your new password cannot be your employee code.'
+    }
+    return null
+  }
+
+  /** No code needed: the old path, unchanged. */
+  const saveDirectly = async () => {
+    await changePassword(pw)
+    navigate('/', { replace: true })
+  }
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setError(null); setNotice(null)
 
-    if (pw.length < MIN_LENGTH) {
-      setError(`Use at least ${MIN_LENGTH} characters.`)
-      return
-    }
-    if (pw !== confirm) {
-      setError('The two passwords do not match.')
-      return
-    }
-    if (employee && pw.toLowerCase() === employee.ecode.toLowerCase()) {
-      setError('Your new password cannot be your employee code.')
-      return
-    }
+    const problem = passwordProblem()
+    if (problem) { setError(problem); return }
 
     setBusy(true)
     try {
-      await changePassword(pw)
-      navigate('/', { replace: true })
+      if (!verify) { await saveDirectly(); return }
+
+      if (!sent) {
+        const r = await requestOtp({ purpose: 'change', email })
+        if (!r.ok) { setError(r.message); return }
+        setSent(true)
+        setNotice(r.message)
+        return
+      }
+
+      const r = await submitOtp({ purpose: 'change', code, password: pw })
+      if (!r.ok) { setError(r.message); return }
+      // The session still carries the old password's token, and the
+      // point of the exercise is that the new one is what works.
+      await signOut()
+      navigate('/login', { replace: true, state: { changed: true } })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not change password.')
     } finally {
@@ -62,6 +107,31 @@ export default function ChangePassword() {
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">
           {error && <Alert kind="error">{error}</Alert>}
+          {notice && <Alert kind="success">{notice}</Alert>}
+
+          {/* Everything above the code is answered first and then locked,
+              so the screen the code is typed into is not also a screen
+              where the password can still change underneath it. */}
+          {verify && (
+            <div>
+              <label className="label" htmlFor="official-email">Official email</label>
+              <input
+                id="official-email"
+                type="email"
+                inputMode="email"
+                className="input"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={sent}
+                autoComplete="email"
+                placeholder="you@cyrix.in"
+                required
+              />
+              <p className="mt-1.5 text-xs text-ink-500">
+                We send a code here to check it is really you.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="label" htmlFor="pw">New password</label>
@@ -71,8 +141,9 @@ export default function ChangePassword() {
               className="input"
               value={pw}
               onChange={e => setPw(e.target.value)}
+              disabled={sent}
               autoComplete="new-password"
-              autoFocus
+              autoFocus={!verify}
               required
             />
             <p className="mt-1.5 text-xs text-ink-500">
@@ -88,15 +159,69 @@ export default function ChangePassword() {
               className="input"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
+              disabled={sent}
               autoComplete="new-password"
               required
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full" disabled={busy}>
+          {sent && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <label
+                className="label flex items-center gap-1.5 !text-emerald-800"
+                htmlFor="otp"
+              >
+                <MailCheck className="h-3.5 w-3.5" /> Code from your email
+              </label>
+              <input
+                id="otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                className="input bg-white text-center text-xl font-semibold tracking-[0.4em]"
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+                required
+              />
+              <p className="mt-1.5 text-xs text-emerald-800">
+                Six digits, good for 10 minutes.
+              </p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="btn-primary w-full"
+            disabled={busy || (sent && code.length < 6)}
+          >
             {busy && <Spinner className="h-4 w-4" />}
-            {busy ? 'Saving…' : 'Save password'}
+            {busy
+              ? 'Working…'
+              : !verify ? 'Save password'
+              : sent ? 'Save password'
+              : 'Email me a code'}
           </button>
+
+          {sent && (
+            <button
+              type="button"
+              onClick={() => { setSent(false); setCode(''); setNotice(null); setError(null) }}
+              className="flex w-full items-center justify-center gap-1.5 text-xs text-ink-500 hover:text-ink-700"
+            >
+              <ArrowLeft className="h-3 w-3" /> Change the email or password
+            </button>
+          )}
+
+          {/* No address on file, so no code was possible. Said once,
+              plainly, rather than left as a silently weaker screen. */}
+          {!forced && !verify && (
+            <p className="text-xs text-ink-400">
+              Ask HR to add your official email to your record, and this page
+              will start confirming changes with a code.
+            </p>
+          )}
 
           {forced ? (
             <button

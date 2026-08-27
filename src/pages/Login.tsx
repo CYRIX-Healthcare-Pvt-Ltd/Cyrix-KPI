@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { supabase, friendlyError } from '@/lib/supabase'
+import { requestOtp, submitOtp } from '@/lib/passwordOtp'
 import { Alert, Spinner } from '@/components/ui'
 import { Logo, ProductMark } from '@/components/Logo'
 
@@ -90,7 +90,11 @@ export default function Login() {
             <ForgotPassword
               onBack={code => {
                 setMode('signin')
-                if (code) { setEcode(code); setPassword(code); setError(null) }
+                // The employee code comes back filled in; the password
+                // deliberately does not. It used to be pre-filled because
+                // a reset made the password the employee code, and that
+                // is exactly the behaviour this replaced.
+                if (code) { setEcode(code); setPassword(''); setError(null) }
               }}
             />
           ) : (
@@ -156,7 +160,7 @@ export default function Login() {
 
 function Field({
   id, label, value, onChange, type = 'text', placeholder, autoComplete,
-  autoFocus, uppercase, hint, below,
+  autoFocus, uppercase, hint, disabled, below,
 }: {
   id: string
   label: string
@@ -168,6 +172,13 @@ function Field({
   autoFocus?: boolean
   uppercase?: boolean
   hint?: string
+  /**
+   * Answered already and not up for revision — the employee code and
+   * email are what the emailed code was issued against, so letting them
+   * change while it is being typed would only produce a code that no
+   * longer matches anything.
+   */
+  disabled?: boolean
   /** Rendered under the field's rule, e.g. the forgot-password link. */
   below?: React.ReactNode
 }) {
@@ -186,6 +197,7 @@ function Field({
         placeholder={placeholder}
         autoComplete={autoComplete}
         autoFocus={autoFocus}
+        disabled={disabled}
         autoCapitalize={uppercase ? 'characters' : undefined}
         autoCorrect="off"
         spellCheck={false}
@@ -202,28 +214,65 @@ function Field({
 }
 
 /**
- * Resets an account back to ecode-as-password. Gated server-side on the
- * self_service_password_reset setting, so switching it off before go-live
- * needs no change here.
+ * Proving it is your account before letting you take it back.
+ *
+ * This used to set the password back to the employee code, which meant
+ * the only thing standing between somebody and a colleague's account was
+ * knowing an employee code — a number printed on their badge. The
+ * self_service_password_reset switch was the sole guard, which is why it
+ * had to stay off and why nobody could actually use this.
+ *
+ * Now a code goes to the address on that person's record and nothing
+ * happens until it comes back.
+ *
+ * Note what is NOT said on this screen. Whether that employee code
+ * exists, whether the address matches, whether there is an address at
+ * all — every one of those comes back as the same sentence, because
+ * anything more specific turns this form into a way to find out who
+ * works here. The server decides that; this only prints it.
  */
 function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
   const [code, setCode] = useState('')
+  const [email, setEmail] = useState('')
+  const [otp, setOtp] = useState('')
+  const [pw, setPw] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  const send = async () => {
+    const r = await requestOtp({ purpose: 'reset', ecode: code.trim(), email: email.trim() })
+    // Deliberately advances even when nothing was sent. Stopping here on
+    // a wrong address is the same as saying "that address is wrong",
+    // which is the thing this screen must never say.
+    if (!r.ok && r.message) { setError(r.message); return }
+    setSent(true)
+    setNotice(r.message)
+  }
+
+  const finish = async () => {
+    if (pw.length < 8) { setError('Use at least 8 characters.'); return }
+    if (pw !== confirm) { setError('The two passwords do not match.'); return }
+    if (pw.toLowerCase() === code.trim().toLowerCase()) {
+      setError('Your new password cannot be your employee code.')
+      return
+    }
+    const r = await submitOtp({
+      purpose: 'reset', ecode: code.trim(), code: otp, password: pw,
+    })
+    if (!r.ok) { setError(r.message); return }
+    setDone(true)
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setError(null); setNotice(null)
     setBusy(true)
     try {
-      const { data, error: rpcError } = await supabase.rpc('request_password_reset', {
-        p_ecode: code.trim(),
-      })
-      if (rpcError) throw new Error(friendlyError(rpcError))
-      setDone((data as { ecode: string }).ecode)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reset the password.')
+      await (sent ? finish() : send())
     } finally {
       setBusy(false)
     }
@@ -232,11 +281,11 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
   if (done) {
     return (
       <div className="mt-10 space-y-6">
-        <Alert kind="success" title="Password reset">
-          Sign in as <strong>{done}</strong> with the password <strong>{done}</strong>.
+        <Alert kind="success" title="Password changed">
+          Sign in as <strong>{code.trim().toUpperCase()}</strong> with your new password.
         </Alert>
         <button
-          onClick={() => onBack(done)}
+          onClick={() => onBack(code.trim().toUpperCase())}
           className="w-full btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600"
         >
           Back to Sign In
@@ -248,6 +297,7 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
   return (
     <form onSubmit={submit} className="mt-10 space-y-7">
       {error && <Alert kind="error">{error}</Alert>}
+      {notice && <Alert kind="success">{notice}</Alert>}
 
       <Field
         id="forgot-ecode"
@@ -255,19 +305,69 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
         value={code}
         onChange={v => setCode(v.toUpperCase())}
         placeholder="E1042"
-        autoFocus
+        autoFocus={!sent}
         uppercase
-        hint="Your password will be set back to your employee code."
+        disabled={sent}
       />
+
+      <Field
+        id="forgot-email"
+        label="Official Email"
+        type="email"
+        value={email}
+        onChange={setEmail}
+        placeholder="you@cyrix.in"
+        disabled={sent}
+        hint={sent ? undefined : 'The address on your employee record. HR can tell you which one that is.'}
+      />
+
+      {sent && (
+        <>
+          <Field
+            id="forgot-otp"
+            label="Code From Your Email"
+            value={otp}
+            onChange={v => setOtp(v.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+            autoFocus
+            hint="Six digits, good for 10 minutes."
+          />
+          <Field
+            id="forgot-pw"
+            label="New Password"
+            type="password"
+            value={pw}
+            onChange={setPw}
+            hint="At least 8 characters."
+          />
+          <Field
+            id="forgot-confirm"
+            label="Confirm New Password"
+            type="password"
+            value={confirm}
+            onChange={setConfirm}
+          />
+        </>
+      )}
 
       <button
         type="submit"
-        disabled={busy}
+        disabled={busy || (sent && otp.length < 6)}
         className="flex w-full items-center justify-center gap-2 btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600 disabled:opacity-60"
       >
         {busy && <Spinner className="h-4 w-4" />}
-        {busy ? 'Resetting' : 'Reset My Password'}
+        {busy ? 'Working' : sent ? 'Set My Password' : 'Email Me A Code'}
       </button>
+
+      {sent && (
+        <button
+          type="button"
+          onClick={() => { setSent(false); setOtp(''); setNotice(null); setError(null) }}
+          className="w-full text-[11px] font-semibold uppercase tracking-label text-ink-400 transition-colors hover:text-ink-900"
+        >
+          Use A Different Code Or Email
+        </button>
+      )}
 
       <button
         type="button"

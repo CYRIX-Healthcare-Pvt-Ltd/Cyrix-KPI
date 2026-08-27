@@ -153,10 +153,15 @@ mode:
 node scripts/go-live.mjs
 ```
 
-While `self_service_password_reset` is on, the login screen resets any account
-back to ecode-as-password for anyone who types that employee code — and the
-codes run `E1`, `E2`, `E3`… That is fine on a laptop and unacceptable on a
-public URL. `--check` shows the current state, `--revert` puts it back.
+That switch used to be the only thing standing between a public URL and
+anybody's account: the login screen reset any account back to
+ecode-as-password for whoever typed that employee code, and the codes run
+`E1`, `E2`, `E3`… Migration `0051` took the grant away from anonymous and
+signed-in callers, so the route now goes through an emailed one-time code
+(below) and the switch no longer decides anything on its own.
+
+Still worth running before go-live. `--check` shows the current state,
+`--revert` puts it back.
 
 ### Vercel (recommended)
 
@@ -392,3 +397,37 @@ node scripts/user-admin.mjs reset E551     # back to ecode, forced change re-arm
 
 Migrations are immutable — `db:push` warns if an already-applied file has
 changed. Add a new numbered file instead of editing an old one.
+
+### Password reset and change codes
+
+Both flows send a six-digit code to the address on the employee's record.
+The code is generated in the `password-otp` edge function, hashed by
+Postgres, and never stored, logged or returned.
+
+```bash
+supabase functions deploy password-otp
+```
+
+Then set the two secrets it needs. **These are function secrets, not
+`VITE_` variables** — they must never reach the hosting provider, where
+everything is compiled into the JavaScript the browser downloads:
+
+```bash
+supabase secrets set RESEND_API_KEY=re_xxx OTP_FROM='Cyrix KPI <no-reply@cyrix.in>'
+```
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are
+injected by the platform. Resend needs `cyrix.in` verified first, which is
+one DNS record on their dashboard.
+
+Nobody can use any of this until employee records carry an address.
+`work_email` exists on the table and the **bulk employee import already
+reads an `email` or `work email` column**, so HR can load them from the
+same spreadsheet they use for the roster — but note that the import also
+stamps `must_change_password` on every row it touches, so an
+email-only re-upload forces a password change company-wide.
+
+Somebody with no address on record is not locked out. The change-password
+page falls back to its old behaviour and says so, the first-login forced
+change never asks for a code, and HR's own reset (`admin_reset_password`)
+is untouched.
