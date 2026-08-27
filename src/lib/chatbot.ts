@@ -57,6 +57,14 @@ export type FactId =
   | 'team.weak'
   | 'team.person'
   | 'team.overview'
+  // Which KRA, not which section. "In which job role am I worst" was
+  // answered with the Job Role total out of 80, which is the one number
+  // that cannot tell them which row to work on.
+  | 'kra.weakest'
+  | 'kra.best'
+  | 'kra.declining'
+  | 'core.weakest'
+  | 'core.declining'
 
 /**
  * Who a section of the manual is written for.
@@ -269,6 +277,36 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
     id: 'score.year',
     any: ['average', 'avg', 'this year', 'year score', 'overall', 'annual',
           'ശരാശരി', 'औसत', 'సగటు'],
+  },
+  {
+    // A named row of the KPI, rather than the block it sits in.
+    id: 'kra.weakest',
+    any: ['which kra', 'which job role', 'worst kra', 'weakest kra',
+          'which area', 'where am i weak', 'worst in', 'lowest kra',
+          'which row', 'weakest area', 'worst area'],
+  },
+  {
+    id: 'kra.best',
+    any: ['best kra', 'strongest kra', 'best area', 'strongest area',
+          'which kra is best', 'best job role'],
+  },
+  {
+    id: 'kra.declining',
+    any: ['kra dropping', 'kra falling', 'which kra is decreasing',
+          'area dropping', 'getting worse', 'going down', 'declining'],
+  },
+  {
+    // The five values are rated individually and rolled into one figure.
+    // "Which core value is decreasing" needs the five, not the roll-up.
+    id: 'core.declining',
+    any: ['core value decreasing', 'core value dropping', 'core value falling',
+          'which core value is decreasing', 'core value going down',
+          'core value getting worse'],
+  },
+  {
+    id: 'core.weakest',
+    any: ['which core value', 'worst core value', 'lowest core value',
+          'weakest core value', 'core value am i worst'],
   },
   {
     id: 'score.split',

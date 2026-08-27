@@ -5,7 +5,8 @@ import { MessageCircle, X, SendHorizonal, BookOpen, Languages } from 'lucide-rea
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
-  useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose, currentFy,
+  useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
+  useKraAttainment, useMyCoreValueTrend, useCoreValues, currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
@@ -58,6 +59,12 @@ export default function ChatBot() {
   const teamIds = (teamNow?.team ?? []).map(t => t.id)
   const { data: teamMonths } = useTeamSubmissions(
     teamIds.length ? teamIds : undefined, fy)
+  // Which ROW is weakest, not which block. The section totals cannot
+  // answer "in which job role am I worst" — that is the one question the
+  // 80/20 split is guaranteed not to help with.
+  const { data: kras } = useKraAttainment(employee ? [employee.id] : undefined, fy)
+  const { data: coreTrend } = useMyCoreValueTrend(employee?.id, fy)
+  const { data: coreValues } = useCoreValues()
   // The manual states deadlines as {tmDays} and {mgrDays}, filled from
   // live settings. The Help page has always done this; the panel quoted
   // the same sentences without them and printed the braces at people.
@@ -87,7 +94,9 @@ export default function ChatBot() {
   const c = (key: string, vars?: Record<string, string | number>) =>
     // Trimmed because every one of these can take an empty {name}, and a
     // system account should not be greeted as "Hello ." either.
-    say(CHAT[key], lang, vars).replace(/\s+([.,—])/g, '$1').replace(/\s{2,}/g, ' ').trim()
+    // Only a full stop with a space in front of it. Taking the space off
+    // the em dash too produced "The manual may— or ask".
+    say(CHAT[key], lang, vars).replace(/,?\s+\./g, '.').replace(/\s{2,}/g, ' ').trim()
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
@@ -124,6 +133,9 @@ export default function ChatBot() {
       pending: pending ?? null,
       team: teamNow?.team ?? [],
       teamMonths: teamMonths ?? [],
+      kras: kras ?? [],
+      coreTrend: coreTrend ?? [],
+      coreValues: coreValues ?? [],
       month, ecode,
     })
 

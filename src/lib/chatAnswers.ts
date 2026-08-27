@@ -2,6 +2,7 @@ import { CHAT } from './chat-strings'
 import { say, type Lang } from './i18n'
 import { monthLabel } from './fy'
 import { bandFor } from './bands'
+import { ratingToPoints } from './scoring'
 import { WEAK_THRESHOLD } from './bands'
 import type { FactId } from './chatbot'
 
@@ -58,6 +59,35 @@ export interface AnswerContext {
   month?: number
   /** Which person was named. */
   ecode?: string
+  /** One row per KRA per month — the only place a single row's own
+   *  attainment lives. The section totals cannot answer "which row". */
+  kras?: Array<{
+    period_month: string
+    section: string
+    kra: string
+    weightage: number
+    attainment_pct: number | null
+  }>
+  /** The five core values rated separately, month by month. */
+  coreTrend?: Array<{ core_value_id: string; period_month: string; rating: string | null }>
+  coreValues?: Array<{ id: string; name: string }>
+}
+
+/**
+ * Earlier in the year against lately.
+ *
+ * Split down the middle of whatever months exist rather than "last month
+ * vs the one before": with four scored months a single bad month is not
+ * a trend, and two halves of two is the least noisy thing that can be
+ * said honestly. Needs at least two points either side of the line to
+ * claim anything is falling.
+ */
+function halves(points: Array<{ period_month: string; value: number }>) {
+  if (points.length < 3) return null
+  const ordered = [...points].sort((a, b) => a.period_month.localeCompare(b.period_month))
+  const mid = Math.floor(ordered.length / 2)
+  const mean = (xs: typeof ordered) => xs.reduce((a, x) => a + x.value, 0) / xs.length
+  return { from: mean(ordered.slice(0, mid)), to: mean(ordered.slice(mid)) }
 }
 
 const scoreOf = (s: Scored | undefined) =>
@@ -247,6 +277,104 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
       return t('team.person', {
         name: person.full_name, ecode: person.ecode,
         scope, score: v.toFixed(2), band: band(v),
+      })
+    }
+
+    // ---- one row of the KPI ---------------------------------------
+    case 'kra.weakest':
+    case 'kra.best': {
+      const rows = ctx.kras ?? []
+      if (rows.length === 0) return t('kra.none')
+      const byKra = new Map<string, { pct: number[]; weightage: number; section: string }>()
+      for (const r of rows) {
+        if (r.attainment_pct === null) continue
+        const e = byKra.get(r.kra) ?? { pct: [], weightage: r.weightage, section: r.section }
+        e.pct.push(r.attainment_pct)
+        byKra.set(r.kra, e)
+      }
+      const ranked = [...byKra.entries()]
+        .map(([kra, e]) => ({
+          kra, weightage: e.weightage,
+          pct: e.pct.reduce((a, b) => a + b, 0) / e.pct.length,
+        }))
+        .sort((a, b) => b.pct - a.pct)
+      if (ranked.length === 0) return t('kra.none')
+      const top = ranked[0], bottom = ranked[ranked.length - 1]
+      if (id === 'kra.best') {
+        return t('kra.best', {
+          kra: top.kra, pct: top.pct.toFixed(1),
+          weightage: top.weightage, band: band(top.pct),
+        })
+      }
+      return t('kra.weakest', {
+        kra: bottom.kra, pct: bottom.pct.toFixed(1), weightage: bottom.weightage,
+        band: band(bottom.pct), best: top.kra, bestPct: top.pct.toFixed(1),
+      })
+    }
+
+    case 'kra.declining': {
+      const rows = (ctx.kras ?? []).filter(r => r.attainment_pct !== null)
+      if (rows.length === 0) return t('kra.none')
+      const names = [...new Set(rows.map(r => r.kra))]
+      let worst: { kra: string; from: number; to: number; drop: number } | null = null
+      for (const kra of names) {
+        const h = halves(rows.filter(r => r.kra === kra)
+          .map(r => ({ period_month: r.period_month, value: r.attainment_pct! })))
+        if (!h) continue
+        const drop = h.from - h.to
+        if (drop > 0 && (!worst || drop > worst.drop)) worst = { kra, ...h, drop }
+      }
+      if (worst) {
+        return t('kra.declining', {
+          kra: worst.kra, from: worst.from.toFixed(1), to: worst.to.toFixed(1),
+        })
+      }
+      // Nothing falling is an answer, and a better one than silence.
+      const lowest = names
+        .map(kra => {
+          const xs = rows.filter(r => r.kra === kra).map(r => r.attainment_pct!)
+          return { kra, pct: xs.reduce((a, b) => a + b, 0) / xs.length }
+        })
+        .sort((a, b) => a.pct - b.pct)[0]
+      return t('kra.steady', { kra: lowest.kra, pct: lowest.pct.toFixed(1) })
+    }
+
+    case 'core.weakest':
+    case 'core.declining': {
+      const trend = (ctx.coreTrend ?? []).filter(r => r.rating)
+      const names = new Map((ctx.coreValues ?? []).map(v => [v.id, v.name]))
+      if (trend.length === 0) return t('core.none')
+      const points = trend.map(r => ({
+        id: r.core_value_id, period_month: r.period_month,
+        value: ratingToPoints(r.rating) ?? 0,
+      }))
+      const ids = [...new Set(points.map(p => p.id))]
+
+      if (id === 'core.declining') {
+        let worst: { id: string; from: number; to: number; drop: number } | null = null
+        for (const cv of ids) {
+          const h = halves(points.filter(p => p.id === cv))
+          if (!h) continue
+          const drop = h.from - h.to
+          if (drop > 0 && (!worst || drop > worst.drop)) worst = { id: cv, ...h, drop }
+        }
+        if (worst) {
+          return t('core.declining', {
+            name: names.get(worst.id) ?? 'A core value',
+            from: worst.from.toFixed(0), to: worst.to.toFixed(0),
+          })
+        }
+      }
+
+      const ranked = ids
+        .map(cv => {
+          const xs = points.filter(p => p.id === cv).map(p => p.value)
+          return { id: cv, pct: xs.reduce((a, b) => a + b, 0) / xs.length }
+        })
+        .sort((a, b) => a.pct - b.pct)
+      const low = ranked[0]
+      return t(id === 'core.declining' ? 'core.steady' : 'core.weakest', {
+        name: names.get(low.id) ?? 'A core value', pct: low.pct.toFixed(0),
       })
     }
 

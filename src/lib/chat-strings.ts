@@ -118,6 +118,62 @@ export const CHAT: Record<string, Phrase> = {
     te: 'ఈ సంవత్సరం ఇంకా ఏమీ స్కోర్ కాలేదు.',
   },
 
+  // ---- one row of the KPI, not the block it sits in ---------------
+  'kra.weakest': {
+    en: 'Your weakest row is {kra} at {pct}% of its {weightage}% — {band}. Strongest is {best} at {bestPct}%.',
+    ml: 'ഏറ്റവും ദുർബലമായ വരി {kra} ആണ് — അതിന്റെ {weightage}%-ൽ {pct}%, {band}. ഏറ്റവും മികച്ചത് {best} ({bestPct}%).',
+    hi: 'आपकी सबसे कमज़ोर पंक्ति {kra} है — उसके {weightage}% में से {pct}%, {band}। सबसे मज़बूत {best} ({bestPct}%)।',
+    te: 'మీ బలహీన వరుస {kra} — దాని {weightage}%లో {pct}%, {band}. బలమైనది {best} ({bestPct}%).',
+  },
+  'kra.best': {
+    en: 'Your strongest row is {kra} at {pct}% of its {weightage}% — {band}.',
+    ml: 'ഏറ്റവും മികച്ച വരി {kra} ആണ് — അതിന്റെ {weightage}%-ൽ {pct}%, {band}.',
+    hi: 'आपकी सबसे मज़बूत पंक्ति {kra} है — उसके {weightage}% में से {pct}%, {band}।',
+    te: 'మీ బలమైన వరుస {kra} — దాని {weightage}%లో {pct}%, {band}.',
+  },
+  'kra.declining': {
+    en: '{kra} is falling — {from}% earlier in the year, {to}% lately.',
+    ml: '{kra} കുറയുന്നു — വർഷത്തിന്റെ തുടക്കത്തിൽ {from}%, അടുത്തിടെ {to}%.',
+    hi: '{kra} गिर रहा है — वर्ष की शुरुआत में {from}%, हाल में {to}%।',
+    te: '{kra} తగ్గుతోంది — సంవత్సర ఆరంభంలో {from}%, ఇటీవల {to}%.',
+  },
+  'kra.steady': {
+    en: 'Nothing is falling. The lowest is {kra} at {pct}%, and it is not dropping.',
+    ml: 'ഒന്നും കുറയുന്നില്ല. ഏറ്റവും കുറവ് {kra} ({pct}%), അത് കുറയുന്നുമില്ല.',
+    hi: 'कुछ भी नहीं गिर रहा। सबसे कम {kra} ({pct}%) है, और वह गिर नहीं रहा।',
+    te: 'ఏదీ తగ్గడం లేదు. అత్యల్పం {kra} ({pct}%), అది తగ్గడం లేదు.',
+  },
+  'kra.none': {
+    en: 'No month has been scored yet, so there is nothing to compare.',
+    ml: 'ഇതുവരെ ഒരു മാസവും സ്കോർ ചെയ്തിട്ടില്ല, താരതമ്യം ചെയ്യാൻ ഒന്നുമില്ല.',
+    hi: 'अभी तक कोई महीना स्कोर नहीं हुआ, तुलना करने के लिए कुछ नहीं है।',
+    te: 'ఇంకా ఏ నెలా స్కోర్ కాలేదు, పోల్చడానికి ఏమీ లేదు.',
+  },
+  'core.weakest': {
+    en: 'Your lowest core value is {name}, averaging {pct} out of 100.',
+    ml: 'ഏറ്റവും കുറഞ്ഞ core value {name} ആണ്, ശരാശരി 100-ൽ {pct}.',
+    hi: 'आपका सबसे कम core value {name} है, औसत 100 में से {pct}।',
+    te: 'మీ అత్యల్ప core value {name}, సగటు 100కి {pct}.',
+  },
+  'core.declining': {
+    en: '{name} is slipping — {from} earlier in the year, {to} lately.',
+    ml: '{name} കുറയുന്നു — വർഷത്തിന്റെ തുടക്കത്തിൽ {from}, അടുത്തിടെ {to}.',
+    hi: '{name} गिर रहा है — वर्ष की शुरुआत में {from}, हाल में {to}।',
+    te: '{name} తగ్గుతోంది — సంవత్సర ఆరంభంలో {from}, ఇటీవల {to}.',
+  },
+  'core.steady': {
+    en: 'No core value is slipping. The lowest is {name} at {pct} out of 100.',
+    ml: 'ഒരു core value-ഉം കുറയുന്നില്ല. ഏറ്റവും കുറവ് {name} (100-ൽ {pct}).',
+    hi: 'कोई core value नहीं गिर रहा। सबसे कम {name} (100 में से {pct}) है।',
+    te: 'ఏ core value తగ్గడం లేదు. అత్యల్పం {name} (100కి {pct}).',
+  },
+  'core.none': {
+    en: 'No core value ratings yet this year.',
+    ml: 'ഈ വർഷം ഇതുവരെ core value റേറ്റിംഗുകൾ ഇല്ല.',
+    hi: 'इस वर्ष अभी तक कोई core value रेटिंग नहीं है।',
+    te: 'ఈ సంవత్సరం ఇంకా core value రేటింగ్‌లు లేవు.',
+  },
+
   // ---- the KPI itself -------------------------------------------
   'kpi.active': {
     en: 'Your KPI is approved and in force for the year.',

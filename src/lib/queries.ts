@@ -1588,3 +1588,45 @@ export function useSaveOtpSender() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['otp_from'] }),
   })
 }
+
+/**
+ * The five core-value ratings, month by month, for one person.
+ *
+ * The scores views roll core values up into a single figure, which
+ * answers "how are my core values" and cannot answer "which core value
+ * is slipping" — the question somebody actually asks. The individual
+ * ratings only exist here.
+ */
+export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeId,
+    queryKey: ['core_value_trend', employeeId, fy],
+    staleTime: 60_000,
+    queryFn: async () => {
+      // An embedded select, so PostgREST filters on the parent
+      // submission. The generated types do not describe the join, hence
+      // the cast — the shape is asserted by the rows it returns.
+      const { data, error } = await supabase.from('core_value_ratings')
+        .select('core_value_id, self_rating, manager_rating,'
+              + ' kpi_submissions!inner(period_month, employee_id, financial_year)')
+        .eq('kpi_submissions.employee_id', employeeId!)
+        .eq('kpi_submissions.financial_year', fy)
+      if (error) throw new Error(friendlyError(error))
+      const rows = (data ?? []) as unknown as Array<{
+        core_value_id: string
+        self_rating: string | null
+        manager_rating: string | null
+        kpi_submissions: { period_month: string } | null
+      }>
+      return rows
+        .filter(r => r.kpi_submissions)
+        .map(r => ({
+          core_value_id: r.core_value_id,
+          period_month: r.kpi_submissions!.period_month,
+          // The manager's is the one that counts; theirs is the fallback
+          // while a month is still being reviewed.
+          rating: r.manager_rating ?? r.self_rating,
+        }))
+    },
+  })
+}

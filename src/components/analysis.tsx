@@ -8,7 +8,9 @@ import {
   bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
   type Band, type BandShare,
 } from '@/lib/bands'
-import { SECTION_SHORT, JOB_ROLE_TOTAL } from '@/lib/sections'
+import {
+  SECTION_SHORT, JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT,
+} from '@/lib/sections'
 import type { KraAttainmentRow, WeakAreaRow, KraBenchmarkRow } from '@/types/db'
 
 /** Built once — it is the same five stops on every hero on every screen. */
@@ -295,13 +297,35 @@ export function TeamBands({
   share: BandShare
   label?: string
 }) {
-  const parts: Array<[string, number | null, number | null]> = [
-    ['Job role', share.job, JOB_ROLE_TOTAL],
+  /*
+    Every figure here is a SHARE of its own band, not a raw mark, and the
+    caption is the only thing that says so.
+
+    "Core values 76.0% · of its weightage" was read as core values being
+    scored out of a hundred, which contradicts the 20 marks everybody
+    knows they are worth. It is 76% OF those 20 — 15.2 marks — and the
+    caption has to be able to be multiplied out the way "of 80%" can.
+
+    Core values is the awkward one because it is not a single number
+    across a team: 20 normally, 15 for anyone carrying ESMS. So it names
+    the range rather than retreating into "its weightage".
+  */
+  // All four read the same way — "of 80%", "of 20%" — so the four
+  // figures are obviously the same kind of number. Core values is the
+  // only one that is not always a single figure: 20 normally, 15 for
+  // anyone carrying ESMS, so a mixed team gets the range rather than a
+  // number that would be wrong for half of them.
+  const coreOutOf = share.anyEsms
+    ? `of ${REMAINDER_TOTAL - ESMS_WEIGHT}–${REMAINDER_TOTAL}%`
+    : `of ${REMAINDER_TOTAL}%`
+
+  const parts: Array<[string, number | null, string]> = [
+    ['Job role', share.job, `of ${JOB_ROLE_TOTAL}%`],
     ...(share.anyEsms
-      ? [['ESMS', share.esms, null] as [string, number | null, null]]
+      ? [['ESMS', share.esms, `of ${ESMS_WEIGHT}%`] as [string, number | null, string]]
       : []),
-    ['Core values', share.core, null],
-    ['Total', share.total, 100],
+    ['Core values', share.core, coreOutOf],
+    ['Total', share.total, 'of 100%'],
   ]
 
   return (
@@ -323,7 +347,7 @@ export function TeamBands({
         'mt-3 grid grid-cols-2 gap-3 grid-pairs',
         parts.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
       )}>
-        {parts.map(([name, pct, outOf]) => {
+        {parts.map(([name, pct, caption]) => {
           const band = bandFor(pct)
           return (
             <div key={name} className="min-w-0">
@@ -336,12 +360,11 @@ export function TeamBands({
               )}>
                 {pct === null ? '—' : `${pct.toFixed(1)}%`}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-ink-400">
-                {/* The denominator only where it is the same for
-                    everybody. Core values is 20 for most people and 15
-                    for anyone carrying ESMS, so printing one number
-                    there would be wrong for half the team. */}
-                {outOf ? `of ${outOf}%` : 'of its weightage'}
+              {/* Not truncated: the caption is what stops the figure
+                  above being read as a mark out of a hundred, so it has
+                  to be readable at 375px rather than tidy. */}
+              <p className="mt-0.5 text-[11px] leading-tight text-ink-400">
+                {caption}
               </p>
             </div>
           )
