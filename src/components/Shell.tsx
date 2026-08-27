@@ -15,6 +15,7 @@ import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
 import StartMonthPrompt from './StartMonthPrompt'
 import InstallPrompt from './InstallPrompt'
+import ChatBot from './ChatBot'
 import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
 
@@ -343,6 +344,7 @@ export default function Shell() {
           it. Only one person in a hundred is missing a start month, but
           that question has no dismiss and this one does, so the one that
           cannot be put off has to be the one in front. */}
+      <ChatBot />
       <InstallPrompt />
       <StartMonthPrompt />
     </div>
