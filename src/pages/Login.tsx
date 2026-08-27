@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { requestOtp, submitOtp } from '@/lib/passwordOtp'
+import { emailFeedback, isOfficialEmail, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 import { Alert, Spinner } from '@/components/ui'
 import { Logo, ProductMark } from '@/components/Logo'
 
@@ -160,7 +161,7 @@ export default function Login() {
 
 function Field({
   id, label, value, onChange, type = 'text', placeholder, autoComplete,
-  autoFocus, uppercase, hint, disabled, below,
+  autoFocus, uppercase, hint, disabled, error, onBlur, below,
 }: {
   id: string
   label: string
@@ -179,6 +180,10 @@ function Field({
    * longer matches anything.
    */
   disabled?: boolean
+  /** Replaces the hint and turns the rule red. */
+  error?: string | null
+  /** Leaving the field is what counts as having finished typing in it. */
+  onBlur?: () => void
   /** Rendered under the field's rule, e.g. the forgot-password link. */
   below?: React.ReactNode
 }) {
@@ -203,11 +208,21 @@ function Field({
         spellCheck={false}
         required
         onChange={e => onChange(e.target.value)}
-        className={`mt-2 w-full border-0 border-b border-ink-300 bg-transparent px-0 py-2.5
-                    text-lg text-ink-900 placeholder:text-ink-300 focus:border-ink-900
-                    focus:outline-none focus:ring-0 ${uppercase ? 'uppercase' : ''}`}
+        onBlur={onBlur}
+        aria-invalid={!!error}
+        className={`mt-2 w-full border-0 border-b bg-transparent px-0 py-2.5
+                    text-lg text-ink-900 placeholder:text-ink-300
+                    focus:outline-none focus:ring-0 ${uppercase ? 'uppercase' : ''} ${
+                      error
+                        ? 'border-cyrixRed-500 focus:border-cyrixRed-600'
+                        : 'border-ink-300 focus:border-ink-900'
+                    }`}
       />
-      {hint && <p className="mt-2 text-xs text-ink-400">{hint}</p>}
+      {/* The rule under the field is the whole visual language of this
+          screen, so the error uses it rather than adding a box. */}
+      {error
+        ? <p className="mt-2 text-xs font-medium text-cyrixRed-600">{error}</p>
+        : hint && <p className="mt-2 text-xs text-ink-400">{hint}</p>}
       {below && <div className="mt-2.5">{below}</div>}
     </div>
   )
@@ -238,10 +253,13 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
   const [pw, setPw] = useState('')
   const [confirm, setConfirm] = useState('')
   const [sent, setSent] = useState(false)
+  const [touched, setTouched] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+
+  const emailProblem = emailFeedback(email, touched)
 
   const send = async () => {
     const r = await requestOtp({ purpose: 'reset', ecode: code.trim(), email: email.trim() })
@@ -315,10 +333,12 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
         label="Official Email"
         type="email"
         value={email}
-        onChange={setEmail}
-        placeholder="you@cyrix.in"
+        onChange={v => { setEmail(v); if (touched) setTouched(false) }}
+        placeholder={`you@${OFFICIAL_DOMAIN}`}
         disabled={sent}
-        hint={sent ? undefined : 'The address on your employee record. HR can tell you which one that is.'}
+        onBlur={() => setTouched(true)}
+        error={sent ? null : emailProblem}
+        hint={sent ? undefined : 'The email on your employee record. HR can tell you which one that is.'}
       />
 
       {sent && (
@@ -352,7 +372,7 @@ function ForgotPassword({ onBack }: { onBack: (code?: string) => void }) {
 
       <button
         type="submit"
-        disabled={busy || (sent && otp.length < 6)}
+        disabled={busy || (sent && otp.length < 6) || (!sent && !isOfficialEmail(email))}
         className="flex w-full items-center justify-center gap-2 btn-press bg-ink-950 py-4 text-[12px] font-bold uppercase tracking-label text-white hover:bg-cyrixRed-600 disabled:opacity-60"
       >
         {busy && <Spinner className="h-4 w-4" />}

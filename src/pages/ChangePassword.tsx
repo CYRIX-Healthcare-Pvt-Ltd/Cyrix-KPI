@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MailCheck, ArrowLeft } from 'lucide-react'
+import clsx from 'clsx'
+import { MailCheck, ArrowLeft, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Alert, Spinner } from '@/components/ui'
 import { requestOtp, submitOtp } from '@/lib/passwordOtp'
+import { emailFeedback, isOfficialEmail, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 
 const MIN_LENGTH = 8
 
@@ -15,6 +17,10 @@ export default function ChangePassword() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [sent, setSent] = useState(false)
+  // Held back until they leave the field: complaining about "kev" while
+  // somebody is still typing "kevin.r@..." is the field arguing with the
+  // person filling it in.
+  const [touched, setTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -42,6 +48,8 @@ export default function ChangePassword() {
    */
   const onRecord = (employee?.work_email ?? '').trim()
   const verify = !forced && onRecord !== ''
+
+  const emailProblem = emailFeedback(email, touched)
 
   const passwordProblem = (): string | null => {
     if (pw.length < MIN_LENGTH) return `Use at least ${MIN_LENGTH} characters.`
@@ -119,16 +127,32 @@ export default function ChangePassword() {
                 id="official-email"
                 type="email"
                 inputMode="email"
-                className="input"
+                className={clsx(
+                  'input',
+                  emailProblem && 'border-cyrixRed-300 bg-cyrixRed-50/40',
+                )}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
+                onBlur={() => setTouched(true)}
                 disabled={sent}
                 autoComplete="email"
-                placeholder="you@cyrix.in"
+                placeholder={`you@${OFFICIAL_DOMAIN}`}
+                aria-invalid={!!emailProblem}
+                aria-describedby="official-email-hint"
                 required
               />
-              <p className="mt-1.5 text-xs text-ink-500">
-                We send a code here to check it is really you.
+              {/* One line, in the same place either way. A message that
+                  appears in a slot that was not there a moment ago moves
+                  the button out from under the thumb about to press it. */}
+              <p
+                id="official-email-hint"
+                className={clsx(
+                  'mt-1.5 flex items-start gap-1.5 text-xs',
+                  emailProblem ? 'text-cyrixRed-700' : 'text-ink-500',
+                )}
+              >
+                {emailProblem && <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />}
+                {emailProblem ?? 'We send a code here to check it is really you.'}
               </p>
             </div>
           )}
@@ -194,7 +218,13 @@ export default function ChangePassword() {
           <button
             type="submit"
             className="btn-primary w-full"
-            disabled={busy || (sent && code.length < 6)}
+            disabled={
+              busy ||
+              (sent && code.length < 6) ||
+              // Nothing to gain from sending a code to an address that
+              // cannot be on the record.
+              (verify && !sent && !isOfficialEmail(email))
+            }
           >
             {busy && <Spinner className="h-4 w-4" />}
             {busy
