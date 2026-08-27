@@ -13,6 +13,7 @@ import { bandFor } from '@/lib/bands'
 import { monthLabel } from '@/lib/fy'
 import { PageLoader, StatTile, Alert, Spinner } from '@/components/ui'
 import Avatar from '@/components/Avatar'
+import InstallButton from '@/components/InstallButton'
 import {
   fileToAvatar, humanBytes, dataUrlBytes, shouldWarnAboutFace,
 } from '@/lib/avatar'
@@ -535,6 +536,9 @@ export default function Profile() {
         >
           <KeyRound className="h-4 w-4" /> Change my password
         </Link>
+        {/* Renders nothing where it is already installed, or where the
+            browser cannot install at all. */}
+        <InstallButton />
       </div>
     </div>
   )

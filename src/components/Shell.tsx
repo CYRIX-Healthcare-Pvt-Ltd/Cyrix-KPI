@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
-  LogOut, Menu, X, KeyRound, Building2, BarChart3, UserMinus,
+  LogOut, Menu, X, Building2, BarChart3, UserMinus,
   ShieldAlert, Trash2, Timer, MessageSquare,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -14,7 +14,6 @@ import {
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
 import StartMonthPrompt from './StartMonthPrompt'
-import InstallPrompt from './InstallPrompt'
 import ChatBot from './ChatBot'
 import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
@@ -250,16 +249,10 @@ export default function Shell() {
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}
             <Notifications enabled={!isSwAdmin || isHrAdmin} />
-            <NavLink
-              to="/change-password"
-              className="btn-icon"
-              aria-label="Change password"
-              title="Change password"
-            >
-              {/* A key is the thing you change; leaving is the thing you
-                  cannot undo by clicking again. Same logic as the tabs. */}
-              <KeyRound className="h-4.5 w-4.5 text-sky-600" />
-            </NavLink>
+            {/* Changing a password lives on the profile page, next to
+                the photo and the manual — everything about the account
+                in one place, rather than one of them promoted to a
+                permanent icon in the header. */}
             <button
               onClick={handleSignOut}
               className="btn-icon"
@@ -338,14 +331,14 @@ export default function Shell() {
 
       {/* Outside main, above the nav: questions about the account and the
           device rather than about whichever screen happens to be open.
-          Both render nothing at all once answered.
+          It renders nothing at all once answered.
 
-          Install first in the source so the start month paints on top of
-          it. Only one person in a hundred is missing a start month, but
-          that question has no dismiss and this one does, so the one that
-          cannot be put off has to be the one in front. */}
+          Installing the app used to sit here too, as a dialog on every
+          sign-in. It is an offer rather than a requirement, so it moved
+          to the profile page beside the password: in front of somebody
+          who came to submit a month, it was a toll on the thing they
+          opened the app to do. */}
       <ChatBot />
-      <InstallPrompt />
       <StartMonthPrompt />
     </div>
   )

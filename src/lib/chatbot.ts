@@ -214,6 +214,10 @@ const ALIASES: Record<string, string[]> = {
   's2.p3': ['deadline', 'due', 'late', 'last date', 'how many days'],
   's3.p1': ['disagree', 'dispute', 'query', 'complain', 'wrong score', 'appeal'],
   'prof.p1': ['photo', 'picture', 'avatar', 'profile'],
+  // Nobody is prompted to install any more, so the words people would
+  // reach for have to find the one page that says where it is.
+  'prof.p5': ['install', 'home screen', 'homescreen', 'app on my phone',
+              'add to phone', 'download the app', 'shortcut', 'icon'],
 }
 
 const MONTHS = [

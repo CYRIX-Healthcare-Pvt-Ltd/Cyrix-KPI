@@ -308,6 +308,10 @@ export default function Help() {
           ...(appraised
             ? [{ what: t('prof.p4.what'), how: t('prof.p4.how'), to: '/me', cta: 'Open my profile' }]
             : []),
+          // Nobody would go looking for this, and the offer stopped
+          // coming to them when the sign-in dialog was removed. The
+          // manual is now the only thing that says it exists.
+          { what: t('prof.p5.what'), how: t('prof.p5.how'), to: '/me', cta: 'Open my profile' },
         ]}
       />
 

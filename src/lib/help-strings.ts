@@ -654,6 +654,18 @@ export const HELP: Record<string, Phrase> = {
     hi: 'जिन्हें स्कोर मिला है उनमें, आपकी टीम में और पूरे Cyrix में आपकी रैंक प्रोफ़ाइल पर दिखती है।',
     te: 'స్కోరు వచ్చినవారిలో, మీ టీమ్‌లో మరియు Cyrix మొత్తంలో మీ ర్యాంక్ ప్రొఫైల్‌లో కనిపిస్తుంది.',
   },
+  'prof.p5.what': {
+    en: 'Put the app on your phone',
+    ml: 'ആപ്പ് നിങ്ങളുടെ ഫോണിൽ ഇടുക',
+    hi: 'ऐप को अपने फ़ोन पर लगाएँ',
+    te: 'యాప్‌ను మీ ఫోన్‌లో పెట్టండి',
+  },
+  'prof.p5.how': {
+    en: 'Install the app is on your profile, next to Change my password. It then opens from your home screen like any other app, fills the whole screen, and keeps you signed in. Nothing is downloaded from a store and it works the same either way.',
+    ml: 'Install the app എന്നത് നിങ്ങളുടെ പ്രൊഫൈലിൽ, Change my password-ന് അടുത്തായി ഉണ്ട്. പിന്നീട് മറ്റ് ആപ്പുകൾ പോലെ ഹോം സ്ക്രീനിൽ നിന്ന് തുറക്കാം, സ്ക്രീൻ മുഴുവൻ നിറയും, നിങ്ങൾ സൈൻ ഇൻ ആയി തുടരും. സ്റ്റോറിൽ നിന്ന് ഒന്നും ഡൗൺലോഡ് ചെയ്യേണ്ട, രണ്ട് രീതിയിലും ഒരുപോലെ പ്രവർത്തിക്കും.',
+    hi: 'Install the app आपकी प्रोफ़ाइल पर है, Change my password के बगल में। फिर यह किसी भी ऐप की तरह होम स्क्रीन से खुलता है, पूरी स्क्रीन भरता है, और आप साइन इन रहते हैं। स्टोर से कुछ भी डाउनलोड नहीं होता और दोनों तरह से एक जैसा चलता है।',
+    te: 'Install the app మీ ప్రొఫైల్‌లో, Change my password పక్కన ఉంది. తర్వాత ఇతర యాప్‌ల లాగే హోమ్ స్క్రీన్ నుండి తెరవవచ్చు, స్క్రీన్ మొత్తం నిండుతుంది, మీరు సైన్ ఇన్‌లోనే ఉంటారు. స్టోర్ నుండి ఏమీ డౌన్‌లోడ్ కాదు, రెండు విధాలా ఒకేలా పనిచేస్తుంది.',
+  },
 
   // ---- things people ask ---------------------------------------
   'ask.title': {
