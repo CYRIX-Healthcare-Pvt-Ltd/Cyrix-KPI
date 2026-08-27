@@ -4,6 +4,15 @@
   "outputDirectory": "dist",
   "framework": "vite",
 
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "cyrix-kpi.vercel.app" }],
+      "destination": "https://app.cyrix.in/$1",
+      "permanent": true
+    }
+  ],
+
   "rewrites": [
     {
       "source": "/((?!assets/|icon-|favicon|manifest|sw\\.js|workbox-|registerSW).*)",

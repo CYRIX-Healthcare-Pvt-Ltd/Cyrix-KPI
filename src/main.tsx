@@ -5,11 +5,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ScoreThemeProvider } from '@/contexts/ScoreThemeContext'
 import { guardNumberFields } from '@/lib/numberFields'
+import { watchInstallability } from '@/lib/pwa'
 import App from './App'
 import './index.css'
 
 // Before anything renders, so no field is ever briefly unguarded.
 guardNumberFields()
+// And before React mounts, because beforeinstallprompt fires once and
+// early — a component that has not rendered yet cannot catch it.
+watchInstallability()
 
 const queryClient = new QueryClient({
   defaultOptions: {

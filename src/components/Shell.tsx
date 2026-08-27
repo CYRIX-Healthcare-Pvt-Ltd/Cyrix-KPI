@@ -14,6 +14,7 @@ import {
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
 import StartMonthPrompt from './StartMonthPrompt'
+import InstallPrompt from './InstallPrompt'
 import Avatar from './Avatar'
 import { Logo, LogoMark } from './Logo'
 
@@ -334,9 +335,15 @@ export default function Shell() {
         </div>
       </nav>
 
-      {/* Outside main, above the nav: it is a question about the account
-          rather than about whichever screen happens to be open, and it
-          renders nothing at all once answered. */}
+      {/* Outside main, above the nav: questions about the account and the
+          device rather than about whichever screen happens to be open.
+          Both render nothing at all once answered.
+
+          Install first in the source so the start month paints on top of
+          it. Only one person in a hundred is missing a start month, but
+          that question has no dismiss and this one does, so the one that
+          cannot be put off has to be the one in front. */}
+      <InstallPrompt />
       <StartMonthPrompt />
     </div>
   )

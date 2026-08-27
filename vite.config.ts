@@ -23,6 +23,18 @@ export default defineConfig({
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // Naming itself here is what lets getInstalledRelatedApps() answer
+        // "yes, it is already on this device" from inside an ordinary tab
+        // — the one case display-mode: standalone cannot see. Without it
+        // somebody who followed a link to the app they already installed
+        // gets asked to install it again.
+        //
+        // prefer_related_applications stays false, and must: true would
+        // tell the browser to stop offering the install altogether.
+        related_applications: [
+          { platform: 'webapp', url: 'https://app.cyrix.in/manifest.webmanifest' },
+        ],
+        prefer_related_applications: false,
       },
       workbox: {
         // Handles the tap on a notification. Android will not let the page
