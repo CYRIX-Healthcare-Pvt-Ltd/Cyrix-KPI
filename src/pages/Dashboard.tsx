@@ -11,7 +11,7 @@ import {
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import { hasSeenHelp } from '@/lib/seenHelp'
+import { hasSeenHelp, manualOffer } from '@/lib/seenHelp'
 import { READY_LANGS } from '@/lib/i18n'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
@@ -97,7 +97,14 @@ export default function Dashboard() {
    * read it once: somebody who skimmed it before their KPI existed is
    * exactly who needs it again now.
    */
-  const gettingStarted = kpiStatus !== 'active'
+  // Whether the manual is offered, and how hard. The rule and the reasons
+  // it looks like that are in lib/seenHelp.ts, with tests.
+  const offer = manualOffer({
+    kpiActive: kpiStatus === 'active',
+    monthsScored: annual?.months_scored ?? 0,
+    hasRead: seenHelp,
+  })
+  const gettingStarted = offer === 'loud'
 
   const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
   const hasEsms = esmsWeight > 0
@@ -175,7 +182,7 @@ export default function Dashboard() {
           leaves on its own the month their first score lands — no
           dismiss button, because "have you been scored yet" is a better
           test of whether somebody is still new than asking them. */}
-      {(gettingStarted || !seenHelp) && (
+      {offer !== 'none' && (
         <Link
           to="/help"
           className={clsx(

@@ -3,14 +3,11 @@ const KEY = 'cyrix.seenHelp'
 /**
  * Has this person opened the manual yet?
  *
- * The dashboard used to offer it only to people with no scores yet, on
- * the reasoning that "have you been scored" is a better test of newness
- * than asking. That was right for a joiner and wrong for everybody who
- * was already here the day the app arrived — the whole company saw the
- * site for the first time with a year of scores behind them, and none of
- * them were offered the page explaining it.
- *
- * So the test is whether they have read it, not whether they are new.
+ * Read manualOffer() below before trusting this on its own. It answers
+ * what a browser remembers, which is a smaller and less durable thing
+ * than it looks: per origin, per device, gone when somebody clears their
+ * history — and gone for the entire company the day the app moved to
+ * app.cyrix.in.
  *
  * Keyed by employee, not just by device. A service floor shares phones
  * and a manager signs into their own account on somebody else's handset
@@ -35,4 +32,55 @@ export const hasSeenHelp = (employeeId: string | undefined): boolean => {
 
 export const markHelpSeen = (employeeId: string | undefined): void => {
   try { localStorage.setItem(keyFor(employeeId), '1') } catch { /* see above */ }
+}
+
+/** Nothing, a line, or a panel. */
+export type ManualOffer = 'none' | 'quiet' | 'loud'
+
+/**
+ * Whether to offer the manual on the dashboard, and how hard.
+ *
+ * This rule has been wrong twice, in opposite directions, so it lives
+ * out here with tests on it.
+ *
+ * First it asked "have you been scored yet", which is a fine test for a
+ * joiner and was wrong for a company that met the app all at once with a
+ * year of history behind them — nobody was offered the page explaining
+ * the thing they were all seeing for the first time.
+ *
+ * Then it asked "have you read it", which fixed that and broke something
+ * worse. The answer to that question lives in localStorage, per origin
+ * and per device, so moving to app.cyrix.in wiped it for everybody at
+ * once and asked a person four months into their year, averaging 94,
+ * whether they were new here.
+ *
+ * So the two questions are separated. Whether somebody is new is decided
+ * by what the database knows and cannot be forgotten by a browser;
+ * whether they have already taken the offer only ever hides it early,
+ * for somebody who is new anyway. An established person is never asked,
+ * whatever their browser has lost.
+ *
+ * Nobody loses the manual either way — the permanent link to it lives on
+ * the profile page, which is where somebody goes when the question is
+ * about themselves rather than about a number.
+ */
+export function manualOffer(opts: {
+  /** Approved and in force. Anything else is still being set up. */
+  kpiActive: boolean
+  monthsScored: number
+  hasRead: boolean
+}): ManualOffer {
+  // No working KPI: the screen behind this is empty and explains none of
+  // itself. Loud, and not retired by having read it — somebody who
+  // skimmed the manual before their KPI existed is exactly who needs it
+  // again once it does.
+  if (!opts.kpiActive) return 'loud'
+
+  // Approved, nothing scored yet. Still worth offering, quietly, and
+  // gone the moment they take it.
+  if (opts.monthsScored === 0) return opts.hasRead ? 'none' : 'quiet'
+
+  // A month behind them. They have been through this and do not need
+  // asking again.
+  return 'none'
 }
