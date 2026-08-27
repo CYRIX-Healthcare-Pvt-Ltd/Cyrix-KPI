@@ -37,7 +37,7 @@ interface Turn {
 }
 
 export default function ChatBot() {
-  const { employee } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const fy = currentFy()
   const [lang, setLang] = useLang()
   const [open, setOpen] = useState(false)
@@ -67,7 +67,7 @@ export default function ChatBot() {
       : prev))
   }, [open, firstName])
 
-  const factAnswer = (id: FactId): string => {
+  const factAnswer = (id: FactId, month?: number): string => {
     const scored = (history ?? []).filter(
       s => s.final_total_score !== null || s.mgr_total_score !== null)
     const latest = scored[scored.length - 1]
@@ -81,6 +81,26 @@ export default function ChatBot() {
         const band = bandFor(v)
         return `${monthLabel(latest.period_month)} came to ${v?.toFixed(2)} out of 100` +
           (band ? ` — ${band.label}.` : '.')
+      }
+      case 'score.month': {
+        // The name they said, resolved against their own financial year
+        // — April to March, so January belongs to the calendar year
+        // after the one the FY is named for.
+        const [startYear] = fy.split('-').map(Number)
+        const year = month! >= 3 ? startYear : startYear + 1
+        const key = `${year}-${String(month! + 1).padStart(2, '0')}-01`
+        const row = (history ?? []).find(s => s.period_month.startsWith(key.slice(0, 7)))
+        const v = row ? scoreOf(row) : null
+        const name = monthLabel(key)
+
+        if (!row) return `${name} has not been assessed. Nothing was submitted for it.`
+        if (v === null) {
+          return row.status === 'submitted'
+            ? `${name} is with your manager and has not been scored yet.`
+            : `${name} is still a draft — it has not been sent in yet.`
+        }
+        const band = bandFor(v)
+        return `${name} came to ${v.toFixed(2)} out of 100` + (band ? ` — ${band.label}.` : '.')
       }
       case 'score.year': {
         const avg = annual?.avg_total_score
@@ -142,10 +162,10 @@ export default function ChatBot() {
   const ask = (question: string) => {
     const q = question.trim()
     if (!q) return
-    const found = matchQuestion(q)
+    const found = matchQuestion(q, { isManager, isHrAdmin, isSwAdmin })
     const reply: Turn =
       found.kind === 'fact'
-        ? { from: 'app', text: factAnswer(found.id) }
+        ? { from: 'app', text: factAnswer(found.id, found.month) }
         : found.kind === 'manual'
           ? {
               from: 'app',

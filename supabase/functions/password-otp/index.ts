@@ -274,7 +274,20 @@ Deno.serve(async req => {
       }
 
       if (result.ok) {
-        await sendCode(db, result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
+        try {
+          await sendCode(db, result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
+        } catch (sendErr) {
+          // The row is already written, and it counts towards three per
+          // quarter hour. Leaving it there locks somebody out of the
+          // recovery flow because the recovery flow failed, which is the
+          // one moment they can least afford it.
+          await db.rpc('void_password_otp', { p_ecode: ecode, p_purpose: purpose })
+          console.error('password-otp send failed', sendErr)
+          return json({
+            error: 'The code could not be emailed. The sending address is probably not ' +
+                   'verified with the mail provider yet — tell SW Admin.',
+          }, 502)
+        }
       }
 
       // Truthful to somebody asking about their own account; the same

@@ -41,10 +41,59 @@ describe('what people actually type', () => {
     expect(asks('എന്റെ ശരാശരി')).toEqual({ kind: 'fact', id: 'score.year' })
   })
 
-  it('sends KPI setup questions to the manual', () => {
-    const r = asks('how to setup my kpi')
-    expect(r.kind).toBe('manual')
-    if (r.kind === 'manual') expect(r.section).toBe('s1')
+  it('answers "how do I set up my KPI" with how to write one', () => {
+    // Reported wrong: it came back with "Set the month their KPI starts
+    // from", a manager's page about one of their reports, which won on
+    // containing the words "set" and "KPI".
+    //
+    // Every phrasing, because the manual's own heading is "Write your
+    // KPI" and nobody has ever typed that.
+    for (const q of [
+      'How do I set up my KPI?',
+      'how to setup my kpi',
+      'how do i create my kpi',
+      'how to make my kpi',
+      'where do i add my kra',
+    ]) {
+      const r = asks(q)
+      expect(r.kind).toBe('manual')
+      if (r.kind === 'manual') expect(r.key).toBe('s1.p1')
+    }
+  })
+
+  it('reads a month by name out of the question', () => {
+    // Also reported wrong: it returned a page about start months.
+    expect(asks('what was my kpi in april')).toEqual({ kind: 'fact', id: 'score.month', month: 3 })
+    expect(asks('my score in jan')).toEqual({ kind: 'fact', id: 'score.month', month: 0 })
+    expect(asks('september score')).toEqual({ kind: 'fact', id: 'score.month', month: 8 })
+    // A month with no score word in it is not a lookup.
+    expect(asks('april').kind).not.toBe('fact')
+  })
+
+  it('never offers a team member a page they cannot act on', () => {
+    // A team member has no approval screen and no way to change
+    // somebody's start month. Those are not weaker answers to them,
+    // they are unreachable ones.
+    for (const q of [
+      'How do I set up my KPI?', 'approve a kpi', 'change the start month',
+      'score my team', 'who has not submitted',
+    ]) {
+      const r = asks(q)
+      if (r.kind === 'manual') {
+        expect(['team', 'hr', 'sw']).not.toContain(r.section)
+      }
+    }
+  })
+
+  it('gives a manager their own pages', () => {
+    const boss = { isManager: true }
+    const approve = matchQuestion('how do i approve a kpi', boss)
+    expect(approve.kind).toBe('manual')
+    if (approve.kind === 'manual') expect(approve.section).toBe('team')
+
+    // And still answers their own-record questions as themselves.
+    const mine = matchQuestion('How do I set up my KPI?', boss)
+    if (mine.kind === 'manual') expect(mine.key).toBe('s1.p1')
   })
 
   it('finds the answers the manual was written for', () => {

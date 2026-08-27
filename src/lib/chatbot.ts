@@ -30,18 +30,89 @@ export type AnswerSource =
   /** Straight from the manual, with a link to the section it came from. */
   | { kind: 'manual'; key: string; section: string }
   /** Their own figures, filled in by the caller. */
-  | { kind: 'fact'; id: FactId }
+  | { kind: 'fact'; id: FactId; month?: number }
   /** Nothing matched well enough to guess. */
   | { kind: 'unknown' }
 
 export type FactId =
   | 'score.last'
+  | 'score.month'
   | 'score.year'
   | 'score.split'
   | 'score.months'
   | 'score.bestworst'
   | 'kpi.status'
   | 'team.pending'
+
+/**
+ * Who a section of the manual is written for.
+ *
+ * The reason this exists: "How do I set up my KPI?" came back with "Set
+ * the month their KPI starts from", which is a manager's answer about
+ * one of their reports. It won on words alone — it contains "set" and
+ * "KPI" — and word overlap has no idea whose question it is answering.
+ *
+ * A team member cannot approve a KPI or change somebody's start month,
+ * so those pages are not wrong answers to them, they are unreachable
+ * ones.
+ */
+export interface Reader {
+  isManager?: boolean
+  isHrAdmin?: boolean
+  isSwAdmin?: boolean
+}
+
+const canRead = (section: string, who: Reader): boolean => {
+  switch (section) {
+    case 'team': return !!who.isManager
+    case 'hr': return !!who.isHrAdmin
+    case 'sw': return !!who.isSwAdmin
+    // s1, s2, s3, prof, ask — everybody's own account.
+    default: return true
+  }
+}
+
+/** Sections about the reader's own record come first on a tie. */
+const OWN_SECTIONS = new Set(['s1', 's2', 's3', 'ask', 'prof'])
+
+/**
+ * Phrasings the manual does not use for things people ask about daily.
+ *
+ * The manual says "Write your KPI", which is the right heading and not
+ * the words anybody types. Nobody has ever asked how to *write* their
+ * KPI; they ask how to set it up, create it, add it, start it.
+ */
+const ALIASES: Record<string, string[]> = {
+  's1.p1': ['set up', 'setup', 'create', 'make', 'add', 'start', 'build', 'new kpi',
+            'fill', 'enter kpi', 'kra', 'weightage'],
+  // Not "approve" — that is what a manager does, and putting it here
+  // meant a manager asking how to approve a KPI was told how to send
+  // one to their own manager.
+  's1.p4': ['submit kpi', 'send kpi', 'waiting for approval'],
+  's2.p1': ['submit', 'fill month', 'monthly', 'achieved', 'enter month'],
+  's2.p3': ['deadline', 'due', 'late', 'last date', 'how many days'],
+  's3.p1': ['disagree', 'dispute', 'query', 'complain', 'wrong score', 'appeal'],
+  'prof.p1': ['photo', 'picture', 'avatar', 'profile'],
+}
+
+const MONTHS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+]
+const SHORT = MONTHS.map(m => m.slice(0, 3))
+
+/** The month somebody named, 0-11, or null. */
+export function monthNamed(query: string): number | null {
+  for (const word of normalise(query).split(' ')) {
+    const full = MONTHS.indexOf(word)
+    if (full !== -1) return full
+    if (word.length >= 3) {
+      const short = SHORT.indexOf(word.slice(0, 3))
+      if (short !== -1 && MONTHS[short].startsWith(word)) return short
+    }
+  }
+  return null
+}
 
 /**
  * Words that point at a figure rather than at the manual.
@@ -157,6 +228,10 @@ export function manualIndex(): ManualEntry[] {
     collect('.what', asked)
     collect('.how', explained)
     collect('.how.base', explained)
+    // The words people use for it, which are not always the manual's.
+    for (const alias of ALIASES[stem] ?? []) {
+      for (const t of tokens(alias)) asked.add(t)
+    }
     built.push({ key: stem, section, asked, explained })
   }
   index = built
@@ -182,9 +257,16 @@ const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => 
  * answerable exactly, and an exact answer beats a page that explains
  * where scores come from.
  */
-export function matchQuestion(query: string): AnswerSource {
+export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
   const asked = tokens(query)
   if (asked.length === 0) return { kind: 'unknown' }
+
+  // A named month with a score word in it is a lookup, and beats every
+  // page explaining where scores come from.
+  const month = monthNamed(query)
+  if (month !== null && /score|kpi|get|got|result|mark/i.test(query)) {
+    return { kind: 'fact', id: 'score.month', month }
+  }
 
   let bestFact: { id: FactId; score: number } | null = null
   for (const p of FACT_PATTERNS) {
@@ -193,8 +275,12 @@ export function matchQuestion(query: string): AnswerSource {
   }
   if (bestFact) return { kind: 'fact', id: bestFact.id }
 
-  let best: { entry: ManualEntry; score: number } | null = null
+  let best: { entry: ManualEntry; score: number; own: boolean } | null = null
   for (const entry of manualIndex()) {
+    // Pages this person cannot act on are not weaker answers, they are
+    // wrong ones — a team member has no approval screen to go to.
+    if (!canRead(entry.section, who)) continue
+
     let hits = 0
     for (const t of asked) {
       // A word in the question is worth three in the answer. Both count,
@@ -206,7 +292,12 @@ export function matchQuestion(query: string): AnswerSource {
     // Share of what THEY asked, not of what the entry contains: a long
     // answer must not win by having more words in it.
     const score = hits / (asked.length * 3)
-    if (!best || score > best.score) best = { entry, score }
+    const own = OWN_SECTIONS.has(entry.section)
+
+    // Ties went to whichever entry the index happened to list first,
+    // which is how a test passed on luck. Own record wins a tie now.
+    const better = !best || score > best.score || (score === best.score && own && !best.own)
+    if (better) best = { entry, score, own }
   }
 
   // Below this it is guessing, and a confident wrong answer about an
