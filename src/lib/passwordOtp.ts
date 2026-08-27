@@ -74,9 +74,11 @@ export const submitOtp = (args: {
 /**
  * Prove the sender address works, before it matters.
  *
- * The recipient is not passed: the server sends only to the SW Admin's
- * own record. A "send a test anywhere" button on an admin screen is a
- * way to aim the company's mail reputation at whoever you like.
+ * The target is an EMPLOYEE CODE, never an address — blank means the SW
+ * Admin themselves. That distinction is the whole safeguard: a free-text
+ * address field on an admin screen is a way to aim the company's mail
+ * reputation at whoever you like, whereas an employee code can only ever
+ * reach somebody the company already has on file.
  */
-export const sendOtpTest = (): Promise<OtpReply> =>
-  call({ action: 'test', purpose: 'change' })
+export const sendOtpTest = (target?: string): Promise<OtpReply> =>
+  call({ action: 'test', purpose: 'change', target: (target ?? '').trim() })

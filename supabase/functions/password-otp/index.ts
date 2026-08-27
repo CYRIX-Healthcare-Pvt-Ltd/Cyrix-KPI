@@ -150,6 +150,48 @@ async function sendCode(
   if (!res.ok) throw new Error(`Resend refused: ${res.status} ${await res.text()}`)
 }
 
+/**
+ * A test that cannot be mistaken for the real thing.
+ *
+ * Deliberately not a six-digit code. The target is now a named
+ * colleague rather than the admin themselves, and a message reading
+ * "482913 is your Cyrix KPI code" landing unannounced in somebody's
+ * inbox says exactly one thing to them: somebody is trying to get into
+ * my account. That is a support call and a scare, from a button meant to
+ * check a DNS record.
+ */
+async function sendTest(db: ReturnType<typeof admin>, to: string, name: string) {
+  const key = Deno.env.get('RESEND_API_KEY')
+  if (!key) throw new Error('RESEND_API_KEY is not set')
+  const from = await senderAddress(db)
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: 'Test message from Cyrix KPI — no action needed',
+      text:
+        `Hello ${name},\n\n` +
+        `This is a test. Somebody in IT is checking that Cyrix KPI can reach ` +
+        `your email address, so that password codes work when you need one.\n\n` +
+        `Nothing has changed on your account and there is nothing to do. ` +
+        `You can delete this.\n`,
+      html:
+        `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
+        `<p style="color:#39424e">Hello ${name},</p>` +
+        `<p style="color:#39424e"><strong>This is a test.</strong> Somebody in IT is checking ` +
+        `that Cyrix KPI can reach your email address, so that password codes work when ` +
+        `you need one.</p>` +
+        `<p style="color:#8792a2;font-size:13px">Nothing has changed on your account and ` +
+        `there is nothing to do. You can delete this.</p></div>`,
+    }),
+  })
+
+  if (!res.ok) throw new Error(`Resend refused: ${res.status} ${await res.text()}`)
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -189,24 +231,31 @@ Deno.serve(async req => {
       with the SW Admin's own address.
     */
     if (body.action === 'test') {
-      const { data, error } = await db.rpc('otp_test_recipient', { p_ecode: ecode })
+      const { data, error } = await db.rpc('otp_test_recipient', {
+        p_caller: ecode,
+        p_target: (body.target ?? '').trim() || null,
+      })
       if (error) throw error
-      const who = data as { ok: boolean; reason?: string; email?: string; name?: string }
-
-      if (!who.ok) {
-        return json({
-          error: who.reason === 'no_email_on_record'
-            ? 'Your own record has no email address, so there is nowhere to send a test.'
-            : 'Only SW Admin can send a test.',
-        }, 403)
+      const who = data as {
+        ok: boolean; reason?: string; email?: string; name?: string; ecode?: string
       }
 
-      await sendCode(db, who.email!, (who.name ?? '').split(' ')[0] || 'there',
-                     sixDigitCode(), 'change')
+      if (!who.ok) {
+        const said: Record<string, string> = {
+          no_such_employee: 'No active employee has that code.',
+          no_email_on_record: who.ecode
+            ? `${who.name} (${who.ecode}) has no email address on their record.`
+            : 'That record has no email address on it.',
+          not_sw_admin: 'Only SW Admin can send a test.',
+        }
+        return json({ error: said[who.reason ?? ''] ?? 'Could not send a test.' }, 403)
+      }
+
+      await sendTest(db, who.email!, (who.name ?? '').split(' ')[0] || 'there')
       return json({
         ok: true,
-        message: `Test sent to ${who.email}. If it does not arrive, the sender address ` +
-                 `is not verified with the mail provider.`,
+        message: `Test sent to ${who.name} at ${who.email}. If it does not arrive, ` +
+                 `the sender address is not verified with the mail provider.`,
       })
     }
 

@@ -436,6 +436,7 @@ function OtpSenderCard() {
   const { data: saved, isLoading } = useOtpSender()
   const save = useSaveOtpSender()
   const [draft, setDraft] = useState<string | null>(null)
+  const [target, setTarget] = useState('')
   const [state, setState] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [testing, setTesting] = useState(false)
 
@@ -455,7 +456,7 @@ function OtpSenderCard() {
 
   const onTest = async () => {
     setState(null); setTesting(true)
-    const r = await sendOtpTest()
+    const r = await sendOtpTest(target)
     setTesting(false)
     setState({ kind: r.ok ? 'success' : 'error', text: r.message })
   }
@@ -491,21 +492,46 @@ function OtpSenderCard() {
         >
           {save.isPending && <Spinner className="h-4 w-4" />} Save
         </button>
+      </div>
+
+      {/* An employee code rather than an address, and the difference is
+          the safeguard: a free-text address here would be a way to send
+          company mail to anywhere at all. A code can only reach somebody
+          already on the payroll. */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
+        <label htmlFor="otp-test-target" className="text-sm text-ink-600">
+          Send a test to
+        </label>
+        <input
+          id="otp-test-target"
+          className="input w-32 uppercase"
+          value={target}
+          onChange={e => setTarget(e.target.value.toUpperCase())}
+          placeholder="E1427"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+        />
         <button
           onClick={onTest}
           disabled={testing || dirty}
-          title={dirty ? 'Save the address first' : 'Sends one message to your own email'}
+          title={dirty ? 'Save the address first' : undefined}
           className="btn-secondary shrink-0"
         >
           {testing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
           Send test
         </button>
+        {!target.trim() && (
+          <span className="text-xs text-ink-400">Blank sends it to you.</span>
+        )}
       </div>
 
       <p className="text-xs text-ink-400">
         A name in front of the address is what people see —{' '}
         <span className="font-medium text-ink-600">Cyrix KPI</span> rather than
-        the address itself. The test goes to your own record and nowhere else.
+        the address itself. The test says plainly that it is a test, so it can
+        go to a colleague without alarming them, and it uses the address on
+        their record — an employee code, never a typed address.
       </p>
     </div>
   )
