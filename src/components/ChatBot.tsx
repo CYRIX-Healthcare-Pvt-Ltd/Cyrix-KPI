@@ -234,12 +234,26 @@ export default function ChatBot() {
 
             {turns.length <= 1 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {[
-                  'How do I set up my KPI?',
-                  'What was my score last month?',
-                  'My average this year',
-                  'Why can I not open this month?',
-                ].map(q => (
+                {/* A manager's first questions are about their team, not
+                    about their own KPI — everybody got the same four,
+                    and none of them were the ones a manager opens this
+                    panel to ask. Only offered where there is an answer:
+                    a manager with no scored month behind them would be
+                    shown a chip that returns "nothing scored yet". */}
+                {(isManager
+                  ? [
+                      'Who has not submitted yet?',
+                      'Who is the lowest in my team?',
+                      'My team average',
+                      'How do I approve a KPI?',
+                    ]
+                  : [
+                      'How do I set up my KPI?',
+                      'What was my score last month?',
+                      'My average this year',
+                      'Why can I not open this month?',
+                    ]
+                ).map(q => (
                   <button
                     key={q}
                     onClick={() => ask(q)}
