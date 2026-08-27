@@ -171,7 +171,8 @@ public URL. `--check` shows the current state, `--revert` puts it back.
    | `VITE_SUPABASE_ANON_KEY` | your `sb_publishable_…` key |
    | `VITE_AUTH_EMAIL_DOMAIN` | `cyrix.local` |
 
-4. **Deploy.** You get a `*.vercel.app` URL; every push to `main` redeploys.
+4. **Deploy.** Every push to `main` redeploys. Vercel gives the project a
+   `*.vercel.app` URL; this one is served from **https://app.cyrix.in**.
 
 **Only `VITE_`-prefixed variables belong here.** They are compiled into the
 JavaScript that ships to the browser, so anyone can read them — which is fine
@@ -184,8 +185,32 @@ directly, with no redirect URLs to allowlist.
 
 ### Custom domain
 
-Add e.g. `kpi.cyrix.in` under **Settings → Domains** and point a CNAME at the
-host. HTTPS is issued automatically.
+Live on **`app.cyrix.in`**, added under **Settings → Domains** with a CNAME
+pointed at the Vercel host. HTTPS is issued automatically.
+
+Nothing in the app knows its own address — every link, redirect, manifest
+entry and service worker path is relative — so moving the domain needs no
+code change and no redeploy.
+
+What does not move is anything the *browser* files under the old origin.
+Both of these are one-time costs of the move, not bugs:
+
+- **Everyone is signed out.** The Supabase session lives in `localStorage`,
+  which is per-origin, so the session from the old host is invisible here.
+  Everybody signs in once more.
+- **Per-person preferences reset**, for the same reason: the chosen language
+  (`src/lib/i18n.ts`), the alert on/off setting (`src/lib/alerts.ts`) and the
+  "has read the manual" flag (`src/lib/seenHelp.ts`). Harmless — the manual
+  card simply offers itself again.
+- **An already-installed PWA still points at the old host.** It was installed
+  against that origin and keeps its own service worker there. Anyone who
+  added the app to their home screen from the old address has to remove it
+  and install again from this one.
+
+And one place outside this repo will care later: **Supabase → Authentication
+→ URL Configuration**. Nothing today needs it — sign-in is the password grant
+with no redirects — but it matters the day password reset moves to an emailed
+link or OTP.
 
 ## Running it locally
 
