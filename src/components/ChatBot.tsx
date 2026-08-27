@@ -10,6 +10,7 @@ import { monthLabel } from '@/lib/fy'
 import { bandFor } from '@/lib/bands'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
+import { CHAT } from '@/lib/chat-strings'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
 
 /**
@@ -32,8 +33,8 @@ interface Turn {
   text: string
   /** Manual section this came from, for the link under it. */
   section?: string
-  /** Offer the manual, because nothing was understood. */
-  lost?: boolean
+  /** Show the link to the manual under this answer. */
+  manualLink?: boolean
 }
 
 export default function ChatBot() {
@@ -50,111 +51,145 @@ export default function ChatBot() {
   const { data: assignment } = useMyAssignment(employee?.id, fy)
   const { data: pending } = usePendingCounts(employee?.id, fy)
 
-  const firstName = employee?.full_name.split(' ')[0] ?? 'there'
+  /**
+   * What to call them, and when not to call them anything.
+   *
+   * SW_ADMIN's record is named "Software Administrator", so the first
+   * word of it is "Software" and the panel opened with "Hello Software".
+   * The underscore codes are shared system logins rather than people —
+   * there is nobody on the other side of them to greet by name.
+   */
+  const systemAccount = (employee?.ecode ?? '').includes('_')
+  const firstName = systemAccount
+    ? ''
+    : employee?.full_name.trim().split(/\s+/)[0] ?? ''
+
   const t = (key: string, vars?: Record<string, string | number>) =>
     say(HELP[key], lang, vars)
+  const c = (key: string, vars?: Record<string, string | number>) =>
+    // Trimmed because every one of these can take an empty {name}, and a
+    // system account should not be greeted as "Hello ." either.
+    say(CHAT[key], lang, vars).replace(/\s+([.,—])/g, '$1').replace(/\s{2,}/g, ' ').trim()
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns, open])
 
-  // Greeted by name, once, when they open it. Rebuilt on a language
-  // change so the greeting is not left in the language they just left.
+  /*
+    Greeted by name, and re-greeted in the new language if they switch.
+
+    Only the opening line is rewritten: everything after it is a real
+    exchange, and silently restating somebody's earlier answers in a
+    different language would be rewriting what they were told.
+  */
   useEffect(() => {
     if (!open) return
-    setTurns(prev => (prev.length === 0
-      ? [{ from: 'app', text: `Hello ${firstName}. Ask me anything about your KPI — in English, മലയാളം, हिन्दी or తెలుగు.` }]
+    setTurns(prev => (prev.length <= 1
+      ? [{ from: 'app', text: c('greeting', { name: firstName }) }]
       : prev))
-  }, [open, firstName])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, firstName, lang])
 
   const factAnswer = (id: FactId, month?: number): string => {
     const scored = (history ?? []).filter(
       s => s.final_total_score !== null || s.mgr_total_score !== null)
-    const latest = scored[scored.length - 1]
-    const scoreOf = (s: typeof latest) =>
+    const scoreOf = (s: { final_total_score: number | null; mgr_total_score: number | null } | undefined) =>
       s?.final_total_score ?? s?.mgr_total_score ?? null
+    const latest = scored[scored.length - 1]
+    const band = (v: number | null | undefined) => bandFor(v)?.label ?? ''
 
     switch (id) {
+      case 'manual':
+        return c('manual')
+
+      case 'chit.hello':
+        return c('greeting', { name: firstName })
+
+      case 'whoami':
+        return c('whoami', { name: employee?.full_name ?? '', ecode: employee?.ecode ?? '' })
+
       case 'score.last': {
-        if (!latest) return `No month has been scored for you yet, ${firstName}.`
         const v = scoreOf(latest)
-        const band = bandFor(v)
-        return `${monthLabel(latest.period_month)} came to ${v?.toFixed(2)} out of 100` +
-          (band ? ` — ${band.label}.` : '.')
+        if (!latest || v === null) return c('year.none')
+        return c('month.scored', {
+          month: monthLabel(latest.period_month), score: v.toFixed(2), band: band(v),
+        })
       }
+
       case 'score.month': {
-        // The name they said, resolved against their own financial year
-        // — April to March, so January belongs to the calendar year
-        // after the one the FY is named for.
+        // Resolved against their own financial year — April to March, so
+        // January belongs to the calendar year after the one the FY is
+        // named for.
         const [startYear] = fy.split('-').map(Number)
         const year = month! >= 3 ? startYear : startYear + 1
-        const key = `${year}-${String(month! + 1).padStart(2, '0')}-01`
-        const row = (history ?? []).find(s => s.period_month.startsWith(key.slice(0, 7)))
-        const v = row ? scoreOf(row) : null
-        const name = monthLabel(key)
-
-        if (!row) return `${name} has not been assessed. Nothing was submitted for it.`
+        const stamp = `${year}-${String(month! + 1).padStart(2, '0')}`
+        const row = (history ?? []).find(s => s.period_month.startsWith(stamp))
+        const name = monthLabel(`${stamp}-01`)
+        if (!row) return c('month.none', { month: name })
+        const v = scoreOf(row)
         if (v === null) {
-          return row.status === 'submitted'
-            ? `${name} is with your manager and has not been scored yet.`
-            : `${name} is still a draft — it has not been sent in yet.`
+          return c(row.status === 'draft' ? 'month.draft' : 'month.waiting', { month: name })
         }
-        const band = bandFor(v)
-        return `${name} came to ${v.toFixed(2)} out of 100` + (band ? ` — ${band.label}.` : '.')
+        return c('month.scored', { month: name, score: v.toFixed(2), band: band(v) })
       }
+
       case 'score.year': {
         const avg = annual?.avg_total_score
-        if (avg === null || avg === undefined) {
-          return `Nothing has been scored yet this year, so there is no average to show.`
-        }
-        const band = bandFor(avg)
-        return `Your FY ${fy} average is ${avg.toFixed(2)} across ` +
-          `${annual?.months_scored ?? 0} scored month${annual?.months_scored === 1 ? '' : 's'}` +
-          (band ? `, which is ${band.label}.` : '.')
+        if (avg === null || avg === undefined) return c('year.none')
+        return c('year', {
+          fy, avg: avg.toFixed(2), n: annual?.months_scored ?? 0, band: band(avg),
+        })
       }
+
       case 'score.split': {
-        if (!annual || annual.avg_total_score === null) {
-          return 'Nothing has been scored yet, so there is no split to show.'
-        }
-        const bits = [
-          `Job Role ${annual.avg_job_role_score?.toFixed(1) ?? '—'} of 80`,
-          annual.avg_esms_score !== null ? `ESMS ${annual.avg_esms_score.toFixed(1)} of 5` : null,
-          `Core Values ${annual.avg_core_values_score?.toFixed(1) ?? '—'} of ` +
-            (annual.avg_esms_score !== null ? '15' : '20'),
+        if (!annual || annual.avg_total_score === null) return c('year.none')
+        const esms = annual.avg_esms_score
+        const parts = [
+          `Job Role ${annual.avg_job_role_score?.toFixed(1) ?? '—'} / 80`,
+          esms !== null ? `ESMS ${esms.toFixed(1)} / 5` : null,
+          `Core Values ${annual.avg_core_values_score?.toFixed(1) ?? '—'} / ${esms !== null ? 15 : 20}`,
         ].filter(Boolean)
-        return `On average this year: ${bits.join(', ')}.`
+        return c('split', { parts: parts.join(', ') })
       }
+
       case 'score.months': {
         const done = annual?.months_scored ?? 0
-        const open_ = (history ?? []).filter(
+        const waiting = (history ?? []).filter(
           s => s.status === 'draft' || s.status === 'submitted').length
-        return `${done} month${done === 1 ? '' : 's'} scored so far` +
-          (open_ ? `, and ${open_} still with you or your manager.` : '.')
+        return waiting
+          ? c('months.open', { done, open: waiting })
+          : c('months', { done })
       }
+
       case 'score.bestworst': {
-        const hi = annual?.highest_month, lo = annual?.lowest_month
-        if (hi === null || hi === undefined) return 'Nothing scored yet this year.'
-        return `Your best month so far is ${hi.toFixed(2)} and your lowest is ` +
-          `${lo?.toFixed(2) ?? '—'}, out of 100.`
+        if (scored.length === 0) return c('bestworst.none')
+        // Named months, not bare numbers: "your best is 94.35" does not
+        // tell somebody which month to look at.
+        const ranked = [...scored].sort((a, b) => (scoreOf(b) ?? 0) - (scoreOf(a) ?? 0))
+        const top = ranked[0], bottom = ranked[ranked.length - 1]
+        return c('bestworst', {
+          best: monthLabel(top.period_month), bestScore: scoreOf(top)!.toFixed(2),
+          worst: monthLabel(bottom.period_month), worstScore: scoreOf(bottom)!.toFixed(2),
+        })
       }
+
       case 'kpi.status': {
-        const said: Record<string, string> = {
-          active: 'Your KPI is approved and in force for the year.',
-          pending_approval: 'Your KPI is with your manager, waiting to be approved.',
-          rejected: 'Your manager sent your KPI back. Open My KPI to see why, change it and send it again.',
-          draft: 'Your KPI is still a draft. Finish it and send it to your manager.',
+        const byStatus: Record<string, string> = {
+          active: 'kpi.active', pending_approval: 'kpi.pending',
+          rejected: 'kpi.rejected', draft: 'kpi.draft',
         }
-        return said[assignment?.assignment?.status ?? '']
-          ?? 'You have not set up a KPI for this year yet.'
+        return c(byStatus[assignment?.assignment?.status ?? ''] ?? 'kpi.none')
       }
+
       case 'team.pending': {
         const k = pending?.approvals ?? 0
         const m = pending?.scoring ?? 0
-        if (!k && !m) return 'Nothing is waiting on you right now.'
-        return [
-          k ? `${k} KPI${k === 1 ? '' : 's'} to approve` : null,
-          m ? `${m} month${m === 1 ? '' : 's'} to score` : null,
-        ].filter(Boolean).join(' and ') + '.'
+        if (!k && !m) return c('team.clear')
+        const parts = [
+          k ? c('team.approvals', { n: k }) : null,
+          m ? c('team.scoring', { n: m }) : null,
+        ].filter(Boolean)
+        return c('team.waiting', { parts: parts.join(', ') })
       }
     }
   }
@@ -165,7 +200,11 @@ export default function ChatBot() {
     const found = matchQuestion(q, { isManager, isHrAdmin, isSwAdmin })
     const reply: Turn =
       found.kind === 'fact'
-        ? { from: 'app', text: factAnswer(found.id, found.month) }
+        ? {
+            from: 'app',
+            text: factAnswer(found.id, found.month),
+            manualLink: found.id === 'manual',
+          }
         : found.kind === 'manual'
           ? {
               from: 'app',
@@ -176,8 +215,8 @@ export default function ChatBot() {
             }
           : {
               from: 'app',
-              text: `I do not know that one, ${firstName}. The manual may — or ask your manager.`,
-              lost: true,
+              text: c('lost', { name: firstName }),
+              manualLink: true,
             }
     setTurns(prev => [...prev, { from: 'them', text: q }, reply])
     setDraft('')
@@ -242,7 +281,7 @@ export default function ChatBot() {
                   )}
                 >
                   {turn.text}
-                  {(turn.section || turn.lost) && (
+                  {(turn.section || turn.manualLink) && (
                     <Link
                       to="/help"
                       onClick={() => setOpen(false)}

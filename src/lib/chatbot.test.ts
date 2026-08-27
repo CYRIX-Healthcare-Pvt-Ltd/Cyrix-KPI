@@ -110,6 +110,35 @@ describe('what people actually type', () => {
     }
   })
 
+  it('says hello back rather than failing its first exchange', () => {
+    // Somebody opening with "hi" is not asking anything, and "I do not
+    // know that one" is a poor first impression from a help panel.
+    for (const q of ['hi', 'HI', 'hello', 'hey', 'Good morning']) {
+      expect(asks(q)).toEqual({ kind: 'fact', id: 'chit.hello' })
+    }
+    // But not on a word that merely contains them.
+    expect(asks('this achieved thing').kind).not.toBe('fact')
+  })
+
+  it('knows who it is talking to', () => {
+    // It has their record open. Being asked and saying no reads as a bot
+    // that knows nothing about you, right before you ask it your score.
+    for (const q of ['what is my name', 'WHAT IS my name', 'who am i', 'my employee code']) {
+      expect(asks(q)).toEqual({ kind: 'fact', id: 'whoami' })
+    }
+  })
+
+  it('finds the best month however it is phrased', () => {
+    // Reported: "which month has best?" returned a page about start
+    // months, because the pattern was the literal string "best month".
+    for (const q of ['which month has best?', 'best month', 'worst month',
+                     'my highest score', 'what was my lowest score']) {
+      expect(asks(q)).toEqual({ kind: 'fact', id: 'score.bestworst' })
+    }
+    // "best" alone is not a question about a month.
+    expect(asks('who is the best engineer').kind).not.toBe('fact')
+  })
+
   it('says it does not know rather than guessing', () => {
     // None of these are in the manual, and every one of them is the kind
     // of thing somebody would believe an answer to.

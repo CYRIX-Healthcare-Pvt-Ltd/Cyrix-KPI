@@ -35,6 +35,9 @@ export type AnswerSource =
   | { kind: 'unknown' }
 
 export type FactId =
+  | 'manual'
+  | 'chit.hello'
+  | 'whoami'
   | 'score.last'
   | 'score.month'
   | 'score.year'
@@ -124,6 +127,29 @@ export function monthNamed(query: string): number | null {
  */
 const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
   {
+    // Asked for the manual by name. Answering that with "I do not know
+    // that one — the manual may" is the panel refusing to hand over the
+    // one thing it was certainly asked for.
+    id: 'manual',
+    any: ['manual', 'guide', 'help page', 'documentation', 'instructions',
+          'how to use', 'user manual', 'മാനുവൽ', 'मैनुअल', 'మాన్యువల్'],
+  },
+  {
+    // Somebody opening with "hi" is not asking anything, and answering
+    // it with "I do not know that one" is the bot failing its very
+    // first exchange.
+    id: 'chit.hello',
+    any: ['hi', 'hii', 'hello', 'hey', 'good morning', 'good evening',
+          'ഹലോ', 'നമസ്കാരം', 'नमस्ते', 'हैलो', 'హలో', 'నమస్కారం'],
+  },
+  {
+    // It knows. Being asked and saying no reads as a bot that knows
+    // nothing about you, right before you ask it about your score.
+    id: 'whoami',
+    any: ['my name', 'who am i', 'my ecode', 'my employee code', 'my code',
+          'എന്റെ പേര്', 'मेरा नाम', 'నా పేరు'],
+  },
+  {
     id: 'score.last',
     any: ['last month', 'previous month', 'lastmonth', 'കഴിഞ്ഞ മാസം', 'पिछले महीने', 'గత నెల'],
   },
@@ -143,7 +169,20 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
   },
   {
     id: 'score.bestworst',
-    any: ['best month', 'worst month', 'highest', 'lowest', 'best score', 'worst score'],
+    // Matched on words rather than phrases: "which month has best?" does
+    // not contain the string "best month", and that is exactly how
+    // somebody asks it.
+    any: ['best', 'worst', 'highest', 'lowest', 'top month'],
+    all: ['month'],
+  },
+  {
+    // The same question without the word "month" in it — "my highest
+    // score", "what is my best". Two entries rather than one loose one,
+    // because dropping the requirement entirely makes "best engineer"
+    // and "worst case" into questions about somebody's record.
+    id: 'score.bestworst',
+    any: ['best', 'worst', 'highest', 'lowest'],
+    all: ['score'],
   },
   {
     id: 'kpi.status',
@@ -243,9 +282,22 @@ export const resetManualIndex = () => { index = null }
 
 const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => {
   const flat = normalise(query)
+  const words = new Set(flat.split(' '))
+
+  // Everything in `all` has to be there, which is what stops "best
+  // engineer" being read as a question about a month.
+  for (const need of p.all ?? []) {
+    if (!words.has(normalise(need))) return 0
+  }
+
   let hits = 0
   for (const phrase of p.any) {
-    if (flat.includes(normalise(phrase))) hits += 2
+    const needle = normalise(phrase)
+    // A single word matches as a whole word; a phrase matches anywhere.
+    // Without the first half, "hi" fires on "this", "achieved" and
+    // half the manual.
+    const found = needle.includes(' ') ? flat.includes(needle) : words.has(needle)
+    if (found) hits += 2
   }
   return hits
 }
