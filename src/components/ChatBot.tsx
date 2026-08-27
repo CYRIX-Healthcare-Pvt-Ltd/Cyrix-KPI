@@ -4,13 +4,14 @@ import clsx from 'clsx'
 import { MessageCircle, X, SendHorizonal, BookOpen, Languages } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts, currentFy,
+  useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
+  useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose, currentFy,
 } from '@/lib/queries'
-import { monthLabel } from '@/lib/fy'
-import { bandFor } from '@/lib/bands'
+import { currentReportingMonth } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
+import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
 
 /**
@@ -50,6 +51,18 @@ export default function ChatBot() {
   const { data: history } = useSubmissionHistory(employee?.id, fy)
   const { data: assignment } = useMyAssignment(employee?.id, fy)
   const { data: pending } = usePendingCounts(employee?.id, fy)
+  // A manager's questions are mostly about somebody else. Only fetched
+  // for a manager, and the server filters it to their own reports.
+  const { data: teamNow } = useTeamMonth(
+    isManager ? employee?.id : undefined, currentReportingMonth(), fy)
+  const teamIds = (teamNow?.team ?? []).map(t => t.id)
+  const { data: teamMonths } = useTeamSubmissions(
+    teamIds.length ? teamIds : undefined, fy)
+  // The manual states deadlines as {tmDays} and {mgrDays}, filled from
+  // live settings. The Help page has always done this; the panel quoted
+  // the same sentences without them and printed the braces at people.
+  const { data: policy } = useTatPolicy()
+  const closingDay = useMonthClose().data ?? null
 
   /**
    * What to call them, and when not to call them anything.
@@ -65,7 +78,12 @@ export default function ChatBot() {
     : employee?.full_name.trim().split(/\s+/)[0] ?? ''
 
   const t = (key: string, vars?: Record<string, string | number>) =>
-    say(HELP[key], lang, vars)
+    say(HELP[key], lang, {
+      tmDays: policy?.tm_grace_days ?? 3,
+      mgrDays: policy?.manager_grace_days ?? 5,
+      closingDay: closingDay ?? '',
+      ...vars,
+    })
   const c = (key: string, vars?: Record<string, string | number>) =>
     // Trimmed because every one of these can take an empty {name}, and a
     // system account should not be greeted as "Hello ." either.
@@ -90,119 +108,36 @@ export default function ChatBot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, firstName, lang])
 
-  const factAnswer = (id: FactId, month?: number): string => {
-    const scored = (history ?? []).filter(
-      s => s.final_total_score !== null || s.mgr_total_score !== null)
-    const scoreOf = (s: { final_total_score: number | null; mgr_total_score: number | null } | undefined) =>
-      s?.final_total_score ?? s?.mgr_total_score ?? null
-    const latest = scored[scored.length - 1]
-    const band = (v: number | null | undefined) => bandFor(v)?.label ?? ''
-
-    switch (id) {
-      case 'manual':
-        return c('manual')
-
-      case 'chit.hello':
-        return c('greeting', { name: firstName })
-
-      case 'whoami':
-        return c('whoami', { name: employee?.full_name ?? '', ecode: employee?.ecode ?? '' })
-
-      case 'score.last': {
-        const v = scoreOf(latest)
-        if (!latest || v === null) return c('year.none')
-        return c('month.scored', {
-          month: monthLabel(latest.period_month), score: v.toFixed(2), band: band(v),
-        })
-      }
-
-      case 'score.month': {
-        // Resolved against their own financial year — April to March, so
-        // January belongs to the calendar year after the one the FY is
-        // named for.
-        const [startYear] = fy.split('-').map(Number)
-        const year = month! >= 3 ? startYear : startYear + 1
-        const stamp = `${year}-${String(month! + 1).padStart(2, '0')}`
-        const row = (history ?? []).find(s => s.period_month.startsWith(stamp))
-        const name = monthLabel(`${stamp}-01`)
-        if (!row) return c('month.none', { month: name })
-        const v = scoreOf(row)
-        if (v === null) {
-          return c(row.status === 'draft' ? 'month.draft' : 'month.waiting', { month: name })
-        }
-        return c('month.scored', { month: name, score: v.toFixed(2), band: band(v) })
-      }
-
-      case 'score.year': {
-        const avg = annual?.avg_total_score
-        if (avg === null || avg === undefined) return c('year.none')
-        return c('year', {
-          fy, avg: avg.toFixed(2), n: annual?.months_scored ?? 0, band: band(avg),
-        })
-      }
-
-      case 'score.split': {
-        if (!annual || annual.avg_total_score === null) return c('year.none')
-        const esms = annual.avg_esms_score
-        const parts = [
-          `Job Role ${annual.avg_job_role_score?.toFixed(1) ?? '—'} / 80`,
-          esms !== null ? `ESMS ${esms.toFixed(1)} / 5` : null,
-          `Core Values ${annual.avg_core_values_score?.toFixed(1) ?? '—'} / ${esms !== null ? 15 : 20}`,
-        ].filter(Boolean)
-        return c('split', { parts: parts.join(', ') })
-      }
-
-      case 'score.months': {
-        const done = annual?.months_scored ?? 0
-        const waiting = (history ?? []).filter(
-          s => s.status === 'draft' || s.status === 'submitted').length
-        return waiting
-          ? c('months.open', { done, open: waiting })
-          : c('months', { done })
-      }
-
-      case 'score.bestworst': {
-        if (scored.length === 0) return c('bestworst.none')
-        // Named months, not bare numbers: "your best is 94.35" does not
-        // tell somebody which month to look at.
-        const ranked = [...scored].sort((a, b) => (scoreOf(b) ?? 0) - (scoreOf(a) ?? 0))
-        const top = ranked[0], bottom = ranked[ranked.length - 1]
-        return c('bestworst', {
-          best: monthLabel(top.period_month), bestScore: scoreOf(top)!.toFixed(2),
-          worst: monthLabel(bottom.period_month), worstScore: scoreOf(bottom)!.toFixed(2),
-        })
-      }
-
-      case 'kpi.status': {
-        const byStatus: Record<string, string> = {
-          active: 'kpi.active', pending_approval: 'kpi.pending',
-          rejected: 'kpi.rejected', draft: 'kpi.draft',
-        }
-        return c(byStatus[assignment?.assignment?.status ?? ''] ?? 'kpi.none')
-      }
-
-      case 'team.pending': {
-        const k = pending?.approvals ?? 0
-        const m = pending?.scoring ?? 0
-        if (!k && !m) return c('team.clear')
-        const parts = [
-          k ? c('team.approvals', { n: k }) : null,
-          m ? c('team.scoring', { n: m }) : null,
-        ].filter(Boolean)
-        return c('team.waiting', { parts: parts.join(', ') })
-      }
-    }
-  }
+  /**
+   * Built from data this screen has loaded anyway. The sentence itself
+   * is assembled in lib/chatAnswers.ts so it can be run against the real
+   * database without a browser — which is how "lowest score teammember
+   * in july" was found to be answering with the manager's own score.
+   */
+  const factAnswer = (id: FactId, month?: number, ecode?: string): string =>
+    answerFact(id, {
+      lang, fy, firstName,
+      me: { full_name: employee?.full_name ?? '', ecode: employee?.ecode ?? '' },
+      history: history ?? [],
+      annual: annual ?? null,
+      kpiStatus: assignment?.assignment?.status ?? null,
+      pending: pending ?? null,
+      team: teamNow?.team ?? [],
+      teamMonths: teamMonths ?? [],
+      month, ecode,
+    })
 
   const ask = (question: string) => {
     const q = question.trim()
     if (!q) return
-    const found = matchQuestion(q, { isManager, isHrAdmin, isSwAdmin })
+    const found = matchQuestion(q, {
+      isManager, isHrAdmin, isSwAdmin, team: teamNow?.team ?? [],
+    })
     const reply: Turn =
       found.kind === 'fact'
         ? {
             from: 'app',
-            text: factAnswer(found.id, found.month),
+            text: factAnswer(found.id, found.month, found.ecode),
             manualLink: found.id === 'manual',
           }
         : found.kind === 'manual'

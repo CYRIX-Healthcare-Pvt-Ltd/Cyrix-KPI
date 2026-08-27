@@ -190,3 +190,77 @@ describe('the index it searches', () => {
       .toEqual(matchQuestion('why can I not open this month'))
   })
 })
+
+/**
+ * The manager's half, found by using it as one.
+ *
+ * A manager with 16 reports asked "Lowest score teammember in july" and
+ * was told her own July score. The panel had no idea a team existed —
+ * every pattern in it was written in the first person.
+ */
+describe('a manager asking about their team', () => {
+  const team = [
+    { ecode: 'E2249', full_name: 'Rahul Tinil' },
+    { ecode: 'E1895', full_name: 'Vineesh K R' },
+    { ecode: 'E599', full_name: 'Vineesan Vazhayil' },
+    { ecode: 'E2041', full_name: 'Sreenath K P' },
+  ]
+  const mgr = (q: string) => matchQuestion(q, { isManager: true, team })
+  const tm = (q: string) => matchQuestion(q, { isManager: false })
+
+  it('reads a team question as a team question', () => {
+    expect(mgr('Lowest score teammember in july'))
+      .toEqual({ kind: 'fact', id: 'team.lowest', month: 6 })
+    expect(mgr('who is the highest in my team'))
+      .toEqual({ kind: 'fact', id: 'team.highest', month: undefined })
+    expect(mgr('who has not submitted yet').kind).toBe('fact')
+    expect(mgr('how many people report to me'))
+      .toEqual({ kind: 'fact', id: 'team.size' })
+  })
+
+  it('finds somebody named, by first name or employee code', () => {
+    expect(mgr('how is Rahul doing'))
+      .toEqual({ kind: 'fact', id: 'team.person', ecode: 'E2249', month: undefined })
+    expect(mgr('E2041 score'))
+      .toEqual({ kind: 'fact', id: 'team.person', ecode: 'E2041', month: undefined })
+    expect(mgr('how did Rahul do in may'))
+      .toEqual({ kind: 'fact', id: 'team.person', ecode: 'E2249', month: 4 })
+  })
+
+  it('does not confuse two people whose names start the same', () => {
+    // Vineesh and Vineesan are both on this roster.
+    expect(mgr('what about Vineesh')).toMatchObject({ ecode: 'E1895' })
+    expect(mgr('what about Vineesan')).toMatchObject({ ecode: 'E599' })
+  })
+
+  it('offers none of it to somebody with no team', () => {
+    // A team member asking the same words must never be handed a
+    // colleague's figures — and cannot be, since the roster is empty.
+    expect(tm('who is the lowest in my team').kind).not.toBe('fact')
+    expect(tm('how is Rahul doing').kind).not.toBe('fact')
+  })
+
+  it('still knows when a manager is asking about themselves', () => {
+    expect(mgr('who am i')).toEqual({ kind: 'fact', id: 'whoami' })
+    expect(mgr('my score last month')).toEqual({ kind: 'fact', id: 'score.last' })
+    expect(mgr('what is my average')).toEqual({ kind: 'fact', id: 'score.year' })
+  })
+
+  it('hears "how do I" as a question for the manual, not for a figure', () => {
+    // "how do i score my team" was answered with the team's average, and
+    // "what does ESMS mean" with their ESMS figure — the panel reaching
+    // for data when the person wanted the procedure.
+    for (const q of ['how do i score my team', 'how do i approve a kpi',
+                     'what does ESMS mean', 'what is a KRA']) {
+      expect(mgr(q).kind).toBe('manual')
+    }
+    // But a count is still a count.
+    expect(mgr('how many people report to me').kind).toBe('fact')
+  })
+
+  it('answers a question made entirely of stop words', () => {
+    // "what is this" has no token left after the stop list, and the
+    // matcher used to give up before looking at a single pattern.
+    expect(mgr('what is this')).toEqual({ kind: 'fact', id: 'manual' })
+  })
+})

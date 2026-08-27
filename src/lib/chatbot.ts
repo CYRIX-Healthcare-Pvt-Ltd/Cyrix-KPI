@@ -30,7 +30,7 @@ export type AnswerSource =
   /** Straight from the manual, with a link to the section it came from. */
   | { kind: 'manual'; key: string; section: string }
   /** Their own figures, filled in by the caller. */
-  | { kind: 'fact'; id: FactId; month?: number }
+  | { kind: 'fact'; id: FactId; month?: number; ecode?: string }
   /** Nothing matched well enough to guess. */
   | { kind: 'unknown' }
 
@@ -46,6 +46,17 @@ export type FactId =
   | 'score.bestworst'
   | 'kpi.status'
   | 'team.pending'
+  // A manager's questions are mostly about somebody else. Asked "lowest
+  // score teammember in july", the panel returned the manager's own July
+  // score — it had no idea a team existed.
+  | 'team.size'
+  | 'team.average'
+  | 'team.lowest'
+  | 'team.highest'
+  | 'team.notdone'
+  | 'team.weak'
+  | 'team.person'
+  | 'team.overview'
 
 /**
  * Who a section of the manual is written for.
@@ -63,6 +74,100 @@ export interface Reader {
   isManager?: boolean
   isHrAdmin?: boolean
   isSwAdmin?: boolean
+  /**
+   * The people reporting to them, so "how is Rahul doing" can be
+   * understood. Names only ever come from the roster the server already
+   * returned, so this can never resolve to somebody they cannot see.
+   */
+  team?: Array<{ ecode: string; full_name: string }>
+}
+
+/** Words that mean "not about me". */
+const TEAM_WORDS = new Set([
+  'team', 'teammate', 'teammates', 'teammember', 'teammembers', 'member',
+  'members', 'report', 'reports', 'reportee', 'reportees', 'staff', 'everyone',
+  'everybody', 'who', 'whose', 'whom', 'anybody', 'anyone', 'subordinate',
+  'subordinates', 'people', 'boys', 'juniors', 'engineers',
+])
+
+const anyOf = (words: Set<string>, list: string[]) => list.some(w => words.has(w))
+
+/**
+ * Somebody on this manager's team, named in the question.
+ *
+ * Matched on the employee code or the first name, both of which people
+ * actually type. Deliberately not on every part of a full name — "K P"
+ * and "P M" are initials on this roster and would match half of it.
+ */
+function personNamed(
+  query: string,
+  team: Array<{ ecode: string; full_name: string }>,
+): string | null {
+  const words = new Set(normalise(query).split(' '))
+  const flat = normalise(query)
+
+  for (const member of team) {
+    if (words.has(normalise(member.ecode))) return member.ecode
+  }
+  // Longest name first, so "Vineesh" is not answered with "Vineesan".
+  const byLength = [...team].sort((a, b) => b.full_name.length - a.full_name.length)
+  for (const member of byLength) {
+    if (flat.includes(normalise(member.full_name))) return member.ecode
+  }
+  for (const member of byLength) {
+    const first = normalise(member.full_name).split(' ')[0]
+    if (first.length >= 4 && words.has(first)) return member.ecode
+  }
+  return null
+}
+
+/**
+ * The manager's half of the panel.
+ *
+ * Checked before anything personal, because a manager asking "lowest
+ * score teammember in july" wants their team and got their own July
+ * score — the question was read as if the only person in it was them.
+ */
+function teamFact(query: string, who: Reader): AnswerSource | null {
+  if (!who.isManager) return null
+
+  const flat = normalise(query)
+  const words = new Set(flat.split(' '))
+  const month = monthNamed(query) ?? undefined
+
+  // A named colleague is the strongest signal there is.
+  const ecode = personNamed(query, who.team ?? [])
+  if (ecode) return { kind: 'fact', id: 'team.person', ecode, month }
+
+  if (!anyOf(words, [...TEAM_WORDS])) return null
+
+  // "who am i" is a question about themselves that happens to start
+  // with a team word.
+  if (/\bwho\s+am\s+i\b/.test(flat) || flat.includes('my name')) return null
+
+  if (anyOf(words, ['lowest', 'worst', 'bottom', 'least', 'weakest', 'poorest'])) {
+    return { kind: 'fact', id: 'team.lowest', month }
+  }
+  if (anyOf(words, ['highest', 'best', 'top', 'strongest'])) {
+    return { kind: 'fact', id: 'team.highest', month }
+  }
+  if (anyOf(words, ['average', 'avg', 'mean', 'overall'])) {
+    return { kind: 'fact', id: 'team.average', month }
+  }
+  if (anyOf(words, ['submitted', 'submit', 'pending', 'missing', 'waiting',
+                    'left', 'yet', 'due', 'late'])) {
+    return { kind: 'fact', id: 'team.notdone', month }
+  }
+  if (anyOf(words, ['weak', 'struggling', 'below', 'attention', 'risk', 'pip',
+                    'improve', 'concern', 'trouble'])) {
+    return { kind: 'fact', id: 'team.weak', month }
+  }
+  if (anyOf(words, ['many', 'count', 'size', 'strength', 'much'])) {
+    return { kind: 'fact', id: 'team.size' }
+  }
+  // Asked about the team without naming a figure — a summary is a better
+  // answer than "I do not know that one".
+  return { kind: 'fact', id: 'team.overview', month }
 }
 
 const canRead = (section: string, who: Reader): boolean => {
@@ -92,6 +197,11 @@ const ALIASES: Record<string, string[]> = {
   // meant a manager asking how to approve a KPI was told how to send
   // one to their own manager.
   's1.p4': ['submit kpi', 'send kpi', 'waiting for approval'],
+  // A manager correcting somebody else's row before approving it. The
+  // answer says so; the heading does not, so the words never matched.
+  'team.p1': ['approve', 'their target', 'their weightage', 'change their',
+              'correct their', 'edit their', 'their kra'],
+  'team.p3': ['score my team', 'score them', 'scoring', 'their figures'],
   's2.p1': ['submit', 'fill month', 'monthly', 'achieved', 'enter month'],
   's2.p3': ['deadline', 'due', 'late', 'last date', 'how many days'],
   's3.p1': ['disagree', 'dispute', 'query', 'complain', 'wrong score', 'appeal'],
@@ -132,7 +242,9 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
     // one thing it was certainly asked for.
     id: 'manual',
     any: ['manual', 'guide', 'help page', 'documentation', 'instructions',
-          'how to use', 'user manual', 'മാനുവൽ', 'मैनुअल', 'మాన్యువల్'],
+          'how to use', 'user manual', 'what is this', 'what can i do',
+          'supposed to do', 'where do i start', 'explain this app',
+          'മാനുവൽ', 'मैनुअल', 'మాన్యువల్'],
   },
   {
     // Somebody opening with "hi" is not asking anything, and answering
@@ -309,14 +421,46 @@ const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => 
  * answerable exactly, and an exact answer beats a page that explains
  * where scores come from.
  */
+/**
+ * Is this somebody asking to be taught, rather than told a number?
+ *
+ * Found by testing as a manager who had never seen the app: "how do i
+ * score my team" was answered with the team's average, and "what does
+ * ESMS mean" with their ESMS figure. Both are the panel hearing a
+ * keyword and reaching for data when the person wanted the procedure.
+ *
+ * "how many" is deliberately not here — that one really is a count.
+ */
+const TEACH_ME =
+  /\bhow\s+(do|to|can|should|does)\b|\bwhat\s+(is|are|does)\b[^?]*\bmeans?\b|\bwhat\s+(is|are)\s+(a|an)\b/
+
 export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
   const asked = tokens(query)
-  if (asked.length === 0) return { kind: 'unknown' }
+  const teachMe = TEACH_ME.test(normalise(query))
+
+  /*
+    "what is this" used to come back as "I do not know that one", and the
+    reason is worth keeping in mind before adding anything above here:
+    every word in it is a stop word, so the token list was empty and the
+    function returned before it had looked at a single pattern.
+
+    The fact patterns match on the raw sentence rather than on tokens, so
+    they work on a question made entirely of small words. Only the manual
+    search below needs something left after the stop words are gone.
+  */
+
+  // A manager's question is usually about somebody else, and reading it
+  // as if it were about them is the worst kind of wrong answer here: a
+  // real number, confidently given, for the wrong person.
+  if (!teachMe) {
+    const team = teamFact(query, who)
+    if (team) return team
+  }
 
   // A named month with a score word in it is a lookup, and beats every
   // page explaining where scores come from.
   const month = monthNamed(query)
-  if (month !== null && /score|kpi|get|got|result|mark/i.test(query)) {
+  if (!teachMe && month !== null && /score|kpi|get|got|result|mark/i.test(query)) {
     return { kind: 'fact', id: 'score.month', month }
   }
 
@@ -325,7 +469,12 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
     const score = factScore(query, p)
     if (score > 0 && (!bestFact || score > bestFact.score)) bestFact = { id: p.id, score }
   }
-  if (bestFact) return { kind: 'fact', id: bestFact.id }
+  // The manual answer to "what is this" is the manual itself.
+  if (bestFact && (!teachMe || bestFact.id === 'manual')) {
+    return { kind: 'fact', id: bestFact.id }
+  }
+
+  if (asked.length === 0) return { kind: 'unknown' }
 
   let best: { entry: ManualEntry; score: number; own: boolean } | null = null
   for (const entry of manualIndex()) {

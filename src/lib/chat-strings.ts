@@ -150,6 +150,81 @@ export const CHAT: Record<string, Phrase> = {
     te: 'ఈ సంవత్సరానికి మీరు ఇంకా KPI సెట్ చేయలేదు.',
   },
 
+  // ---- a manager's team ------------------------------------------
+  'team.size': {
+    en: '{n} people report to you.',
+    ml: '{n} പേർ നിങ്ങൾക്ക് കീഴിൽ റിപ്പോർട്ട് ചെയ്യുന്നു.',
+    hi: '{n} लोग आपको रिपोर्ट करते हैं।',
+    te: '{n} మంది మీకు రిపోర్ట్ చేస్తారు.',
+  },
+  'team.average': {
+    en: 'Your team averaged {avg} {scope}, across {n} people — {band}.',
+    ml: 'നിങ്ങളുടെ ടീമിന്റെ ശരാശരി {scope} {avg} ആണ്, {n} പേരുടെ അടിസ്ഥാനത്തിൽ — {band}.',
+    hi: 'आपकी टीम का औसत {scope} {avg} है, {n} लोगों पर — {band}।',
+    te: 'మీ టీమ్ సగటు {scope} {avg}, {n} మంది ఆధారంగా — {band}.',
+  },
+  'team.lowest': {
+    en: 'Lowest {scope}: {name} ({ecode}) at {score} — {band}.',
+    ml: 'ഏറ്റവും കുറവ് {scope}: {name} ({ecode}) — {score}, {band}.',
+    hi: 'सबसे कम {scope}: {name} ({ecode}) — {score}, {band}।',
+    te: 'అత్యల్పం {scope}: {name} ({ecode}) — {score}, {band}.',
+  },
+  'team.highest': {
+    en: 'Highest {scope}: {name} ({ecode}) at {score} — {band}.',
+    ml: 'ഏറ്റവും ഉയർന്നത് {scope}: {name} ({ecode}) — {score}, {band}.',
+    hi: 'सबसे अधिक {scope}: {name} ({ecode}) — {score}, {band}।',
+    te: 'అత్యధికం {scope}: {name} ({ecode}) — {score}, {band}.',
+  },
+  'team.notdone': {
+    en: '{n} of {total} have not sent {month} in yet: {names}.',
+    ml: '{total}-ൽ {n} പേർ {month} ഇതുവരെ അയച്ചിട്ടില്ല: {names}.',
+    hi: '{total} में से {n} ने {month} अभी तक नहीं भेजा: {names}।',
+    te: '{total}లో {n} మంది {month} ఇంకా పంపలేదు: {names}.',
+  },
+  'team.alldone': {
+    en: 'Everybody has sent {month} in.',
+    ml: 'എല്ലാവരും {month} അയച്ചു കഴിഞ്ഞു.',
+    hi: 'सभी ने {month} भेज दिया है।',
+    te: 'అందరూ {month} పంపారు.',
+  },
+  'team.weak': {
+    en: '{n} below Good {scope}: {names}.',
+    ml: '{scope} Good-ന് താഴെ {n} പേർ: {names}.',
+    hi: '{scope} Good से नीचे {n} लोग: {names}।',
+    te: '{scope} Good కంటే తక్కువ {n} మంది: {names}.',
+  },
+  'team.allgood': {
+    en: 'Nobody is below Good {scope}.',
+    ml: '{scope} ആരും Good-ന് താഴെ അല്ല.',
+    hi: '{scope} कोई भी Good से नीचे नहीं है।',
+    te: '{scope} ఎవరూ Good కంటే తక్కువ లేరు.',
+  },
+  'team.person': {
+    en: '{name} ({ecode}) {scope}: {score} — {band}.',
+    ml: '{name} ({ecode}) {scope}: {score} — {band}.',
+    hi: '{name} ({ecode}) {scope}: {score} — {band}।',
+    te: '{name} ({ecode}) {scope}: {score} — {band}.',
+  },
+  'team.person.none': {
+    en: '{name} ({ecode}) has no scored month {scope}.',
+    ml: '{name} ({ecode}) — {scope} സ്കോർ ചെയ്ത മാസമില്ല.',
+    hi: '{name} ({ecode}) का {scope} कोई स्कोर किया महीना नहीं है।',
+    te: '{name} ({ecode}) కు {scope} స్కోర్ చేసిన నెల లేదు.',
+  },
+  'team.overview': {
+    en: '{n} people, averaging {avg} {scope}. Highest {best}, lowest {worst}.',
+    ml: '{n} പേർ, ശരാശരി {avg} {scope}. ഏറ്റവും ഉയർന്നത് {best}, കുറവ് {worst}.',
+    hi: '{n} लोग, औसत {avg} {scope}। सबसे अधिक {best}, सबसे कम {worst}।',
+    te: '{n} మంది, సగటు {avg} {scope}. అత్యధికం {best}, అత్యల్పం {worst}.',
+  },
+  'team.nodata': {
+    en: 'Nothing has been scored for your team {scope}.',
+    ml: 'നിങ്ങളുടെ ടീമിന് {scope} ഒന്നും സ്കോർ ചെയ്തിട്ടില്ല.',
+    hi: 'आपकी टीम के लिए {scope} कुछ भी स्कोर नहीं हुआ है।',
+    te: 'మీ టీమ్‌కు {scope} ఏమీ స్కోర్ కాలేదు.',
+  },
+  'scope.year': { en: 'this year', ml: 'ഈ വർഷം', hi: 'इस वर्ष', te: 'ఈ సంవత్సరం' },
+
   // ---- a manager's queue -----------------------------------------
   'team.clear': {
     en: 'Nothing is waiting on you right now.',
