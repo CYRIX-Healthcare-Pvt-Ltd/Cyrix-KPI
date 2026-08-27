@@ -291,6 +291,16 @@ export function ActionRequired({
  * they are comparable to each other and to the total, which is the one
  * thing raw points could never be.
  */
+interface Tile {
+  name: string
+  /** The average mark, which is what people say out loud. */
+  mark: number | null
+  /** Its share of the band, which is the only comparable figure. */
+  pct: number | null
+  /** "of 80". Null total means the team has no single denominator. */
+  outOf: string
+}
+
 export function TeamBands({
   share, label = 'Team average by band',
 }: {
@@ -310,22 +320,46 @@ export function TeamBands({
     across a team: 20 normally, 15 for anyone carrying ESMS. So it names
     the range rather than retreating into "its weightage".
   */
-  // All four read the same way — "of 80%", "of 20%" — so the four
-  // figures are obviously the same kind of number. Core values is the
-  // only one that is not always a single figure: 20 normally, 15 for
-  // anyone carrying ESMS, so a mixed team gets the range rather than a
-  // number that would be wrong for half of them.
-  const coreOutOf = share.anyEsms
-    ? `of ${REMAINDER_TOTAL - ESMS_WEIGHT}–${REMAINDER_TOTAL}%`
-    : `of ${REMAINDER_TOTAL}%`
+  /*
+    The mark first, the share underneath.
 
-  const parts: Array<[string, number | null, string]> = [
-    ['Job role', share.job, `of ${JOB_ROLE_TOTAL}%`],
+    "77.4% of 80%" is the right figure and the wrong headline: it asks a
+    manager to multiply before they can see the number their KPI is
+    actually written in, which is 80 + 20 = 100. So the big number is the
+    mark — 61.9 of 80 — the way they would say it out loud.
+
+    The share stays because it is the only thing that answers the
+    question they opened this for. 61.9 against 15.2 says nothing about
+    which band is weaker; 77.4% against 76.0% says it immediately, which
+    is the entire reason this card is percentages and not points.
+
+    Total carries no share of its own: it is already out of 100, so the
+    mark and the percentage are the same number and printing both would
+    just look like a mistake.
+  */
+  const tile = (
+    name: string,
+    mark: number | null,
+    pct: number | null,
+    outOf: number | null,
+    fallbackOutOf?: string,
+  ): Tile => ({
+    name,
+    mark,
+    pct,
+    outOf: outOf !== null ? `of ${outOf}` : fallbackOutOf ?? '',
+  })
+
+  const parts: Tile[] = [
+    tile('Job role', share.marks.job, share.job, share.outOf.job ?? JOB_ROLE_TOTAL),
     ...(share.anyEsms
-      ? [['ESMS', share.esms, `of ${ESMS_WEIGHT}%`] as [string, number | null, string]]
+      ? [tile('ESMS', share.marks.esms, share.esms, share.outOf.esms ?? ESMS_WEIGHT)]
       : []),
-    ['Core values', share.core, coreOutOf],
-    ['Total', share.total, 'of 100%'],
+    // A mixed team has no single denominator: 20 normally, 15 for anyone
+    // carrying ESMS. Naming one would be wrong for half of them.
+    tile('Core values', share.marks.core, share.core, share.outOf.core,
+         `of ${REMAINDER_TOTAL - ESMS_WEIGHT}–${REMAINDER_TOTAL}`),
+    tile('Total', share.marks.total, null, 100),
   ]
 
   return (
@@ -347,8 +381,11 @@ export function TeamBands({
         'mt-3 grid grid-cols-2 gap-3 grid-pairs',
         parts.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
       )}>
-        {parts.map(([name, pct, caption]) => {
-          const band = bandFor(pct)
+        {parts.map(({ name, mark, pct, outOf }) => {
+          // Coloured by the share, always — a mark of 15.2 is excellent
+          // out of 20 and dreadful out of 80, so the points alone cannot
+          // say which band they belong to.
+          const band = bandFor(pct ?? mark)
           return (
             <div key={name} className="min-w-0">
               <p className="truncate text-[11px] font-medium uppercase tracking-label text-ink-400">
@@ -358,13 +395,11 @@ export function TeamBands({
                 'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
                 band ? band.accent : 'text-ink-300',
               )}>
-                {pct === null ? '—' : `${pct.toFixed(1)}%`}
+                {mark === null ? '—' : mark.toFixed(1)}
+                <span className="ml-1 text-xs font-medium text-ink-400">{outOf}</span>
               </p>
-              {/* Not truncated: the caption is what stops the figure
-                  above being read as a mark out of a hundred, so it has
-                  to be readable at 375px rather than tidy. */}
               <p className="mt-0.5 text-[11px] leading-tight text-ink-400">
-                {caption}
+                {pct === null ? ' ' : `${pct.toFixed(1)}% of it`}
               </p>
             </div>
           )

@@ -202,3 +202,61 @@ describe('teamBandShare', () => {
     expect(Number.isFinite(s.job!)).toBe(true)
   })
 })
+
+/**
+ * Both figures, because neither one answers on its own.
+ *
+ * A manager asked why core values read 76% when it is worth 20 marks,
+ * and the honest answer was that they had to multiply 76% by 20 to get
+ * back to the number their KPI is actually written in. The mark is what
+ * people say out loud; the share is the only thing that compares one
+ * band against another.
+ */
+describe('team bands carry marks as well as shares', () => {
+  const person = (job: number, core: number, esms = 0) => ({
+    weights: { job: 80, esms: esms ? 5 : 0, core: esms ? 15 : 20 },
+    months: [{ job, esms: esms || null, core, total: job + core + esms }],
+  })
+
+  it('reports the marks people actually think in', () => {
+    // 62/80 and 15/20 — the shape of the KPI they agreed.
+    const s = teamBandShare([person(62, 15)])
+    expect(s.marks.job).toBeCloseTo(62, 5)
+    expect(s.marks.core).toBeCloseTo(15, 5)
+    expect(s.marks.total).toBeCloseTo(77, 5)
+  })
+
+  it('keeps the shares, which are the comparable figures', () => {
+    // 62 against 15 says nothing about which band is weaker. 77.5%
+    // against 75% says it immediately.
+    const s = teamBandShare([person(62, 15)])
+    expect(s.job).toBeCloseTo(77.5, 5)
+    expect(s.core).toBeCloseTo(75, 5)
+  })
+
+  it('the two agree: a share of its denominator is the mark', () => {
+    const s = teamBandShare([person(62, 15), person(70, 18)])
+    expect((s.job! / 100) * s.outOf.job!).toBeCloseTo(s.marks.job!, 5)
+    expect((s.core! / 100) * s.outOf.core!).toBeCloseTo(s.marks.core!, 5)
+    // And the bands add up to the total, which is what makes the card
+    // readable as one sum rather than three unrelated figures.
+    expect(s.marks.job! + s.marks.core!).toBeCloseTo(s.marks.total!, 5)
+  })
+
+  it('names a denominator only when the team shares one', () => {
+    // Everybody on 20.
+    expect(teamBandShare([person(62, 15), person(70, 18)]).outOf.core).toBe(20)
+    // One of them carries ESMS, so core values is 15 for them and 20 for
+    // the other. Printing either would be wrong for half the team.
+    const mixed = teamBandShare([person(62, 15), person(70, 13, 4)])
+    expect(mixed.outOf.core).toBeNull()
+    expect(mixed.outOf.job).toBe(80)
+  })
+
+  it('averages marks over the same people as the shares', () => {
+    // Somebody with no scored month is absent, not a zero — in both.
+    const s = teamBandShare([person(62, 15), { weights: { job: 80, esms: 0, core: 20 }, months: [] }])
+    expect(s.people).toBe(1)
+    expect(s.marks.job).toBeCloseTo(62, 5)
+  })
+})

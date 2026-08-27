@@ -183,6 +183,23 @@ export interface BandShare extends BandScores {
   people: number
   /** Does anybody here carry ESMS at all? */
   anyEsms: boolean
+  /**
+   * The same four as average MARKS rather than shares.
+   *
+   * Both are needed and neither replaces the other. A manager thinks in
+   * marks, because 80 + 20 = 100 is the shape of the KPI they agreed,
+   * and "77.4% of 80%" asks them to reach for a calculator to get back
+   * to it. But 61.9 against 15.2 cannot answer the question they opened
+   * the screen for — whether the team is weaker on job role or on core
+   * values. Only the shares compare.
+   */
+  marks: BandScores
+  /**
+   * What each band was out of, where that is the same for everybody.
+   * Core values is 20 normally and 15 for anyone carrying ESMS, so a
+   * mixed team has no single number and this is null.
+   */
+  outOf: { job: number | null; esms: number | null; core: number | null }
 }
 
 const mean = (values: Array<number | null>): number | null => {
@@ -220,11 +237,39 @@ export function teamBandShare(
     // having been assessed yet.
     .filter(p => p.job !== null || p.esms !== null || p.core !== null || p.total !== null)
 
+  // The marks themselves, averaged the same way and over the same
+  // people, so the two figures on a tile always describe one thing.
+  const rawEach = people
+    .map(p => ({
+      job: mean(p.months.map(m => m.job)),
+      esms: mean(p.months.map(m => m.esms)),
+      core: mean(p.months.map(m => m.core)),
+      total: mean(p.months.map(m => m.total)),
+    }))
+    .filter(p => p.job !== null || p.esms !== null || p.core !== null || p.total !== null)
+
+  /** One number, or null where the team does not share one. */
+  const shared = (pick: (w: BandWeights) => number): number | null => {
+    const seen = [...new Set(people.map(p => pick(p.weights)))]
+    return seen.length === 1 ? seen[0] : null
+  }
+
   return {
     job: mean(each.map(p => p.job)),
     esms: mean(each.map(p => p.esms)),
     core: mean(each.map(p => p.core)),
     total: mean(each.map(p => p.total)),
+    marks: {
+      job: mean(rawEach.map(p => p.job)),
+      esms: mean(rawEach.map(p => p.esms)),
+      core: mean(rawEach.map(p => p.core)),
+      total: mean(rawEach.map(p => p.total)),
+    },
+    outOf: {
+      job: shared(w => w.job),
+      esms: shared(w => w.esms),
+      core: shared(w => w.core),
+    },
     people: each.length,
     anyEsms: people.some(p => p.weights.esms > 0),
   }
