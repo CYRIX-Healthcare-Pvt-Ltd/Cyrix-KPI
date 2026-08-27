@@ -431,3 +431,32 @@ Somebody with no address on record is not locked out. The change-password
 page falls back to its old behaviour and says so, the first-login forced
 change never asks for a code, and HR's own reset (`admin_reset_password`)
 is untouched.
+
+### Edge functions deploy themselves
+
+`.github/workflows/deploy-functions.yml` deploys everything under
+`supabase/functions/` on every push to `main` that touches them.
+
+This exists because Vercel and Supabase are separate systems and only one
+of them watches this repository. The site rebuilt on every push while the
+edge function stayed on whatever build somebody last ran the CLI for —
+which is how the Send test button spent a day answering "Unknown action"
+from a function that predated it.
+
+One secret is needed on the repository, under **Settings → Secrets and
+variables → Actions**:
+
+| Name | Where from |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | supabase.com/dashboard/account/tokens |
+
+The project ref is in the workflow rather than in a secret — it is in the
+URL of every request the browser already makes.
+
+**Migrations are deliberately not automated.** Applying them needs
+`SUPABASE_DB_URL`, which carries the database password and full write
+access to every appraisal in the company; putting that in a CI secret to
+save a command is a poor trade. They also run a schema change against
+production the moment somebody merges, where today each one is a
+deliberate act at a keyboard with a self-test that fails the whole
+transaction. Keep using `npm run db:push`.

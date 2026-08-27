@@ -1,0 +1,83 @@
+# Deploys the Supabase edge functions on every push to main.
+#
+# Vercel watches this repository and rebuilds the site by itself, which
+# is why the app kept updating while the function did not: Supabase
+# watches nothing. An edge function only reaches the project when
+# somebody runs the CLI, and "somebody remembers to run the CLI" is not
+# a deployment process — it is how a Send test button spent a day
+# returning "Unknown action" against a build that predated it.
+#
+# Needs one secret on the repository, under
+# Settings -> Secrets and variables -> Actions:
+#
+#   SUPABASE_ACCESS_TOKEN   a personal access token from
+#                           supabase.com/dashboard/account/tokens
+#
+# That token can deploy to the project and nothing else here uses it.
+# The project ref below is not a secret — it is in the URL of every
+# request the browser already makes.
+#
+# Deliberately NOT here: migrations. Applying those needs the database
+# password, which would put full write access to every appraisal in the
+# company into a CI secret, and would run a schema change against
+# production the moment somebody merges. They stay a deliberate act at a
+# keyboard, with their self-tests, run by `npm run db:push`.
+
+name: Deploy edge functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/deploy-functions.yml'
+  # So a failed run can be retried, and so the first run can be started
+  # by hand without having to invent a change to push.
+  workflow_dispatch:
+
+# A second push while the first is still deploying would race it, and
+# the loser overwrites the winner.
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy every function under supabase/functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: emuvmihfbnndhbpsndvc
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set on this repository."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          # Every directory, rather than a hard-coded name: the next
+          # function added should deploy itself without anybody editing
+          # this file and finding out later that they did not.
+          shopt -s nullglob
+          found=0
+          for dir in supabase/functions/*/; do
+            name="$(basename "$dir")"
+            [ -f "$dir/index.ts" ] || continue
+            echo "--- deploying $name"
+            supabase functions deploy "$name" --project-ref "$PROJECT_REF"
+            found=$((found + 1))
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No functions found under supabase/functions."
+            exit 1
+          fi
+          echo "Deployed $found function(s)."
