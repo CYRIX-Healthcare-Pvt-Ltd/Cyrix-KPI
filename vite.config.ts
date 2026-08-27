@@ -37,6 +37,10 @@ export default defineConfig({
         prefer_related_applications: false,
       },
       workbox: {
+        // Old hashed chunks are what a stale tab asks for after a
+        // deploy. Keeping them cached forever is how a browser ends up
+        // serving half of one build and half of another.
+        cleanupOutdatedCaches: true,
         // Handles the tap on a notification. Android will not let the page
         // raise one at all — only the worker may — so the click arrives
         // here rather than in the app.

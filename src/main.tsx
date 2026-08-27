@@ -6,6 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ScoreThemeProvider } from '@/contexts/ScoreThemeContext'
 import { guardNumberFields } from '@/lib/numberFields'
 import { watchInstallability } from '@/lib/pwa'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import App from './App'
 import './index.css'
 
@@ -29,14 +30,18 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <ScoreThemeProvider>
-            <App />
-          </ScoreThemeProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    {/* Outermost, so a throw inside any provider is caught too — a
+        blank page is the one outcome this must never allow. */}
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <ScoreThemeProvider>
+              <App />
+            </ScoreThemeProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

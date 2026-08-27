@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { PageLoader } from '@/components/ui'
+import { lazyRoute } from '@/lib/lazyRoute'
 import Shell from '@/components/Shell'
 import Login from '@/pages/Login'
 import ChangePassword from '@/pages/ChangePassword'
@@ -9,25 +10,25 @@ import Dashboard from '@/pages/Dashboard'
 
 // Split off the heavier screens — recharts and the xlsx parser should not
 // sit in the bundle a service engineer downloads just to log in on 4G.
-const MyKpi             = lazy(() => import('@/pages/MyKpi'))
-const KpiSetup          = lazy(() => import('@/pages/KpiSetup'))
-const MonthlySubmission = lazy(() => import('@/pages/MonthlySubmission'))
-const MyHistory         = lazy(() => import('@/pages/MyHistory'))
-const Profile           = lazy(() => import('@/pages/Profile'))
-const Team              = lazy(() => import('@/pages/Team'))
-const TeamAnalysis      = lazy(() => import('@/pages/TeamAnalysis'))
-const Approvals         = lazy(() => import('@/pages/Approvals'))
-const ScoreSubmission   = lazy(() => import('@/pages/ScoreSubmission'))
-const TeamMember        = lazy(() => import('@/pages/TeamMember'))
-const AdminOverview     = lazy(() => import('@/pages/admin/AdminOverview'))
-const AdminEmployees    = lazy(() => import('@/pages/admin/AdminEmployees'))
-const AdminReports      = lazy(() => import('@/pages/admin/AdminReports'))
-const AdminRequests     = lazy(() => import('@/pages/admin/AdminRequests'))
-const SwAdmin           = lazy(() => import('@/pages/admin/SwAdmin'))
-const KpiTiming         = lazy(() => import('@/pages/admin/KpiTiming'))
-const DeletionRequests  = lazy(() => import('@/pages/DeletionRequests'))
-const ScoreQueries      = lazy(() => import('@/pages/ScoreQueries'))
-const Help              = lazy(() => import('@/pages/Help'))
+const MyKpi             = lazyRoute(() => import('@/pages/MyKpi'))
+const KpiSetup          = lazyRoute(() => import('@/pages/KpiSetup'))
+const MonthlySubmission = lazyRoute(() => import('@/pages/MonthlySubmission'))
+const MyHistory         = lazyRoute(() => import('@/pages/MyHistory'))
+const Profile           = lazyRoute(() => import('@/pages/Profile'))
+const Team              = lazyRoute(() => import('@/pages/Team'))
+const TeamAnalysis      = lazyRoute(() => import('@/pages/TeamAnalysis'))
+const Approvals         = lazyRoute(() => import('@/pages/Approvals'))
+const ScoreSubmission   = lazyRoute(() => import('@/pages/ScoreSubmission'))
+const TeamMember        = lazyRoute(() => import('@/pages/TeamMember'))
+const AdminOverview     = lazyRoute(() => import('@/pages/admin/AdminOverview'))
+const AdminEmployees    = lazyRoute(() => import('@/pages/admin/AdminEmployees'))
+const AdminReports      = lazyRoute(() => import('@/pages/admin/AdminReports'))
+const AdminRequests     = lazyRoute(() => import('@/pages/admin/AdminRequests'))
+const SwAdmin           = lazyRoute(() => import('@/pages/admin/SwAdmin'))
+const KpiTiming         = lazyRoute(() => import('@/pages/admin/KpiTiming'))
+const DeletionRequests  = lazyRoute(() => import('@/pages/DeletionRequests'))
+const ScoreQueries      = lazyRoute(() => import('@/pages/ScoreQueries'))
+const Help              = lazyRoute(() => import('@/pages/Help'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
