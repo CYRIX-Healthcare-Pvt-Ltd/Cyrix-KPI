@@ -1555,3 +1555,36 @@ export function useAnnualSummary(employeeId: string | undefined, fy: string) {
     },
   })
 }
+
+// ---------------------------------------------------------------------
+// The address password codes come from
+// ---------------------------------------------------------------------
+
+/**
+ * Readable by anyone signed in — it is not a secret, it is what your
+ * inbox will show. Writing goes through an RPC, because app_settings is
+ * HR's by RLS and this is SW Admin's to set.
+ */
+export function useOtpSender() {
+  return useQuery({
+    queryKey: ['otp_from'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ value: string }>>(
+        supabase.from('app_settings').select('value').eq('key', 'otp_from').limit(1),
+      )
+      return rows[0]?.value ?? ''
+    },
+  })
+}
+
+export function useSaveOtpSender() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (from: string) => {
+      const { error } = await supabase.rpc('set_otp_from', { p_from: from })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['otp_from'] }),
+  })
+}

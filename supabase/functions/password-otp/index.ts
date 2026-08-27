@@ -97,10 +97,30 @@ async function signedInEcode(req: Request): Promise<string | null> {
   return emp?.ecode ?? null
 }
 
-async function sendCode(to: string, name: string, code: string, purpose: string) {
+/**
+ * Who the code appears to come from.
+ *
+ * The setting first, the secret second. Changing an edge-function secret
+ * needs the CLI, a login and a redeploy, and the moment this needs
+ * changing is the moment somebody is locked out — so SW Admin owns it
+ * from the admin screen and the secret is only the fallback for a
+ * deployment nobody has told anything.
+ */
+async function senderAddress(db: ReturnType<typeof admin>): Promise<string> {
+  try {
+    const { data } = await db.rpc('otp_sender')
+    if (typeof data === 'string' && data.includes('@')) return data
+  } catch { /* fall through to the secret */ }
+  return Deno.env.get('OTP_FROM') ?? 'Cyrix KPI <no-reply@send.cyrix.in>'
+}
+
+async function sendCode(
+  db: ReturnType<typeof admin>,
+  to: string, name: string, code: string, purpose: string,
+) {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) throw new Error('RESEND_API_KEY is not set')
-  const from = Deno.env.get('OTP_FROM') ?? 'Cyrix KPI <no-reply@cyrix.in>'
+  const from = await senderAddress(db)
 
   const what = purpose === 'reset' ? 'reset your password' : 'change your password'
   const res = await fetch('https://api.resend.com/emails', {
@@ -142,7 +162,7 @@ Deno.serve(async req => {
   }
 
   const purpose = body.purpose === 'change' ? 'change' : 'reset'
-  const signedIn = purpose === 'change'
+  const signedIn = purpose === 'change' || body.action === 'test'
 
   // For a signed-in change the identity comes from the token. Letting
   // the body name the account would make this a way to reset anybody's
@@ -155,6 +175,41 @@ Deno.serve(async req => {
   const db = admin()
 
   try {
+    /*
+      Prove the sender address works, before it matters.
+
+      A wrong From is rejected by the provider on every send, and the way
+      you find out is that password resets stop working for the whole
+      company — silently, since nobody reports an email they were not
+      expecting. So the screen that sets it can also test it.
+
+      The recipient is not a parameter. "Send a test anywhere" on an
+      admin screen is a way to point the company's mail reputation at
+      whoever you like; the database decides, and it only ever answers
+      with the SW Admin's own address.
+    */
+    if (body.action === 'test') {
+      const { data, error } = await db.rpc('otp_test_recipient', { p_ecode: ecode })
+      if (error) throw error
+      const who = data as { ok: boolean; reason?: string; email?: string; name?: string }
+
+      if (!who.ok) {
+        return json({
+          error: who.reason === 'no_email_on_record'
+            ? 'Your own record has no email address, so there is nowhere to send a test.'
+            : 'Only SW Admin can send a test.',
+        }, 403)
+      }
+
+      await sendCode(db, who.email!, (who.name ?? '').split(' ')[0] || 'there',
+                     sixDigitCode(), 'change')
+      return json({
+        ok: true,
+        message: `Test sent to ${who.email}. If it does not arrive, the sender address ` +
+                 `is not verified with the mail provider.`,
+      })
+    }
+
     if (body.action === 'request') {
       const code = sixDigitCode()
       const { data, error } = await db.rpc('issue_password_otp', {
@@ -170,7 +225,7 @@ Deno.serve(async req => {
       }
 
       if (result.ok) {
-        await sendCode(result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
+        await sendCode(db, result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
       }
 
       // Truthful to somebody asking about their own account; the same

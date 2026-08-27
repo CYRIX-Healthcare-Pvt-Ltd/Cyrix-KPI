@@ -70,3 +70,13 @@ export const submitOtp = (args: {
     password: args.password,
     ecode: args.ecode,
   })
+
+/**
+ * Prove the sender address works, before it matters.
+ *
+ * The recipient is not passed: the server sends only to the SW Admin's
+ * own record. A "send a test anywhere" button on an admin screen is a
+ * way to aim the company's mail reputation at whoever you like.
+ */
+export const sendOtpTest = (): Promise<OtpReply> =>
+  call({ action: 'test', purpose: 'change' })

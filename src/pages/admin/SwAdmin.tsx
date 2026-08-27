@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser,
+  Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
+import { useOtpSender, useSaveOtpSender } from '@/lib/queries'
+import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 
 interface LoginStatusRow {
@@ -198,6 +200,8 @@ export default function SwAdmin() {
           </p>
         </div>
       </div>
+
+      <OtpSenderCard />
 
       {notice && <Alert kind="success">{notice}</Alert>}
       {resetError && <Alert kind="error">{resetError}</Alert>}
@@ -409,6 +413,99 @@ export default function SwAdmin() {
         Every reset and clear is written to the audit log against your account.
         Clearing KPI data works only while the system is in testing — after
         that, removing a record goes through the reporting manager and HR.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The address password codes come from.
+ *
+ * Here rather than in an edge-function secret, because changing a secret
+ * needs the CLI, a Supabase login and a redeploy — and the moment this
+ * needs changing is the moment somebody is locked out and the person who
+ * can do all three is asleep.
+ *
+ * The test button is the point of the card. A From address the mail
+ * provider has not verified is rejected on every send, and the way you
+ * find out is that resets quietly stop working for the whole company:
+ * nobody reports an email they were not expecting. One button, one real
+ * message, to the only inbox the server will address — your own.
+ */
+function OtpSenderCard() {
+  const { data: saved, isLoading } = useOtpSender()
+  const save = useSaveOtpSender()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [state, setState] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [testing, setTesting] = useState(false)
+
+  const value = draft ?? saved ?? ''
+  const dirty = draft !== null && draft !== saved
+
+  const onSave = async () => {
+    setState(null)
+    try {
+      await save.mutateAsync(value.trim())
+      setDraft(null)
+      setState({ kind: 'success', text: 'Saved. Send a test to prove it works.' })
+    } catch (err) {
+      setState({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' })
+    }
+  }
+
+  const onTest = async () => {
+    setState(null); setTesting(true)
+    const r = await sendOtpTest()
+    setTesting(false)
+    setState({ kind: r.ok ? 'success' : 'error', text: r.message })
+  }
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <Mail className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
+        <div className="min-w-0">
+          <p className="font-medium text-ink-900">Password codes come from</p>
+          <p className="mt-0.5 text-sm text-ink-500">
+            Shown in the inbox of anyone resetting or changing their password.
+            The domain has to be verified with the mail provider — an
+            unverified one is refused on every send.
+          </p>
+        </div>
+      </div>
+
+      {state && <Alert kind={state.kind}>{state.text}</Alert>}
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          className="input min-w-0 flex-1"
+          value={isLoading ? '' : value}
+          placeholder={isLoading ? 'Loading…' : 'Cyrix KPI <no-reply@send.cyrix.in>'}
+          onChange={e => setDraft(e.target.value)}
+          aria-label="Sender address for password codes"
+        />
+        <button
+          onClick={onSave}
+          disabled={!dirty || save.isPending}
+          className="btn-primary shrink-0"
+        >
+          {save.isPending && <Spinner className="h-4 w-4" />} Save
+        </button>
+        <button
+          onClick={onTest}
+          disabled={testing || dirty}
+          title={dirty ? 'Save the address first' : 'Sends one message to your own email'}
+          className="btn-secondary shrink-0"
+        >
+          {testing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+          Send test
+        </button>
+      </div>
+
+      <p className="text-xs text-ink-400">
+        A name in front of the address is what people see —{' '}
+        <span className="font-medium text-ink-600">Cyrix KPI</span> rather than
+        the address itself. The test goes to your own record and nowhere else.
       </p>
     </div>
   )
