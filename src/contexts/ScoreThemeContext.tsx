@@ -47,8 +47,52 @@ const Ctx = createContext<ScoreTheme | undefined>(undefined)
 /** Before any score exists, interactive states stay brand black. */
 const NEUTRAL = { base: '#141519', soft: '#eeeef0', strong: '#000000' }
 
+/** In dark, the same place the neutral goes: near-white rather than black. */
+const NEUTRAL_DARK = { base: '#f4f5f7', soft: '#262830', strong: '#ffffff' }
+
+/**
+ * Whether the page is currently dark.
+ *
+ * Read from the DOM rather than from React state because the theme lives
+ * on the root element and is written by a plain module — there is no
+ * provider above this one to ask.
+ */
+const isDark = () =>
+  typeof document !== 'undefined'
+  && (document.documentElement.dataset.theme === 'dark'
+    || (!document.documentElement.dataset.theme
+      && window.matchMedia?.('(prefers-color-scheme: dark)').matches))
+
+/**
+ * The band's three tokens, turned the right way up for the current theme.
+ *
+ * Every band hex was chosen for a white page: `soft` is a pale wash to sit
+ * behind text and `strong` is a near-black version of the hue to sit on it.
+ * On a dark page that pairing is exactly backwards — and where the token is
+ * used as bare text with no wash behind it, as the bottom navigation does
+ * for the tab you are standing on, `strong` is dark ink on a dark page and
+ * simply disappears.
+ *
+ * So in dark the two swap roles: `base` is the mid-tone of the hue and
+ * reads on either ground, which is what text becomes, and the wash is a
+ * dark tint of it rather than a pale one. The hue is unchanged — a green
+ * band stays green, which is the whole point of the tinting.
+ */
+function tokensFor(band: Band | null) {
+  const dark = isDark()
+  if (!band) return dark ? NEUTRAL_DARK : NEUTRAL
+  const c = band.hex
+  return dark
+    ? {
+        base: c.base,
+        soft: `color-mix(in srgb, ${c.base} 22%, #0d0e12)`,
+        strong: c.base,
+      }
+    : c
+}
+
 const varsFor = (band: Band | null): CSSProperties => {
-  const c = band?.hex ?? NEUTRAL
+  const c = tokensFor(band)
   return {
     '--score-accent': c.base,
     '--score-soft': c.soft,
@@ -60,18 +104,34 @@ export function ScoreThemeProvider({ children }: { children: ReactNode }) {
   const [base, setBaseScore] = useState<number | null>(null)
   const [override, setOverride] = useState<number | null>(null)
 
+  /*
+   * Bumped whenever the theme changes, so the two effects below recompute.
+   * Without it the tint keeps whichever way up it was written at load and
+   * the whole palette inverts behind the reader's back.
+   */
+  const [themeTick, setThemeTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setThemeTick(t => t + 1)
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+    mq?.addEventListener?.('change', bump)
+    // The switch writes data-theme on the root; nothing else does.
+    const obs = new MutationObserver(bump)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => { mq?.removeEventListener?.('change', bump); obs.disconnect() }
+  }, [])
+
   const baseBand = useMemo(() => bandFor(base), [base])
   const score = override ?? base
   const band = useMemo(() => bandFor(score), [score])
 
   // Only ever the signed-in person's own. The document is the chrome.
   useEffect(() => {
-    const c = baseBand?.hex ?? NEUTRAL
+    const c = tokensFor(baseBand)
     const root = document.documentElement
     root.style.setProperty('--score-accent', c.base)
     root.style.setProperty('--score-soft', c.soft)
     root.style.setProperty('--score-strong', c.strong)
-  }, [baseBand])
+  }, [baseBand, themeTick])
 
   /**
    * The colour of the screen you are on, published separately.
@@ -87,12 +147,12 @@ export function ScoreThemeProvider({ children }: { children: ReactNode }) {
    * report, which is most of them.
    */
   useEffect(() => {
-    const c = band?.hex ?? NEUTRAL
+    const c = tokensFor(band)
     const root = document.documentElement
     root.style.setProperty('--page-accent', c.base)
     root.style.setProperty('--page-soft', c.soft)
     root.style.setProperty('--page-strong', c.strong)
-  }, [band])
+  }, [band, themeTick])
 
   const scopeStyle = useMemo(
     () => (override === null ? {} : varsFor(bandFor(override))),

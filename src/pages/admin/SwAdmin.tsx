@@ -844,6 +844,23 @@ function BemmpTab() {
     return [...seen].sort((a, b) => a.localeCompare(b))
   }, [datasets])
 
+  const districtOptions = useMemo(() => {
+    const seen = new Set<string>()
+    for (const d of datasets ?? []) for (const x of d.districts ?? []) seen.add(x)
+    return [...seen].sort((a, b) => a.localeCompare(b))
+  }, [datasets])
+
+  /*
+   * Districts are picked in a dialog rather than inline, and that is not a
+   * cosmetic choice. There are fourteen of them; as chips on every row that
+   * is several hundred controls on the page, and each one saving on click
+   * means four round trips to assign four districts. The dialog collects
+   * the whole set and saves once — which is exactly why BEMMP's own screen
+   * does it this way.
+   */
+  const [picking, setPicking] = useState<BemmpProfile | null>(null)
+  const [draft, setDraft] = useState<string[]>([])
+
   const update = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<BemmpProfile> }) => {
       const { error } = await supabase.from('profile').update(patch).eq('id', id)
@@ -988,12 +1005,20 @@ function BemmpTab() {
                     <select
                       className="input h-8 py-0 text-sm"
                       value={byDistrict ? '__districts__' : zone}
-                      disabled={update.isPending || zoneOptions.length === 0}
+                      disabled={update.isPending
+                        || (zoneOptions.length === 0 && districtOptions.length === 0)}
                       onChange={e => {
-                        if (e.target.value === '__districts__') return
+                        if (e.target.value === '__districts__') {
+                          setDraft(r.districts ?? [])
+                          setPicking(r)
+                          return
+                        }
                         update.mutate({
                           id: r.id,
                           patch: {
+                            // Choosing a zone clears the districts: a zone is a
+                            // whole set of them, so holding both would leave two
+                            // answers to what this person sees.
                             zones: e.target.value ? [e.target.value] : [],
                             districts: [],
                           },
@@ -1002,12 +1027,20 @@ function BemmpTab() {
                     >
                       <option value="">Everything</option>
                       {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
-                      {byDistrict && (
-                        <option value="__districts__" disabled>
-                          {(r.districts ?? []).length} districts — set in BEMMP
+                      {districtOptions.length > 0 && (
+                        <option value="__districts__">
+                          {byDistrict
+                            ? `${(r.districts ?? []).length} districts — change`
+                            : 'Choose districts…'}
                         </option>
                       )}
                     </select>
+                    {byDistrict && (
+                      <p className="mt-1 max-w-56 truncate text-xs text-ink-500"
+                         title={(r.districts ?? []).join(', ')}>
+                        {(r.districts ?? []).join(', ')}
+                      </p>
+                    )}
                   </td>
                 </tr>
               )
@@ -1021,6 +1054,63 @@ function BemmpTab() {
           Showing the first 200. Search to narrow it down.
         </p>
       )}
+      {/* The whole set, saved once. */}
+      {picking && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
+          onClick={() => setPicking(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-ink-900">
+              Districts for {picking.full_name}
+            </h3>
+            <p className="mt-1 text-sm text-ink-500">
+              Choosing districts clears any zone. Ticking none is the same as
+              Everything.
+            </p>
+
+            <div className="mt-4 grid gap-1.5 sm:grid-cols-2">
+              {districtOptions.map(d => {
+                const on = draft.includes(d)
+                return (
+                  <label key={d} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-ink-700 hover:bg-ink-50">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => setDraft(prev =>
+                        on ? prev.filter(x => x !== d) : [...prev, d])}
+                    />
+                    <span className="truncate">{d}</span>
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setPicking(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                disabled={update.isPending}
+                onClick={() => {
+                  update.mutate({
+                    id: picking.id,
+                    patch: { districts: draft, zones: [] },
+                  })
+                  setPicking(null)
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

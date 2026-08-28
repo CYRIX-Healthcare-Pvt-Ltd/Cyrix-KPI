@@ -215,7 +215,7 @@ export default function Shell() {
                   in 40px of header read as a stray icon rather than a brand.
                   It stays in the file for the app icon, where a square is
                   the only shape available. */}
-              <Logo height={20} showSubtitle={false} />
+              <Logo className="h-[17px] sm:h-6" height={24} showSubtitle={false} />
             </a>
             <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
               KPI
