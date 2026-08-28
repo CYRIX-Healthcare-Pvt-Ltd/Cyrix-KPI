@@ -754,22 +754,35 @@ function SpareTab() {
 /* ---------------------------------------------------------------------
  * BEMMP
  *
- * Its roster lives in this database now, so who may open BEMMP and in what
+ * Its roster lives in this database, so who may open BEMMP and in what
  * capacity is answerable here rather than from inside the module.
  *
- * A select rather than the chips the Spare tab uses, because BEMMP has
- * eight roles and eight chips on a row is a wall. Same decision, different
- * number of options.
+ * Three separate questions, kept separate because they are independent in
+ * the business — the original Andhra login is a Director who nonetheless
+ * sees only Andhra:
  *
- * Zones and districts are shown but not edited. They name real geography
- * and the lists live in BEMMP; a free-text field here would let somebody
- * type a zone that does not exist and silently hide every ticket in it.
+ *   role       what they can do
+ *   contracts  which contracts they see at all
+ *   area       which slice of a contract, when they should not see it whole
+ *
+ * The area lists are read from the dataset rows rather than declared here.
+ * Districts are a property of the ticket data and a hard-coded fourteen
+ * goes stale the day a contract gains one; 0063 records them beside the
+ * pointer so this screen can offer them without downloading 5 MB of
+ * tickets to find out what they are.
  * ------------------------------------------------------------------- */
 interface BemmpProfile {
   id: string
   code: string
   full_name: string | null
   role: string
+  scope: string[] | null
+  zones: string[] | null
+  districts: string[] | null
+}
+
+interface DatasetRow {
+  state: string
   zones: string[] | null
   districts: string[] | null
 }
@@ -785,6 +798,12 @@ const BEMMP_ROLES: { value: string; label: string }[] = [
   { value: 'purchase', label: 'Purchase' },
 ]
 
+/** The contracts BEMMP runs. Two, and they are structural, not data. */
+const CONTRACTS: { id: string; label: string }[] = [
+  { id: 'kl', label: 'Kerala' },
+  { id: 'ap', label: 'Andhra' },
+]
+
 function BemmpTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
@@ -797,7 +816,7 @@ function BemmpTab() {
       for (let from = 0; ; from += 1000) {
         const page = await supabase
           .from('profile')
-          .select('id, code, full_name, role, zones, districts')
+          .select('id, code, full_name, role, scope, zones, districts')
           .order('code')
           .range(from, from + 999)
         if (page.error) throw page.error
@@ -808,9 +827,26 @@ function BemmpTab() {
     },
   })
 
-  const setRole = useMutation({
-    mutationFn: async ({ id, role }: { id: string; role: string }) => {
-      const { error } = await supabase.from('profile').update({ role }).eq('id', id)
+  /** What the published exports say the zones are. */
+  const { data: datasets } = useQuery({
+    queryKey: ['bemmp_datasets'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dataset').select('state, zones, districts')
+      if (error) throw error
+      return (data ?? []) as DatasetRow[]
+    },
+  })
+
+  const zoneOptions = useMemo(() => {
+    const seen = new Set<string>()
+    for (const d of datasets ?? []) for (const z of d.zones ?? []) seen.add(z)
+    return [...seen].sort((a, b) => a.localeCompare(b))
+  }, [datasets])
+
+  const update = useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<BemmpProfile> }) => {
+      const { error } = await supabase.from('profile').update(patch).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bemmp_profiles'] }),
@@ -831,7 +867,7 @@ function BemmpTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-ink-900">BEMMP roles</h2>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP access</h2>
         <p className="mt-0.5 text-sm text-ink-500">
           {filtered.length} of {data?.length ?? 0} people
         </p>
@@ -840,18 +876,24 @@ function BemmpTab() {
       <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
-          <p className="font-medium text-ink-900">A role is not a tile</p>
+          <p className="font-medium text-ink-900">Role, contract and area are three questions</p>
           <p className="mt-1">
-            This decides what somebody can do inside BEMMP. Whether they are
-            offered it at all is the Modules column on the Logins tab.
+            The role is what somebody can do. The contracts are which of them
+            they see at all. The area narrows a contract for people who work
+            one zone — leave it on <strong>Everything</strong> and they get the
+            whole contract, which is right for most.
           </p>
           <p className="mt-1.5">
-            Scope is the one thing set on the BEMMP screen itself, and only
-            because the zones and districts on offer are read from the loaded
-            ticket data rather than stored anywhere — there is no list here to
-            choose from. Names and employee codes come from the HR employee
-            record and follow it automatically.
+            Whether the tile is offered at all is the Modules column on the
+            Logins tab. Names and employee codes come from the HR record.
           </p>
+          {zoneOptions.length === 0 && (
+            <p className="mt-1.5">
+              No zones are listed yet — they are read from the published
+              ticket export, so they appear here once somebody publishes one
+              in BEMMP.
+            </p>
+          )}
         </div>
       </div>
 
@@ -872,36 +914,100 @@ function BemmpTab() {
           <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
             <tr>
               <th className="px-3 py-2.5">Employee</th>
-              <th className="px-3 py-2.5">Role in BEMMP</th>
-              <th className="px-3 py-2.5">Scope</th>
+              <th className="px-3 py-2.5">Role</th>
+              <th className="px-3 py-2.5">Contracts</th>
+              <th className="px-3 py-2.5">Area</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
             {filtered.slice(0, 200).map(r => {
-              const scope = [...(r.zones ?? []), ...(r.districts ?? [])]
+              const scope = r.scope ?? []
+              const zone = (r.zones ?? [])[0] ?? ''
+              const byDistrict = (r.districts ?? []).length > 0
               return (
                 <tr key={r.id}>
                   <td className="px-3 py-2.5">
                     <span className="font-medium text-ink-900">{r.full_name}</span>
                     <span className="ml-2 text-ink-400">{r.code}</span>
                   </td>
+
                   <td className="px-3 py-2.5">
                     <select
                       className="input h-8 py-0 text-sm"
                       value={r.role}
-                      disabled={setRole.isPending}
-                      onChange={e => setRole.mutate({ id: r.id, role: e.target.value })}
+                      disabled={update.isPending}
+                      onChange={e => update.mutate({ id: r.id, patch: { role: e.target.value } })}
                     >
                       {BEMMP_ROLES.map(role => (
                         <option key={role.value} value={role.value}>{role.label}</option>
                       ))}
                     </select>
                   </td>
-                  <td className="px-3 py-2.5 text-ink-500">
-                    {/* Empty means every contract in this schema, not none —
-                        so it says so rather than showing a blank cell that
-                        reads as missing access. */}
-                    {scope.length === 0 ? 'Everything' : scope.join(', ')}
+
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {CONTRACTS.map(c => {
+                        const on = scope.includes(c.id)
+                        return (
+                          <button
+                            key={c.id}
+                            aria-pressed={on}
+                            disabled={update.isPending}
+                            onClick={() => update.mutate({
+                              id: r.id,
+                              patch: {
+                                scope: on
+                                  ? scope.filter(s => s !== c.id)
+                                  : [...scope, c.id],
+                              },
+                            })}
+                            className={clsx(
+                              'badge cursor-pointer transition-colors disabled:opacity-50',
+                              on ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
+                                 : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
+                            )}
+                          >
+                            {c.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {scope.length === 0 && (
+                      // Empty means none here, not everything — the opposite of
+                      // what it means for the area below, which is exactly the
+                      // confusion that once left everybody locked out.
+                      <p className="mt-1 text-xs text-cyrixRed-600">Sees nothing</p>
+                    )}
+                  </td>
+
+                  <td className="px-3 py-2.5">
+                    {/* Zone or districts, never both: a zone is a whole set of
+                        districts, so holding both would leave two answers to
+                        "what does this person see". Choosing a zone clears the
+                        districts, which is the rule BEMMP's own server applies. */}
+                    <select
+                      className="input h-8 py-0 text-sm"
+                      value={byDistrict ? '__districts__' : zone}
+                      disabled={update.isPending || zoneOptions.length === 0}
+                      onChange={e => {
+                        if (e.target.value === '__districts__') return
+                        update.mutate({
+                          id: r.id,
+                          patch: {
+                            zones: e.target.value ? [e.target.value] : [],
+                            districts: [],
+                          },
+                        })
+                      }}
+                    >
+                      <option value="">Everything</option>
+                      {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
+                      {byDistrict && (
+                        <option value="__districts__" disabled>
+                          {(r.districts ?? []).length} districts — set in BEMMP
+                        </option>
+                      )}
+                    </select>
                   </td>
                 </tr>
               )
