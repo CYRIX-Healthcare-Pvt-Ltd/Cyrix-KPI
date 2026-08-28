@@ -17,7 +17,7 @@ import StartMonthPrompt from './StartMonthPrompt'
 import ChatBot from './ChatBot'
 import Avatar from './Avatar'
 import ThemeToggle from './ThemeToggle'
-import { Logo, LogoMark } from './Logo'
+import { Logo } from './Logo'
 
 /**
  * What each tab's icon is coloured, by what the tab is for.
@@ -210,8 +210,12 @@ export default function Shell() {
               aria-label="All Cyrix apps"
               title="All Cyrix apps"
             >
-              <LogoMark className="h-8 w-8" />
-              <Logo className="hidden sm:inline-flex" height={20} showSubtitle={false} />
+              {/* The wordmark alone. The square X mark beside it was a second
+                  logo doing the same job at the same size, and two lockups
+                  in 40px of header read as a stray icon rather than a brand.
+                  It stays in the file for the app icon, where a square is
+                  the only shape available. */}
+              <Logo height={20} showSubtitle={false} />
             </a>
             <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
               KPI
