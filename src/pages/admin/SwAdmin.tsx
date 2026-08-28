@@ -39,7 +39,7 @@ const STATE_STYLE: Record<string, string> = {
   'Set their own password': 'bg-emerald-100 text-emerald-800',
 }
 
-export default function SwAdmin() {
+function LoginsTab() {
   const qc = useQueryClient()
   const { data: modules } = useAppModules()
   const { data: grants } = useModuleGrants(true)
@@ -163,10 +163,8 @@ export default function SwAdmin() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
-            <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
-            Login administration
-          </h1>
+          {/* h2, not h1: the tab shell above owns the page heading now. */}
+          <h2 className="text-lg font-semibold text-ink-900">Login administration</h2>
           <p className="mt-0.5 text-sm text-ink-500">
             {filtered.length} of {data?.length ?? 0} accounts
           </p>
@@ -592,6 +590,246 @@ function OtpSenderCard() {
         go to a colleague without alarming them, and it uses the address on
         their record — an employee code, never a typed address.
       </p>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------------
+ * Spare Mapping
+ *
+ * Spare's roster lives in this database now, so who administers Spare is
+ * answerable from here rather than from inside Spare's own admin screens.
+ * Only the role is editable: name and employee code come from the HR
+ * record and the database refuses to change them from this side, which is
+ * what makes the employee list the master rather than one copy of three.
+ * ------------------------------------------------------------------- */
+interface SpareProfile {
+  id: string
+  ecode: string
+  full_name: string
+  role: 'engineer' | 'project_manager' | 'admin'
+  active: boolean
+}
+
+const SPARE_ROLES: { value: SpareProfile['role']; label: string; hint: string }[] = [
+  { value: 'engineer', label: 'Engineer', hint: 'Scan tags and file edit requests' },
+  { value: 'project_manager', label: 'Project manager', hint: 'Approve edit requests for their facilities' },
+  { value: 'admin', label: 'Admin', hint: 'Facilities, fields, item masters and settings' },
+]
+
+function SpareTab() {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['spare_profiles'],
+    queryFn: async () => {
+      // Paged for the same reason the login list is: PostgREST stops at
+      // 1,000 rows and there is a profile for every employee with a login.
+      const all: SpareProfile[] = []
+      for (let from = 0; ; from += 1000) {
+        const page = await supabase
+          .from('profiles')
+          .select('id, ecode, full_name, role, active')
+          .order('ecode')
+          .range(from, from + 999)
+        if (page.error) throw page.error
+        const rows = (page.data ?? []) as SpareProfile[]
+        all.push(...rows)
+        if (rows.length < 1000) return all
+      }
+    },
+  })
+
+  const setRole = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: SpareProfile['role'] }) => {
+      const { error } = await supabase.from('profiles').update({ role }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spare_profiles'] }),
+    onError: (e) => setError(friendlyError(e)),
+  })
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const rows = data ?? []
+    if (!q) return rows
+    return rows.filter(r =>
+      r.ecode.toLowerCase().includes(q) || r.full_name.toLowerCase().includes(q))
+  }, [data, search])
+
+  if (isLoading) return <PageLoader />
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-ink-900">Spare Mapping roles</h2>
+        <p className="mt-0.5 text-sm text-ink-500">
+          {filtered.length} of {data?.length ?? 0} people
+        </p>
+      </div>
+
+      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+        <div>
+          <p className="font-medium text-ink-900">A role is not a tile</p>
+          <p className="mt-1">
+            This decides what somebody can do inside Spare. Whether they are
+            offered it at all is the Modules column on the Logins tab — a
+            person can hold a role here and never see the tile.
+          </p>
+          <p className="mt-1.5">
+            Names and employee codes cannot be edited here or in Spare. They
+            come from the HR employee record, and a change there reaches Spare
+            on its own.
+          </p>
+        </div>
+      </div>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+        <input
+          className="input pl-9"
+          placeholder="Search by name or employee code"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-ink-200">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+            <tr>
+              <th className="px-3 py-2.5">Employee</th>
+              <th className="px-3 py-2.5">Role in Spare</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-100">
+            {filtered.slice(0, 200).map(r => (
+              <tr key={r.id} className={clsx(!r.active && 'opacity-50')}>
+                <td className="px-3 py-2.5">
+                  <span className="font-medium text-ink-900">{r.full_name}</span>
+                  <span className="ml-2 text-ink-400">{r.ecode}</span>
+                  {!r.active && <span className="ml-2 badge bg-ink-100 text-ink-500">Inactive</span>}
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {SPARE_ROLES.map(role => (
+                      <button
+                        key={role.value}
+                        title={role.hint}
+                        aria-pressed={r.role === role.value}
+                        disabled={setRole.isPending}
+                        onClick={() => setRole.mutate({ id: r.id, role: role.value })}
+                        className={clsx(
+                          'badge cursor-pointer transition-colors disabled:opacity-50',
+                          r.role === role.value
+                            ? 'bg-ink-900 text-white hover:bg-cyrixRed-700'
+                            : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
+                        )}
+                      >
+                        {role.label}
+                      </button>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {filtered.length > 200 && (
+        <p className="text-sm text-ink-500">
+          Showing the first 200. Search to narrow it down.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------------
+ * BEMMP
+ *
+ * Nothing to administer from here yet, and saying so is better than an
+ * empty tab that reads as broken. BEMMP still signs people in against its
+ * own Supabase project, so it has its own roster and its own admin
+ * screens — and it will keep asking for a second password until that
+ * moves here.
+ * ------------------------------------------------------------------- */
+function BemmpTab() {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-ink-900">BEMMP Dashboard</h2>
+      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+        <div>
+          <p className="font-medium text-ink-900">Administered from inside BEMMP</p>
+          <p className="mt-1">
+            BEMMP keeps its own database, so its people and permissions are not
+            visible here. Its admin screens are in the module itself.
+          </p>
+          <p className="mt-1.5">
+            That separation is also why it asks for a password of its own: a
+            session belongs to one database, and BEMMP is not on this one yet.
+            Both end when its data moves across.
+          </p>
+        </div>
+      </div>
+      <a className="btn-secondary inline-flex w-fit" href="/bemmp">
+        <LayoutGrid className="h-4 w-4" /> Open BEMMP
+      </a>
+    </div>
+  )
+}
+
+const ADMIN_TABS = [
+  { id: 'logins', label: 'Logins', render: () => <LoginsTab /> },
+  { id: 'spare', label: 'Spare Mapping', render: () => <SpareTab /> },
+  { id: 'bemmp', label: 'BEMMP', render: () => <BemmpTab /> },
+] as const
+
+/**
+ * One administration screen for every module rather than one per app.
+ *
+ * Each module used to be administered from inside itself, which meant
+ * knowing which app a question belonged to before you could answer it, and
+ * signing into that app to do it. Everything answerable from this database
+ * is answerable here; the one tab that still points elsewhere says why.
+ */
+export default function SwAdmin() {
+  const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
+  const active = ADMIN_TABS.find(t => t.id === tab) ?? ADMIN_TABS[0]
+
+  return (
+    <div className="space-y-5">
+      <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
+        <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
+        Administration
+      </h1>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-ink-200">
+        {ADMIN_TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            aria-current={t.id === tab ? 'page' : undefined}
+            className={clsx(
+              'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              t.id === tab
+                ? 'border-cyrixRed-600 text-ink-900'
+                : 'border-transparent text-ink-400 hover:text-ink-700',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {active.render()}
     </div>
   )
 }
