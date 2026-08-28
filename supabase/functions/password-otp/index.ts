@@ -143,10 +143,17 @@ async function senderAddress(db: ReturnType<typeof admin>): Promise<string> {
   return Deno.env.get('OTP_FROM') ?? 'Cyrix KPI <no-reply@send.cyrix.in>'
 }
 
+/**
+ * Sends, and returns the provider's own id for the message.
+ *
+ * That id is the only handle on a specific send. Without it "he says he
+ * never got it" is unanswerable — with it, the delivery events arriving
+ * at mail-events say exactly what happened to that message.
+ */
 async function sendCode(
   db: ReturnType<typeof admin>,
   to: string, name: string, code: string, purpose: string,
-) {
+): Promise<string | null> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) throw new Error('RESEND_API_KEY is not set')
   const from = await senderAddress(db)
@@ -177,6 +184,14 @@ async function sendCode(
   })
 
   if (!res.ok) throw new MailRefused(res.status, await res.text())
+
+  // Their id, if they gave one. Never worth failing a send over.
+  try {
+    const accepted = await res.json()
+    return typeof accepted?.id === 'string' ? accepted.id : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -304,7 +319,13 @@ Deno.serve(async req => {
 
       if (result.ok) {
         try {
-          await sendCode(db, result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
+          const messageId = await sendCode(
+            db, result.email!, (result.name ?? '').split(' ')[0] || 'there', code, purpose)
+          if (messageId) {
+            await db.rpc('tag_password_otp', {
+              p_ecode: ecode, p_purpose: purpose, p_provider_id: messageId,
+            })
+          }
         } catch (sendErr) {
           // The row is already written, and it counts towards three per
           // quarter hour. Leaving it there locks somebody out of the

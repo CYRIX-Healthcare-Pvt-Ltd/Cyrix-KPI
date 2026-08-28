@@ -460,3 +460,43 @@ save a command is a poor trade. They also run a schema change against
 production the moment somebody merges, where today each one is a
 deliberate act at a keyboard with a self-test that fails the whole
 transaction. Keep using `npm run db:push`.
+
+### Knowing whether a code actually arrived
+
+A code went to a real address, Resend returned 2xx, and nothing landed —
+not the inbox, not spam. Accepting a message is not delivering it, and
+there was no way to tell "delivered", "bounced" and "quietly discarded"
+apart.
+
+The `mail-events` function records what the provider says happened after
+it accepted a message. To switch it on:
+
+1. **Resend → Webhooks → Add endpoint**, pointed at
+   `https://<project>.supabase.co/functions/v1/mail-events`
+2. Subscribe to at least `email.delivered`, `email.bounced` and
+   `email.complained`
+3. Copy the signing secret Resend shows (`whsec_…`) and set it:
+
+```bash
+supabase secrets set RESEND_WEBHOOK_SECRET=whsec_xxx
+```
+
+Until that secret exists the endpoint refuses everything with a 500, which
+is deliberate: an unsigned "delivered" from a stranger is worse than no
+record, because somebody would trust it.
+
+The endpoint is deployed with `--no-verify-jwt` — Resend has no Supabase
+token, and the Svix signature is what authenticates it. Verified before
+anything is written, along with the timestamp, so a captured request
+cannot be replayed later.
+
+Each code carries the provider's message id (`password_otp.provider_id`),
+so "he says he never got it" is a join rather than a guess:
+
+```sql
+select e.ecode, o.created_at, s.status
+from password_otp o
+join employees e on e.id = o.employee_id
+left join v_mail_status s on s.provider_id = o.provider_id
+order by o.created_at desc;
+```
