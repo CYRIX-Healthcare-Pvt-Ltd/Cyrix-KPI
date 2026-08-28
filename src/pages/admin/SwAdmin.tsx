@@ -846,9 +846,11 @@ function BemmpTab() {
             offered it at all is the Modules column on the Logins tab.
           </p>
           <p className="mt-1.5">
-            Zone and district scope is set inside BEMMP, against its own lists
-            of real geography. Names and employee codes come from the HR
-            employee record and follow it automatically.
+            Scope is the one thing set on the BEMMP screen itself, and only
+            because the zones and districts on offer are read from the loaded
+            ticket data rather than stored anywhere — there is no list here to
+            choose from. Names and employee codes come from the HR employee
+            record and follow it automatically.
           </p>
         </div>
       </div>
