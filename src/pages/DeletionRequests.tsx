@@ -15,7 +15,7 @@ const STAGE_LABEL: Record<string, string> = {
 
 const STAGE_STYLE: Record<string, string> = {
   pending_manager: 'bg-amber-100 text-amber-800',
-  pending_hr: 'bg-ink-900 text-white',
+  pending_hr: 'bg-ink-900 text-onInk',
   approved: 'bg-cyrixRed-100 text-cyrixRed-800',
   rejected: 'bg-ink-100 text-ink-600',
 }
@@ -97,7 +97,7 @@ export default function DeletionRequests() {
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-ink-200/70 bg-ink-50 p-3.5 text-xs text-ink-600">
         <span className="badge bg-amber-100 text-amber-800">Reporting manager</span>
         <ArrowRight className="h-3.5 w-3.5 text-ink-300" />
-        <span className="badge bg-ink-900 text-white">HR</span>
+        <span className="badge bg-ink-900 text-onInk">HR</span>
         <ArrowRight className="h-3.5 w-3.5 text-ink-300" />
         <span className="badge bg-cyrixRed-100 text-cyrixRed-800">Done</span>
         <span className="ml-2">

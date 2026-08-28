@@ -413,7 +413,7 @@ function LoginsTab() {
                             className={clsx(
                               'badge cursor-pointer transition-colors disabled:opacity-50',
                               on
-                                ? 'bg-ink-900 text-white hover:bg-cyrixRed-700'
+                                ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
                                 : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
                             )}
                           >
@@ -727,7 +727,7 @@ function SpareTab() {
                         className={clsx(
                           'badge cursor-pointer transition-colors disabled:opacity-50',
                           r.role === role.value
-                            ? 'bg-ink-900 text-white hover:bg-cyrixRed-700'
+                            ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
                             : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
                         )}
                       >

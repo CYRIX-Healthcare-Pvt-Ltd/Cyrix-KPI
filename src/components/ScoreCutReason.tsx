@@ -50,7 +50,7 @@ export function ScoreCutPrompt({
         <textarea
           id="cut-reason"
           rows={3}
-          className="input bg-white"
+          className="input bg-surface"
           disabled={disabled}
           value={value}
           onChange={e => onChange(e.target.value)}

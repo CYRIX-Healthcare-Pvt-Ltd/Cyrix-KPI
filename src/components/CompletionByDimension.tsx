@@ -90,7 +90,7 @@ export default function CompletionByDimension() {
               onClick={() => { setDim(d); setShowAll(false) }}
               className={clsx(
                 'rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors',
-                dim === d ? 'bg-ink-900 text-white' : 'text-ink-500 hover:text-ink-800',
+                dim === d ? 'bg-ink-900 text-onInk' : 'text-ink-500 hover:text-ink-800',
               )}
             >
               {d}

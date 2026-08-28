@@ -58,12 +58,25 @@ export function LogoMark({
   className?: string
   variant?: 'dark' | 'light'
 }) {
-  const bg = variant === 'light' ? 'bg-white' : 'bg-ink-950'
+  /*
+   * Literal colours, not palette tokens, and deliberately so.
+   *
+   * The mark is a printed brand asset: a black square carrying a white
+   * stroke and a red one. Tokens would invert it in dark mode, and since
+   * both the square and its stroke would flip together the result is a
+   * white X on a white square — an invisible logo, which is a worse
+   * outcome than a dark square sitting on a dark page.
+   *
+   * The `light` variant is the inverse mark for use on black, which is a
+   * different asset rather than a different theme, so it is unaffected.
+   */
+  const bg = variant === 'light' ? '#ffffff' : '#141519'
   const stroke = variant === 'light' ? '#141519' : '#ffffff'
 
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-md ${bg} ${className}`}
+      className={`inline-flex items-center justify-center rounded-md ${className}`}
+      style={{ backgroundColor: bg }}
       aria-hidden
     >
       <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">

@@ -124,7 +124,7 @@ function RankTile({
         <div
           className={clsx(
             'pointer-events-none absolute left-0 right-0 top-full z-20 mt-1.5',
-            'origin-top rounded-lg border border-ink-200 bg-white p-3 shadow-lg',
+            'origin-top rounded-lg border border-ink-200 bg-surface p-3 shadow-lg',
             'transition-opacity duration-150 ease-out',
             open
               ? 'opacity-100'

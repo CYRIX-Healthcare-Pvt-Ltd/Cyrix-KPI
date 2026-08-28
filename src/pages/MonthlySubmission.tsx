@@ -929,8 +929,8 @@ function ScoreQueryPanel({
                             className={clsx(
                               'btn-press rounded-lg px-3 py-1.5 text-xs font-medium ring-1',
                               picked[item.id].kind === k
-                                ? 'bg-ink-900 text-white ring-ink-900'
-                                : 'bg-white text-ink-600 ring-ink-200 hover:bg-ink-50',
+                                ? 'bg-ink-900 text-onInk ring-ink-900'
+                                : 'bg-surface text-ink-600 ring-ink-200 hover:bg-ink-50',
                             )}
                           >
                             {k === 'clarification'
@@ -947,7 +947,7 @@ function ScoreQueryPanel({
                           ones you mean is the difference between a
                           complaint and a question. */}
                       {item.section === 'core_values' && coreValueNames.length > 0 && (
-                        <div className="rounded-lg bg-white p-2.5 ring-1 ring-ink-200">
+                        <div className="rounded-lg bg-surface p-2.5 ring-1 ring-ink-200">
                           <p className="mb-1.5 text-xs font-medium text-ink-600">
                             Which ones? (optional)
                           </p>
@@ -1082,7 +1082,7 @@ function AlternatePicker({
       </label>
       <select
         id={`alt-${item.id}`}
-        className="input w-auto min-w-48 flex-1 bg-white py-1.5 text-sm"
+        className="input w-auto min-w-48 flex-1 bg-surface py-1.5 text-sm"
         disabled={!editable || pick.isPending}
         value={item.alternate_id ?? ''}
         onChange={async e => {

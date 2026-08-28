@@ -216,7 +216,7 @@ export default function BellCurve({
               const row = model.perBand.find(b => b.band.key === band?.key)
               if (!band || !row) return null
               return (
-                <div className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-xs shadow-sm">
+                <div className="rounded-lg border border-ink-200 bg-surface px-3 py-2 text-xs shadow-sm">
                   <p className="font-semibold" style={{ color: band.hex.base }}>
                     {band.label}
                   </p>

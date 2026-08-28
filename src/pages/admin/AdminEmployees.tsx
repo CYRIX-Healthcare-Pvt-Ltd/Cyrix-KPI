@@ -227,7 +227,7 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <p>
             Their record exists but has no login yet. Issue one by running:
           </p>
-          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-white">
+          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
             node scripts/user-admin.mjs issue-login {done}
           </code>
           <p className="mt-2">
@@ -361,7 +361,7 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       {result ? (
         <Alert kind="success" title={`${result.added} employee record(s) imported`}>
           <p>Logins still need issuing — run:</p>
-          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-white">
+          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
             node scripts/import-employees.mjs "your-file.xlsx"
           </code>
           {result.failed.length > 0 && (

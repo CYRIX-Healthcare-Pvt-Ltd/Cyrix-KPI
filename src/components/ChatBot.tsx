@@ -179,15 +179,15 @@ export default function ChatBot() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Ask about your KPI"
-          className="btn-press fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-ink-950 text-white shadow-lg hover:bg-cyrixRed-600 lg:bottom-6"
+          className="btn-press fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shade text-white shadow-lg hover:bg-cyrixRed-600 hover:text-white lg:bottom-6"
         >
           <MessageCircle className="h-5 w-5" />
         </button>
       )}
 
       {open && (
-        <div className="animate-pop-in fixed inset-x-3 bottom-20 z-40 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-96 lg:bottom-6">
-          <div className="flex items-center justify-between gap-2 border-b border-ink-200 bg-ink-950 px-4 py-3 text-white">
+        <div className="animate-pop-in fixed inset-x-3 bottom-20 z-40 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-surface shadow-2xl sm:inset-x-auto sm:right-4 sm:w-96 lg:bottom-6">
+          <div className="flex items-center justify-between gap-2 border-b border-ink-200 bg-shade px-4 py-3 text-white">
             <p className="text-sm font-semibold">Ask about your KPI</p>
             <div className="flex items-center gap-1">
               <Languages className="h-3.5 w-3.5 text-white/50" />
@@ -223,7 +223,7 @@ export default function ChatBot() {
                   className={clsx(
                     'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
                     turn.from === 'them'
-                      ? 'rounded-br-sm bg-ink-900 text-white'
+                      ? 'rounded-br-sm bg-ink-900 text-onInk'
                       : 'rounded-bl-sm bg-ink-100 text-ink-800',
                   )}
                 >
@@ -294,7 +294,7 @@ export default function ChatBot() {
               type="submit"
               disabled={!draft.trim()}
               aria-label="Send"
-              className="btn-press flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-950 text-white disabled:opacity-40"
+              className="btn-press flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-shade text-white disabled:opacity-40"
             >
               <SendHorizonal className="h-4 w-4" />
             </button>

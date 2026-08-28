@@ -203,7 +203,7 @@ export default function ChangePassword() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
-                className="input bg-white text-center text-xl font-semibold tracking-[0.4em]"
+                className="input bg-surface text-center text-xl font-semibold tracking-[0.4em]"
                 value={code}
                 onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
                 autoFocus

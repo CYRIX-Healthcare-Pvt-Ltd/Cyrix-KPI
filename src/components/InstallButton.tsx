@@ -63,12 +63,12 @@ export default function InstallButton() {
           done is show exactly where its own one lives. */}
       {steps && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink-950/60 p-0 sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="install-steps-title"
         >
-          <div className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
+          <div className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl">
             <div className="flex items-start justify-between gap-3">
               <h2 id="install-steps-title" className="text-lg font-semibold text-ink-900">
                 {route === 'ios' ? 'Add it to your Home Screen' : 'Install Cyrix KPI'}
@@ -122,7 +122,7 @@ function Step({
 }) {
   return (
     <li className="flex items-center gap-3">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-900 text-xs font-semibold text-white">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-900 text-xs font-semibold text-onInk">
         {n}
       </span>
       <Icon className="h-4 w-4 shrink-0 text-violet-600" />

@@ -182,7 +182,7 @@ const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }
   // step in the process, and people asked what it meant. This is what
   // has actually happened — the manager has been through it, and the
   // month is now waiting out its closing date.
-  scored:    { label: 'Manager reviewed',   cls: 'bg-ink-900 text-white' },
+  scored:    { label: 'Manager reviewed',   cls: 'bg-ink-900 text-onInk' },
   finalized: { label: 'Final',              cls: 'bg-emerald-100 text-emerald-800' },
 }
 

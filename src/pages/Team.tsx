@@ -336,7 +336,7 @@ export default function Team() {
                 className={clsx(
                   'btn-press flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   chartTab === key
-                    ? 'bg-white text-ink-900 shadow-sm'
+                    ? 'bg-surface text-ink-900 shadow-sm'
                     : 'text-ink-500 hover:text-ink-800',
                 )}
               >
@@ -667,7 +667,7 @@ function MemberPeek({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-ink-950/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-shade/40 p-0 sm:items-center sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -676,7 +676,7 @@ function MemberPeek({
       {/* Full width and bottom-anchored on a phone, a card on a desktop.
           Stops the click so tapping inside does not close it. */}
       <div
-        className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-4">

@@ -618,7 +618,7 @@ function RowEditor({
               )}
             </label>
             <select
-              className="input bg-white"
+              className="input bg-surface"
               value={row.scoring_rule}
               onChange={e => {
                 const rule = e.target.value as ScoringRule
@@ -888,7 +888,7 @@ function AlternateEditor({
   onRemove: () => void
 }) {
   return (
-    <div className="rounded-lg border border-ink-200 bg-white p-3">
+    <div className="rounded-lg border border-ink-200 bg-surface p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
           Alternative {index + 1}

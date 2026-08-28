@@ -168,7 +168,7 @@ export default function Help() {
                 className={clsx(
                   'btn-press rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   lang === l.code
-                    ? 'bg-white text-ink-900 shadow-sm'
+                    ? 'bg-surface text-ink-900 shadow-sm'
                     : 'text-ink-500 hover:text-ink-800',
                 )}
               >

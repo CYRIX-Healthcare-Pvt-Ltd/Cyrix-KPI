@@ -19,11 +19,55 @@ export default {
          * communicate performance, not brand, and a red-on-red scale
          * would be unreadable.
          */
+        /*
+         * Read from CSS variables so one stylesheet can restate the whole
+         * ramp for dark mode and every existing bg-ink-50 / text-ink-900 /
+         * border-ink-200 follows without being touched. There are around
+         * 350 of them across 35 components; adding a dark: variant to each
+         * would be 350 chances to miss one, and every future component
+         * would have to remember.
+         *
+         * Channels rather than whole colours, and rgb(... / <alpha-value>)
+         * rather than var(--x): the app leans on alpha modifiers in 22
+         * places — border-ink-200/70, bg-ink-950/60 — and a variable
+         * holding "#d8d9dd" cannot take one.
+         */
         ink: {
-          50:  '#f7f7f8', 100: '#eeeef0', 200: '#d8d9dd', 300: '#b4b6bd',
-          400: '#8a8d97', 500: '#6b6e79', 600: '#565962', 700: '#464851',
-          800: '#2b2d34', 900: '#141519', 950: '#000000',
+          50:  'rgb(var(--ink-50) / <alpha-value>)',
+          100: 'rgb(var(--ink-100) / <alpha-value>)',
+          200: 'rgb(var(--ink-200) / <alpha-value>)',
+          300: 'rgb(var(--ink-300) / <alpha-value>)',
+          400: 'rgb(var(--ink-400) / <alpha-value>)',
+          500: 'rgb(var(--ink-500) / <alpha-value>)',
+          600: 'rgb(var(--ink-600) / <alpha-value>)',
+          700: 'rgb(var(--ink-700) / <alpha-value>)',
+          800: 'rgb(var(--ink-800) / <alpha-value>)',
+          900: 'rgb(var(--ink-900) / <alpha-value>)',
+          950: 'rgb(var(--ink-950) / <alpha-value>)',
         },
+        /** The page behind everything. White in light, near-black in dark. */
+        canvas: 'rgb(var(--canvas) / <alpha-value>)',
+        /** Cards and bars, a step lighter than the canvas in dark so they
+         *  still read as raised without needing a shadow. */
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        /** Text and icons sitting on an ink-900/950 fill. It cannot be
+         *  plain white: ink-900 becomes near-white in dark, and white on
+         *  white is the one thing a palette swap must not produce. */
+        onInk: 'rgb(var(--on-ink) / <alpha-value>)',
+        /**
+         * Near-black in both themes, for the surfaces that are meant to be
+         * dark rather than merely darker than the page: the sign-in hero,
+         * the chatbot's chrome, the analysis cards, and every modal scrim.
+         *
+         * These were bg-ink-950 and inverting them turned the sign-in hero
+         * white while the wordmark on it stayed white — an invisible logo
+         * on a blank panel. A scrim is worse: ink-950/60 in dark is a white
+         * veil over a dark page, which reads as the screen washing out.
+         *
+         * Not a token that flips, because these are not "the darkest step
+         * of the palette". They are dark on purpose.
+         */
+        shade: 'rgb(20 21 25 / <alpha-value>)',
         cyrixRed: {
           50:  '#fef2f3', 100: '#fde3e5', 200: '#fbccd0', 300: '#f7a8af',
           400: '#f17886', 500: '#e64a5f', 600: '#e30613', 700: '#c00512',

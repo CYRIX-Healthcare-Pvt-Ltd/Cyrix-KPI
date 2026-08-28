@@ -16,6 +16,7 @@ import Notifications from './Notifications'
 import StartMonthPrompt from './StartMonthPrompt'
 import ChatBot from './ChatBot'
 import Avatar from './Avatar'
+import ThemeToggle from './ThemeToggle'
 import { Logo, LogoMark } from './Logo'
 
 /**
@@ -185,7 +186,7 @@ export default function Shell() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-ink-200 bg-white">
+      <header className="sticky top-0 z-30 border-b border-ink-200 bg-surface">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
           <button
             className="btn-icon lg:hidden"
@@ -275,6 +276,7 @@ export default function Shell() {
             </NavLink>
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}
+            <ThemeToggle />
             <Notifications enabled={!isSwAdmin || isHrAdmin} />
             {/* Changing a password lives on the profile page, next to
                 the photo and the manual — everything about the account
@@ -292,7 +294,7 @@ export default function Shell() {
         </div>
 
         {menuOpen && (
-          <nav className="border-t border-ink-200 bg-white px-3 py-2 lg:hidden">
+          <nav className="border-t border-ink-200 bg-surface px-3 py-2 lg:hidden">
             {items.map(item => (
               <NavLink
                 key={item.to}
@@ -324,7 +326,7 @@ export default function Shell() {
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-white lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
         {/* One more column than there are tabs: the last cell is the way
             out to the other modules. The header mark does the same job, but
             it is 32px in a corner — on a phone this bar is where people

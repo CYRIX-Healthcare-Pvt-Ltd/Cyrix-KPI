@@ -9,6 +9,31 @@
 
 @layer base {
   :root {
+    /*
+     * The palette, as RGB channels so Tailwind can apply alpha to them.
+     * Light here; dark restates the same names further down and nothing
+     * else in the app has to know which one is in force.
+     */
+    --canvas: 255 255 255;
+    --surface: 255 255 255;
+    --on-ink: 255 255 255;
+
+    --ink-50: 247 247 248;
+    --ink-100: 238 238 240;
+    --ink-200: 216 217 221;
+    --ink-300: 180 182 189;
+    --ink-400: 138 141 151;
+    --ink-500: 107 110 121;
+    --ink-600: 86 89 98;
+    --ink-700: 70 72 81;
+    --ink-800: 43 45 52;
+    --ink-900: 20 21 25;
+    --ink-950: 0 0 0;
+
+    /* What a tint is mixed into. White on a white page; the dark canvas
+       in dark, or every softened score colour turns milky. */
+    --mix-base: #ffffff;
+
     /* Overwritten at runtime by ScoreThemeProvider.
 
        --score-* is the signed-in person: the chrome, every hover, every
@@ -38,11 +63,94 @@
     --dur-ui: 250ms;
   }
 
+  /*
+   * Dark.
+   *
+   * The ink ramp is turned end for end: what was the palest wash becomes
+   * the deepest surface, and what was near-black text becomes near-white.
+   * Every bg-ink-50 and text-ink-900 in the app keeps meaning "faintest
+   * background" and "strongest text" without being edited.
+   *
+   * The middle of the ramp does not simply invert. ink-400 is muted text
+   * and a straight flip would put it at 180 182 189 on a near-black page —
+   * far too bright to read as secondary. The greys from 300 to 600 are
+   * chosen for contrast against the dark canvas rather than mirrored.
+   *
+   * Written twice on purpose: once for a browser set to dark, once for an
+   * explicit choice. The media query is guarded so choosing light beats a
+   * dark operating system, and the attribute selector so choosing dark
+   * beats a light one. A single :root[data-theme] block would leave anyone
+   * on "system" — the default, and most people — in permanent light.
+   */
+  /* An explicit choice of dark. */
+  :root[data-theme='dark'] {
+    --canvas: 13 14 18;
+    --surface: 23 24 28;
+    --on-ink: 20 21 25;
+
+    --ink-50: 30 31 37;
+    --ink-100: 38 40 47;
+    --ink-200: 51 54 63;
+    --ink-300: 74 78 89;
+    --ink-400: 140 145 158;
+    --ink-500: 160 165 177;
+    --ink-600: 186 190 200;
+    --ink-700: 210 213 220;
+    --ink-800: 232 234 238;
+    --ink-900: 244 245 247;
+    --ink-950: 255 255 255;
+
+    --mix-base: #0d0e12;
+
+    --score-accent: #f4f5f7;
+    --score-soft: #262830;
+    --score-strong: #ffffff;
+
+    --page-accent: #f4f5f7;
+    --page-soft: #262830;
+    --page-strong: #ffffff;
+  }
+
+  /* No choice made — follow the machine. Guarded so that choosing light
+     still beats a dark operating system. Most people never touch the
+     toggle, so this branch is the one that matters. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --canvas: 13 14 18;
+      --surface: 23 24 28;
+      --on-ink: 20 21 25;
+
+      --ink-50: 30 31 37;
+      --ink-100: 38 40 47;
+      --ink-200: 51 54 63;
+      --ink-300: 74 78 89;
+      --ink-400: 140 145 158;
+      --ink-500: 160 165 177;
+      --ink-600: 186 190 200;
+      --ink-700: 210 213 220;
+      --ink-800: 232 234 238;
+      --ink-900: 244 245 247;
+      --ink-950: 255 255 255;
+
+      --mix-base: #0d0e12;
+
+      --score-accent: #f4f5f7;
+      --score-soft: #262830;
+      --score-strong: #ffffff;
+
+      --page-accent: #f4f5f7;
+      --page-soft: #262830;
+      --page-strong: #ffffff;
+    }
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-white font-sans text-ink-900 antialiased;
+    /* canvas, not surface: identical in light, but in dark the page sits a
+       step below the cards so a card reads as raised without a shadow. */
+    @apply bg-canvas font-sans text-ink-900 antialiased;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -116,16 +224,18 @@
    * red is carrying meaning, not decoration.
    */
   .btn-primary {
-    @apply btn bg-ink-950 text-white;
+    @apply btn bg-ink-950 text-onInk;
   }
   .btn-primary:hover:not(:disabled),
   .btn-primary:focus-visible:not(:disabled) {
     background-color: var(--score-accent);
-    color: #fff;
+    /* Not #fff: --score-accent is near-white in dark, and white on it
+       is invisible. --score-strong is defined against it in both. */
+    color: rgb(var(--canvas));
   }
 
   .btn-secondary {
-    @apply btn border border-ink-200 bg-white text-ink-700;
+    @apply btn border border-ink-200 bg-surface text-ink-700;
   }
   .btn-secondary:hover:not(:disabled),
   .btn-secondary:focus-visible:not(:disabled) {
@@ -224,8 +334,8 @@
      the bug this replaces. */
   .select-on-dark option,
   .select-on-dark optgroup {
-    background-color: #ffffff;
-    color: #141519;
+    background-color: rgb(var(--surface));
+    color: rgb(var(--ink-900));
   }
   .select-on-dark:hover {
     @apply bg-white/20;
@@ -260,13 +370,13 @@
   }
   .card-interactive:hover {
     border-color: var(--score-accent);
-    background-color: color-mix(in srgb, var(--score-soft) 40%, #fff);
+    background-color: color-mix(in srgb, var(--score-soft) 40%, var(--mix-base));
   }
 
   /* Minimal surface: a hairline, no shadow. Depth comes from whitespace
      and type weight rather than from borders and drop shadows. */
   .card {
-    @apply rounded-xl border border-ink-200/70 bg-white;
+    @apply rounded-xl border border-ink-200/70 bg-surface;
   }
 
   /**
@@ -364,7 +474,7 @@
       background-color: var(--score-soft);
     }
     .nav-profile:hover > span:last-child {
-      background-color: color-mix(in srgb, var(--score-accent) 18%, #fff);
+      background-color: color-mix(in srgb, var(--score-accent) 18%, var(--mix-base));
       color: var(--score-strong);
     }
   }
@@ -693,4 +803,43 @@
       animation-delay: -4.5s;
     }
   }
+}
+
+/*
+ * Switching theme as a circular reveal from the switch itself, the way
+ * Spare does it. The View Transitions API holds a snapshot of the outgoing
+ * theme underneath while the incoming one is clipped in over the top, so
+ * every colour in the app crosses together instead of several hundred
+ * elements each easing their own at their own pace — which is what a
+ * plain CSS transition on a palette swap looks like, and it looks broken.
+ *
+ * --theme-x / --theme-y / --theme-r are set on :root by the toggle, which
+ * aims the circle at wherever the switch happens to be. The radius is the
+ * distance to the furthest corner, so the circle always finishes covering
+ * the screen whichever corner it started from.
+ *
+ * Decoration, never the mechanism: without the API, or with reduced
+ * motion asked for, the theme simply changes.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* The old theme just sits there; only the new one is animated in over it. */
+::view-transition-old(root) { z-index: 1; }
+
+::view-transition-new(root) {
+  z-index: 10;
+  animation: theme-reveal 520ms var(--ease-out) forwards;
+}
+
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--theme-x, 50%) var(--theme-y, 50%)); }
+  to   { clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50%) var(--theme-y, 50%)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) { animation: none; }
 }

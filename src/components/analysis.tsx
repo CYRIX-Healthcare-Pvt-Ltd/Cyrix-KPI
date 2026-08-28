@@ -40,7 +40,7 @@ export function ScoreHeader({
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl bg-ink-950 text-white"
+      className="relative overflow-hidden rounded-2xl bg-shade text-white"
       // The wash takes its colour from THIS header's band, not the page
       // tint. They diverge whenever a screen reports on someone other than
       // the reader — a team average, a report's year — and a green glow
@@ -153,7 +153,7 @@ export function ScoreHeader({
           {BAND_SCALE.slice(1).map(({ band: b, from }) => (
             <span
               key={b.key}
-              className="absolute inset-y-0 w-px bg-ink-950/60"
+              className="absolute inset-y-0 w-px bg-shade/60"
               style={{ left: `${from}%` }}
             />
           ))}
@@ -228,7 +228,7 @@ export function ActionRequired({
   cta: string
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl bg-ink-950 text-white">
+    <div className="relative overflow-hidden rounded-xl bg-shade text-white">
       <span className="absolute inset-y-0 left-0 w-1 bg-cyrixRed-600" />
       {/*
         Stacked on a phone, side by side from 640px up.
@@ -270,7 +270,7 @@ export function ActionRequired({
             app, which this one had never been. */}
         <Link
           to={to}
-          className="btn-press shrink-0 rounded-lg bg-white px-6 py-3 text-center text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
+          className="btn-press shrink-0 rounded-lg bg-surface px-6 py-3 text-center text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
         >
           {cta}
         </Link>

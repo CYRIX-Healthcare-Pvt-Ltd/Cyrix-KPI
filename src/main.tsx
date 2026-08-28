@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ScoreThemeProvider } from '@/contexts/ScoreThemeContext'
 import { guardNumberFields } from '@/lib/numberFields'
+import { startTheme } from '@/lib/theme'
 import { watchInstallability } from '@/lib/pwa'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import App from './App'
@@ -12,6 +13,9 @@ import './index.css'
 
 // Before anything renders, so no field is ever briefly unguarded.
 guardNumberFields()
+// Before render, so nobody sees a flash of the wrong palette, and so a
+// choice made in another module is already in force when this one opens.
+startTheme()
 // And before React mounts, because beforeinstallprompt fires once and
 // early — a component that has not rendered yet cannot catch it.
 watchInstallability()

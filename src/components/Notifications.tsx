@@ -263,7 +263,7 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
           // The mobile offset is the header's own height plus the same
           // safe-area inset the body uses, so it clears the header on a
           // notched phone as well as a flat one.
-          className="animate-pop-in fixed inset-x-3 top-[calc(env(safe-area-inset-top)_+_3.75rem)] z-40 origin-top overflow-hidden rounded-xl border border-ink-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] sm:origin-top-right"
+          className="animate-pop-in fixed inset-x-3 top-[calc(env(safe-area-inset-top)_+_3.75rem)] z-40 origin-top overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] sm:origin-top-right"
         >
           <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2">
             <h2 className="flex-1 text-sm font-semibold text-ink-800">Notifications</h2>
