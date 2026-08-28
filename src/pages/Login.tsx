@@ -43,7 +43,9 @@ export default function Login() {
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* ---------------- brand panel ---------------- */}
       <aside className="relative hidden flex-col justify-between bg-shade p-12 lg:flex">
-        <Logo height={40} variant="light" />
+        {/* `shade` is pinned black in both themes, so this panel does not
+            follow the toggle and neither may the lockup on it. */}
+        <Logo height={40} onDark />
 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">

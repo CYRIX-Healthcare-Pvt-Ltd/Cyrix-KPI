@@ -1,131 +1,78 @@
+import onLight from '@/assets/cyrix-logo.png'
+import onDarkArt from '@/assets/cyrix-logo-white.png'
+
 /**
- * The Cyrix Healthcare lockup, drawn once and shared by every module.
+ * The Cyrix Healthcare lockup — the real artwork, not a drawing of it.
  *
- * Redrawn from the supplied artwork: heavy condensed caps, the X oversized
- * and red, the registered mark red at the top right, the entity line
- * letterspaced beneath, and the strapline in blue with its own red X.
+ * Every module used to approximate this wordmark in its own SVG, which is
+ * how one company came to have four that were nearly but not quite alike.
+ * This is the supplied file, shipped as-is, so there is nothing left to
+ * drift.
  *
- * The black halves are `currentColor`, which is the whole reason this is
- * drawn rather than dropped in as an image: the artwork is black on white
- * and would vanish on a dark page. The red and the blue are brand colours
- * and stay put in both themes.
+ * Two files rather than one: the artwork is black type on a transparent
+ * ground and would vanish on a dark page. The dark-page copy is the same
+ * image with its *lightness* inverted and hue left alone — a plain invert
+ * would turn the red cyan and the blue orange, which is another company's
+ * logo. Both are in the markup and CSS picks one, so the swap happens in
+ * the same frame as the theme and never flashes the wrong one.
  *
- * This is a close redraw, not the original vector — the artwork's typeface
- * is not one we ship. Drop the real file at `public/cyrix-logo.svg` and
- * this component can become an <img>, but it will then need a light
- * variant for dark mode, which is what the redraw avoids.
+ * The lockup is three stacked bands, and the shorter ones are a crop of
+ * the same file rather than separate exports — `.cyrix-logo` clips, so
+ * asking for less shows less of one image.
  */
-const RED = '#e30613'
-const BLUE = '#1c3f94'
+
+/** Where each band's ink ends, in the artwork's own 300 x 115 grid. */
+const BAND = { wordmark: 67, entity: 92, full: 115 }
 
 export function Logo({
   className = '',
-  height = 34,
-  variant = 'dark',
+  height,
+  onDark = false,
   showSubtitle = true,
   showTagline = false,
 }: {
   className?: string
-  /** Rendered height in px. The lockup scales from this. */
+  /**
+   * Rendered height in px. Omit it to let `className` set the height —
+   * which is how a header gets one size on a phone and another on a
+   * desktop, since an inline style would beat the class that does it.
+   */
   height?: number
-  /** `dark` = ink type for light backgrounds; `light` = white for black. */
-  variant?: 'dark' | 'light'
+  /**
+   * The surface behind this is dark in *both* themes — the login hero,
+   * which is pinned to `shade`. Without this the lockup follows the page
+   * theme and lands black on black in light mode.
+   */
+  onDark?: boolean
   showSubtitle?: boolean
   showTagline?: boolean
 }) {
-  // Three stacked bands: wordmark, entity line, strapline. The viewBox
-  // grows only as far as what is actually shown, so a wordmark on its own
-  // is not padded by the space the other two would have taken.
-  const box = showTagline ? 104 : showSubtitle ? 78 : 58
-
-  return (
-    <svg
-      viewBox={`0 0 330 ${box}`}
-      height={height}
-      className={className}
-      role="img"
-      aria-label="Cyrix Health Care Pvt Ltd"
-      style={{ color: variant === 'light' ? '#ffffff' : 'rgb(var(--ink-900))' }}
-    >
-      {/* The X is set larger than the rest and sits on the same baseline,
-          which is what gives the mark its lift on the right. */}
-      <text
-        x="0" y="47"
-        fontSize="56" fontWeight="800" letterSpacing="-0.5"
-        fill="currentColor"
-        fontFamily="inherit"
-      >
-        CYRI<tspan fill={RED} fontSize="66">X</tspan>
-      </text>
-      <text
-        x="298" y="14"
-        fontSize="14" fontWeight="700"
-        fill={RED}
-        fontFamily="inherit"
-      >
-        ®
-      </text>
-
-      {showSubtitle && (
-        <text
-          x="2" y="70"
-          fontSize="13.5" fontWeight="600" letterSpacing="5.2"
-          fill="currentColor"
-          fontFamily="inherit"
-        >
-          HEALTH CARE PVT LTD
-        </text>
-      )}
-
-      {showTagline && (
-        <text
-          x="2" y="96"
-          fontSize="13" fontWeight="600"
-          fill={BLUE}
-          fontFamily="inherit"
-        >
-          The <tspan fill={RED}>X</tspan>-Factor in Medical Technology Reliability
-        </text>
-      )}
-    </svg>
-  )
-}
-
-/**
- * Square mark for the app icon: the X alone, one stroke black and one red,
- * as it reads in the wordmark.
- */
-export function LogoMark({
-  className = 'h-9 w-9',
-  variant = 'dark',
-}: {
-  className?: string
-  variant?: 'dark' | 'light'
-}) {
-  /*
-   * Literal colours, not palette tokens, and deliberately so. The mark is a
-   * printed brand asset: a black square carrying a white stroke and a red
-   * one. Tokens would invert both together in dark mode and produce a white
-   * X on a white square — an invisible logo.
-   */
-  const bg = variant === 'light' ? '#ffffff' : '#000000'
-  const stroke = variant === 'light' ? '#141519' : '#ffffff'
+  const band = showTagline ? BAND.full : showSubtitle ? BAND.entity : BAND.wordmark
 
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-md ${className}`}
-      style={{ backgroundColor: bg }}
-      aria-hidden
+      className={`cyrix-logo ${className}`}
+      data-on={onDark ? 'dark' : undefined}
+      style={{
+        aspectRatio: `300 / ${band}`,
+        ...(height === undefined ? null : { height: `${height}px` }),
+      }}
+      role="img"
+      aria-label="Cyrix Health Care Pvt Ltd"
     >
-      <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
-        <path d="M4.5 4.5 L19.5 19.5" stroke={stroke} strokeWidth="3.6" strokeLinecap="square" />
-        <path d="M19.5 4.5 L4.5 19.5" stroke={RED} strokeWidth="3.6" strokeLinecap="square" />
-      </svg>
+      <img className="cyrix-logo-light" src={onLight} alt="" />
+      <img className="cyrix-logo-dark" src={onDarkArt} alt="" />
     </span>
   )
 }
 
-/** Product lockup for the login hero — "CYRIX KPI." with the red accents. */
+/**
+ * The product lockup for the login hero — "CYRIX KPI." set in type.
+ *
+ * Deliberately not the company logo: this names the product, and the
+ * company mark is already on the same panel above it. It only ever sits
+ * on `shade`, so it is white in both themes.
+ */
 export function ProductMark({ className = 'text-6xl' }: { className?: string }) {
   return (
     <span className={`inline-flex items-start font-black tracking-[-0.03em] text-white ${className}`}>

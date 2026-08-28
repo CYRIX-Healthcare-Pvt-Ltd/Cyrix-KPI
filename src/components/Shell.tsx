@@ -208,12 +208,14 @@ export default function Shell() {
               aria-label="All Cyrix apps"
               title="All Cyrix apps"
             >
-              {/* The wordmark alone. The square X mark beside it was a second
-                  logo doing the same job at the same size, and two lockups
-                  in 40px of header read as a stray icon rather than a brand.
-                  It stays in the file for the app icon, where a square is
-                  the only shape available. */}
-              <Logo className="h-[17px] sm:h-6" height={24} showSubtitle={false} />
+              {/* The wordmark alone — the entity line under it is 13px of
+                  letterspaced caps, which at header size is a grey smudge
+                  rather than words.
+
+                  No `height`: the class sets it, smaller on a phone where
+                  the bar is tighter, and an inline height would beat the
+                  class and win in both. */}
+              <Logo className="h-[17px] sm:h-6" showSubtitle={false} />
             </a>
             <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
               KPI
@@ -242,11 +244,17 @@ export default function Shell() {
             {/* The desktop counterpart of the bottom bar's Apps cell. The
                 mark on the left reaches the same place, but a clickable logo
                 is a convention you have to already know; this says the word.
-                A plain anchor — the portal is above this app's basename. */}
-            <a href="/" className="nav-link" title="All Cyrix apps">
-              <Grid2x2 className="h-4 w-4 text-ink-400" />
-              Apps
-            </a>
+                A plain anchor — the portal is above this app's basename.
+
+                Hidden on the same test as that bar: with one destination
+                there is nothing here to leave, and Apps beside a single
+                tab reads as a second module rather than the way out. */}
+            {items.length > 1 && (
+              <a href="/" className="nav-link" title="All Cyrix apps">
+                <Grid2x2 className="h-4 w-4 text-ink-400" />
+                Apps
+              </a>
+            )}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">

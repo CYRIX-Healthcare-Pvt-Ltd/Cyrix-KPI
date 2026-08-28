@@ -896,3 +896,50 @@
 .recharts-tooltip-item {
   color: rgb(var(--ink-900)) !important;
 }
+
+/*
+ * The company lockup.
+ *
+ * Identical in all four modules, down to this block — the mark is one
+ * asset now, and the rules that place it should not be four dialects of
+ * the same idea either.
+ *
+ * Both copies of the artwork are in the markup and CSS shows one. That
+ * is what makes the swap land in the same frame as the theme: choosing
+ * a `src` in JavaScript means a paint with the old file still in place,
+ * which on the circular reveal reads as the logo lagging behind the
+ * page sweeping past it.
+ *
+ * The wrapper clips. The artwork is one image holding three stacked
+ * bands — wordmark, entity line, strapline — and a caller asking for
+ * fewer gets a shorter box over the same picture, so a header and a
+ * login page cannot disagree about the spacing between them.
+ */
+.cyrix-logo {
+  display: block;
+  overflow: hidden;
+  flex: none;
+}
+.cyrix-logo img {
+  display: block;
+  width: 100%;
+}
+.cyrix-logo-dark {
+  display: none;
+}
+
+:root[data-theme='dark'] .cyrix-logo-light { display: none; }
+:root[data-theme='dark'] .cyrix-logo-dark { display: block; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .cyrix-logo-light { display: none; }
+  :root:not([data-theme='light']) .cyrix-logo-dark { display: block; }
+}
+
+/*
+ * Last, and on purpose: these carry the same specificity as the theme
+ * rules above, so order is what lets a surface that is dark in both
+ * themes — the login hero — keep the white lockup in light mode.
+ */
+.cyrix-logo[data-on='dark'] .cyrix-logo-light { display: none; }
+.cyrix-logo[data-on='dark'] .cyrix-logo-dark { display: block; }

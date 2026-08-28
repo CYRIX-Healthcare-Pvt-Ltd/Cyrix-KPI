@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Grid2x2, Timer, QrCode, Activity,
+  LayoutGrid, Timer, QrCode, Activity,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
@@ -1181,11 +1181,17 @@ export default function SwAdmin() {
         they belong where every other module puts navigation on a phone,
         under the thumb rather than at the top of a scrolling page you have
         to return to in order to move.
+
+        No Apps cell. In the other modules that cell is how you leave for
+        a different one, but an administrator arrives here from the portal
+        and has no second module to leave for — it offered a round trip to
+        the page they just came from, and cost every real tab a fifth of
+        the bar to do it. The wordmark in the header still goes back.
       */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
         <div
           className="grid"
-          style={{ gridTemplateColumns: `repeat(${ADMIN_TABS.length + 1}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${ADMIN_TABS.length}, minmax(0, 1fr))` }}
         >
           {ADMIN_TABS.map(t => (
             <button
@@ -1201,16 +1207,6 @@ export default function SwAdmin() {
               <span className="w-full truncate px-0.5 text-center">{t.short}</span>
             </button>
           ))}
-
-          {/* The way out, last, as in every other module. */}
-          <a
-            href="/"
-            className="flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium text-ink-400"
-            aria-label="All Cyrix apps"
-          >
-            <Grid2x2 className="h-5 w-5" />
-            <span className="w-full truncate px-0.5 text-center">Apps</span>
-          </a>
         </div>
       </nav>
     </div>
