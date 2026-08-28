@@ -235,6 +235,15 @@ export default function Shell() {
                 <Badge count={item.badge} />
               </NavLink>
             ))}
+
+            {/* The desktop counterpart of the bottom bar's Apps cell. The
+                mark on the left reaches the same place, but a clickable logo
+                is a convention you have to already know; this says the word.
+                A plain anchor — the portal is above this app's basename. */}
+            <a href="/" className="nav-link" title="All Cyrix apps">
+              <Grid2x2 className="h-4 w-4 text-ink-400" />
+              Apps
+            </a>
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
