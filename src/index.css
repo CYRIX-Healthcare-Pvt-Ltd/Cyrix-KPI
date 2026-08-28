@@ -61,6 +61,15 @@
     --dur-press: 160ms;
     --dur-fast: 200ms;
     --dur-ui: 250ms;
+
+    /*
+     * Tells the browser which way its own controls should go: the popup a
+     * <select> opens, scrollbars, checkboxes, the date picker. None of
+     * those are ours to style, and without this they stay light — a white
+     * menu with pale grey rows over a dark page, which is unreadable and
+     * looks broken rather than unstyled.
+     */
+    color-scheme: light;
   }
 
   /*
@@ -109,6 +118,8 @@
     --page-accent: #f4f5f7;
     --page-soft: #262830;
     --page-strong: #ffffff;
+
+    color-scheme: dark;
   }
 
   /* No choice made — follow the machine. Guarded so that choosing light
@@ -141,6 +152,8 @@
       --page-accent: #f4f5f7;
       --page-soft: #262830;
       --page-strong: #ffffff;
+
+      color-scheme: dark;
     }
   }
 
@@ -842,4 +855,44 @@
 
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-new(root) { animation: none; }
+}
+
+/*
+ * Charts.
+ *
+ * Recharts writes its colours as SVG presentation attributes, and those do
+ * not accept var() — so the grid, the axes and the tick labels were stuck
+ * at their light values and turned into bright white rules over a dark
+ * page. A CSS rule beats a presentation attribute, so styling them here is
+ * enough: no re-render on theme change, and no colour passed through props
+ * from a dozen call sites.
+ *
+ * The series colours stay in the components. They carry meaning — red is
+ * the job role, the band tints are the score scale — and meaning does not
+ * belong in a stylesheet.
+ */
+.recharts-cartesian-grid line {
+  stroke: rgb(var(--ink-100));
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: rgb(var(--ink-200));
+}
+.recharts-cartesian-axis-tick-value {
+  fill: rgb(var(--ink-500));
+}
+.recharts-legend-item-text {
+  color: rgb(var(--ink-600)) !important;
+  fill: rgb(var(--ink-600));
+}
+/* The tooltip is a floating panel, so it needs the raised surface rather
+   than the page, or it disappears into the chart behind it. */
+.recharts-default-tooltip {
+  background-color: rgb(var(--surface)) !important;
+  border-color: rgb(var(--ink-200)) !important;
+  color: rgb(var(--ink-900));
+}
+.recharts-tooltip-label,
+.recharts-tooltip-item {
+  color: rgb(var(--ink-900)) !important;
 }

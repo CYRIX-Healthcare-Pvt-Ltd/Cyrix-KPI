@@ -25,7 +25,7 @@ export interface TrendPoint {
  * them can drift back to clipping.
  */
 export function ScoreLabel({
-  x, y, value, fill = '#141519', dy = -12, index, count,
+  x, y, value, fill = 'currentColor', dy = -12, index, count,
 }: {
   x?: number
   y?: number
@@ -107,7 +107,10 @@ export default function ScoreTrend({
   }
 
   return (
-    <div style={{ height }}>
+    // currentColor is what the total-score line, its dots and its labels
+    // inherit, so this one class is what makes them follow the palette
+    // instead of staying pinned to the old near-black.
+    <div className="text-ink-900" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={TREND_MARGIN}>
           {/* The scale, behind the data. Same bands as the score meter and
@@ -148,12 +151,12 @@ export default function ScoreTrend({
           <Line
             type="monotone"
             dataKey="score"
-            stroke="#141519"
+            stroke="currentColor"
             strokeWidth={2}
-            dot={{ r: 3, fill: '#141519', strokeWidth: 0 }}
+            dot={{ r: 3, fill: 'currentColor', strokeWidth: 0 }}
             // Bigger than the mark, so a thumb can find a point that is
             // only 6px across.
-            activeDot={{ r: 6, fill: '#141519', stroke: '#fff', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: 'currentColor', stroke: 'rgb(var(--surface))', strokeWidth: 2 }}
             connectNulls
             isAnimationActive={false}
             label={<ScoreLabel count={data.length} />}

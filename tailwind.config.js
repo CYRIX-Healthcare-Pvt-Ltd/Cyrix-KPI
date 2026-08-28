@@ -66,8 +66,13 @@ export default {
          *
          * Not a token that flips, because these are not "the darkest step
          * of the palette". They are dark on purpose.
+         *
+         * Exactly #000000, which is what ink-950 rendered before any of
+         * this existed. These surfaces must look in light precisely as
+         * they always have — near-black would have been a quiet redesign
+         * of the sign-in screen smuggled in behind a dark mode.
          */
-        shade: 'rgb(20 21 25 / <alpha-value>)',
+        shade: 'rgb(0 0 0 / <alpha-value>)',
         cyrixRed: {
           50:  '#fef2f3', 100: '#fde3e5', 200: '#fbccd0', 300: '#f7a8af',
           400: '#f17886', 500: '#e64a5f', 600: '#e30613', 700: '#c00512',

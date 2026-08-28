@@ -70,7 +70,9 @@ export function LogoMark({
    * The `light` variant is the inverse mark for use on black, which is a
    * different asset rather than a different theme, so it is unaffected.
    */
-  const bg = variant === 'light' ? '#ffffff' : '#141519'
+  /* The exact pair the mark rendered before the palette moved into
+     variables: bg-white and bg-ink-950. */
+  const bg = variant === 'light' ? '#ffffff' : '#000000'
   const stroke = variant === 'light' ? '#141519' : '#ffffff'
 
   return (

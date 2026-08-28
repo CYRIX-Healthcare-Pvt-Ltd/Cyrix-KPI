@@ -1,35 +1,28 @@
 import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Sun, Moon, MonitorSmartphone } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import {
   type Theme, readTheme, setTheme, nextTheme, resolveTheme, THEME_KEY,
 } from '@/lib/theme'
 
-const LABEL: Record<Theme, string> = {
-  light: 'Light — switch to dark',
-  dark: 'Dark — follow the device',
-  system: 'Following the device — switch to light',
-}
-
 /**
- * Light, dark, or follow the device.
+ * Light or dark, shared by every Cyrix module.
  *
- * Three states rather than a two-way switch. "Follow the device" is the
- * default and where most people stay, and it is genuinely different from
- * light: it moves with the phone at sunset. A boolean would strand
- * everybody on whichever the app guessed first.
+ * The same switch Spare has: two states, one icon showing at a time, the
+ * outgoing one rotating and shrinking away as the incoming one arrives.
+ * Both live in the same grid cell, absolutely placed, which is what stops
+ * the button flinching by a pixel as they exchange.
  *
- * The icon crossfades rather than swapping: the outgoing one rotates and
- * shrinks away while the incoming one arrives, so the control reads as one
- * thing changing state rather than two icons taking turns. Both sit in the
- * same grid cell, absolutely placed, which is what stops the button
- * flinching by a pixel as they exchange.
+ * Someone who has never pressed it follows their device — "system" is the
+ * stored default. Pressing it is an explicit choice from then on, and that
+ * choice is written to one key that all four modules read, so it holds
+ * when you click through to another tile.
  */
 export default function ThemeToggle({ className = '' }: { className?: string }) {
   const [theme, setLocal] = useState<Theme>(() => readTheme())
 
-  // Another module in another tab may have changed it. Same origin, so the
-  // choice arrives here as a storage event.
+  // Another module, in another tab, on the same origin. Its choice arrives
+  // here as a storage event.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === THEME_KEY) setLocal(readTheme())
@@ -40,8 +33,10 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
 
   /**
    * Switches as a circular reveal spreading from the button, using the
-   * View Transitions API. Where it is missing, or less motion was asked
-   * for, the theme simply changes — the reveal is decoration.
+   * View Transitions API: the browser holds a snapshot of the old theme
+   * while the new one is clipped in over it, so every colour crosses
+   * together instead of several hundred elements each easing their own.
+   * Without the API, or with reduced motion asked for, it simply changes.
    */
   function toggle(event: React.MouseEvent<HTMLButtonElement>) {
     const next = nextTheme(theme)
@@ -59,8 +54,8 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
 
     const x = event.clientX
     const y = event.clientY
-    // The furthest corner, so the circle always finishes covering the
-    // screen whichever corner the button is sitting in.
+    // The distance to the furthest corner, so the circle always finishes
+    // covering the screen whichever corner the button sits in.
     const radius = Math.hypot(
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
@@ -72,37 +67,28 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
 
     // flushSync is required: startViewTransition snapshots the DOM when
     // its callback returns, and a normal React update would not have
-    // landed by then — the snapshot would be of the old theme twice.
+    // landed by then — it would snapshot the old theme twice.
     start.call(document, () => { flushSync(commit) })
   }
 
-  const shown = resolveTheme(theme)
-  const following = theme === 'system'
+  const dark = resolveTheme(theme) === 'dark'
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={LABEL[theme]}
-      title={LABEL[theme]}
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
       className={`btn-press relative grid h-9 w-9 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 ${className}`}
     >
       <Sun
         className={`absolute h-5 w-5 text-amber-500 transition-all duration-[var(--dur-ui)] ${
-          shown === 'light' && !following ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-50 opacity-0'
+          dark ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-50 opacity-0'
         }`}
       />
       <Moon
         className={`absolute h-5 w-5 text-indigo-400 transition-all duration-[var(--dur-ui)] ${
-          shown === 'dark' && !following ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-50 opacity-0'
-        }`}
-      />
-      {/* The third state says so rather than showing whichever the device
-          happens to be right now, which would read as an explicit choice
-          somebody had made. */}
-      <MonitorSmartphone
-        className={`absolute h-5 w-5 transition-all duration-[var(--dur-ui)] ${
-          following ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-50 opacity-0'
+          dark ? '-rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
         }`}
       />
     </button>

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import ThemeToggle from '@/components/ThemeToggle'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { requestOtp, submitOtp } from '@/lib/passwordOtp'
@@ -72,9 +73,15 @@ export default function Login() {
 
       {/* ---------------- form panel ---------------- */}
       <main className="flex flex-col justify-between bg-surface px-6 py-10 sm:px-12 lg:px-16 lg:py-12">
-        {/* Brand shows here only on small screens, where the panel is hidden. */}
-        <div className="lg:hidden">
-          <Logo className="text-lg" />
+        {/* The switch belongs here too: this is the first screen anyone
+            sees, and somebody who prefers dark should not have to sign in
+            through a white page to reach the control that fixes it. */}
+        <div className="flex items-start justify-between gap-3">
+          {/* Brand shows here only on small screens, where the panel is hidden. */}
+          <div className="lg:hidden">
+            <Logo className="text-lg" />
+          </div>
+          <ThemeToggle className="ml-auto" />
         </div>
 
         <div className="mx-auto w-full max-w-sm py-10 lg:py-0">

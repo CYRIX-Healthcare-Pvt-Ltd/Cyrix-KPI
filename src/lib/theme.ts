@@ -88,9 +88,17 @@ export function setTheme(theme: Theme): void {
   applyTheme(theme)
 }
 
-/** light → dark → system → light. */
-export function nextTheme(theme: Theme): Theme {
-  return theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light'
+/**
+ * The other one — a plain two-way switch, as Spare has always had.
+ *
+ * "system" survives as the starting point, so somebody who never touches
+ * the switch still follows their phone into dark at sunset. It is simply
+ * not a third stop on the way round: from system you get the opposite of
+ * whatever you are looking at, which is the only thing pressing a switch
+ * can be asking for.
+ */
+export function nextTheme(theme: Theme): 'light' | 'dark' {
+  return resolveTheme(theme) === 'dark' ? 'light' : 'dark'
 }
 
 /**
