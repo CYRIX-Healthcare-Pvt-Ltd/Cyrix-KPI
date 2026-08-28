@@ -211,7 +211,7 @@ export default function Shell() {
               title="All Cyrix apps"
             >
               <LogoMark className="h-8 w-8" />
-              <Logo className="hidden text-[15px] sm:inline-flex" showSubtitle={false} />
+              <Logo className="hidden sm:inline-flex" height={20} showSubtitle={false} />
             </a>
             <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
               KPI

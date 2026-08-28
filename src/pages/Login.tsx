@@ -43,7 +43,7 @@ export default function Login() {
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* ---------------- brand panel ---------------- */}
       <aside className="relative hidden flex-col justify-between bg-shade p-12 lg:flex">
-        <Logo className="text-lg" variant="light" />
+        <Logo height={40} variant="light" />
 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">
@@ -79,7 +79,7 @@ export default function Login() {
         <div className="flex items-start justify-between gap-3">
           {/* Brand shows here only on small screens, where the panel is hidden. */}
           <div className="lg:hidden">
-            <Logo className="text-lg" />
+            <Logo height={34} />
           </div>
           <ThemeToggle className="ml-auto" />
         </div>

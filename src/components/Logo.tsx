@@ -1,49 +1,69 @@
 /**
- * Cyrix Healthcare wordmark, drawn as type rather than a bitmap so it
- * stays sharp at any size and can invert onto black.
+ * The Cyrix Healthcare lockup, drawn once and shared by every module.
  *
- * Faithful to the printed logo: heavy condensed caps, the X in red, the
- * registered mark raised, and the letterspaced HEALTH CARE PVT LTD rule
- * beneath it.
+ * This is BEMMP's drawing, ported here verbatim: it is the one measured
+ * against the printed artwork, and three apps each approximating it in
+ * their own HTML is how the same company came to have three wordmarks that
+ * are nearly but not quite alike. The coordinates are the lockup — CYRIX
+ * at 52, the registered mark raised beside it, the entity line letterspaced
+ * beneath — so they are not adjusted here.
+ *
+ * SVG text rather than an image: the dark half follows `currentColor` and
+ * flips with the theme, and the red stays the brand red in both.
  */
 export function Logo({
-  className = 'text-2xl',
+  className = '',
+  height = 34,
   variant = 'dark',
   showSubtitle = true,
-  showTagline = false,
 }: {
   className?: string
-  /** `dark` = black type for light backgrounds; `light` = white for black. */
+  /** Rendered height in px. The lockup scales from this. */
+  height?: number
+  /** `dark` = ink type for light backgrounds; `light` = white for black. */
   variant?: 'dark' | 'light'
   showSubtitle?: boolean
-  showTagline?: boolean
 }) {
-  const base = variant === 'light' ? 'text-white' : 'text-ink-900'
-  const sub = variant === 'light' ? 'text-white/70' : 'text-ink-700'
+  // The full lockup is 78 units tall; the wordmark alone is 52.
+  const box = showSubtitle ? 78 : 52
+  const h = showSubtitle ? height : Math.round(height * 0.62)
 
   return (
-    <span className={`inline-flex flex-col leading-none ${className}`}>
-      <span className={`flex items-start font-black tracking-[-0.02em] ${base}`}>
-        <span>CYRI</span>
-        <span className="text-cyrixRed-600">X</span>
-        <span className="ml-[0.12em] mt-[0.1em] text-[0.32em] font-semibold">®</span>
-      </span>
-
+    <svg
+      viewBox={`0 0 300 ${box}`}
+      height={h}
+      className={className}
+      role="img"
+      aria-label="Cyrix Health Care Pvt Ltd"
+      style={{ color: variant === 'light' ? '#ffffff' : 'rgb(var(--ink-900))' }}
+    >
+      <text
+        x="0" y="44"
+        fontSize="52" fontWeight="700" letterSpacing="1"
+        fill="currentColor"
+        fontFamily="inherit"
+      >
+        CYRI<tspan fill="#e30613">X</tspan>
+      </text>
+      <text
+        x="171" y="16"
+        fontSize="13" fontWeight="600"
+        fill="#e30613"
+        fontFamily="inherit"
+      >
+        ®
+      </text>
       {showSubtitle && (
-        <span
-          className={`mt-[0.28em] text-[0.29em] font-semibold tracking-[0.34em] ${sub}`}
+        <text
+          x="1" y="66"
+          fontSize="13.5" fontWeight="500" letterSpacing="3.4"
+          fill="currentColor"
+          fontFamily="inherit"
         >
           HEALTH CARE PVT LTD
-        </span>
+        </text>
       )}
-
-      {showTagline && (
-        <span className={`mt-[0.3em] text-[0.26em] font-medium ${sub}`}>
-          The <span className="text-cyrixRed-600">X</span>-Factor in Medical
-          Technology Reliability
-        </span>
-      )}
-    </span>
+    </svg>
   )
 }
 
@@ -64,14 +84,11 @@ export function LogoMark({
    * The mark is a printed brand asset: a black square carrying a white
    * stroke and a red one. Tokens would invert it in dark mode, and since
    * both the square and its stroke would flip together the result is a
-   * white X on a white square — an invisible logo, which is a worse
-   * outcome than a dark square sitting on a dark page.
+   * white X on a white square — an invisible logo, which is worse than a
+   * dark square on a dark page.
    *
-   * The `light` variant is the inverse mark for use on black, which is a
-   * different asset rather than a different theme, so it is unaffected.
+   * The exact pair it has always rendered: bg-white and bg-ink-950.
    */
-  /* The exact pair the mark rendered before the palette moved into
-     variables: bg-white and bg-ink-950. */
   const bg = variant === 'light' ? '#ffffff' : '#000000'
   const stroke = variant === 'light' ? '#141519' : '#ffffff'
 
