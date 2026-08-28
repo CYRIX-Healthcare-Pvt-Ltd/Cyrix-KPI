@@ -754,34 +754,165 @@ function SpareTab() {
 /* ---------------------------------------------------------------------
  * BEMMP
  *
- * Nothing to administer from here yet, and saying so is better than an
- * empty tab that reads as broken. BEMMP still signs people in against its
- * own Supabase project, so it has its own roster and its own admin
- * screens — and it will keep asking for a second password until that
- * moves here.
+ * Its roster lives in this database now, so who may open BEMMP and in what
+ * capacity is answerable here rather than from inside the module.
+ *
+ * A select rather than the chips the Spare tab uses, because BEMMP has
+ * eight roles and eight chips on a row is a wall. Same decision, different
+ * number of options.
+ *
+ * Zones and districts are shown but not edited. They name real geography
+ * and the lists live in BEMMP; a free-text field here would let somebody
+ * type a zone that does not exist and silently hide every ticket in it.
  * ------------------------------------------------------------------- */
+interface BemmpProfile {
+  id: string
+  code: string
+  full_name: string | null
+  role: string
+  zones: string[] | null
+  districts: string[] | null
+}
+
+const BEMMP_ROLES: { value: string; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'director', label: 'Director' },
+  { value: 'divisional_manager', label: 'Divisional manager' },
+  { value: 'zonal_manager', label: 'Zonal manager' },
+  { value: 'district_incharge', label: 'District in-charge' },
+  { value: 'project_head', label: 'Project head' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'purchase', label: 'Purchase' },
+]
+
 function BemmpTab() {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['bemmp_profiles'],
+    queryFn: async () => {
+      const all: BemmpProfile[] = []
+      for (let from = 0; ; from += 1000) {
+        const page = await supabase
+          .from('profile')
+          .select('id, code, full_name, role, zones, districts')
+          .order('code')
+          .range(from, from + 999)
+        if (page.error) throw page.error
+        const rows = (page.data ?? []) as BemmpProfile[]
+        all.push(...rows)
+        if (rows.length < 1000) return all
+      }
+    },
+  })
+
+  const setRole = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: string }) => {
+      const { error } = await supabase.from('profile').update({ role }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bemmp_profiles'] }),
+    onError: (e) => setError(friendlyError(e)),
+  })
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const rows = data ?? []
+    if (!q) return rows
+    return rows.filter(r =>
+      r.code.toLowerCase().includes(q) ||
+      (r.full_name ?? '').toLowerCase().includes(q))
+  }, [data, search])
+
+  if (isLoading) return <PageLoader />
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-ink-900">BEMMP Dashboard</h2>
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP roles</h2>
+        <p className="mt-0.5 text-sm text-ink-500">
+          {filtered.length} of {data?.length ?? 0} people
+        </p>
+      </div>
+
       <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
-          <p className="font-medium text-ink-900">Administered from inside BEMMP</p>
+          <p className="font-medium text-ink-900">A role is not a tile</p>
           <p className="mt-1">
-            BEMMP keeps its own database, so its people and permissions are not
-            visible here. Its admin screens are in the module itself.
+            This decides what somebody can do inside BEMMP. Whether they are
+            offered it at all is the Modules column on the Logins tab.
           </p>
           <p className="mt-1.5">
-            That separation is also why it asks for a password of its own: a
-            session belongs to one database, and BEMMP is not on this one yet.
-            Both end when its data moves across.
+            Zone and district scope is set inside BEMMP, against its own lists
+            of real geography. Names and employee codes come from the HR
+            employee record and follow it automatically.
           </p>
         </div>
       </div>
-      <a className="btn-secondary inline-flex w-fit" href="/bemmp">
-        <LayoutGrid className="h-4 w-4" /> Open BEMMP
-      </a>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+        <input
+          className="input pl-9"
+          placeholder="Search by name or employee code"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-ink-200">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+            <tr>
+              <th className="px-3 py-2.5">Employee</th>
+              <th className="px-3 py-2.5">Role in BEMMP</th>
+              <th className="px-3 py-2.5">Scope</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-100">
+            {filtered.slice(0, 200).map(r => {
+              const scope = [...(r.zones ?? []), ...(r.districts ?? [])]
+              return (
+                <tr key={r.id}>
+                  <td className="px-3 py-2.5">
+                    <span className="font-medium text-ink-900">{r.full_name}</span>
+                    <span className="ml-2 text-ink-400">{r.code}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <select
+                      className="input h-8 py-0 text-sm"
+                      value={r.role}
+                      disabled={setRole.isPending}
+                      onChange={e => setRole.mutate({ id: r.id, role: e.target.value })}
+                    >
+                      {BEMMP_ROLES.map(role => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2.5 text-ink-500">
+                    {/* Empty means every contract in this schema, not none —
+                        so it says so rather than showing a blank cell that
+                        reads as missing access. */}
+                    {scope.length === 0 ? 'Everything' : scope.join(', ')}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {filtered.length > 200 && (
+        <p className="text-sm text-ink-500">
+          Showing the first 200. Search to narrow it down.
+        </p>
+      )}
     </div>
   )
 }
