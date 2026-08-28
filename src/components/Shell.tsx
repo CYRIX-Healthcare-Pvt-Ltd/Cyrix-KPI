@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
@@ -63,7 +63,7 @@ interface NavItem {
 
 export default function Shell() {
   const { employee, isManager, isHrAdmin, isSwAdmin, signOut } = useAuth()
-  const navigate = useNavigate()
+
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const fy = currentFy()
@@ -176,7 +176,11 @@ export default function Shell() {
 
   const handleSignOut = async () => {
     await signOut()
-    navigate('/login', { replace: true })
+    // The portal owns the session, so signing out here signs you out of
+    // everything — the door back has to be the portal's, not this app's
+    // login page. A hard assignment rather than navigate(): the portal
+    // sits above this app's basename and React Router cannot reach it.
+    window.location.assign('/')
   }
 
   return (
