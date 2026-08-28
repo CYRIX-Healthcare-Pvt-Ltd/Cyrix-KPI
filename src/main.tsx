@@ -34,7 +34,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         blank page is the one outcome this must never allow. */}
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* The portal owns app.cyrix.in; this app owns /kpi beneath it.
+            Without the basename every route would resolve one level too
+            high and land on the portal's tiles. */}
+        <BrowserRouter basename="/kpi">
           <AuthProvider>
             <ScoreThemeProvider>
               <App />

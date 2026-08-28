@@ -3,7 +3,23 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
+/**
+ * The app lives at app.cyrix.in/kpi, not at the root.
+ *
+ * app.cyrix.in is the portal — a tile per module, KPI being one of
+ * three. So every URL this app emits has to carry /kpi, and there are
+ * three separate places that decide one: Vite writes it into index.html,
+ * React Router strips it off the front of every route, and the manifest
+ * tells the installed app which corner of the origin it owns.
+ *
+ * outDir matches base deliberately. Vite's `base` only rewrites the URLs
+ * inside index.html — it does not move the files — so building to plain
+ * dist/ would ship a page asking for /kpi/assets/… while the file sat at
+ * /assets/…, and every bundle would 404. Building into dist/kpi puts the
+ * files where the page is about to look for them.
+ */
 export default defineConfig({
+  base: '/kpi/',
   plugins: [
     react(),
     VitePWA({
@@ -17,7 +33,8 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait-primary',
-        start_url: '/',
+        start_url: '/kpi/',
+        scope: '/kpi/',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -60,6 +77,8 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') },
   },
   build: {
+    outDir: 'dist/kpi',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks: {
