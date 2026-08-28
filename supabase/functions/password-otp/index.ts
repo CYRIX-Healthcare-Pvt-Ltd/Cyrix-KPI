@@ -73,6 +73,35 @@ function sixDigitCode(): string {
 
 const MIN_PASSWORD = 8
 
+/**
+ * The mail provider said no, and which no it was.
+ *
+ * Kept apart from every other failure because the two likely causes need
+ * different people: a rejected key is SW Admin changing a secret, and an
+ * unverified sender is whoever runs DNS. The first version of this told
+ * everybody the same guess — "probably not verified yet" — which sends
+ * half the people who see it to the wrong place.
+ */
+class MailRefused extends Error {
+  constructor(readonly status: number, readonly detail: string) {
+    super(`mail provider refused: ${status}`)
+  }
+}
+
+/** Said to the person, from the status. Never the provider's own body. */
+function whyMailFailed(err: unknown): string {
+  if (!(err instanceof MailRefused)) {
+    return 'The code could not be emailed. Try again shortly.'
+  }
+  if (err.status === 401 || err.status === 429) {
+    return 'The mail provider rejected our account key. SW Admin needs to check it.'
+  }
+  if (err.status === 403 || err.status === 422) {
+    return 'The sending address is not accepted by the mail provider yet. Tell SW Admin.'
+  }
+  return 'The code could not be emailed just now. Try again shortly.'
+}
+
 const admin = () =>
   createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -147,7 +176,7 @@ async function sendCode(
     }),
   })
 
-  if (!res.ok) throw new Error(`Resend refused: ${res.status} ${await res.text()}`)
+  if (!res.ok) throw new MailRefused(res.status, await res.text())
 }
 
 /**
@@ -189,7 +218,7 @@ async function sendTest(db: ReturnType<typeof admin>, to: string, name: string) 
     }),
   })
 
-  if (!res.ok) throw new Error(`Resend refused: ${res.status} ${await res.text()}`)
+  if (!res.ok) throw new MailRefused(res.status, await res.text())
 }
 
 Deno.serve(async req => {
@@ -284,8 +313,10 @@ Deno.serve(async req => {
           await db.rpc('void_password_otp', { p_ecode: ecode, p_purpose: purpose })
           console.error('password-otp send failed', sendErr)
           return json({
-            error: 'The code could not be emailed. The sending address is probably not ' +
-                   'verified with the mail provider yet — tell SW Admin.',
+            error: whyMailFailed(sendErr),
+            // The provider's own status, so a diagnosis does not depend
+            // on reading logs that this CLI version cannot fetch.
+            provider_status: sendErr instanceof MailRefused ? sendErr.status : null,
           }, 502)
         }
       }
