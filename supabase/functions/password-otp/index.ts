@@ -109,20 +109,49 @@ const admin = () =>
     { auth: { persistSession: false } },
   )
 
-/** Who is calling, from their token rather than from what they typed. */
+/**
+ * Who is calling, read from the token itself.
+ *
+ * This used to build a second Supabase client with the anon key and ask
+ * auth.getUser(). That is one network call and two moving parts to learn
+ * something the request already carries — and it started returning
+ * nobody for an SW Admin who was demonstrably signed in, which surfaces
+ * as "Please sign in again" in front of somebody who just did.
+ *
+ * The platform has already verified this token: the function is deployed
+ * WITHOUT --no-verify-jwt, so a request with a bad signature never
+ * reaches this line. What is left is reading a claim, and forging one
+ * would mean forging the signature the gateway just checked.
+ *
+ * The anon key is itself a valid JWT, which is what a browser sends when
+ * its session has gone. It carries role "anon" and no subject, so both
+ * checks below matter: without them, every signed-out visitor would
+ * arrive here as somebody.
+ */
+function callerFromToken(req: Request): string | null {
+  const header = req.headers.get('Authorization') ?? ''
+  const token = header.replace(/^Bearers+/i, '').trim()
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    // base64url, which atob does not accept as-is.
+    const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const claims = JSON.parse(json) as { sub?: string; role?: string; exp?: number }
+    if (claims.role !== 'authenticated' || !claims.sub) return null
+    if (claims.exp && claims.exp * 1000 < Date.now()) return null
+    return claims.sub
+  } catch {
+    return null
+  }
+}
+
+/** ...and which employee that is. */
 async function signedInEcode(req: Request): Promise<string | null> {
-  const auth = req.headers.get('Authorization')
-  if (!auth) return null
-  const asThem = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: auth } }, auth: { persistSession: false } },
-  )
-  const { data, error } = await asThem.auth.getUser()
-  if (error || !data.user) return null
+  const userId = callerFromToken(req)
+  if (!userId) return null
   const { data: emp } = await admin()
     .from('employees').select('ecode')
-    .eq('auth_user_id', data.user.id).maybeSingle()
+    .eq('auth_user_id', userId).maybeSingle()
   return emp?.ecode ?? null
 }
 

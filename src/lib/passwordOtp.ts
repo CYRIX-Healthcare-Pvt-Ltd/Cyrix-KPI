@@ -15,8 +15,32 @@ export interface OtpReply {
   message: string
 }
 
+/**
+ * The token this request travels with.
+ *
+ * Signed in, it is their session. Signed out — which is most of the
+ * point of a password reset — it is the publishable key, which is what
+ * the gateway wants in front of a function that verifies JWTs.
+ *
+ * Set here rather than left to functions.invoke, which stopped
+ * attaching it at all once the project moved to sb_publishable keys.
+ * The gateway then refused every anonymous call with
+ * UNAUTHORIZED_NO_AUTH_HEADER before the function ran, so the whole
+ * forgot-password flow answered a spinner that never stopped — while
+ * the same call with the header set worked perfectly, which is exactly
+ * the shape of bug that survives testing from a terminal.
+ */
+async function authHeader(): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+  return `Bearer ${token}`
+}
+
 async function call(body: Record<string, unknown>): Promise<OtpReply> {
-  const { data, error } = await supabase.functions.invoke('password-otp', { body })
+  const { data, error } = await supabase.functions.invoke('password-otp', {
+    body,
+    headers: { Authorization: await authHeader() },
+  })
 
   // A non-2xx comes back as an error with the body on the context, and
   // the body is where the sentence written for the reader lives.
