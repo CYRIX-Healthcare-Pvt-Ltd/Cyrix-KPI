@@ -3,6 +3,7 @@ import {
   type CSSProperties, type ReactNode,
 } from 'react'
 import { bandFor, type Band } from '@/lib/bands'
+import { isDark } from '@/lib/isDark'
 
 /**
  * Publishes a performance band as CSS custom properties, so interactive
@@ -57,11 +58,9 @@ const NEUTRAL_DARK = { base: '#f4f5f7', soft: '#262830', strong: '#ffffff' }
  * on the root element and is written by a plain module — there is no
  * provider above this one to ask.
  */
-const isDark = () =>
-  typeof document !== 'undefined'
-  && (document.documentElement.dataset.theme === 'dark'
-    || (!document.documentElement.dataset.theme
-      && window.matchMedia?.('(prefers-color-scheme: dark)').matches))
+/* Imported rather than restated. Two copies of "is it dark" is how one of
+   them ends up handling the unstamped "system" case and the other not. */
+
 
 /**
  * The band's three tokens, turned the right way up for the current theme.

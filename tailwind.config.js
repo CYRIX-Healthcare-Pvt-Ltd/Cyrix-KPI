@@ -73,10 +73,76 @@ export default {
          * of the sign-in screen smuggled in behind a dark mode.
          */
         shade: 'rgb(0 0 0 / <alpha-value>)',
+        /*
+         * Status hues, on the same variables for the same reason.
+         *
+         * Only the ends are variable. 50/100/200 are the washes a status
+         * panel sits on and 700/800/900 is the text on them, so both ends
+         * have to turn together on a dark page — otherwise deep amber text
+         * lands on a pale amber panel that is now the darkest thing on
+         * screen, which is how a warning came to read as unstyled grey.
+         *
+         * 300 to 600 stay literal. They are icons and accents picked to
+         * work on either ground, and cyrixRed-600 is the X in the logo:
+         * a brand colour that moves with the theme is not one.
+         */
+        amber: {
+          50:  'rgb(var(--amber-50) / <alpha-value>)',
+          100: 'rgb(var(--amber-100) / <alpha-value>)',
+          200: 'rgb(var(--amber-200) / <alpha-value>)',
+          300: '#fcd34d', 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706',
+          700: 'rgb(var(--amber-700) / <alpha-value>)',
+          800: 'rgb(var(--amber-800) / <alpha-value>)',
+          900: 'rgb(var(--amber-900) / <alpha-value>)',
+        },
+        emerald: {
+          50:  'rgb(var(--emerald-50) / <alpha-value>)',
+          100: 'rgb(var(--emerald-100) / <alpha-value>)',
+          200: 'rgb(var(--emerald-200) / <alpha-value>)',
+          300: '#6ee7b7', 400: '#34d399', 500: '#10b981', 600: '#059669',
+          700: 'rgb(var(--emerald-700) / <alpha-value>)',
+          800: 'rgb(var(--emerald-800) / <alpha-value>)',
+          900: 'rgb(var(--emerald-900) / <alpha-value>)',
+        },
+        /* The middle of the band scale. Same treatment, or lime and green
+           keep pale chips on a dark page while red, amber and emerald
+           either side of them flip. */
+        green: {
+          50:  'rgb(var(--green-50) / <alpha-value>)',
+          100: 'rgb(var(--green-100) / <alpha-value>)',
+          200: 'rgb(var(--green-200) / <alpha-value>)',
+          300: '#86efac', 400: '#4ade80', 500: '#22c55e', 600: '#16a34a',
+          700: 'rgb(var(--green-700) / <alpha-value>)',
+          800: 'rgb(var(--green-800) / <alpha-value>)',
+          900: 'rgb(var(--green-900) / <alpha-value>)',
+        },
+        lime: {
+          50:  'rgb(var(--lime-50) / <alpha-value>)',
+          100: 'rgb(var(--lime-100) / <alpha-value>)',
+          200: 'rgb(var(--lime-200) / <alpha-value>)',
+          300: '#bef264', 400: '#a3e635', 500: '#84cc16', 600: '#65a30d',
+          700: 'rgb(var(--lime-700) / <alpha-value>)',
+          800: 'rgb(var(--lime-800) / <alpha-value>)',
+          900: 'rgb(var(--lime-900) / <alpha-value>)',
+        },
+        violet: {
+          50:  'rgb(var(--violet-50) / <alpha-value>)',
+          100: 'rgb(var(--violet-100) / <alpha-value>)',
+          200: 'rgb(var(--violet-200) / <alpha-value>)',
+          300: '#c4b5fd', 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed',
+          700: 'rgb(var(--violet-700) / <alpha-value>)',
+          800: 'rgb(var(--violet-800) / <alpha-value>)',
+          900: 'rgb(var(--violet-900) / <alpha-value>)',
+        },
         cyrixRed: {
-          50:  '#fef2f3', 100: '#fde3e5', 200: '#fbccd0', 300: '#f7a8af',
-          400: '#f17886', 500: '#e64a5f', 600: '#e30613', 700: '#c00512',
-          800: '#9e0812', 900: '#7e1426', 950: '#460610',
+          50:  'rgb(var(--red-50) / <alpha-value>)',
+          100: 'rgb(var(--red-100) / <alpha-value>)',
+          200: 'rgb(var(--red-200) / <alpha-value>)',
+          300: '#f7a8af', 400: '#f17886', 500: '#e64a5f', 600: '#e30613',
+          700: 'rgb(var(--red-700) / <alpha-value>)',
+          800: 'rgb(var(--red-800) / <alpha-value>)',
+          900: 'rgb(var(--red-900) / <alpha-value>)',
+          950: '#460610',
         },
       },
       fontFamily: {

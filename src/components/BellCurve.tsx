@@ -4,6 +4,7 @@ import {
   Tooltip, ReferenceArea, ReferenceLine, Cell,
 } from 'recharts'
 import { bandFor, attainmentPct, BAND_SCALE } from '@/lib/bands'
+import { useIsDark } from '@/lib/isDark'
 
 /** A smooth curve needs a shape to be smooth about. */
 const MIN_PEOPLE = 3
@@ -78,6 +79,8 @@ export default function BellCurve({
   height?: number
   emptyMessage?: string
 }) {
+  const ink = useIsDark() ? '#f4f5f7' : '#141519'
+
   const model = useMemo(() => {
     const clean = values.filter(v => Number.isFinite(v))
     if (clean.length < MIN_PEOPLE) return null
@@ -229,15 +232,19 @@ export default function BellCurve({
             }}
           />
 
+          {/* Ink, and it has to follow the theme: a near-black average line
+              on a near-black page is a line nobody can see. Recharts writes
+              this as an SVG presentation attribute, which does not take
+              var(), so the value is decided here rather than in CSS. */}
           <ReferenceLine
             x={model.mean}
-            stroke="#141519"
+            stroke={ink}
             strokeDasharray="4 3"
             label={{
               value: `avg ${fmt(Math.round(model.mean * 10) / 10)}`,
               position: 'top',
               fontSize: 11,
-              fill: '#141519',
+              fill: ink,
             }}
           />
 

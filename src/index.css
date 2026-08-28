@@ -30,6 +30,68 @@
     --ink-900: 20 21 25;
     --ink-950: 0 0 0;
 
+    /*
+     * Status hues, the same trick as the ink ramp.
+     *
+     * Only the two ends move. 50/100/200 are washes a status sits on and
+     * 700/800/900 is the text that sits on them, so on a dark page both
+     * have to turn end for end together — a pale amber panel with deep
+     * amber text becomes a dim amber panel with bright amber text, and
+     * the seventy-odd places that say bg-amber-50 or text-emerald-800
+     * keep meaning what they meant.
+     *
+     * The middle of each ramp stays fixed. 500 and 600 are icons and
+     * accents chosen to read on either ground, and cyrixRed-600 is the X
+     * in the logo — a brand colour that must be the same red in both
+     * themes or it is not the brand colour.
+     *
+     * Light is exactly the values these had as literal hexes.
+     */
+    --amber-50: 255 251 235;
+    --amber-100: 254 243 199;
+    --amber-200: 253 230 138;
+    --amber-700: 180 83 9;
+    --amber-800: 146 64 14;
+    --amber-900: 120 53 15;
+
+    --emerald-50: 236 253 245;
+    --emerald-100: 209 250 229;
+    --emerald-200: 167 243 208;
+    --emerald-700: 4 120 87;
+    --emerald-800: 6 95 70;
+    --emerald-900: 6 78 59;
+
+    /* Green and lime are here for the band scale, which runs red → amber
+       → lime → green → emerald. Miss one and that band alone keeps a pale
+       chip on a dark page while its neighbours flip. */
+    --green-50: 240 253 244;
+    --green-100: 220 252 231;
+    --green-200: 187 247 208;
+    --green-700: 21 128 61;
+    --green-800: 22 101 52;
+    --green-900: 20 83 45;
+
+    --lime-50: 247 254 231;
+    --lime-100: 236 252 203;
+    --lime-200: 217 249 157;
+    --lime-700: 77 124 15;
+    --lime-800: 63 98 18;
+    --lime-900: 54 83 20;
+
+    --violet-50: 245 243 255;
+    --violet-100: 237 233 254;
+    --violet-200: 221 214 254;
+    --violet-700: 109 40 217;
+    --violet-800: 91 33 182;
+    --violet-900: 76 29 149;
+
+    --red-50: 254 242 243;
+    --red-100: 253 227 229;
+    --red-200: 251 204 208;
+    --red-700: 192 5 18;
+    --red-800: 158 8 18;
+    --red-900: 126 20 38;
+
     /* What a tint is mixed into. White on a white page; the dark canvas
        in dark, or every softened score colour turns milky. */
     --mix-base: #ffffff;
@@ -109,6 +171,49 @@
     --ink-900: 244 245 247;
     --ink-950: 255 255 255;
 
+    /* Washes dimmed into the page, text brightened off it. Same hues. */
+    --amber-50: 48 36 14;
+    --amber-100: 62 46 16;
+    --amber-200: 92 68 22;
+    --amber-700: 250 189 78;
+    --amber-800: 252 208 126;
+    --amber-900: 253 224 171;
+
+    --emerald-50: 12 43 33;
+    --emerald-100: 14 56 42;
+    --emerald-200: 20 84 62;
+    --emerald-700: 52 211 153;
+    --emerald-800: 110 231 183;
+    --emerald-900: 167 243 208;
+
+    --green-50: 14 42 24;
+    --green-100: 18 54 31;
+    --green-200: 25 81 46;
+    --green-700: 74 222 128;
+    --green-800: 134 239 172;
+    --green-900: 187 247 208;
+
+    --lime-50: 32 42 12;
+    --lime-100: 42 54 15;
+    --lime-200: 63 81 23;
+    --lime-700: 163 230 53;
+    --lime-800: 190 242 100;
+    --lime-900: 217 249 157;
+
+    --violet-50: 34 28 60;
+    --violet-100: 44 35 78;
+    --violet-200: 65 52 115;
+    --violet-700: 167 139 250;
+    --violet-800: 196 181 253;
+    --violet-900: 221 214 254;
+
+    --red-50: 55 18 22;
+    --red-100: 70 22 27;
+    --red-200: 104 32 39;
+    --red-700: 255 106 116;
+    --red-800: 255 154 161;
+    --red-900: 255 190 195;
+
     --mix-base: #0d0e12;
 
     --score-accent: #f4f5f7;
@@ -142,6 +247,49 @@
       --ink-800: 232 234 238;
       --ink-900: 244 245 247;
       --ink-950: 255 255 255;
+
+      /* Washes dimmed into the page, text brightened off it. Same hues. */
+      --amber-50: 48 36 14;
+      --amber-100: 62 46 16;
+      --amber-200: 92 68 22;
+      --amber-700: 250 189 78;
+      --amber-800: 252 208 126;
+      --amber-900: 253 224 171;
+
+      --emerald-50: 12 43 33;
+      --emerald-100: 14 56 42;
+      --emerald-200: 20 84 62;
+      --emerald-700: 52 211 153;
+      --emerald-800: 110 231 183;
+      --emerald-900: 167 243 208;
+
+      --green-50: 14 42 24;
+      --green-100: 18 54 31;
+      --green-200: 25 81 46;
+      --green-700: 74 222 128;
+      --green-800: 134 239 172;
+      --green-900: 187 247 208;
+
+      --lime-50: 32 42 12;
+      --lime-100: 42 54 15;
+      --lime-200: 63 81 23;
+      --lime-700: 163 230 53;
+      --lime-800: 190 242 100;
+      --lime-900: 217 249 157;
+
+      --violet-50: 34 28 60;
+      --violet-100: 44 35 78;
+      --violet-200: 65 52 115;
+      --violet-700: 167 139 250;
+      --violet-800: 196 181 253;
+      --violet-900: 221 214 254;
+
+      --red-50: 55 18 22;
+      --red-100: 70 22 27;
+      --red-200: 104 32 39;
+      --red-700: 255 106 116;
+      --red-800: 255 154 161;
+      --red-900: 255 190 195;
 
       --mix-base: #0d0e12;
 

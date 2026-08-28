@@ -12,6 +12,7 @@ import {
   fyMonthsFrom, openFyMonthsFrom, monthLabel, isMonthOpen,
 } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
+import { useIsDark } from '@/lib/isDark'
 import {
   Alert, PageLoader, StatTile, StatusBadge, BandCell,
 } from '@/components/ui'
@@ -21,6 +22,7 @@ import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 export default function MyHistory() {
   const { employee } = useAuth()
   const fy = currentFy()
+  const ink = useIsDark() ? '#f4f5f7' : '#141519'
   // Carried here by the submission screen so the confirmation lands
   // beside the row that has just changed rather than on a page the
   // person is about to leave.
@@ -116,9 +118,13 @@ export default function MyHistory() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {/* Value labels sit above each point in their own line's
                     colour, so the series can be read without the legend. */}
-                <Line type="monotone" dataKey="Total" stroke="#141519" strokeWidth={2.5}
+                {/* Ink, and it follows the theme: the total was the darkest
+                    line on the chart and on a dark page that is the page's
+                    own colour. Decided here because Recharts writes stroke
+                    as an SVG attribute, which does not take var(). */}
+                <Line type="monotone" dataKey="Total" stroke={ink} strokeWidth={2.5}
                       dot={{ r: 3 }} connectNulls
-                      label={<ScoreLabel fill="#141519" dy={-12} count={chartData.length} />} />
+                      label={<ScoreLabel fill={ink} dy={-12} count={chartData.length} />} />
                 <Line type="monotone" dataKey="Job role" stroke="#e30613" strokeWidth={1.5}
                       dot={{ r: 2 }} connectNulls
                       label={<ScoreLabel fill="#e30613" dy={-10} count={chartData.length} />} />

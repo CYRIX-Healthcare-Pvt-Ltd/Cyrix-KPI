@@ -3,6 +3,7 @@ import {
   CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import { monthLabel } from '@/lib/fy'
+import { useIsDark } from '@/lib/isDark'
 import { ScoreLabel } from './ScoreTrend'
 
 export interface BandTrendPoint {
@@ -23,12 +24,29 @@ export interface BandTrendPoint {
  */
 const MARGIN = { top: 28, right: 20, left: 0, bottom: 8 }
 
-const SERIES = {
-  total: { name: 'Total', colour: '#141519', width: 2.5 },
+/**
+ * The four lines.
+ *
+ * Total is the only one that moves with the theme, and it has to: it was
+ * the ink black of the wordmark, which on a dark page is a line drawn in
+ * the page's own colour — the strongest series on the chart, invisible.
+ * It becomes near-white, which is the same decision the ink ramp makes.
+ *
+ * The other three are chosen to read on either ground and do not move.
+ * Red is the job role and is the brand red; violet is ESMS; the grey for
+ * core values sits at the midpoint on purpose, far enough from both the
+ * white page and the near-black one.
+ *
+ * Not a CSS variable, because Recharts writes `stroke` as an SVG
+ * presentation attribute and those do not accept var(). This is one of
+ * the few places a colour has to be decided in JavaScript.
+ */
+const seriesFor = (dark: boolean) => ({
+  total: { name: 'Total', colour: dark ? '#f4f5f7' : '#141519', width: 2.5 },
   job:   { name: 'Job role', colour: '#e30613', width: 1.5 },
   esms:  { name: 'ESMS', colour: '#7c3aed', width: 1.5 },
   core:  { name: 'Core values', colour: '#8a8d97', width: 1.5 },
-} as const
+}) as const
 
 /**
  * A score month by month, and what it was made of.
@@ -58,6 +76,8 @@ export default function BandTrend({
   height?: number
   emptyMessage?: string
 }) {
+  const SERIES = seriesFor(useIsDark())
+
   const data = points.map(p => ({
     month: monthLabel(p.month).split('-')[0],
     full: monthLabel(p.month),
