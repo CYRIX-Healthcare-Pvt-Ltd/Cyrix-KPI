@@ -1,7 +1,7 @@
 /* Self-hosted rather than loaded from a CDN: this is an installable PWA
    that field engineers open on patchy connections, and a webfont that
    fails to arrive would fall back mid-session. */
-@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/inter';
 
 @tailwind base;
 @tailwind components;

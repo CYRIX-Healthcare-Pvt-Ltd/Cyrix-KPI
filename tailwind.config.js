@@ -31,12 +31,23 @@ export default {
         },
       },
       fontFamily: {
+        /*
+         * SF Pro, the same stack every Cyrix module uses.
+         *
+         * It is Apple's font and licensed only for Apple platforms, so it
+         * cannot be shipped. -apple-system picks it up where it already
+         * exists; Inter is bundled as the stand-in everywhere else, close
+         * enough in metrics that the layout does not shift between a
+         * phone and a desk.
+         */
         sans: [
-          'Space Grotesk Variable',
-          'Space Grotesk',
-          'system-ui',
+          'SF Pro Text',
           '-apple-system',
+          'BlinkMacSystemFont',
+          'Inter Variable',
+          'Inter',
           'Segoe UI',
+          'Roboto',
           'sans-serif',
         ],
       },
