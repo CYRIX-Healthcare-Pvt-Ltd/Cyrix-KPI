@@ -217,9 +217,10 @@ export default function Shell() {
                   class and win in both. */}
               <Logo className="h-[17px] sm:h-6" showSubtitle={false} />
             </a>
-            <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
-              KPI
-            </span>
+            {/* No module name beside the mark. It sat between the wordmark
+                and the navigation as a third grey word belonging to
+                neither, and the tabs already say which module this is —
+                on a phone under the thumb, on a desktop right next to it. */}
           </div>
 
           {/* lg, not md. Between the two the tabs, the name and three
