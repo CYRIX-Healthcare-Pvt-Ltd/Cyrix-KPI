@@ -191,9 +191,23 @@ export default function Shell() {
             {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
+          {/* The way back to the tiles. A plain anchor, not a router link:
+              the portal sits above this app's basename, so <Link to="/">
+              would resolve to /kpi/ and land you where you already are.
+              Brand mark goes home, the label beside it names where you are —
+              which is why the label stays outside the link. Opened on its
+              own domain instead of under the portal, "/" bounces straight
+              back here, so this is safe either way. */}
           <div className="flex items-center gap-2.5">
-            <LogoMark className="h-8 w-8" />
-            <Logo className="hidden text-[15px] sm:inline-flex" showSubtitle={false} />
+            <a
+              href="/"
+              className="btn-press flex items-center gap-2.5 rounded-lg py-1 pr-1"
+              aria-label="All Cyrix apps"
+              title="All Cyrix apps"
+            >
+              <LogoMark className="h-8 w-8" />
+              <Logo className="hidden text-[15px] sm:inline-flex" showSubtitle={false} />
+            </a>
             <span className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
               KPI
             </span>
