@@ -1630,3 +1630,76 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
     },
   })
 }
+
+// ---------------------------------------------------------------------
+// Which modules a person is offered on the portal
+// ---------------------------------------------------------------------
+
+export interface AppModule {
+  code: string
+  name: string
+  description: string | null
+  path: string
+  icon: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+/** The catalogue. Three rows today, and not a secret. */
+export function useAppModules() {
+  return useQuery({
+    queryKey: ['app_modules'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap<AppModule[]>(
+        supabase.from('app_modules').select('*').eq('is_active', true).order('sort_order'),
+      ),
+  })
+}
+
+/**
+ * Every grant, as a set of "employeeId:moduleCode".
+ *
+ * Paged explicitly. Every active employee holds a KPI grant, so this is
+ * already over PostgREST's 1,000-row ceiling on day one — and a silent
+ * truncation here would show an administrator empty checkboxes for
+ * people who do have access, which is the kind of wrong that gets acted
+ * on.
+ */
+export function useModuleGrants(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['module_grants'],
+    queryFn: async () => {
+      const held = new Set<string>()
+      for (let from = 0; ; from += 1000) {
+        const rows = await unwrap<Array<{ employee_id: string; module_code: string }>>(
+          supabase.from('employee_modules')
+            .select('employee_id, module_code')
+            .order('employee_id').range(from, from + 999),
+        )
+        rows.forEach(r => held.add(`${r.employee_id}:${r.module_code}`))
+        if (rows.length < 1000) break
+      }
+      return held
+    },
+  })
+}
+
+export function useSetModuleAccess() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { employeeId: string; module: string; granted: boolean }) => {
+      // Through the RPC rather than a direct insert, so granted_by fills
+      // itself in and the audit line is not something a caller can
+      // forget. "Who gave this person BEMMP" gets asked.
+      const { error } = await supabase.rpc('set_module_access', {
+        p_employee_id: args.employeeId,
+        p_module_code: args.module,
+        p_granted: args.granted,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['module_grants'] }),
+  })
+}

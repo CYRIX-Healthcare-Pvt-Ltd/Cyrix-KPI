@@ -1,11 +1,16 @@
 import { useState, useMemo } from 'react'
+import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
+  LayoutGrid,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
-import { useOtpSender, useSaveOtpSender } from '@/lib/queries'
+import {
+  useOtpSender, useSaveOtpSender,
+  useAppModules, useModuleGrants, useSetModuleAccess,
+} from '@/lib/queries'
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 
@@ -36,6 +41,9 @@ const STATE_STYLE: Record<string, string> = {
 
 export default function SwAdmin() {
   const qc = useQueryClient()
+  const { data: modules } = useAppModules()
+  const { data: grants } = useModuleGrants(true)
+  const setModule = useSetModuleAccess()
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [confirming, setConfirming] = useState<LoginStatusRow | null>(null)
@@ -201,6 +209,22 @@ export default function SwAdmin() {
         </div>
       </div>
 
+      {/* Sits above the table, because the Modules column is the one
+          thing on this screen whose effect is somewhere else entirely. */}
+      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
+        <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+        <div className="text-ink-600">
+          <p className="font-medium text-ink-900">Modules decide what appears on app.cyrix.in</p>
+          <p className="mt-1">
+            Everybody has <strong>KPI</strong> — everybody is appraised. The rest
+            are handed out here: click a name in the Modules column to give or
+            take away the tile. It changes what a person is{' '}
+            <em>offered</em> on the portal, not what they are permitted to do
+            once inside — each module still checks that for itself.
+          </p>
+        </div>
+      </div>
+
       <OtpSenderCard />
 
       {notice && <Alert kind="success">{notice}</Alert>}
@@ -336,6 +360,10 @@ export default function SwAdmin() {
                 <th className="px-4 py-2.5">Login</th>
                 <th className="px-4 py-2.5">Manager</th>
                 <th className="px-4 py-2.5">State</th>
+                {/* Which tiles this person is offered on app.cyrix.in.
+                    Everybody starts with KPI because everybody is
+                    appraised; the rest are handed out here. */}
+                <th className="px-4 py-2.5">Modules</th>
                 <th className="px-4 py-2.5">Last sign-in</th>
                 <th className="px-4 py-2.5">Password changed</th>
                 <th className="px-4 py-2.5 text-right">Actions</th>
@@ -365,6 +393,37 @@ export default function SwAdmin() {
                     <span className={`badge ${STATE_STYLE[r.login_state] ?? 'bg-ink-100 text-ink-600'}`}>
                       {r.login_state}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(modules ?? []).map(m => {
+                        const on = grants?.has(`${r.employee_id}:${m.code}`) ?? false
+                        return (
+                          <button
+                            key={m.code}
+                            onClick={() => setModule.mutate({
+                              employeeId: r.employee_id, module: m.code, granted: !on,
+                            })}
+                            disabled={setModule.isPending}
+                            // Named rather than ticked: a row of bare
+                            // checkboxes needs a header to decode, and this
+                            // table is already seven columns wide.
+                            title={on
+                              ? `Remove ${m.name} from ${r.full_name}`
+                              : `Give ${r.full_name} access to ${m.name}`}
+                            aria-pressed={on}
+                            className={clsx(
+                              'badge cursor-pointer transition-colors disabled:opacity-50',
+                              on
+                                ? 'bg-ink-900 text-white hover:bg-cyrixRed-700'
+                                : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
+                            )}
+                          >
+                            {m.name}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
