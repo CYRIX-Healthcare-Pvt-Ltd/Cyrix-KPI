@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, Timer, MessageSquare, Grid2x2,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -107,10 +107,11 @@ export default function Shell() {
   }
 
   const allItems: NavItem[] = isSwAdmin && !isHrAdmin
-    ? [
-        { to: '/admin/logins', label: 'Logins', icon: ShieldAlert, end: true },
-        { to: '/admin/timing', label: 'KPI Timing', icon: Timer },
-      ]
+    // One destination, named for what it opens. It used to be two — Logins
+    // and KPI Timing — which put a single module's settings beside the
+    // screen that administers all of them, and left the bar saying Logins
+    // was current while the tabs inside it said BEMMP was.
+    ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert, end: true }]
     : isHrAdmin
     ? [
         { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -130,10 +131,7 @@ export default function Shell() {
         { to: '/admin/queries', label: 'Queries', icon: MessageSquare },
         records,
         ...(isSwAdmin
-          ? [
-              { to: '/admin/logins', label: 'Logins', icon: ShieldAlert },
-              { to: '/admin/timing', label: 'KPI Timing', icon: Timer },
-            ]
+          ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]
           : []),
       ]
     : [
@@ -330,6 +328,13 @@ export default function Shell() {
         <Outlet />
       </main>
 
+      {/*
+        A bar of one tab is not navigation — it is a label taking up the
+        bottom of the screen. SW Admin has a single destination now that KPI
+        timing sits inside it, so the bar goes and the wordmark in the header
+        is the way back to the other modules.
+      */}
+      {items.length > 1 && (
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
         {/* One more column than there are tabs: the last cell is the way
             out to the other modules. The header mark does the same job, but
@@ -378,6 +383,7 @@ export default function Shell() {
           </a>
         </div>
       </nav>
+      )}
 
       {/* Outside main, above the nav: questions about the account and the
           device rather than about whichever screen happens to be open.

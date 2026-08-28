@@ -1,21 +1,29 @@
 /**
  * The Cyrix Healthcare lockup, drawn once and shared by every module.
  *
- * This is BEMMP's drawing, ported here verbatim: it is the one measured
- * against the printed artwork, and three apps each approximating it in
- * their own HTML is how the same company came to have three wordmarks that
- * are nearly but not quite alike. The coordinates are the lockup — CYRIX
- * at 52, the registered mark raised beside it, the entity line letterspaced
- * beneath — so they are not adjusted here.
+ * Redrawn from the supplied artwork: heavy condensed caps, the X oversized
+ * and red, the registered mark red at the top right, the entity line
+ * letterspaced beneath, and the strapline in blue with its own red X.
  *
- * SVG text rather than an image: the dark half follows `currentColor` and
- * flips with the theme, and the red stays the brand red in both.
+ * The black halves are `currentColor`, which is the whole reason this is
+ * drawn rather than dropped in as an image: the artwork is black on white
+ * and would vanish on a dark page. The red and the blue are brand colours
+ * and stay put in both themes.
+ *
+ * This is a close redraw, not the original vector — the artwork's typeface
+ * is not one we ship. Drop the real file at `public/cyrix-logo.svg` and
+ * this component can become an <img>, but it will then need a light
+ * variant for dark mode, which is what the redraw avoids.
  */
+const RED = '#e30613'
+const BLUE = '#1c3f94'
+
 export function Logo({
   className = '',
   height = 34,
   variant = 'dark',
   showSubtitle = true,
+  showTagline = false,
 }: {
   className?: string
   /** Rendered height in px. The lockup scales from this. */
@@ -23,44 +31,60 @@ export function Logo({
   /** `dark` = ink type for light backgrounds; `light` = white for black. */
   variant?: 'dark' | 'light'
   showSubtitle?: boolean
+  showTagline?: boolean
 }) {
-  // The full lockup is 78 units tall; the wordmark alone is 52.
-  const box = showSubtitle ? 78 : 52
-  const h = showSubtitle ? height : Math.round(height * 0.62)
+  // Three stacked bands: wordmark, entity line, strapline. The viewBox
+  // grows only as far as what is actually shown, so a wordmark on its own
+  // is not padded by the space the other two would have taken.
+  const box = showTagline ? 104 : showSubtitle ? 78 : 58
 
   return (
     <svg
-      viewBox={`0 0 300 ${box}`}
-      height={h}
+      viewBox={`0 0 330 ${box}`}
+      height={height}
       className={className}
       role="img"
       aria-label="Cyrix Health Care Pvt Ltd"
       style={{ color: variant === 'light' ? '#ffffff' : 'rgb(var(--ink-900))' }}
     >
+      {/* The X is set larger than the rest and sits on the same baseline,
+          which is what gives the mark its lift on the right. */}
       <text
-        x="0" y="44"
-        fontSize="52" fontWeight="700" letterSpacing="1"
+        x="0" y="47"
+        fontSize="56" fontWeight="800" letterSpacing="-0.5"
         fill="currentColor"
         fontFamily="inherit"
       >
-        CYRI<tspan fill="#e30613">X</tspan>
+        CYRI<tspan fill={RED} fontSize="66">X</tspan>
       </text>
       <text
-        x="171" y="16"
-        fontSize="13" fontWeight="600"
-        fill="#e30613"
+        x="298" y="14"
+        fontSize="14" fontWeight="700"
+        fill={RED}
         fontFamily="inherit"
       >
         ®
       </text>
+
       {showSubtitle && (
         <text
-          x="1" y="66"
-          fontSize="13.5" fontWeight="500" letterSpacing="3.4"
+          x="2" y="70"
+          fontSize="13.5" fontWeight="600" letterSpacing="5.2"
           fill="currentColor"
           fontFamily="inherit"
         >
           HEALTH CARE PVT LTD
+        </text>
+      )}
+
+      {showTagline && (
+        <text
+          x="2" y="96"
+          fontSize="13" fontWeight="600"
+          fill={BLUE}
+          fontFamily="inherit"
+        >
+          The <tspan fill={RED}>X</tspan>-Factor in Medical Technology Reliability
         </text>
       )}
     </svg>
@@ -68,8 +92,8 @@ export function Logo({
 }
 
 /**
- * Square mark for the header and app icon: the X alone, one stroke black
- * and one red, as it reads in the wordmark.
+ * Square mark for the app icon: the X alone, one stroke black and one red,
+ * as it reads in the wordmark.
  */
 export function LogoMark({
   className = 'h-9 w-9',
@@ -79,15 +103,10 @@ export function LogoMark({
   variant?: 'dark' | 'light'
 }) {
   /*
-   * Literal colours, not palette tokens, and deliberately so.
-   *
-   * The mark is a printed brand asset: a black square carrying a white
-   * stroke and a red one. Tokens would invert it in dark mode, and since
-   * both the square and its stroke would flip together the result is a
-   * white X on a white square — an invisible logo, which is worse than a
-   * dark square on a dark page.
-   *
-   * The exact pair it has always rendered: bg-white and bg-ink-950.
+   * Literal colours, not palette tokens, and deliberately so. The mark is a
+   * printed brand asset: a black square carrying a white stroke and a red
+   * one. Tokens would invert both together in dark mode and produce a white
+   * X on a white square — an invisible logo.
    */
   const bg = variant === 'light' ? '#ffffff' : '#000000'
   const stroke = variant === 'light' ? '#141519' : '#ffffff'
@@ -100,7 +119,7 @@ export function LogoMark({
     >
       <svg viewBox="0 0 24 24" className="h-[60%] w-[60%]" fill="none">
         <path d="M4.5 4.5 L19.5 19.5" stroke={stroke} strokeWidth="3.6" strokeLinecap="square" />
-        <path d="M19.5 4.5 L4.5 19.5" stroke="#e30613" strokeWidth="3.6" strokeLinecap="square" />
+        <path d="M19.5 4.5 L4.5 19.5" stroke={RED} strokeWidth="3.6" strokeLinecap="square" />
       </svg>
     </span>
   )

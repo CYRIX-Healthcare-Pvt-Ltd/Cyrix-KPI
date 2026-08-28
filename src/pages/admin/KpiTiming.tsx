@@ -97,10 +97,12 @@ export default function KpiTiming() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
+        {/* h2, not h1: this is a tab inside Administration now, and that
+            screen owns the page heading. */}
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900">
           <Timer className="h-5 w-5 text-cyrixRed-600" />
           KPI timing
-        </h1>
+        </h2>
         <p className="mt-0.5 text-sm text-ink-500">
           How long each side gets before a month counts as late, and which
           month the clock starts on.

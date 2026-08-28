@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid,
+  LayoutGrid, Grid2x2, Timer, QrCode, Activity,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
@@ -13,6 +13,7 @@ import {
 } from '@/lib/queries'
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
+import KpiTiming from './KpiTiming'
 
 interface LoginStatusRow {
   employee_id: string
@@ -1115,10 +1116,18 @@ function BemmpTab() {
   )
 }
 
+/*
+ *  is what the phone bar shows: five cells on a 375px screen is
+ * about seven characters each, and "Spare Mapping" is thirteen.
+ */
 const ADMIN_TABS = [
-  { id: 'logins', label: 'Logins', render: () => <LoginsTab /> },
-  { id: 'spare', label: 'Spare Mapping', render: () => <SpareTab /> },
-  { id: 'bemmp', label: 'BEMMP', render: () => <BemmpTab /> },
+  { id: 'logins', label: 'Logins', short: 'Logins', icon: ShieldAlert, render: () => <LoginsTab /> },
+  // KPI belongs beside the other two, not a level above them. It sat in the
+  // navigation as a sibling of this whole screen, which made one module's
+  // settings look like a different kind of thing from the other two.
+  { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTiming /> },
+  { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
+  { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
 ] as const
 
 /**
@@ -1140,7 +1149,9 @@ export default function SwAdmin() {
         Administration
       </h1>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-ink-200">
+      {/* Desktop: a row under the heading, where tabs belong on a wide
+          screen. */}
+      <div className="hidden gap-1 overflow-x-auto border-b border-ink-200 lg:flex">
         {ADMIN_TABS.map(t => (
           <button
             key={t.id}
@@ -1158,7 +1169,50 @@ export default function SwAdmin() {
         ))}
       </div>
 
-      {active.render()}
+      {/* pb for the bar below, which is fixed and would otherwise sit over
+          the last row of whichever table is open. */}
+      <div className="pb-16 lg:pb-0">{active.render()}</div>
+
+      {/*
+        Phone: the same tabs as a bar along the bottom.
+
+        These are the only navigation an administrator has — the module bar
+        is gone, because with one destination it was a bar of one tab. So
+        they belong where every other module puts navigation on a phone,
+        under the thumb rather than at the top of a scrolling page you have
+        to return to in order to move.
+      */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${ADMIN_TABS.length + 1}, minmax(0, 1fr))` }}
+        >
+          {ADMIN_TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              aria-current={t.id === tab ? 'page' : undefined}
+              className={clsx(
+                'flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors',
+                t.id === tab ? 'text-[color:var(--page-strong)]' : 'text-ink-400',
+              )}
+            >
+              <t.icon className={clsx('h-5 w-5', t.id === tab ? '' : 'text-ink-400')} />
+              <span className="w-full truncate px-0.5 text-center">{t.short}</span>
+            </button>
+          ))}
+
+          {/* The way out, last, as in every other module. */}
+          <a
+            href="/"
+            className="flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium text-ink-400"
+            aria-label="All Cyrix apps"
+          >
+            <Grid2x2 className="h-5 w-5" />
+            <span className="w-full truncate px-0.5 text-center">Apps</span>
+          </a>
+        </div>
+      </nav>
     </div>
   )
 }
