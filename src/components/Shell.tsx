@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, Timer, MessageSquare,
+  ShieldAlert, Trash2, Timer, MessageSquare, Grid2x2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -312,9 +312,13 @@ export default function Shell() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-white lg:hidden">
+        {/* One more column than there are tabs: the last cell is the way
+            out to the other modules. The header mark does the same job, but
+            it is 32px in a corner — on a phone this bar is where people
+            actually navigate, so the door out belongs here too. */}
         <div
           className="grid"
-          style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${items.length + 1}, minmax(0, 1fr))` }}
         >
           {items.map(item => (
             <NavLink
@@ -340,6 +344,19 @@ export default function Shell() {
               <span className="truncate">{item.label}</span>
             </NavLink>
           ))}
+
+          {/* Last, not first: the tabs to its left are where people spend
+              their time and their positions are already muscle memory.
+              A plain anchor — the portal is above this app's basename. */}
+          <a
+            href="/"
+            className="relative flex flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium text-ink-400 transition-colors"
+          >
+            <span className="relative">
+              <Grid2x2 className="h-5 w-5" />
+            </span>
+            <span className="truncate">Apps</span>
+          </a>
         </div>
       </nav>
 
