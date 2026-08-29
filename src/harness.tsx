@@ -73,10 +73,39 @@ function Header() {
   )
 }
 
+/*
+ * The portal's sign-in panel, rebuilt here because that is the shape that
+ * broke the mark: a *column* flex container, where a flex item's cross
+ * axis is its width. The logo stretched to the panel, and with a definite
+ * height the aspect ratio was then ignored — so the image inside rendered
+ * many times too tall and the wrapper clipped it to a sliver of one
+ * letter. Kept as a regression case.
+ */
+function BrandPanel() {
+  return (
+    <div
+      className="flex flex-col justify-between bg-shade p-8 text-white"
+      style={{ height: 360 }}
+    >
+      <Logo height={30} showSubtitle={false} onDark />
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">
+          Cyrix Platform
+        </p>
+        <h2 className="mt-2 text-3xl font-bold leading-tight">
+          One account.<br />Every Cyrix tool.
+        </h2>
+      </div>
+      <p className="text-xs text-white/40">India Operations</p>
+    </div>
+  )
+}
+
 function Harness() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
+      <BrandPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">
         {['Jul-26 status', 'Jul-26 score', 'Months scored', 'Job role / core values'].map(t => (
           <div key={t} className="card p-5">
