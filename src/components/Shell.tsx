@@ -258,7 +258,13 @@ export default function Shell() {
             )}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
+          {/* 6px on a phone, the same as the other two modules. At 12px the
+              four controls spread wide enough that the face stopped reading
+              as the start of a group and started reading as something left
+              floating between the wordmark and the icons. The desktop
+              spacing is unchanged — there the name sits beside the face and
+              the row needs the air. */}
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
             {/* The name was the obvious place to look for your own record
                 and did nothing, so it is now the way in. One target
                 covering the name and the avatar: they read as one thing,
@@ -283,7 +289,7 @@ export default function Shell() {
                   {isHrAdmin && ' · HR Admin'}
                 </span>
               </span>
-              <Avatar name={employee?.full_name} src={employee?.avatar} size="sm" />
+              <Avatar name={employee?.full_name} src={employee?.avatar} size="header" />
             </NavLink>
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}

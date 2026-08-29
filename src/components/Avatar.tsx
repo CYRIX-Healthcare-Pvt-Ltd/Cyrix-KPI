@@ -18,6 +18,16 @@ export function initialsOf(name: string | null | undefined): string {
 }
 
 const SIZES = {
+  /*
+   * The header, and the only size that changes with the viewport.
+   *
+   * 32px on a phone is what Spare and BEMMP show: three headers on one
+   * domain, and a face that changes size between them reads as three
+   * different apps rather than one. It grows back to 36 at sm, where the
+   * name sits beside it and the desktop header is unchanged — that layout
+   * is settled and this is not the change that revisits it.
+   */
+  header: 'h-8 w-8 text-[11px] sm:h-9 sm:w-9 sm:text-xs',
   sm: 'h-9 w-9 text-xs',
   md: 'h-11 w-11 text-sm',
   lg: 'h-16 w-16 text-lg',
