@@ -134,6 +134,7 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
   switch (id) {
     case 'manual': return t('manual')
     case 'chit.hello': return t('greeting', { name: ctx.firstName })
+    case 'chit.whoisbot': return t('whoisbot')
     case 'whoami': return t('whoami', { name: ctx.me.full_name, ecode: ctx.me.ecode })
 
     case 'score.last': {

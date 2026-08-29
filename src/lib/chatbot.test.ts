@@ -35,6 +35,42 @@ describe('what people actually type', () => {
     }
   })
 
+  it('knows its own name, and does not confuse it with the reader', () => {
+    for (const q of [
+      'who are you',
+      'Who are you?',
+      'who r u',
+      'what is your name',
+      'what should i call you',
+      'are you a bot',
+      'നീ ആരാണ്',
+      'तुम कौन हो',
+      'మీరు ఎవరు',
+    ]) {
+      expect(asks(q)).toEqual({ kind: 'fact', id: 'chit.whoisbot' })
+    }
+
+    // The reader's own identity is a different question and must stay
+    // one — these two are a word apart and mean opposite things.
+    expect(asks('who am i')).toEqual({ kind: 'fact', id: 'whoami' })
+    expect(asks('what is my name')).toEqual({ kind: 'fact', id: 'whoami' })
+  })
+
+  it('does not answer a manager asking its name with a fact about their team', () => {
+    // The trap: `who` is a TEAM_WORD, so before this was matched ahead of
+    // the team branch, "who are you" reached the code that answers
+    // questions about somebody's reports. A name asked for, an appraisal
+    // score returned.
+    const boss = { isManager: true, team: [{ ecode: 'E599', full_name: 'Vineesan Vazhayil' }] }
+    expect(matchQuestion('who are you', boss)).toEqual({ kind: 'fact', id: 'chit.whoisbot' })
+    expect(matchQuestion('what is your name', boss)).toEqual({ kind: 'fact', id: 'chit.whoisbot' })
+
+    // And the real team questions are untouched.
+    expect(matchQuestion('who is the highest in my team', boss).kind).toBe('fact')
+    expect(matchQuestion('who is the highest in my team', boss))
+      .toEqual({ kind: 'fact', id: 'team.highest', month: undefined })
+  })
+
   it('reads a question half typed in Malayalam', () => {
     // How people on the floor genuinely write: one English word, one not.
     expect(asks('കഴിഞ്ഞ മാസം score')).toEqual({ kind: 'fact', id: 'score.last' })

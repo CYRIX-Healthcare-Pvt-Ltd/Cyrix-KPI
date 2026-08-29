@@ -37,6 +37,8 @@ export type AnswerSource =
 export type FactId =
   | 'manual'
   | 'chit.hello'
+  /** Who the bot is, as opposed to `whoami`, which is who the reader is. */
+  | 'chit.whoisbot'
   | 'whoami'
   | 'score.last'
   | 'score.month'
@@ -99,6 +101,40 @@ const TEAM_WORDS = new Set([
 ])
 
 const anyOf = (words: Set<string>, list: string[]) => list.some(w => words.has(w))
+
+/**
+ * "Who are you" — the bot's own name, not the reader's and not a
+ * colleague's.
+ *
+ * A regex rather than a keyword row in FACT_PATTERNS, because this has to
+ * be decided before the team matcher: `who` is a TEAM_WORD, so a manager
+ * typing "who are you" walks straight into the branch that answers
+ * questions about their reports. Being asked your name and replying with
+ * somebody's appraisal score is the worst version of this being wrong.
+ *
+ * `r`/`u` are in it because that is how the question actually arrives on
+ * a phone. The non-English forms are the plain ways to ask it; like the
+ * rest of the four-language strings here, they are not reviewed by a
+ * native speaker and sit where somebody who reads one can correct it.
+ */
+const BOT_IDENTITY = new RegExp(
+  [
+    /*
+     * Deliberately not `(who|what)\s+is\s+this`: "what is this" is an
+     * existing question meaning "what is this app", and its answer is the
+     * manual. The bot's name only wins when the sentence is addressed to
+     * it — "you", or the word bot.
+     */
+    String.raw`\b(who|what)\s+(are|r)\s+(you|u)\b`,
+    String.raw`\b(who|what)\s+is\s+(this\s+)?(bot|assistant|chat\s?bot)\b`,
+    String.raw`\byour\s+name\b`,
+    String.raw`\bwhat\s+(do|should)\s+i\s+call\s+you\b`,
+    String.raw`\bare\s+you\s+(a\s+)?(bot|robot|human|ai|real|person)\b`,
+    'നീ ആരാണ്', 'നിന്റെ പേര',
+    'तुम कौन हो', 'आप कौन ह', 'तुम्हारा नाम', 'आपका नाम',
+    'నువ్వు ఎవరు', 'మీరు ఎవరు', 'నీ పేరు', 'మీ పేరు',
+  ].join('|'),
+)
 
 /**
  * Somebody on this manager's team, named in the question.
@@ -490,6 +526,13 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
     they work on a question made entirely of small words. Only the manual
     search below needs something left after the stop words are gone.
   */
+
+  // Before the team matcher, deliberately: `who` is a team word, so a
+  // manager asking the bot its name would otherwise be handed a fact
+  // about one of their reports.
+  if (BOT_IDENTITY.test(normalise(query))) {
+    return { kind: 'fact', id: 'chit.whoisbot' }
+  }
 
   // A manager's question is usually about somebody else, and reading it
   // as if it were about them is the worst kind of wrong answer here: a

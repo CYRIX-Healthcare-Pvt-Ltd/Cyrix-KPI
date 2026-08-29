@@ -40,6 +40,26 @@ export const CHAT: Record<string, Phrase> = {
     te: 'మాన్యువల్ అనేది మీ లాగిన్ గురించిన ఒక చిన్న పేజీ — ప్రతి నెలా ఏమి చేయాలి, ఎప్పుడు చేయాలి.',
   },
 
+  /*
+   * ---- who the bot is ------------------------------------------
+   *
+   * Named, because "who are you" is one of the first things anybody
+   * types into a chat window and "I do not know that one" is a poor
+   * first impression. Cyra is what the assistant is called in BEMMP
+   * too — one name across the modules, like the mark and the toggle.
+   *
+   * The second sentence is the honest part. It answers from the manual
+   * and from figures already on the screen; saying so sets the
+   * expectation that it will decline rather than invent, which is the
+   * whole design of this thing.
+   */
+  whoisbot: {
+    en: 'I am Cyra, the Cyrix assistant. I answer from the KPI manual and from your own figures — I do not guess.',
+    ml: 'ഞാൻ Cyra ആണ്, Cyrix അസിസ്റ്റന്റ്. KPI മാനുവലിൽ നിന്നും നിങ്ങളുടെ സ്വന്തം കണക്കുകളിൽ നിന്നുമാണ് ഞാൻ ഉത്തരം നൽകുന്നത് — ഞാൻ ഊഹിക്കില്ല.',
+    hi: 'मैं Cyra हूँ, Cyrix सहायक। मैं KPI मैनुअल और आपके अपने आँकड़ों से उत्तर देती हूँ — मैं अनुमान नहीं लगाती।',
+    te: 'నేను Cyra, Cyrix సహాయకి. నేను KPI మాన్యువల్ నుండి, మీ స్వంత లెక్కల నుండి సమాధానం ఇస్తాను — నేను ఊహించను.',
+  },
+
   // ---- who am I ------------------------------------------------
   whoami: {
     en: 'You are {name}, employee code {ecode}.',
