@@ -312,8 +312,21 @@ export default function SpareFields() {
                       className="h-4 w-4 accent-[color:var(--score-accent)]"
                       checked={r.active}
                       disabled={save.isPending}
-                      onChange={e => save.mutate(() => supabase.from('field_definitions')
-                        .update({ active: e.target.checked }).eq('id', r.id))}
+                      /*
+                       * Read now, written later. The callback handed to
+                       * mutate() does not run until react-query gets to
+                       * it, and by then React has re-rendered this
+                       * controlled checkbox back to `r.active` — so
+                       * reading e.target.checked inside the closure
+                       * returns the value it started with and the update
+                       * writes what was already there. Nothing happens,
+                       * and no error says so.
+                       */
+                      onChange={e => {
+                        const next = e.target.checked
+                        save.mutate(() => supabase.from('field_definitions')
+                          .update({ active: next }).eq('id', r.id))
+                      }}
                     />
                     <span className="text-xs text-ink-500">{r.active ? 'Shown' : 'Hidden'}</span>
                   </label>
@@ -336,8 +349,12 @@ export default function SpareFields() {
                       className="h-4 w-4 accent-[color:var(--score-accent)]"
                       checked={r.required}
                       disabled={save.isPending || !r.active}
-                      onChange={e => save.mutate(() => supabase.from('field_definitions')
-                        .update({ required: e.target.checked }).eq('id', r.id))}
+                      /* Captured before deferring — see the note above. */
+                      onChange={e => {
+                        const next = e.target.checked
+                        save.mutate(() => supabase.from('field_definitions')
+                          .update({ required: next }).eq('id', r.id))
+                      }}
                     />
                     <span className="text-xs text-ink-500">{r.required ? 'Required' : 'Optional'}</span>
                   </label>
