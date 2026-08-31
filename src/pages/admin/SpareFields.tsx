@@ -40,9 +40,21 @@ interface FieldRow {
   field_type: FieldType
   options: string[]
   required: boolean
+  /** Images only. Null means the app's own default applies. */
+  image_max_count: number | null
   display_order: number
   active: boolean
 }
+
+/**
+ * What an engineer is allowed to attach when the field is an image.
+ *
+ * A cap rather than no cap: these are photographed on a phone on a
+ * service floor and stored per spare, so "as many as you like" is a
+ * storage bill nobody chose. Null leaves it to the app's default, which
+ * is what every field created before this had.
+ */
+const IMAGE_MAX_DEFAULT = 3
 
 /**
  * "Serial Number" becomes `serial_number`.
@@ -60,6 +72,8 @@ export default function SpareFields() {
   const [label, setLabel] = useState('')
   const [type, setType] = useState<FieldType>('text')
   const [options, setOptions] = useState('')
+  const [required, setRequired] = useState(false)
+  const [imageMax, setImageMax] = useState(IMAGE_MAX_DEFAULT)
   const [confirming, setConfirming] = useState<FieldRow | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -67,7 +81,7 @@ export default function SpareFields() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('field_definitions')
-        .select('id, field_key, label, field_type, options, required, display_order, active')
+        .select('id, field_key, label, field_type, options, required, image_max_count, display_order, active')
         .order('display_order')
       if (error) throw new Error(friendlyError(error))
       return (data ?? []) as FieldRow[]
@@ -111,9 +125,13 @@ export default function SpareFields() {
       label: trimmed,
       field_type: type,
       options: list,
+      required,
+      // Only meaningful for an image field, and left null on the rest so
+      // the column says "not applicable" rather than a number nothing reads.
+      image_max_count: type === 'image' ? imageMax : null,
       display_order: (rows.at(-1)?.display_order ?? 0) + 1,
     }) as never)
-    setLabel(''); setOptions('')
+    setLabel(''); setOptions(''); setRequired(false); setImageMax(IMAGE_MAX_DEFAULT)
   }
 
   /** Swaps two rows' order values, which is the whole of reordering. */
@@ -182,6 +200,38 @@ export default function SpareFields() {
             onChange={e => setOptions(e.target.value)}
           />
         )}
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[color:var(--score-accent)]"
+              checked={required}
+              onChange={e => setRequired(e.target.checked)}
+            />
+            <span className="text-sm text-ink-700">Mandatory</span>
+            <span className="text-xs text-ink-400">— a spare cannot be saved without it</span>
+          </label>
+
+          {/* Only for images, because it is the only type where "how many"
+              is a question. Shown inline rather than behind a second step:
+              somebody adding a photo field is deciding both at once. */}
+          {type === 'image' && (
+            <label className="inline-flex items-center gap-2">
+              <span className="text-sm text-ink-700">Up to</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={10}
+                className="input w-20"
+                value={imageMax}
+                onChange={e => setImageMax(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+              />
+              <span className="text-sm text-ink-700">image{imageMax === 1 ? '' : 's'}</span>
+            </label>
+          )}
+        </div>
         {label.trim() && (
           <p className="text-xs text-ink-500">
             Stored as <code className="font-mono">{slugify(label) || '—'}</code>, which is
@@ -197,7 +247,12 @@ export default function SpareFields() {
             <tr>
               <th className="px-3 py-2.5">Field</th>
               <th className="px-3 py-2.5">Type</th>
-              <th className="px-3 py-2.5">Asked for</th>
+              {/* "Active", not "Asked for" — the first person to see the
+                  latter asked what it meant, which is the whole test a
+                  column header has to pass. It is also what Spare's own
+                  screen calls it, so the two agree. */}
+              <th className="px-3 py-2.5">Active</th>
+              <th className="px-3 py-2.5">Mandatory</th>
               <th className="px-3 py-2.5 text-right">Order</th>
               <th className="px-3 py-2.5" />
             </tr>
@@ -205,7 +260,7 @@ export default function SpareFields() {
           <tbody className="divide-y divide-ink-100">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-ink-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-ink-500">
                   No fields yet. A spare will be tagged with its warehouse and code alone.
                 </td>
               </tr>
@@ -221,9 +276,37 @@ export default function SpareFields() {
                   {r.field_type === 'dropdown' && r.options?.length > 0 && (
                     <span className="ml-1 text-xs text-ink-400">({r.options.length} choices)</span>
                   )}
+                  {/* The cap sits with the type because it is part of what
+                      the type means here, and it is editable in place —
+                      "up to 3" becoming "up to 5" is not worth a dialog. */}
+                  {r.field_type === 'image' && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs text-ink-500">
+                      up to
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={10}
+                        aria-label={`Maximum images for ${r.label}`}
+                        className="input h-7 w-14 px-1.5 py-0 text-center text-xs"
+                        defaultValue={r.image_max_count ?? IMAGE_MAX_DEFAULT}
+                        disabled={save.isPending}
+                        onBlur={e => {
+                          const next = Math.min(10, Math.max(1, Number(e.target.value) || 1))
+                          e.target.value = String(next)
+                          if (next === (r.image_max_count ?? IMAGE_MAX_DEFAULT)) return
+                          save.mutate(() => supabase.from('field_definitions')
+                            .update({ image_max_count: next }).eq('id', r.id))
+                        }}
+                      />
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
-                  <label className="inline-flex cursor-pointer items-center gap-2">
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2"
+                    title="Whether engineers are shown this field when tagging a spare"
+                  >
                     <input
                       type="checkbox"
                       className="h-4 w-4 accent-[color:var(--score-accent)]"
@@ -232,7 +315,31 @@ export default function SpareFields() {
                       onChange={e => save.mutate(() => supabase.from('field_definitions')
                         .update({ active: e.target.checked }).eq('id', r.id))}
                     />
-                    <span className="text-xs text-ink-500">{r.active ? 'Yes' : 'No'}</span>
+                    <span className="text-xs text-ink-500">{r.active ? 'Shown' : 'Hidden'}</span>
+                  </label>
+                </td>
+                {/* Mandatory only bites while the field is shown at all,
+                    so it reads as disabled on a hidden one rather than
+                    claiming a rule nothing enforces. */}
+                <td className="px-3 py-2.5">
+                  <label
+                    className={clsx(
+                      'inline-flex items-center gap-2',
+                      r.active ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                    )}
+                    title={r.active
+                      ? 'A spare cannot be saved without an answer'
+                      : 'The field is hidden, so nothing is required'}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[color:var(--score-accent)]"
+                      checked={r.required}
+                      disabled={save.isPending || !r.active}
+                      onChange={e => save.mutate(() => supabase.from('field_definitions')
+                        .update({ required: e.target.checked }).eq('id', r.id))}
+                    />
+                    <span className="text-xs text-ink-500">{r.required ? 'Required' : 'Optional'}</span>
                   </label>
                 </td>
                 <td className="px-3 py-2.5">

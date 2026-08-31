@@ -13,11 +13,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Menu, LogOut, Bell } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
 import { BulkAssign } from './pages/admin/SwAdmin'
+import SpareFields from './pages/admin/SpareFields'
 import './index.css'
 
 /* A 1x1 JPEG stands in for the base64 photo carried on the employee row —
@@ -110,7 +112,12 @@ function BrandPanel() {
  */
 function UploadPanel() {
   return (
-    <div className="mx-auto max-w-3xl p-4">
+    <div className="mx-auto max-w-5xl space-y-6 p-4">
+      {/* The custom fields editor, which talks to the real table — so on
+          a machine with database access this shows real rows, and on one
+          without it shows the empty state. Either way the chrome is
+          checkable without signing in. */}
+      <SpareFields />
       <BulkAssign<string>
         title="Assign roles from a sheet"
         help="Two columns: the employee code, and the role."
@@ -144,10 +151,17 @@ function Harness() {
   )
 }
 
+// SpareFields is a react-query consumer, so it needs a client. `retry:
+// false` so a machine with no database access shows the empty state at
+// once rather than three failed attempts' worth of spinner.
+const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MemoryRouter initialEntries={['/']}>
-      <Harness />
-    </MemoryRouter>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/']}>
+        <Harness />
+      </MemoryRouter>
+    </QueryClientProvider>
   </StrictMode>,
 )
