@@ -17,6 +17,7 @@ import { Menu, LogOut, Bell } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
+import { BulkAssign } from './pages/admin/SwAdmin'
 import './index.css'
 
 /* A 1x1 JPEG stands in for the base64 photo carried on the employee row —
@@ -101,11 +102,36 @@ function BrandPanel() {
   )
 }
 
+/*
+ * The bulk-upload panel, with its callbacks stubbed. It is the one part
+ * of SW Admin that is pure presentation, so it can be looked at without
+ * an account — the preview table inside a scroll box and the button row
+ * under it are exactly the shapes that have gone wrong before.
+ */
+function UploadPanel() {
+  return (
+    <div className="mx-auto max-w-3xl p-4">
+      <BulkAssign<string>
+        title="Assign roles from a sheet"
+        help="Two columns: the employee code, and the role."
+        templateName="harness.xlsx"
+        templateHeaders={['Employee Code', 'Role']}
+        templateExamples={[{ 'Employee Code': 'CT655', Role: 'Engineer' }]}
+        parseRow={() => ({ ecode: 'CT655', value: 'engineer' })}
+        describe={v => v}
+        apply={async () => ({ changed: 0, missing: [] })}
+        onClose={() => {}}
+      />
+    </div>
+  )
+}
+
 function Harness() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
       <BrandPanel />
+      <UploadPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">
         {['Jul-26 status', 'Jul-26 score', 'Months scored', 'Job role / core values'].map(t => (
           <div key={t} className="card p-5">

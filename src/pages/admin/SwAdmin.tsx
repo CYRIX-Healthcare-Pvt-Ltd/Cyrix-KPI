@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
+import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
+import { SPARE_ROLES, normaliseRole, type SpareRole } from '@/lib/spareRoles'
 import {
   useOtpSender, useSaveOtpSender,
   useAppModules, useModuleGrants, useSetModuleAccess,
@@ -52,6 +54,7 @@ function LoginsTab() {
   const [typedCode, setTypedCode] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [resetError, setResetError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['login_status'],
@@ -170,23 +173,93 @@ function LoginsTab() {
             {filtered.length} of {data?.length ?? 0} accounts
           </p>
         </div>
-        <button
-          onClick={() => exportOrgStatus(
-            filtered.map(r => ({
-              Ecode: r.ecode, Name: r.full_name,
-              Designation: r.designation ?? '', Department: r.department ?? '',
-              Manager: r.manager_name ?? '', 'Login email': r.login_email ?? '',
-              'Login state': r.login_state, Active: r.is_active ? 'Yes' : 'No',
-              'Last signed in': r.last_sign_in_at ?? '',
-              'Password changed': r.password_changed_at ?? '',
-            })),
-            'Cyrix-login-status.xlsx', 'Login status',
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {!importing && (
+            <button onClick={() => setImporting(true)} className="btn-secondary">
+              <Upload className="h-4 w-4" /> Bulk assign modules
+            </button>
           )}
-          className="btn-secondary"
-        >
-          <Download className="h-4 w-4" /> Export
-        </button>
+          <button
+            onClick={() => exportOrgStatus(
+              filtered.map(r => ({
+                Ecode: r.ecode, Name: r.full_name,
+                Designation: r.designation ?? '', Department: r.department ?? '',
+                Manager: r.manager_name ?? '', 'Login email': r.login_email ?? '',
+                'Login state': r.login_state, Active: r.is_active ? 'Yes' : 'No',
+                'Last signed in': r.last_sign_in_at ?? '',
+                'Password changed': r.password_changed_at ?? '',
+              })),
+              'Cyrix-login-status.xlsx', 'Login status',
+            )}
+            className="btn-secondary"
+          >
+            <Download className="h-4 w-4" /> Export
+          </button>
+        </div>
       </div>
+
+      {importing && (
+        <BulkAssign<string[]>
+          title="Assign modules from a sheet"
+          help={
+            <>
+              Two columns: the employee code, and the modules they should be
+              offered — separated by commas. Codes are{' '}
+              {(modules ?? []).map(m => m.code).join(', ') || 'kpi, spare, bemmp'}.
+              An empty modules cell takes every tile away from that person.
+            </>
+          }
+          templateName="Cyrix-module-access-template.xlsx"
+          templateHeaders={['Employee Code', 'Modules']}
+          templateExamples={[
+            { 'Employee Code': 'CT655', Modules: 'kpi, spare' },
+            { 'Employee Code': 'CT656', Modules: 'kpi' },
+            { 'Employee Code': 'CT661', Modules: 'kpi, spare, bemmp' },
+          ]}
+          parseRow={row => {
+            const ecode = pick(row, 'employee_code', 'ecode', 'employee code', 'code', 'emp code')
+            const raw = pick(row, 'modules', 'module', 'access', 'tiles', 'apps')
+            const known = new Set((modules ?? []).map(m => m.code))
+            const wanted = raw
+              .split(/[,;/|]+/)
+              .map(s => s.trim().toLowerCase())
+              .filter(Boolean)
+            const unknown = wanted.filter(w => !known.has(w))
+            if (unknown.length > 0) {
+              return { ecode, problem: `unknown module ${unknown.join(', ')}` }
+            }
+            // A blank cell is a decision, not a gap: it says this person
+            // gets nothing. The preview spells that out before it happens.
+            return { ecode, value: [...new Set(wanted)] }
+          }}
+          describe={codes => (codes.length ? codes.join(', ') : 'no modules at all')}
+          apply={async assignments => {
+            const byEcode = new Map((data ?? []).map(r => [r.ecode.toUpperCase(), r]))
+            const missing: string[] = []
+            let changed = 0
+            for (const a of assignments) {
+              const person = byEcode.get(a.ecode.toUpperCase())
+              if (!person) { missing.push(a.ecode); continue }
+              const want = new Set(a.value)
+              for (const m of modules ?? []) {
+                const has = grants?.has(`${person.employee_id}:${m.code}`) ?? false
+                const should = want.has(m.code)
+                // Only the differences are written. A sheet that repeats
+                // what is already true should cost nothing and should not
+                // fill the audit with grants nobody made.
+                if (has === should) continue
+                await setModule.mutateAsync({
+                  employeeId: person.employee_id, module: m.code, granted: should,
+                })
+                changed++
+              }
+            }
+            await qc.invalidateQueries({ queryKey: ['module_grants'] })
+            return { changed, missing }
+          }}
+          onClose={() => setImporting(false)}
+        />
+      )}
 
       {/* Said plainly rather than buried: this is the question people ask
           first, and the honest answer is that nobody can answer it. */}
@@ -608,20 +681,194 @@ interface SpareProfile {
   id: string
   ecode: string
   full_name: string
-  role: 'engineer' | 'project_manager' | 'admin'
+  role: SpareRole
   active: boolean
 }
 
-const SPARE_ROLES: { value: SpareProfile['role']; label: string; hint: string }[] = [
-  { value: 'engineer', label: 'Engineer', hint: 'Scan tags and file edit requests' },
-  { value: 'project_manager', label: 'Project manager', hint: 'Approve edit requests for their facilities' },
-  { value: 'admin', label: 'Admin', hint: 'Facilities, fields, item masters and settings' },
-]
+// SPARE_ROLES and normaliseRole live in lib/spareRoles: the aliases are
+// the part that can be wrong without anybody noticing, so they are tested.
+
+/**
+ * One employee code per row, and whatever that sheet is assigning.
+ *
+ * Shared because the two uploads differ only in what the second column
+ * means: a role for Spare, a list of modules for Logins. Everything
+ * around it — reading the file, matching codes to people, saying what
+ * will happen before it happens, and reporting what did — is the same
+ * problem, and solving it twice is how two importers end up disagreeing
+ * about whether a blank cell clears a value.
+ *
+ * Nothing is written until the preview has been read. An upload that
+ * applies itself the moment a file is chosen gives nobody the chance to
+ * notice they picked last month's sheet.
+ */
+export function BulkAssign<T>({
+  title,
+  help,
+  templateName,
+  templateHeaders,
+  templateExamples,
+  parseRow,
+  describe,
+  apply,
+  onClose,
+}: {
+  title: string
+  help: ReactNode
+  templateName: string
+  templateHeaders: string[]
+  templateExamples: Array<Record<string, string>>
+  /** One sheet row to one intent, or a reason it cannot be used. */
+  parseRow: (row: Record<string, unknown>) => { ecode: string; value: T } | { ecode: string; problem: string }
+  /** How the intent reads in the preview. */
+  describe: (value: T) => string
+  /** Returns what changed and what was left alone. */
+  apply: (rows: Array<{ ecode: string; value: T }>) => Promise<{ changed: number; missing: string[] }>
+  onClose: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [rows, setRows] = useState<Array<{ ecode: string; value: T }> | null>(null)
+  const [rejected, setRejected] = useState<Array<{ ecode: string; problem: string }>>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ changed: number; missing: string[] } | null>(null)
+
+  const read = async (file: File) => {
+    setError(null); setResult(null); setRows(null); setRejected([])
+    try {
+      const raw = await readSheet(file)
+      const good: Array<{ ecode: string; value: T }> = []
+      const bad: Array<{ ecode: string; problem: string }> = []
+      for (const r of raw) {
+        const parsed = parseRow(r)
+        if (!parsed.ecode) continue
+        if ('problem' in parsed) bad.push(parsed)
+        else good.push(parsed)
+      }
+      if (good.length === 0 && bad.length === 0) {
+        setError('No rows had an employee code in them. Check the column headers, or start from the template.')
+        return
+      }
+      setRows(good)
+      setRejected(bad)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that file.')
+    }
+  }
+
+  const save = async () => {
+    if (!rows?.length) return
+    setBusy(true); setError(null)
+    try {
+      setResult(await apply(rows))
+      setRows(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not apply that sheet.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card space-y-4 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-ink-900">{title}</h3>
+          <div className="mt-1 text-sm text-ink-500">{help}</div>
+        </div>
+        <button onClick={onClose} className="btn-icon shrink-0" aria-label="Close">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => downloadTemplate(templateName, templateHeaders, templateExamples)}
+          className="btn-secondary"
+        >
+          <Download className="h-4 w-4" /> Download the template
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) read(f); e.target.value = '' }}
+        />
+        <button onClick={() => fileRef.current?.click()} className="btn-primary">
+          <Upload className="h-4 w-4" /> Choose a file
+        </button>
+      </div>
+
+      {rejected.length > 0 && (
+        <Alert kind="warning">
+          {rejected.length} row{rejected.length === 1 ? '' : 's'} could not be read and
+          will be skipped: {rejected.slice(0, 5).map(r => `${r.ecode} (${r.problem})`).join(', ')}
+          {rejected.length > 5 && `, and ${rejected.length - 5} more`}.
+        </Alert>
+      )}
+
+      {rows && rows.length > 0 && (
+        <>
+          {/* Read before it is applied. The whole point of a preview is
+              that "1,148 rows" is the moment somebody realises they
+              picked the wrong file. */}
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-ink-200">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+                <tr>
+                  <th className="px-3 py-2">Employee code</th>
+                  <th className="px-3 py-2">Will be set to</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {rows.map((r, i) => (
+                  <tr key={`${r.ecode}-${i}`}>
+                    <td className="px-3 py-1.5 font-medium text-ink-900">{r.ecode}</td>
+                    <td className="px-3 py-1.5 text-ink-600">{describe(r.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={save} disabled={busy} className="btn-primary">
+              {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+              Apply {rows.length} row{rows.length === 1 ? '' : 's'}
+            </button>
+            <span className="text-xs text-ink-500">
+              Anybody not in this file is left exactly as they are.
+            </span>
+          </div>
+        </>
+      )}
+
+      {result && (
+        <Alert kind={result.missing.length ? 'warning' : 'success'}>
+          {result.changed} change{result.changed === 1 ? '' : 's'} applied.
+          {result.missing.length > 0 && (
+            <>
+              {' '}
+              {result.missing.length} code{result.missing.length === 1 ? '' : 's'} matched
+              nobody and {result.missing.length === 1 ? 'was' : 'were'} skipped:{' '}
+              {result.missing.slice(0, 8).join(', ')}
+              {result.missing.length > 8 && `, and ${result.missing.length - 8} more`}.
+            </>
+          )}
+        </Alert>
+      )}
+    </div>
+  )
+}
 
 function SpareTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['spare_profiles'],
@@ -664,12 +911,68 @@ function SpareTab() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-lg font-semibold text-ink-900">Spare Mapping roles</h2>
-        <p className="mt-0.5 text-sm text-ink-500">
-          {filtered.length} of {data?.length ?? 0} people
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900">Spare Mapping roles</h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            {filtered.length} of {data?.length ?? 0} people
+          </p>
+        </div>
+        {!importing && (
+          <button onClick={() => setImporting(true)} className="btn-secondary shrink-0">
+            <Upload className="h-4 w-4" /> Bulk assign roles
+          </button>
+        )}
       </div>
+
+      {importing && (
+        <BulkAssign<SpareProfile['role']>
+          title="Assign roles from a sheet"
+          help={
+            <>
+              Two columns: the employee code, and the role. Engineer, Project
+              manager, Purchase or Admin — spelled however you like.
+            </>
+          }
+          templateName="Cyrix-spare-roles-template.xlsx"
+          templateHeaders={['Employee Code', 'Role']}
+          templateExamples={[
+            { 'Employee Code': 'CT655', Role: 'Engineer' },
+            { 'Employee Code': 'CT656', Role: 'Project manager' },
+            { 'Employee Code': 'CT661', Role: 'Purchase' },
+          ]}
+          parseRow={row => {
+            const ecode = pick(row, 'employee_code', 'ecode', 'employee code', 'code', 'emp code')
+            const raw = pick(row, 'role', 'spare role', 'role in spare', 'access')
+            if (!raw) return { ecode, problem: 'no role' }
+            const role = normaliseRole(raw)
+            return role ? { ecode, value: role } : { ecode, problem: `unknown role "${raw}"` }
+          }}
+          describe={role => SPARE_ROLES.find(r => r.value === role)?.label ?? role}
+          apply={async assignments => {
+            // Matched on the code that is already loaded rather than a
+            // query per row: this list is the whole roster and is in
+            // memory, so a thousand-row sheet costs one round trip.
+            const byEcode = new Map((data ?? []).map(p => [p.ecode.toUpperCase(), p]))
+            const missing: string[] = []
+            const updates = new Map<string, SpareProfile['role']>()
+            for (const a of assignments) {
+              const person = byEcode.get(a.ecode.toUpperCase())
+              if (!person) { missing.push(a.ecode); continue }
+              // Last row wins if a code appears twice, and rows that ask
+              // for the role somebody already holds are not writes.
+              if (person.role !== a.value) updates.set(person.id, a.value)
+            }
+            for (const [id, role] of updates) {
+              const { error: e } = await supabase.from('profiles').update({ role }).eq('id', id)
+              if (e) throw new Error(friendlyError(e))
+            }
+            await qc.invalidateQueries({ queryKey: ['spare_profiles'] })
+            return { changed: updates.size, missing }
+          }}
+          onClose={() => setImporting(false)}
+        />
+      )}
 
       <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
