@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { pick } from './sheet'
-import { normaliseRole, SPARE_ROLES } from './spareRoles'
+import { normaliseRole, saysAdmin, SPARE_ROLES } from './spareRoles'
 
 /**
  * The two failure modes of a bulk upload are both silent.
@@ -48,7 +48,7 @@ describe('reading a column somebody named themselves', () => {
 })
 
 describe('reading a role somebody typed', () => {
-  it('knows each of the four however it is written', () => {
+  it('knows each of the three however it is written', () => {
     for (const [raw, expected] of [
       ['Engineer', 'engineer'],
       ['engineer', 'engineer'],
@@ -60,11 +60,17 @@ describe('reading a role somebody typed', () => {
       ['Purchase', 'purchase'],
       ['purchasing', 'purchase'],
       ['Procurement', 'purchase'],
-      ['Admin', 'admin'],
-      ['Administrator', 'admin'],
     ] as const) {
       expect(normaliseRole(raw)).toBe(expected)
     }
+  })
+
+  it('does not treat admin as a role, because it is not one', () => {
+    // Administering is something people also do (migration 0069), so it
+    // arrives on its own flag. A sheet saying "Admin" in the role column
+    // is missing the actual job and must be refused rather than guessed.
+    expect(normaliseRole('Admin')).toBeNull()
+    expect(normaliseRole('Administrator')).toBeNull()
   })
 
   it('refuses a word it does not know rather than guessing one', () => {
@@ -73,6 +79,19 @@ describe('reading a role somebody typed', () => {
     // somebody a role from a typo.
     for (const raw of ['supervisor', 'store keeper', 'xyz', '', '   ']) {
       expect(normaliseRole(raw)).toBeNull()
+    }
+  })
+
+  it('reads "also an admin" from either column, or from neither', () => {
+    // A separate Admin column…
+    for (const yes of ['Yes', 'y', 'TRUE', '1', 'Admin']) expect(saysAdmin(yes)).toBe(true)
+    // …or squeezed into the role cell, which is what people do when
+    // there is no Admin column to put it in.
+    expect(saysAdmin('Project manager, Admin')).toBe(true)
+    expect(saysAdmin('Engineer + administrator')).toBe(true)
+
+    for (const no of ['', '   ', 'No', 'false', '0', 'Engineer', 'Purchase']) {
+      expect(saysAdmin(no)).toBe(false)
     }
   })
 

@@ -8,7 +8,8 @@ import {
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
-import { SPARE_ROLES, normaliseRole, type SpareRole } from '@/lib/spareRoles'
+import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
+import SpareFields from './SpareFields'
 import {
   useOtpSender, useSaveOtpSender,
   useAppModules, useModuleGrants, useSetModuleAccess,
@@ -682,6 +683,8 @@ interface SpareProfile {
   ecode: string
   full_name: string
   role: SpareRole
+  /** Administering is something people also do — see migration 0069. */
+  is_spare_admin: boolean
   active: boolean
 }
 
@@ -864,11 +867,48 @@ export function BulkAssign<T>({
   )
 }
 
+/**
+ * Spare's two administrative jobs, side by side.
+ *
+ * Who may do what, and what an engineer is asked for when tagging. They
+ * are different questions with different answers, and stacking both onto
+ * one scrolling page meant the fields sat below a table of 1,148 rows.
+ */
 function SpareTab() {
+  const [view, setView] = useState<'roles' | 'fields'>('roles')
+
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-1 rounded-lg bg-ink-100 p-1 sm:w-fit">
+        {([
+          { key: 'roles' as const, label: 'Roles' },
+          { key: 'fields' as const, label: 'Custom fields' },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setView(t.key)}
+            aria-current={view === t.key ? 'page' : undefined}
+            className={clsx(
+              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'roles' ? <SpareRolesView /> : <SpareFields />}
+    </div>
+  )
+}
+
+function SpareRolesView() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | SpareRole>('all')
 
   const { data, isLoading } = useQuery({
     queryKey: ['spare_profiles'],
@@ -879,7 +919,7 @@ function SpareTab() {
       for (let from = 0; ; from += 1000) {
         const page = await supabase
           .from('profiles')
-          .select('id, ecode, full_name, role, active')
+          .select('id, ecode, full_name, role, is_spare_admin, active')
           .order('ecode')
           .range(from, from + 999)
         if (page.error) throw page.error
@@ -890,9 +930,12 @@ function SpareTab() {
     },
   })
 
-  const setRole = useMutation({
-    mutationFn: async ({ id, role }: { id: string; role: SpareProfile['role'] }) => {
-      const { error } = await supabase.from('profiles').update({ role }).eq('id', id)
+  /** One mutation for both, because they are one row and one round trip. */
+  const setAccess = useMutation({
+    mutationFn: async (
+      { id, ...patch }: { id: string; role?: SpareRole; is_spare_admin?: boolean },
+    ) => {
+      const { error } = await supabase.from('profiles').update(patch).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['spare_profiles'] }),
@@ -901,11 +944,29 @@ function SpareTab() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = data ?? []
+    let rows = data ?? []
+    // "admin" is its own filter rather than a fourth role, matching the
+    // shape of the thing: it is a flag somebody also holds, so asking
+    // "who are the admins" is a different question from "who are the
+    // managers", and both have answers.
+    if (roleFilter === 'admin') rows = rows.filter(r => r.is_spare_admin)
+    else if (roleFilter !== 'all') rows = rows.filter(r => r.role === roleFilter)
     if (!q) return rows
     return rows.filter(r =>
       r.ecode.toLowerCase().includes(q) || r.full_name.toLowerCase().includes(q))
-  }, [data, search])
+  }, [data, search, roleFilter])
+
+  /** How many hold each, so the filter says what it will show. */
+  const counts = useMemo(() => {
+    const rows = data ?? []
+    return {
+      all: rows.length,
+      admin: rows.filter(r => r.is_spare_admin).length,
+      ...Object.fromEntries(
+        SPARE_ROLES.map(r => [r.value, rows.filter(p => p.role === r.value).length]),
+      ),
+    } as Record<string, number>
+  }, [data])
 
   if (isLoading) return <PageLoader />
 
@@ -926,45 +987,52 @@ function SpareTab() {
       </div>
 
       {importing && (
-        <BulkAssign<SpareProfile['role']>
+        <BulkAssign<{ role: SpareRole; admin: boolean }>
           title="Assign roles from a sheet"
           help={
             <>
-              Two columns: the employee code, and the role. Engineer, Project
-              manager, Purchase or Admin — spelled however you like.
+              The employee code, the role — Engineer, Project manager or
+              Purchase — and whether they also administer Spare. Say that in
+              an Admin column, or just add "Admin" to the role cell.
             </>
           }
           templateName="Cyrix-spare-roles-template.xlsx"
-          templateHeaders={['Employee Code', 'Role']}
+          templateHeaders={['Employee Code', 'Role', 'Admin']}
           templateExamples={[
-            { 'Employee Code': 'CT655', Role: 'Engineer' },
-            { 'Employee Code': 'CT656', Role: 'Project manager' },
-            { 'Employee Code': 'CT661', Role: 'Purchase' },
+            { 'Employee Code': 'CT655', Role: 'Engineer', Admin: '' },
+            { 'Employee Code': 'CT656', Role: 'Project manager', Admin: 'Yes' },
+            { 'Employee Code': 'CT661', Role: 'Purchase', Admin: '' },
           ]}
           parseRow={row => {
             const ecode = pick(row, 'employee_code', 'ecode', 'employee code', 'code', 'emp code')
             const raw = pick(row, 'role', 'spare role', 'role in spare', 'access')
             if (!raw) return { ecode, problem: 'no role' }
             const role = normaliseRole(raw)
-            return role ? { ecode, value: role } : { ecode, problem: `unknown role "${raw}"` }
+            if (!role) return { ecode, problem: `unknown role "${raw}"` }
+            // Either column says it. "Project manager, Admin" in one cell
+            // is how people write it when there is no Admin column.
+            const adminCell = pick(row, 'admin', 'is admin', 'spare admin', 'administrator')
+            return { ecode, value: { role, admin: saysAdmin(adminCell) || saysAdmin(raw) } }
           }}
-          describe={role => SPARE_ROLES.find(r => r.value === role)?.label ?? role}
+          describe={v =>
+            `${SPARE_ROLES.find(r => r.value === v.role)?.label ?? v.role}${v.admin ? ' + admin' : ''}`}
           apply={async assignments => {
             // Matched on the code that is already loaded rather than a
             // query per row: this list is the whole roster and is in
             // memory, so a thousand-row sheet costs one round trip.
             const byEcode = new Map((data ?? []).map(p => [p.ecode.toUpperCase(), p]))
             const missing: string[] = []
-            const updates = new Map<string, SpareProfile['role']>()
+            const updates = new Map<string, { role: SpareRole; is_spare_admin: boolean }>()
             for (const a of assignments) {
               const person = byEcode.get(a.ecode.toUpperCase())
               if (!person) { missing.push(a.ecode); continue }
-              // Last row wins if a code appears twice, and rows that ask
-              // for the role somebody already holds are not writes.
-              if (person.role !== a.value) updates.set(person.id, a.value)
+              // Last row wins if a code appears twice, and a row asking
+              // for what somebody already has is not a write.
+              if (person.role === a.value.role && person.is_spare_admin === a.value.admin) continue
+              updates.set(person.id, { role: a.value.role, is_spare_admin: a.value.admin })
             }
-            for (const [id, role] of updates) {
-              const { error: e } = await supabase.from('profiles').update({ role }).eq('id', id)
+            for (const [id, patch] of updates) {
+              const { error: e } = await supabase.from('profiles').update(patch).eq('id', id)
               if (e) throw new Error(friendlyError(e))
             }
             await qc.invalidateQueries({ queryKey: ['spare_profiles'] })
@@ -993,14 +1061,31 @@ function SpareTab() {
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-        <input
-          className="input pl-9"
-          placeholder="Search by name or employee code"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <div className="sm:flex sm:items-center sm:gap-3">
+        <div className="relative sm:flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+          <input
+            className="input pl-9"
+            placeholder="Search by name or employee code"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        {/* Counted, so the filter answers the question before it is used:
+            "how many admins are there" is usually the whole reason
+            somebody came looking. */}
+        <select
+          className="input mt-3 sm:mt-0 sm:w-56"
+          value={roleFilter}
+          onChange={e => setRoleFilter(e.target.value as typeof roleFilter)}
+          aria-label="Filter by role"
+        >
+          <option value="all">Everyone ({counts.all})</option>
+          {SPARE_ROLES.map(r => (
+            <option key={r.value} value={r.value}>{r.label} ({counts[r.value] ?? 0})</option>
+          ))}
+          <option value="admin">Admins ({counts.admin})</option>
+        </select>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-ink-200">
@@ -1009,6 +1094,7 @@ function SpareTab() {
             <tr>
               <th className="px-3 py-2.5">Employee</th>
               <th className="px-3 py-2.5">Role in Spare</th>
+              <th className="px-3 py-2.5">Also admin</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -1019,6 +1105,7 @@ function SpareTab() {
                   <span className="ml-2 text-ink-400">{r.ecode}</span>
                   {!r.active && <span className="ml-2 badge bg-ink-100 text-ink-500">Inactive</span>}
                 </td>
+                {/* One of three. A job, and everybody has exactly one. */}
                 <td className="px-3 py-2.5">
                   <div className="flex flex-wrap gap-1.5">
                     {SPARE_ROLES.map(role => (
@@ -1026,8 +1113,8 @@ function SpareTab() {
                         key={role.value}
                         title={role.hint}
                         aria-pressed={r.role === role.value}
-                        disabled={setRole.isPending}
-                        onClick={() => setRole.mutate({ id: r.id, role: role.value })}
+                        disabled={setAccess.isPending}
+                        onClick={() => setAccess.mutate({ id: r.id, role: role.value })}
                         className={clsx(
                           'badge cursor-pointer transition-colors disabled:opacity-50',
                           r.role === role.value
@@ -1039,6 +1126,22 @@ function SpareTab() {
                       </button>
                     ))}
                   </div>
+                </td>
+                {/* Separate, because it is not one of them. A manager who
+                    maintains the custom fields is both, and the old
+                    four-way choice made granting the keys take the job
+                    away. */}
+                <td className="px-3 py-2.5">
+                  <label className="inline-flex cursor-pointer items-center gap-2" title={ADMIN_HINT}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[color:var(--score-accent)]"
+                      checked={r.is_spare_admin}
+                      disabled={setAccess.isPending}
+                      onChange={e => setAccess.mutate({ id: r.id, is_spare_admin: e.target.checked })}
+                    />
+                    <span className="text-xs text-ink-500">Admin</span>
+                  </label>
                 </td>
               </tr>
             ))}

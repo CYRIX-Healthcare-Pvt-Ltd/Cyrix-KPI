@@ -9,7 +9,15 @@
  * reports success. That deserves tests, and tests deserve a module that
  * does not drag a React tree in with it.
  */
-export type SpareRole = 'engineer' | 'project_manager' | 'purchase' | 'admin'
+/**
+ * The job somebody does in Spare. Exactly one of these.
+ *
+ * Administering is not on this list, and that is the point: it is
+ * something people also do, so it lives on `profiles.is_spare_admin` and
+ * combines with any of these. See migration 0069 — as a fourth role it
+ * forced a choice, and granting somebody the keys took their job away.
+ */
+export type SpareRole = 'engineer' | 'project_manager' | 'purchase'
 
 export const SPARE_ROLES: { value: SpareRole; label: string; hint: string }[] = [
   { value: 'engineer', label: 'Engineer', hint: 'Scan tags, and ask for changes' },
@@ -18,8 +26,11 @@ export const SPARE_ROLES: { value: SpareRole; label: string; hint: string }[] = 
   // spare is and holds no other permission. Somebody assigning roles
   // should be able to see that without opening the module.
   { value: 'purchase', label: 'Purchase', hint: 'Decides which Cyrix item a spare is, and approves that for others' },
-  { value: 'admin', label: 'Admin', hint: 'The custom fields, and everything the other three can do' },
 ]
+
+/** Shown beside the checkbox, so what it grants is not a guess. */
+export const ADMIN_HINT =
+  'Also maintains the custom fields, and can approve anything a project manager can'
 
 /**
  * Spellings seen in the wild, plus the obvious short forms.
@@ -48,10 +59,18 @@ const ALIASES: Record<string, SpareRole> = {
   buyer: 'purchase',
   procurement: 'purchase',
 
-  admin: 'admin',
-  admins: 'admin',
-  administrator: 'admin',
-  superadmin: 'admin',
+}
+
+/**
+ * Does this cell mean "and an admin as well"?
+ *
+ * A sheet can say `Project manager, Admin` in one cell, or carry a
+ * separate Admin column with yes/true/1 in it. Both are how people
+ * actually write it, and neither should need explaining.
+ */
+export function saysAdmin(raw: string): boolean {
+  return /\b(admin|administrator|superadmin)\b/i.test(raw)
+    || /^(y|yes|true|1)$/i.test(raw.trim())
 }
 
 /**
