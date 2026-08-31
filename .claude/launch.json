@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "cyrix-spare",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "D:/Projects/Blue-Star", "run", "dev", "--", "--port", "5174"],
+      "port": 5174
     }
   ]
 }
