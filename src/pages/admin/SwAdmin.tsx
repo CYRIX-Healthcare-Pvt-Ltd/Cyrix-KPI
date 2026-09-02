@@ -10,6 +10,7 @@ import { exportOrgStatus } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
 import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
 import SpareFields from './SpareFields'
+import SpareWarehouses from './SpareWarehouses'
 import {
   useOtpSender, useSaveOtpSender,
   useAppModules, useModuleGrants, useSetModuleAccess,
@@ -875,13 +876,17 @@ export function BulkAssign<T>({
  * one scrolling page meant the fields sat below a table of 1,148 rows.
  */
 function SpareTab() {
-  const [view, setView] = useState<'roles' | 'fields'>('roles')
+  const [view, setView] = useState<'roles' | 'warehouses' | 'fields'>('roles')
 
   return (
     <div className="space-y-5">
       <div className="flex gap-1 rounded-lg bg-ink-100 p-1 sm:w-fit">
         {([
           { key: 'roles' as const, label: 'Roles' },
+          // Between the two on purpose: a warehouse is the one thing the
+          // tag form will not go without, so it is set up before the
+          // fields that are optional by comparison.
+          { key: 'warehouses' as const, label: 'Warehouses' },
           { key: 'fields' as const, label: 'Custom fields' },
         ]).map(t => (
           <button
@@ -898,7 +903,7 @@ function SpareTab() {
         ))}
       </div>
 
-      {view === 'roles' ? <SpareRolesView /> : <SpareFields />}
+      {view === 'roles' ? <SpareRolesView /> : view === 'warehouses' ? <SpareWarehouses /> : <SpareFields />}
     </div>
   )
 }
