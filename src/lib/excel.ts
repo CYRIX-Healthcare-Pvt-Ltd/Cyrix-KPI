@@ -86,7 +86,46 @@ function toWeightagePoints(v: unknown, z: string | null): number | null {
   return round3(v <= 1 ? v * 100 : v)
 }
 
+/**
+ * A figure already written as a percentage, unless Excel says otherwise.
+ *
+ * The weightage column guesses: a bare 0.25 there is far more likely to
+ * mean 25% than a quarter of one percent, because weightages are tens.
+ * That guess is wrong for "how much does one over the target cost",
+ * where 1 means one percent and is an entirely ordinary answer — it read
+ * 1 as 100% and wiped the row out on the first unit over.
+ *
+ * So only the cell's own format converts here. No format, no guess.
+ */
+function toPercentPoints(v: unknown, z: string | null): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null
+  return round3(z?.includes('%') ? v * 100 : v)
+}
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000
+
+/**
+ * A rule named outright in the sheet's "Capping" column.
+ *
+ * Matched on what separates the four rather than on the whole label, so
+ * the wording can be tidied without silently un-matching every file
+ * written against the old one. Direction first, then the ceiling or the
+ * floor — which is the same pair of questions the labels themselves ask.
+ */
+export function ruleFromCappingLabel(label: string): ScoringRule | null {
+  const l = label.toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!l) return null
+
+  if (l.includes('higher')) {
+    // "can exceed" / "can pass" / "uncapped" all mean the same ceiling.
+    return /exceed|pass|uncapped|above|beyond/.test(l) ? 'higher_uncapped' : 'higher_capped'
+  }
+  if (l.includes('lower')) {
+    // "below 0", "can go negative", "-ve": the floor is the whole question.
+    return /below 0|below zero|negative|-ve/.test(l) ? 'lower_linear' : 'lower_penalty'
+  }
+  return null
+}
 
 function detectScoringRule(
   formula: string | null,
@@ -189,6 +228,10 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
         } else if (label.includes('achieved weightage') && colOf.formula === undefined) {
           colOf.formula = c
         }
+        // "If lower Capping" before "Capping": it contains the word, and
+        // matching the shorter one first would claim both columns.
+        else if (label.includes('capping') && label.includes('lower')) colOf.perUnit = c
+        else if (label.includes('capping')) colOf.capping = c
       }
       break
     }
@@ -270,7 +313,31 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
 
     const formula =
       colOf.formula !== undefined ? cellAt(ws, r, colOf.formula).f : null
-    const { rule, inferred } = detectScoringRule(formula, currentSection, target)
+
+    /*
+      A named rule beats a guessed one.
+
+      The old template said how a row scores only in the arithmetic of its
+      "Achieved Weightage" formula, so the rule had to be reverse-engineered
+      from it. The bulk template names it in a "Capping" column instead,
+      which is both readable and not a guess — so when it is there it wins,
+      and when it is not this falls back to the formula exactly as before.
+    */
+    const cappingLabel =
+      colOf.capping !== undefined ? norm(cellAt(ws, r, colOf.capping).text) : ''
+    const named = currentSection === 'core_values' ? null : ruleFromCappingLabel(cappingLabel)
+    const { rule, inferred } = named
+      ? { rule: named, inferred: false }
+      : detectScoringRule(formula, currentSection, target)
+
+    // "If lower Capping": what one over the target costs. Only the lower
+    // rules take it, so a stray figure on a higher row is left alone
+    // rather than written into params nothing will read.
+    const perUnitCell = colOf.perUnit !== undefined ? cellAt(ws, r, colOf.perUnit) : null
+    const perUnit =
+      (rule === 'lower_linear' || rule === 'lower_penalty')
+        ? toPercentPoints(perUnitCell?.v, perUnitCell?.z ?? null)
+        : null
 
     result.rows.push({
       section: currentSection,
@@ -283,7 +350,9 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
       target_value: target,
       target_unit: targetCell?.z?.includes('%') ? '%' : null,
       scoring_rule: rule,
-      rule_params: {},
+      // Zero is the absence of a penalty rather than a penalty of nothing,
+      // which is the same reading the scoring engine takes.
+      rule_params: perUnit != null && perUnit > 0 ? { penalty_per_unit: perUnit } : {},
       sort_order: ++sortOrder,
       rule_inferred: inferred,
       sourceRow: r + 1,

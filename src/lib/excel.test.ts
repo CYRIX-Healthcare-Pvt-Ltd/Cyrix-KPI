@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import * as XLSX from 'xlsx'
-import { parseKpiWorkbook, type ParseResult } from './excel'
+import { parseKpiWorkbook, ruleFromCappingLabel, type ParseResult } from './excel'
 
 /**
  * Parses the real template if it is present on this machine. The file
@@ -166,5 +166,76 @@ describe('the ESMS band', () => {
       ['Alignment To Core Values - 20%', 'Customer Delight', 'Delivers a positive experience', 20, 100],
     ]))
     expect(parsed.rows.map(r => r.section)).toEqual(['job_role', 'core_values'])
+  })
+})
+
+describe('the bulk template round-trips', () => {
+  /** Exactly what downloadBulkTemplate() writes. */
+  function templateBuffer(): ArrayBuffer {
+    const rows = [
+      ['KRA& Weightage', 'KRA', 'KPI (Mesurable Parameter)', 'Weightage', 'Target KPI', 'Capping', 'If lower Capping'],
+      ['Job Role - 80%', 'Cost Efficiency', 'R&M vs revenue', 0.4, 100, 'Lower is better (min 0 %)', 1],
+      ['Job Role - 80%', 'Breakdown Management', 'Closed in 30 days', 0.2, 0, 'Lower is better (can go below 0 %)', 2],
+      ['Job Role - 80%', 'Organic Growth', 'Asset value addition', 0.1, 100, 'Higher is better (max weightage)', ''],
+      ['Job Role - 80%', 'Team Handling', 'Team retention', 0.1, 100, 'Higher is better (can exceed weightage)', ''],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    for (let r = 1; r < rows.length; r++) {
+      const ref = XLSX.utils.encode_cell({ r, c: 3 })
+      if (ws[ref]) (ws[ref] as XLSX.CellObject).z = '0%'
+    }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Template')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Ecode to upload'], ['E390']]), 'Ecode')
+    return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  }
+
+  it('reads every weightage back as the percentage it displays', () => {
+    const { rows } = parseKpiWorkbook(templateBuffer())
+    expect(rows.map(r => r.weightage)).toEqual([40, 20, 10, 10])
+    expect(rows.reduce((a, r) => a + r.weightage, 0)).toBe(80)
+  })
+
+  it('takes the rule from the Capping column rather than guessing', () => {
+    const { rows } = parseKpiWorkbook(templateBuffer())
+    expect(rows.map(r => r.scoring_rule)).toEqual([
+      'lower_penalty', 'lower_linear', 'higher_capped', 'higher_uncapped',
+    ])
+    expect(rows.every(r => !r.rule_inferred)).toBe(true)
+  })
+
+  it('reads "If lower Capping" as written, not as a fraction', () => {
+    // 1 means one percent. The weightage column's "a bare 1 is probably
+    // 100%" guess is right there and catastrophic here — it wiped a row
+    // out on the first unit over.
+    const { rows } = parseKpiWorkbook(templateBuffer())
+    expect(rows[0].rule_params.penalty_per_unit).toBe(1)
+    expect(rows[1].rule_params.penalty_per_unit).toBe(2)
+  })
+
+  it('leaves the per-unit figure off a higher-is-better row', () => {
+    const { rows } = parseKpiWorkbook(templateBuffer())
+    expect(rows[2].rule_params).toEqual({})
+    expect(rows[3].rule_params).toEqual({})
+  })
+})
+
+describe('ruleFromCappingLabel', () => {
+  it('matches the four labels the template offers', () => {
+    expect(ruleFromCappingLabel('Higher is better (max weightage)')).toBe('higher_capped')
+    expect(ruleFromCappingLabel('Higher is better (can exceed weightage)')).toBe('higher_uncapped')
+    expect(ruleFromCappingLabel('Lower is better (min 0 %)')).toBe('lower_penalty')
+    expect(ruleFromCappingLabel('Lower is better (can go below 0 %)')).toBe('lower_linear')
+  })
+
+  it('matches on meaning, so old wording still resolves', () => {
+    expect(ruleFromCappingLabel('Higher is better (capped at weightage)')).toBe('higher_capped')
+    expect(ruleFromCappingLabel('Lower is better (linear, can go negative)')).toBe('lower_linear')
+    expect(ruleFromCappingLabel('lower is better — -ve marks apply')).toBe('lower_linear')
+  })
+
+  it('says nothing rather than guessing when it cannot tell', () => {
+    expect(ruleFromCappingLabel('')).toBeNull()
+    expect(ruleFromCappingLabel('see note below')).toBeNull()
   })
 })

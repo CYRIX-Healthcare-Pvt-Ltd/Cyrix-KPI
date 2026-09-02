@@ -18,6 +18,7 @@ import {
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 import KpiTiming from './KpiTiming'
+import BulkKpi from './BulkKpi'
 
 interface LoginStatusRow {
   employee_id: string
@@ -875,6 +876,43 @@ export function BulkAssign<T>({
  * are different questions with different answers, and stacking both onto
  * one scrolling page meant the fields sat below a table of 1,148 rows.
  */
+/**
+ * KPI setup, in two halves.
+ *
+ * Timing is when the year opens and closes; bulk assignment is who gets
+ * what. Both are this screen's business and neither is the other, so they
+ * are sub-tabs rather than one page that scrolls past the thing you did
+ * not come for.
+ */
+function KpiTab() {
+  const [view, setView] = useState<'timing' | 'bulk'>('timing')
+
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-1 rounded-lg bg-ink-100 p-1 sm:w-fit">
+        {([
+          { key: 'timing' as const, label: 'Timing' },
+          { key: 'bulk' as const, label: 'Bulk assign' },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setView(t.key)}
+            aria-current={view === t.key ? 'page' : undefined}
+            className={clsx(
+              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'timing' ? <KpiTiming /> : <BulkKpi />}
+    </div>
+  )
+}
+
 function SpareTab() {
   const [view, setView] = useState<'roles' | 'warehouses' | 'fields'>('roles')
 
@@ -1536,7 +1574,7 @@ const ADMIN_TABS = [
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
-  { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTiming /> },
+  { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTab /> },
   { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
   { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
 ] as const
