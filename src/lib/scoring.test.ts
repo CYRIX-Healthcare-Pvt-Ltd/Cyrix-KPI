@@ -47,6 +47,39 @@ describe('higher_uncapped — overachievement can cross the weightage', () => {
   })
 })
 
+describe('lower_penalty — a stated rate per unit over', () => {
+  // The rule takes the same penalty_per_unit lower_linear does, so the
+  // two differ only in where they stop. Same figures through both is the
+  // clearest way to say that.
+  const p = { penalty_per_unit: 2 }
+
+  it('takes the stated amount off for each one over', () => {
+    expect(calcKpiScore('lower_penalty', 10, 2, 2, p)).toBe(10)
+    expect(calcKpiScore('lower_penalty', 10, 2, 3, p)).toBe(8)
+    expect(calcKpiScore('lower_penalty', 10, 2, 5, p)).toBe(4)
+  })
+
+  it('stops at zero, which is the whole of its difference from lower_linear', () => {
+    expect(calcKpiScore('lower_penalty', 10, 2, 7, p)).toBe(0)
+    expect(calcKpiScore('lower_penalty', 10, 2, 20, p)).toBe(0)
+    // The same inputs, the other rule: past zero and still falling.
+    // 10 - (7-2)*2 = 0, then 10 - (8-2)*2 = -2.
+    expect(calcKpiScore('lower_linear', 10, 2, 7, p)).toBe(0)
+    expect(calcKpiScore('lower_linear', 10, 2, 8, p)).toBe(-2)
+  })
+
+  it('works on a row carrying no weightage of its own', () => {
+    // The point of a stated rate: a proportional slice of 0 is 0.
+    expect(calcKpiScore('lower_penalty', 0, 1, 3, p)).toBe(0)
+    expect(calcKpiScore('lower_linear', 0, 1, 3, p)).toBe(-4)
+  })
+
+  it('ignores a rate of zero, which is the absence of one rather than a free pass', () => {
+    // Falls through to the proportional curve, as if unset.
+    expect(calcKpiScore('lower_penalty', 20, 35, 40, { penalty_per_unit: 0 })).toBe(17.5)
+  })
+})
+
 describe('lower_penalty — exceeding the target reduces the score', () => {
   it('reproduces the Documentation & Reporting row', () => {
     // wt 20, target 35, achieved 40  ->  20 * 35/40 = 17.5

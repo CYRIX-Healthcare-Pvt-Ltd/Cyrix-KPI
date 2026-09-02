@@ -27,13 +27,18 @@ export interface RuleParams {
   /** For higher_uncapped: ceiling as a multiple of the weightage (1.2 = 120%). */
   max_multiplier?: number
   /**
-   * For lower_linear: points off for each unit over the target.
+   * For either lower rule: points off for each unit over the target.
    *
    * Points on the total out of 100, which is what makes a row worth no
    * weightage at all still able to do something: "one complaint a month
    * is allowed, each one after that costs 2%". Set, it replaces the
    * proportional slice at every target — including 0, which is the only
    * place it used to apply.
+   *
+   * Taken by lower_penalty too. The two lower rules differ in one thing
+   * and it is the thing their names say — one stops at zero, the other
+   * keeps going down — so the rate a unit costs is a separate question
+   * from the floor, and both of them get to answer it.
    */
   penalty_per_unit?: number
   /** For banded: thresholds, evaluated on achieved/target as a percentage. */
@@ -91,12 +96,25 @@ export function calcKpiScore(
       break
     }
 
-    case 'lower_penalty':
-      if (target === null || target === undefined) result = 0
-      else if (achieved <= target) result = wt
+    case 'lower_penalty': {
+      if (target === null || target === undefined) { result = 0; break }
+      if (achieved <= target) { result = wt; break }
+      // A stated rate per unit over, exactly as lower_linear takes one.
+      // The two rules now differ in one thing and it is the thing their
+      // names say: this one stops at zero, the other keeps going down.
+      // Before, only one of them could be told what a unit costs, so
+      // "1% off per complaint, but never below zero" could not be
+      // expressed at all -- you picked the floor you wanted and accepted
+      // whatever penalty came with it.
+      //
+      // Unset falls through to the proportional curve, which is what
+      // every row written before today relies on.
+      const perUnit = params.penalty_per_unit
+      if (perUnit != null && perUnit > 0) result = wt - (achieved - target) * perUnit
       else if (achieved === 0) result = 0
       else result = wt * (target / achieved)
       break
+    }
 
     case 'lower_linear': {
       if (target === null || target === undefined) { result = 0; break }

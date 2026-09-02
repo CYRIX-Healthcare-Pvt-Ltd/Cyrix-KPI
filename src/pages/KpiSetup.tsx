@@ -583,21 +583,33 @@ function RowEditor({
 
       <div className="grid gap-3 sm:grid-cols-12 sm:pl-9">
 
+        {/* The same treatment as the KRA and KPI above. These two are the
+            other half of what a row says -- how much it is worth and what
+            counts as hitting it -- and they were the plain grey labels the
+            pair above used to be. */}
         <div className="sm:col-span-2">
-          <label className="label text-xs">Weightage %</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
+            Weightage <span className="font-normal normal-case tracking-normal text-ink-400">— % of 100</span>
+          </label>
           <NumberInput
             min={0} max={100} step="any"
+            className="input font-medium"
             value={row.weightage}
             onValue={v => onChange({ weightage: v ?? 0 })}
+            aria-label={`Weightage for row ${index}`}
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="label text-xs">Target</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
+            Target <span className="font-normal normal-case tracking-normal text-ink-400">— to hit</span>
+          </label>
           <NumberInput
             step="any"
+            className="input font-medium"
             value={row.target_value}
             onValue={v => onChange({ target_value: v })}
+            aria-label={`Target for row ${index}`}
           />
         </div>
 
@@ -686,8 +698,12 @@ function RowEditor({
             )}
 
             {/* The figure that lets a row with no weightage of its own
-                still count for something. */}
-            {row.scoring_rule === 'lower_linear' && (
+                still count for something. Offered by both lower rules:
+                what a unit over costs and where the score bottoms out are
+                two separate decisions, and tying them together meant
+                picking the floor you wanted and accepting whatever
+                penalty came with it. */}
+            {(row.scoring_rule === 'lower_linear' || row.scoring_rule === 'lower_penalty') && (
               <PenaltyPerUnit
                 weightage={row.weightage}
                 value={row.rule_params.penalty_per_unit ?? null}
