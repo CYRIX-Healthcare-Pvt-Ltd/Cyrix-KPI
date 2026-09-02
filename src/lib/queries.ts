@@ -1703,3 +1703,52 @@ export function useSetModuleAccess() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['module_grants'] }),
   })
 }
+
+/** One person in a manager's line, with where they stand this month. */
+export interface SubtreeRow {
+  employee_id: string
+  ecode: string
+  full_name: string
+  designation: string | null
+  avatar: string | null
+  reporting_manager_id: string | null
+  depth: number
+  direct_reports: number
+  assignment_status: string | null
+  submission_status: string | null
+  final_total_score: number | null
+  self_total_score: number | null
+  final_job_role_score: number | null
+  final_core_score: number | null
+  final_esms_score: number | null
+}
+
+/**
+ * Everybody below one person — the caller by default, or a report of
+ * theirs when drilling in. The database decides whether that is allowed
+ * and answers with nothing when it is not (migration 0082).
+ *
+ * `root` is part of the key, so walking down a branch and back up again
+ * is instant the second time rather than a fresh round trip per step.
+ */
+export function useTeamSubtree(
+  fy: string,
+  month: string,
+  root: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['team_subtree', fy, month, root ?? 'me'],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('team_subtree', {
+        p_fy: fy,
+        p_month: month,
+        p_root: root,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as SubtreeRow[]
+    },
+  })
+}

@@ -6,9 +6,10 @@ import {
   Sigma, CalendarDays, LineChart as LineChartIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import {
   useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar,
-  useSettleDueMonths, useOpenQueryMonths, currentFy,
+  useSettleDueMonths, useOpenQueryMonths, useTeamSubtree, currentFy,
 } from '@/lib/queries'
 import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
 import { exportKpiScores } from '@/lib/export'
@@ -21,6 +22,7 @@ import { teamBandShare, attainmentPct } from '@/lib/bands'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import BandTrend from '@/components/BandTrend'
 import Avatar from '@/components/Avatar'
+import TeamDrill from '@/components/TeamDrill'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 import type { KpiSubmission, KpiAssignment, Employee } from '@/types/db'
 
@@ -85,6 +87,9 @@ export default function Team() {
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
   const [peek, setPeek] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusKey>('all')
+  /** Whose team is being looked into, null when nobody's. */
+  const [drill, setDrill] = useState<{ id: string; name: string } | null>(null)
+  const [askScope, setAskScope] = useState(false)
   const [photoFor, setPhotoFor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +107,10 @@ export default function Team() {
   const { data: queried } = useOpenQueryMonths(true)
   const ids = useMemo(() => (data?.team ?? []).map(t => t.id), [data])
   const { data: allSubs } = useTeamSubmissions(ids.length ? ids : undefined, fy)
+  // Only for the report counts and the 'everyone under me' figure. The
+  // list itself still comes from useTeamMonth, which is the query the
+  // rest of this page is built on.
+  const { data: subtree } = useTeamSubtree(fy, month, null)
 
   const team = data?.team ?? []
   const subsById = new Map((data?.submissions ?? []).map(s => [s.employee_id, s]))
@@ -256,20 +265,66 @@ export default function Team() {
     })
   }, [allSubs, fy])
 
-  const download = async () => {
-    setBusy(true); setError(null)
+  /** How many people are below this manager, beyond their own reports. */
+  const wholeLine = subtree?.length ?? 0
+  const reportsById = useMemo(
+    () => new Map((subtree ?? []).filter(r => r.depth === 1).map(r => [r.employee_id, r.direct_reports])),
+    [subtree],
+  )
+
+  /**
+   * The file, for one of two audiences.
+   *
+   * 'direct' is built from what this page already holds. 'deep' cannot
+   * be: the row policy on submissions is a single hop, so reading the
+   * table for a division would come back quietly short rather than
+   * refused. That one goes through the function that checks ancestry and
+   * returns the whole line (migration 0083).
+   */
+  const download = async (scope: 'direct' | 'deep') => {
+    setBusy(true); setError(null); setAskScope(false)
     try {
-      const byEmp = new Map<string, typeof allSubs>()
-      for (const s of allSubs ?? []) {
-        const list = byEmp.get(s.employee_id) ?? []
-        list!.push(s)
-        byEmp.set(s.employee_id, list)
+      if (scope === 'direct') {
+        const byEmp = new Map<string, typeof allSubs>()
+        for (const s of allSubs ?? []) {
+          const list = byEmp.get(s.employee_id) ?? []
+          list!.push(s)
+          byEmp.set(s.employee_id, list)
+        }
+        await exportKpiScores(
+          team.map(employee => ({ employee, submissions: byEmp.get(employee.id) ?? [] })),
+          fy,
+          `Cyrix-KPI-my-team-${fy}.xlsx`,
+        )
+      } else {
+        const { data, error: rpcError } = await supabase.rpc('team_subtree_scores', {
+          p_fy: fy, p_root: null, p_deep: true,
+        })
+        if (rpcError) throw new Error(rpcError.message)
+        type Flat = Record<string, unknown> & { employee_id: string; period_month: string | null }
+        const grouped = new Map<string, { employee: Employee; submissions: KpiSubmission[] }>()
+        for (const raw of (data ?? []) as Flat[]) {
+          let entry = grouped.get(raw.employee_id)
+          if (!entry) {
+            entry = {
+              employee: {
+                id: raw.employee_id,
+                ecode: raw.ecode as string,
+                full_name: raw.full_name as string,
+                designation: raw.designation as string | null,
+                department: raw.department as string | null,
+              } as Employee,
+              submissions: [],
+            }
+            grouped.set(raw.employee_id, entry)
+          }
+          // A person with no submission still comes back, once, with a
+          // null month — they belong in the file as an empty row rather
+          // than being left out of their own division's export.
+          if (raw.period_month) entry.submissions.push(raw as unknown as KpiSubmission)
+        }
+        await exportKpiScores([...grouped.values()], fy, `Cyrix-KPI-whole-team-${fy}.xlsx`)
       }
-      await exportKpiScores(
-        team.map(employee => ({ employee, submissions: byEmp.get(employee.id) ?? [] })),
-        fy,
-        `Cyrix-KPI-my-team-${fy}.xlsx`,
-      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not build the export.')
     } finally {
@@ -486,7 +541,14 @@ export default function Team() {
             <Link to="/team/analysis" className="btn-analysis">
               <BarChart3 className="h-4 w-4" /> Team analysis
             </Link>
-            <button onClick={download} className="btn-excel" disabled={busy}>
+            {/* Only asks when the two answers differ. A manager whose
+                reports manage nobody would be answering a question with
+                one possible answer. */}
+            <button
+              onClick={() => (wholeLine > team.length ? setAskScope(true) : download('direct'))}
+              className="btn-excel"
+              disabled={busy}
+            >
               {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
               Export to Excel
             </button>
@@ -677,6 +739,23 @@ export default function Team() {
                 />
               </div>
 
+              {/* Somebody who manages people can be looked into. Shown
+                  only where there is a team to see, so the button never
+                  opens an empty list. */}
+              {(reportsById.get(member.id) ?? 0) > 0 && (
+                <button
+                  onClick={() => setDrill({ id: member.id, name: member.full_name })}
+                  className="btn-secondary shrink-0 !px-2.5 !py-1.5 text-xs"
+                  title={`See who reports to ${member.full_name}`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">View team</span>
+                  <span className="ml-0.5 tabular-nums opacity-70">
+                    {reportsById.get(member.id)}
+                  </span>
+                </button>
+              )}
+
               {needsScoring && sub ? (
                 <Link to={`/score/${sub.id}`} className="btn-primary shrink-0 !px-3 !py-1.5 text-xs">
                   Score
@@ -708,6 +787,64 @@ export default function Team() {
         <Spline className="h-3.5 w-3.5" />
         The page tint reflects your team's average score.
       </p>
+
+      {drill && (
+        <TeamDrill
+          root={drill}
+          fy={fy}
+          month={month}
+          onClose={() => setDrill(null)}
+        />
+      )}
+
+      {/*
+        Two files, two audiences, and the counts are shown rather than
+        described — "everyone under you" means nothing until it says 187.
+      */}
+      {askScope && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-shade/60 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-ink-200 bg-surface p-5 shadow-2xl">
+            <div>
+              <h4 className="font-semibold text-ink-900">Who should the file cover?</h4>
+              <p className="mt-1 text-sm text-ink-600">
+                Some of your team manage people of their own.
+              </p>
+            </div>
+
+            <button
+              onClick={() => download('direct')}
+              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-brand-300 hover:bg-brand-50/50"
+            >
+              <p className="font-medium text-ink-900">
+                My direct reports
+                <span className="ml-2 tabular-nums text-ink-500">{team.length}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink-500">
+                The {team.length} people on this screen.
+              </p>
+            </button>
+
+            <button
+              onClick={() => download('deep')}
+              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-brand-300 hover:bg-brand-50/50"
+            >
+              <p className="font-medium text-ink-900">
+                Everyone under me
+                <span className="ml-2 tabular-nums text-ink-500">{wholeLine}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Their teams as well, all the way down.
+              </p>
+            </button>
+
+            <div className="flex justify-end">
+              <button onClick={() => setAskScope(false)} className="btn-secondary">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
