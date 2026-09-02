@@ -21,6 +21,14 @@ export interface Band {
   hex: { base: string; soft: string; strong: string }
   /** Text + background for chips and pills. */
   chip: string
+  /**
+   * The same band, a step quieter: an outline and a wash rather than a
+   * fill. For a control that should carry the band colour without
+   * outshouting the score sitting beside it — a chip and a button both
+   * filled at 100 in one row read as two scores rather than a score and
+   * a way in.
+   */
+  tint: string
   /** Accent used for the page wash and section rules. */
   accent: string
   /** Very soft page-level tint. */
@@ -68,6 +76,7 @@ export const BANDS: Band[] = [
     key: 'excellent', label: 'Excellent', min: 90,
     hex: { base: '#059669', soft: '#d1fae5', strong: '#064e3b' },
     chip: 'bg-emerald-100 text-emerald-900',
+    tint: 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100',
     accent: 'text-emerald-800', wash: 'from-emerald-50', bar: 'bg-emerald-600',
     onDark: {
       // Lighter than the light-mode base: #059669 on black is a smudge.
@@ -80,6 +89,7 @@ export const BANDS: Band[] = [
     key: 'veryGood', label: 'Very Good', min: 80,
     hex: { base: '#22c55e', soft: '#dcfce7', strong: '#166534' },
     chip: 'bg-green-100 text-green-800',
+    tint: 'border-green-200 bg-green-50 text-green-800 hover:bg-green-100',
     accent: 'text-green-700', wash: 'from-green-50', bar: 'bg-green-500',
     onDark: {
       text: 'text-green-400', bar: 'bg-green-400',
@@ -91,6 +101,7 @@ export const BANDS: Band[] = [
     key: 'good', label: 'Good', min: 60,
     hex: { base: '#84cc16', soft: '#ecfccb', strong: '#3f6212' },
     chip: 'bg-lime-100 text-lime-900',
+    tint: 'border-lime-200 bg-lime-50 text-lime-800 hover:bg-lime-100',
     accent: 'text-lime-800', wash: 'from-lime-50', bar: 'bg-lime-500',
     onDark: {
       text: 'text-lime-400', bar: 'bg-lime-400',
@@ -102,6 +113,7 @@ export const BANDS: Band[] = [
     key: 'satisfactory', label: 'Satisfactory', min: 40,
     hex: { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
     chip: 'bg-amber-100 text-amber-800',
+    tint: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100',
     accent: 'text-amber-700', wash: 'from-amber-50', bar: 'bg-amber-500',
     onDark: {
       text: 'text-amber-400', bar: 'bg-amber-400',
@@ -113,6 +125,7 @@ export const BANDS: Band[] = [
     key: 'poor', label: 'Poor', min: -Infinity,
     hex: { base: '#e30613', soft: '#fde3e5', strong: '#9e0812' },
     chip: 'bg-cyrixRed-100 text-cyrixRed-800',
+    tint: 'border-cyrixRed-200 bg-cyrixRed-50 text-cyrixRed-800 hover:bg-cyrixRed-100',
     accent: 'text-cyrixRed-700', wash: 'from-cyrixRed-50', bar: 'bg-cyrixRed-600',
     onDark: {
       text: 'text-cyrixRed-400', bar: 'bg-cyrixRed-600',
@@ -273,6 +286,57 @@ export function teamBandShare(
     people: each.length,
     anyEsms: people.some(p => p.weights.esms > 0),
   }
+}
+
+/**
+ * The statuses that mean a month has actually been marked.
+ *
+ * 'finalized' is 'scored' that has since closed; both are a real figure
+ * from a manager. Anything else on a submission is the person's own
+ * self-assessment, which is not a score and must never be averaged into
+ * one.
+ */
+export const SCORED_STATUSES = new Set(['scored', 'finalized'])
+
+/**
+ * Every manager's own team average, keyed by the manager.
+ *
+ * Fed the rows of a reporting line — each carrying who it reports to —
+ * it answers "how is the team under this person doing" for every person
+ * in it at once, which is what lets a list of managers show each team's
+ * standing without a query per row.
+ *
+ * Only scored months count. Somebody who has not been assessed yet is
+ * absent from their team's figure rather than a zero in it: averaging in
+ * the unscored would report a team as failing for not having been
+ * looked at, which is the opposite of what the colour is for.
+ *
+ * A manager with nobody scored is simply not in the map. That is a
+ * different answer from a low average and the caller has to be able to
+ * tell them apart.
+ */
+export function teamAverages(
+  rows: Array<{
+    reporting_manager_id: string | null
+    submission_status: string | null
+    final_total_score: number | null
+  }>,
+): Map<string, number> {
+  const byManager = new Map<string, number[]>()
+  for (const row of rows) {
+    if (!row.reporting_manager_id) continue
+    if (!SCORED_STATUSES.has(row.submission_status ?? '')) continue
+    if (row.final_total_score === null) continue
+    const scores = byManager.get(row.reporting_manager_id) ?? []
+    scores.push(Number(row.final_total_score))
+    byManager.set(row.reporting_manager_id, scores)
+  }
+  return new Map(
+    [...byManager].map(([id, scores]) => [
+      id,
+      Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10,
+    ]),
+  )
 }
 
 /**

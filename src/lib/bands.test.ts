@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   bandFor, attainmentPct, BANDS, BAND_SCALE, bandScaleGradient, teamBandShare,
+  teamAverages,
 } from './bands'
 
 /**
@@ -258,5 +259,69 @@ describe('team bands carry marks as well as shares', () => {
     const s = teamBandShare([person(62, 15), { weights: { job: 80, esms: 0, core: 20 }, months: [] }])
     expect(s.people).toBe(1)
     expect(s.marks.job).toBeCloseTo(62, 5)
+  })
+})
+
+/**
+ * The figure behind the colour on a View team button.
+ *
+ * One pass over a reporting line answers it for every manager in that
+ * line at once, which is the only reason a list of forty rows can each
+ * show their own team's standing.
+ */
+describe("a team's average, per manager, from one reporting line", () => {
+  const row = (
+    manager: string | null,
+    submission_status: string | null,
+    final_total_score: number | null,
+  ) => ({ reporting_manager_id: manager, submission_status, final_total_score })
+
+  it('averages each manager separately in a single pass', () => {
+    const avg = teamAverages([
+      row('a', 'scored', 90),
+      row('a', 'finalized', 80),
+      row('b', 'scored', 40),
+    ])
+    expect(avg.get('a')).toBe(85)
+    expect(avg.get('b')).toBe(40)
+  })
+
+  it('counts finalized months the same as scored ones', () => {
+    // A finalized month is a scored one that has since closed. Dropping
+    // it would make a team's colour drift as the year is signed off.
+    expect(teamAverages([row('a', 'finalized', 70)]).get('a')).toBe(70)
+  })
+
+  it('leaves out anything that is not a manager score', () => {
+    // A self-assessment is the person's own claim, not a score, and a
+    // draft is not even that. Averaging either in would colour a branch
+    // by how optimistic it is about itself.
+    const avg = teamAverages([
+      row('a', 'scored', 90),
+      row('a', 'submitted', 20),
+      row('a', 'draft', 10),
+      row('a', null, null),
+    ])
+    expect(avg.get('a')).toBe(90)
+  })
+
+  it('leaves a manager with nobody scored out of the map entirely', () => {
+    // Absent, not zero: no colour at all is the right answer for a team
+    // that has not been looked at, and a 0 would paint it Poor.
+    const avg = teamAverages([row('a', 'draft', null), row('a', 'submitted', 55)])
+    expect(avg.has('a')).toBe(false)
+    expect(bandFor(avg.get('a') ?? null)).toBeNull()
+  })
+
+  it('rounds to one decimal, the way every other average on screen does', () => {
+    expect(teamAverages([
+      row('a', 'scored', 70),
+      row('a', 'scored', 71),
+      row('a', 'scored', 73),
+    ]).get('a')).toBe(71.3)
+  })
+
+  it('ignores rows at the top of the line, which report to nobody', () => {
+    expect(teamAverages([row(null, 'scored', 90)]).size).toBe(0)
   })
 })

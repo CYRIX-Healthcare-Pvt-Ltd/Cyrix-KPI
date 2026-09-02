@@ -18,6 +18,8 @@ import { Menu, LogOut, Bell } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
+import { ViewTeamButton } from './components/TeamDrill'
+import { ScorePill, StatusBadge } from './components/ui'
 import { BulkAssign } from './pages/admin/SwAdmin'
 import SpareFields from './pages/admin/SpareFields'
 import './index.css'
@@ -133,10 +135,68 @@ function UploadPanel() {
   )
 }
 
+/*
+ * The team list's row, at every band its View team button can wear.
+ *
+ * The button is tinted by the average of the team behind it, and the
+ * thing that needs looking at is not one button but the column of them:
+ * whether five tints are told apart at a glance while scrolling, whether
+ * the tint survives the flip to dark, and whether it fights the score
+ * pill two columns over — that pill is a filled chip off the same five
+ * colours, and a row showing a person's 92 beside their team's 41 must
+ * not read as one number contradicting itself.
+ *
+ * The last row is the case most rows are in today: a team nobody has
+ * scored yet, which has no band and must stay grey rather than borrow
+ * the bottom of the scale.
+ */
+function TeamButtons() {
+  const rows = [
+    { name: 'Nagasai Kiran Battikala', count: 41, own: 92.4, team: 94.1 },
+    { name: 'Mayankkumar Rameshbhai Patel', count: 27, own: 71.5, team: 83.6 },
+    { name: 'Raghwender Prasad', count: 14, own: 88.0, team: 67.2 },
+    { name: 'Afsal Y', count: 9, own: 64.3, team: 48.9 },
+    { name: 'Jerry Joseph', count: 6, own: 92.0, team: 31.4 },
+    { name: 'Manoj Kumar Kumar I S', count: 3, own: null, team: null },
+  ]
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
+      <div className="card divide-y divide-ink-100 overflow-hidden">
+        {rows.map(r => (
+          <div key={r.name} className="flex items-center gap-3 p-4">
+            <Avatar name={r.name} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-ink-900">{r.name}</p>
+              <p className="truncate text-xs text-ink-500">E669 · Project Technical Manager</p>
+            </div>
+            <div className="w-10 shrink-0 sm:w-[124px]">
+              <ViewTeamButton
+                name={r.name}
+                count={r.count}
+                average={r.team}
+                month="2026-07-01"
+                onClick={() => {}}
+              />
+            </div>
+            <div className="hidden w-36 shrink-0 text-right sm:block">
+              <StatusBadge status={r.own === null ? null : 'scored'} />
+            </div>
+            <div className="w-24 shrink-0 text-right sm:w-32">
+              <ScorePill value={r.own} size="sm" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Harness() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
+      <TeamButtons />
       <BrandPanel />
       <UploadPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">

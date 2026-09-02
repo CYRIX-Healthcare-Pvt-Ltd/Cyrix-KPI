@@ -18,11 +18,11 @@ import {
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired, TeamBands } from '@/components/analysis'
 import BellCurve from '@/components/BellCurve'
-import { teamBandShare, attainmentPct } from '@/lib/bands'
+import { teamBandShare, teamAverages, attainmentPct } from '@/lib/bands'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import BandTrend from '@/components/BandTrend'
 import Avatar from '@/components/Avatar'
-import TeamDrill from '@/components/TeamDrill'
+import TeamDrill, { ViewTeamButton } from '@/components/TeamDrill'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
 import type { KpiSubmission, KpiAssignment, Employee } from '@/types/db'
 
@@ -271,6 +271,12 @@ export default function Team() {
     () => new Map((subtree ?? []).filter(r => r.depth === 1).map(r => [r.employee_id, r.direct_reports])),
     [subtree],
   )
+  /**
+   * How each of those teams is doing this month, which is what colours
+   * the way into it. Same query as the counts — the whole line is
+   * already here, so this costs one pass over rows the page has.
+   */
+  const teamAvgById = useMemo(() => teamAverages(subtree ?? []), [subtree])
 
   /**
    * The file, for one of two audiences.
@@ -731,21 +737,17 @@ export default function Team() {
               {/* Narrow and icon-only on a phone rather than hidden: a
                   manager reading this on the road still needs to get into
                   a report's team, and the count is the part that has to
-                  survive the squeeze. */}
-              <div className="w-10 shrink-0 sm:w-[104px]">
+                  survive the squeeze. Tinted by how that team is doing —
+                  see ViewTeamButton. */}
+              <div className="w-10 shrink-0 sm:w-[124px]">
                 {(reportsById.get(member.id) ?? 0) > 0 && (
-                  <button
+                  <ViewTeamButton
+                    name={member.full_name}
+                    count={reportsById.get(member.id) ?? 0}
+                    average={teamAvgById.get(member.id) ?? null}
+                    month={month}
                     onClick={() => setDrill({ id: member.id, name: member.full_name })}
-                    className="btn w-full border border-ink-200 bg-surface !px-1.5 !py-1.5 text-xs text-ink-700 hover:bg-ink-100 sm:!px-2"
-                    title={`See who reports to ${member.full_name}`}
-                    aria-label={`View ${member.full_name}'s team of ${reportsById.get(member.id)}`}
-                  >
-                    <Users className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">View team</span>
-                    <span className="tabular-nums opacity-70">
-                      {reportsById.get(member.id)}
-                    </span>
-                  </button>
+                  />
                 )}
               </div>
 
@@ -797,9 +799,16 @@ export default function Team() {
         })}
       </div>
 
-      <p className="flex items-center gap-1.5 text-xs text-ink-400">
-        <Spline className="h-3.5 w-3.5" />
-        The page tint reflects your team's average score.
+      {/* No key for the colours — the ramp is the same one the scores
+          wear all over the app and reads on its own. What does need
+          saying is that these are two different figures in the same five
+          colours: the page is the whole year, a button is one month. */}
+      <p className="flex items-start gap-1.5 text-xs text-ink-400">
+        <Spline className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          The page tint is your team's average for the year; a View team
+          button is that team's own average for {monthLabel(month)}.
+        </span>
       </p>
 
       {drill && (

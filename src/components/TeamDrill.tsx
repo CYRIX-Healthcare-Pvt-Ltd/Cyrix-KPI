@@ -4,7 +4,7 @@ import { X, ChevronRight, ChevronLeft, Users, AlertCircle, Home } from 'lucide-r
 import { useTeamSubtree, type SubtreeRow } from '@/lib/queries'
 import { PageLoader, ScorePill, StatusBadge, Alert } from '@/components/ui'
 import { ScoreHeader, TeamBands } from '@/components/analysis'
-import { teamBandShare } from '@/lib/bands'
+import { teamBandShare, teamAverages, bandFor, SCORED_STATUSES } from '@/lib/bands'
 import Avatar from '@/components/Avatar'
 import { monthLabel } from '@/lib/fy'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
@@ -36,8 +36,6 @@ interface Crumb {
   id: string
   name: string
 }
-
-const SCORED = new Set(['scored', 'finalized'])
 
 export default function TeamDrill({
   root, fy, month, onClose,
@@ -72,18 +70,14 @@ export default function TeamDrill({
   const waiting = rows.filter(r => r.submission_status === 'submitted').length
 
   /**
-   * This team's month, in the two shapes the page above uses.
-   *
-   * Only people who have actually been scored count towards it. Somebody
-   * with no submission is absent rather than a zero, and averaging them
-   * in would report a team as failing for not having been assessed yet.
+   * Every team on this screen at once — the one being looked at, keyed
+   * by the person at its head, and one for each row that heads a team of
+   * their own. The whole line comes back in a single query, so the
+   * colour on a row costs nothing beyond the arithmetic.
    */
-  const scoredRows = rows.filter(r => SCORED.has(r.submission_status ?? ''))
-  const average = scoredRows.length
-    ? Math.round(
-        (scoredRows.reduce((a, r) => a + (r.final_total_score ?? 0), 0) / scoredRows.length) * 10,
-      ) / 10
-    : null
+  const averages = useMemo(() => teamAverages(data ?? []), [data])
+  const average = averages.get(here.id) ?? null
+  const scoredRows = rows.filter(r => SCORED_STATUSES.has(r.submission_status ?? ''))
 
   const share = useMemo(
     () => teamBandShare(rows.map(r => ({
@@ -92,7 +86,7 @@ export default function TeamDrill({
       // ESMS, which is nearly everybody, and the alternative is a query
       // per person to refine a figure this panel only summarises.
       weights: { job: JOB_ROLE_TOTAL, esms: 0, core: REMAINDER_TOTAL },
-      months: SCORED.has(r.submission_status ?? '')
+      months: SCORED_STATUSES.has(r.submission_status ?? '')
         ? [{
             job: r.final_job_role_score,
             esms: r.final_esms_score,
@@ -218,6 +212,8 @@ export default function TeamDrill({
                   <PersonRow
                     key={r.employee_id}
                     row={r}
+                    month={month}
+                    teamAverage={averages.get(r.employee_id) ?? null}
                     onDrill={() => setTrail(t => [...t, { id: r.employee_id, name: r.full_name }])}
                   />
                 ))}
@@ -239,9 +235,17 @@ export default function TeamDrill({
  * own content and the columns wandered — a long designation on one row
  * put its score somewhere else than the row above it.
  */
-function PersonRow({ row, onDrill }: { row: SubtreeRow; onDrill: () => void }) {
+function PersonRow({
+  row, month, teamAverage, onDrill,
+}: {
+  row: SubtreeRow
+  month: string
+  /** This person's own team's average, null when nobody under them is scored. */
+  teamAverage: number | null
+  onDrill: () => void
+}) {
   const needsScoring = row.submission_status === 'submitted'
-  const final = SCORED.has(row.submission_status ?? '')
+  const final = SCORED_STATUSES.has(row.submission_status ?? '')
   const score = final ? row.final_total_score : row.self_total_score
 
   return (
@@ -280,19 +284,74 @@ function PersonRow({ row, onDrill }: { row: SubtreeRow; onDrill: () => void }) {
 
       {/* The column exists on every row so the ones without a team keep
           the score above them in line; only the button comes and goes. */}
-      <div className="w-11 shrink-0 sm:w-[104px]">
+      <div className="w-10 shrink-0 sm:w-[124px]">
         {row.direct_reports > 0 && (
-          <button
+          <ViewTeamButton
+            name={row.full_name}
+            count={row.direct_reports}
+            average={teamAverage}
+            month={month}
             onClick={onDrill}
-            className="btn w-full border border-ink-200 bg-surface !px-2 !py-1.5 text-xs text-ink-700 hover:bg-ink-100"
-            title={`See who reports to ${row.full_name}`}
-          >
-            <Users className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">View team</span>
-            <span className="tabular-nums opacity-70">{row.direct_reports}</span>
-          </button>
+          />
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The way into somebody else's team, coloured by how that team is doing.
+ *
+ * The colour is the point. A manager of forty scrolling a list wants to
+ * know which branches need them before they open any of them, and a row
+ * of identical grey buttons says only that these people manage people.
+ * Tinted, the list answers "where should I look first" while being
+ * scrolled past.
+ *
+ * Read as an outline rather than a fill, because the score pill beside
+ * it is already a filled band chip: two solid chips in one row would be
+ * two scores, and only one of them is this person's.
+ *
+ * The average behind the colour is the team's, for the month on screen,
+ * and only from people who have been scored — so it is deliberately not
+ * the same figure as the year-long average in the hero above. The
+ * tooltip says both the number and the month rather than leaving anyone
+ * to work out which of the two a colour belongs to.
+ *
+ * Shared by the team list and the drill-down: these are the same control
+ * doing the same job, and the two hand-written copies had already
+ * drifted a padding step apart.
+ */
+export function ViewTeamButton({
+  name, count, average, month, onClick,
+}: {
+  name: string
+  count: number
+  average: number | null
+  month: string
+  onClick: () => void
+}) {
+  const band = bandFor(average)
+  const reading = band && average !== null
+    ? `${name}’s team averages ${average.toFixed(1)} in ${monthLabel(month)} — ${band.label}.`
+    : `Nobody in ${name}’s team has been scored for ${monthLabel(month)} yet.`
+
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        // gap-1.5 rather than the .btn default of 2: at the width this
+        // column can afford, two points of gap is the difference between
+        // "View team" on one line and on two.
+        'btn w-full border !gap-1.5 !px-1.5 !py-1.5 text-xs sm:!px-2',
+        band ? band.tint : 'border-ink-200 bg-surface text-ink-700 hover:bg-ink-100',
+      )}
+      title={`${reading} See who reports to them.`}
+      aria-label={`View ${name}’s team of ${count}. ${reading}`}
+    >
+      <Users className="h-3.5 w-3.5 shrink-0" />
+      <span className="hidden whitespace-nowrap sm:inline">View team</span>
+      <span className="tabular-nums opacity-70">{count}</span>
+    </button>
   )
 }
