@@ -174,20 +174,35 @@ export function NumberInput({
   )
 }
 
+/*
+ * A month moves through these in order, and the colour moves with it:
+ * grey for nothing yet, violet while it is being written, amber while
+ * somebody else holds it, red when it has come back, then green and
+ * emerald as it finishes. Reading down a column of two hundred, the
+ * colour says where each one is before the word does.
+ *
+ * Every ramp here is one of the six that flip end for end with the
+ * theme, so a pale wash behind dark text on the light page becomes a
+ * dark wash behind bright text on the other. 'returned' used to be
+ * Tailwind's own orange, which is not one of them and does not flip --
+ * pale orange with dark orange text sat unreadable on the dark page.
+ * And 'scored' was a solid black chip, which is exactly the same shape
+ * of bug: it inverts to solid white while its text stays light.
+ */
 const SUBMISSION_BADGES: Record<SubmissionStatus, { label: string; cls: string }> = {
-  draft:     { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
+  draft:     { label: 'Draft',              cls: 'bg-violet-100 text-violet-800' },
   submitted: { label: 'Awaiting manager',   cls: 'bg-amber-100 text-amber-800' },
-  returned:  { label: 'Returned to you',    cls: 'bg-orange-100 text-orange-800' },
+  returned:  { label: 'Returned to you',    cls: 'bg-red-100 text-red-800' },
   // "Scored" told nobody anything: it named a database state, not a
   // step in the process, and people asked what it meant. This is what
   // has actually happened — the manager has been through it, and the
   // month is now waiting out its closing date.
-  scored:    { label: 'Manager reviewed',   cls: 'bg-ink-900 text-onInk' },
+  scored:    { label: 'Manager reviewed',   cls: 'bg-lime-100 text-lime-800' },
   finalized: { label: 'Final',              cls: 'bg-emerald-100 text-emerald-800' },
 }
 
 const ASSIGNMENT_BADGES: Record<AssignmentStatus, { label: string; cls: string }> = {
-  draft:            { label: 'Draft',              cls: 'bg-ink-100 text-ink-700' },
+  draft:            { label: 'Draft',              cls: 'bg-violet-100 text-violet-800' },
   pending_approval: { label: 'Awaiting approval',  cls: 'bg-amber-100 text-amber-800' },
   active:           { label: 'Approved',           cls: 'bg-emerald-100 text-emerald-800' },
   rejected:         { label: 'Sent back',          cls: 'bg-red-100 text-red-800' },
@@ -210,7 +225,10 @@ export function StatusBadge({
   queried?: boolean
 }) {
   if (!status) {
-    return <span className="badge bg-ink-100 text-ink-500">Not started</span>
+    // ink-600, not ink-500: the lighter grey measured 4.4:1 on its own
+    // wash, which is under the 4.5 a small label needs. One step down
+    // the ramp is 5.6 and looks the same.
+    return <span className="badge bg-ink-100 text-ink-600">Not started</span>
   }
   if (queried && (status === 'scored' || status === 'finalized')) {
     return <span className="badge bg-amber-100 text-amber-800">Under review</span>

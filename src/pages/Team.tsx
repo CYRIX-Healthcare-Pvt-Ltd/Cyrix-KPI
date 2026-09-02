@@ -26,6 +26,36 @@ import type { KpiSubmission, KpiAssignment, Employee } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
 
+/**
+ * The filter's own idea of status, which is coarser than the database's.
+ *
+ * A manager looking down a list wants four groups, not six: a month that
+ * has been scored and one that has since been finalised are the same
+ * answer to "is this done", and no submission row at all and a draft
+ * one are both "they have not sent it".
+ */
+type StatusKey = 'all' | 'not_started' | 'draft' | 'submitted' | 'scored'
+
+function statusKeyOf(status: string | null): Exclude<StatusKey, 'all'> {
+  if (!status) return 'not_started'
+  if (SCORED.has(status)) return 'scored'
+  if (status === 'submitted') return 'submitted'
+  // 'returned' sits with draft: it is back in their hands either way.
+  return 'draft'
+}
+
+/**
+ * The same colours the badges use, so the filter and the rows it filters
+ * are obviously the same idea. Every ramp flips with the theme.
+ */
+const STATUS_FILTERS: { key: StatusKey; label: string; activeCls: string }[] = [
+  { key: 'all',         label: 'Everyone',        activeCls: 'bg-ink-800 text-onInk' },
+  { key: 'not_started', label: 'Not started',     activeCls: 'bg-ink-300 text-ink-900' },
+  { key: 'draft',       label: 'Draft',           activeCls: 'bg-violet-200 text-violet-900' },
+  { key: 'submitted',   label: 'Awaiting my score', activeCls: 'bg-amber-200 text-amber-900' },
+  { key: 'scored',      label: 'Scored',          activeCls: 'bg-emerald-200 text-emerald-900' },
+]
+
 /** Which band the bell curve is plotting. */
 type BellMetric = 'total' | 'job' | 'esms' | 'core'
 
@@ -54,6 +84,7 @@ export default function Team() {
   const [month, setMonth] = useState(currentReportingMonth())
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
   const [peek, setPeek] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusKey>('all')
   const [photoFor, setPhotoFor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -482,6 +513,37 @@ export default function Team() {
         />
       </div>
 
+      {/*
+        The tiles above count; this narrows. They were the only way to ask
+        "who has not submitted", and a count of sixteen against a list of
+        sixteen names in no particular order is a number you then have to
+        go and find. Each option carries its own count, so an empty one
+        can be seen to be empty without being opened.
+      */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {STATUS_FILTERS.map(f => {
+          const n = team.filter(m => statusKeyOf(subsById.get(m.id)?.status ?? null) === f.key).length
+          if (f.key !== 'all' && n === 0) return null
+          const count = f.key === 'all' ? team.length : n
+          return (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              aria-pressed={statusFilter === f.key}
+              className={clsx(
+                'badge cursor-pointer transition-colors',
+                statusFilter === f.key
+                  ? f.activeCls
+                  : 'bg-ink-100 text-ink-600 hover:bg-ink-200',
+              )}
+            >
+              {f.label}
+              <span className="ml-1.5 tabular-nums opacity-70">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {peek && (
         <MemberPeek
           member={team.find(t => t.id === peek)!}
@@ -529,6 +591,9 @@ export default function Team() {
       */}
       <div className="card divide-y divide-ink-100 overflow-hidden">
         {[...team]
+          .filter(m =>
+            statusFilter === 'all'
+            || statusKeyOf(subsById.get(m.id)?.status ?? null) === statusFilter)
           .sort((a, b) => {
             const rank = (id: string) => (subsById.get(id)?.status === 'submitted' ? 0 : 1)
             return rank(a.id) - rank(b.id)
