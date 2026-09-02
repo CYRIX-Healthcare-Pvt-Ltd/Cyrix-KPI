@@ -546,8 +546,17 @@ function RowEditor({
         "row three is wrong" needs a row three.
       */}
       <div className="mb-3 flex items-start gap-3">
+        {/* Outlined in the same violet as the fields it numbers, rather
+            than filled.
+
+            It was a dark disc with white text, which is invisible on the
+            dark page: the ink ramp flips end for end with the theme, so
+            ink-800 is near-black on one and near-white on the other while
+            the white text stayed white. A colour that flips with the
+            theme, used for both the ring and the digit, cannot come apart
+            that way. */}
         <span
-          className="mt-6 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink-800 text-xs font-semibold text-white"
+          className="mt-6 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-violet-700 text-xs font-bold text-violet-700"
           aria-hidden
         >
           {index}
@@ -569,7 +578,7 @@ function RowEditor({
               KRA
             </label>
             <input
-              className="input border-violet-700 font-medium focus:border-violet-700"
+              className="input border-violet-700 font-medium shadow-[0_0_0_3px_rgb(var(--violet-700)/0.14)] focus:border-violet-700"
               value={row.kra}
               onChange={e => onChange({ kra: e.target.value })}
               placeholder="e.g. Response time"
@@ -582,7 +591,7 @@ function RowEditor({
               KPI
             </label>
             <input
-              className="input border-violet-700 font-medium focus:border-violet-700"
+              className="input border-violet-700 font-medium shadow-[0_0_0_3px_rgb(var(--violet-700)/0.14)] focus:border-violet-700"
               value={row.kpi_description ?? ''}
               onChange={e => onChange({ kpi_description: e.target.value })}
               placeholder="e.g. BD calls assigned to be attended within 48 hours"
