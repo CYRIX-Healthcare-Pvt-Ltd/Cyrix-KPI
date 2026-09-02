@@ -718,7 +718,38 @@ export default function Team() {
                 </span>
               </button>
 
-              <div className="hidden text-right sm:block">
+              {/*
+                View team, then status, then the score.
+
+                It sat after the score and appeared only on rows that had
+                a team, so every row sized itself differently and the
+                badges and figures wandered left and right down the list.
+                The slot is here on every row now, empty where there is
+                nobody to look at, which is what keeps the columns
+                underneath each other.
+              */}
+              {/* Narrow and icon-only on a phone rather than hidden: a
+                  manager reading this on the road still needs to get into
+                  a report's team, and the count is the part that has to
+                  survive the squeeze. */}
+              <div className="w-10 shrink-0 sm:w-[104px]">
+                {(reportsById.get(member.id) ?? 0) > 0 && (
+                  <button
+                    onClick={() => setDrill({ id: member.id, name: member.full_name })}
+                    className="btn w-full border border-ink-200 bg-surface !px-1.5 !py-1.5 text-xs text-ink-700 hover:bg-ink-100 sm:!px-2"
+                    title={`See who reports to ${member.full_name}`}
+                    aria-label={`View ${member.full_name}'s team of ${reportsById.get(member.id)}`}
+                  >
+                    <Users className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:inline">View team</span>
+                    <span className="tabular-nums opacity-70">
+                      {reportsById.get(member.id)}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              <div className="hidden w-36 shrink-0 text-right sm:block">
                 {startsLater ? (
                   <span className="badge bg-ink-100 text-ink-500">
                     From {monthLabel(startsLater)}
@@ -738,23 +769,6 @@ export default function Team() {
                   hasEsms={Number(assign?.esms_weight ?? 0) > 0}
                 />
               </div>
-
-              {/* Somebody who manages people can be looked into. Shown
-                  only where there is a team to see, so the button never
-                  opens an empty list. */}
-              {(reportsById.get(member.id) ?? 0) > 0 && (
-                <button
-                  onClick={() => setDrill({ id: member.id, name: member.full_name })}
-                  className="btn shrink-0 border border-ink-200 bg-surface !px-2.5 !py-1.5 text-xs text-ink-700 hover:bg-ink-100"
-                  title={`See who reports to ${member.full_name}`}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">View team</span>
-                  <span className="ml-0.5 tabular-nums opacity-70">
-                    {reportsById.get(member.id)}
-                  </span>
-                </button>
-              )}
 
               {needsScoring && sub ? (
                 <Link to={`/score/${sub.id}`} className="btn-primary shrink-0 !px-3 !py-1.5 text-xs">
