@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -1580,6 +1580,53 @@ const ADMIN_TABS = [
 ] as const
 
 /**
+ * Which build is on screen, and how long it has been there.
+ *
+ * The question this answers is "has my change gone out yet?", which was
+ * being answered by reloading and squinting at whether something looked
+ * different. So the relative time leads: "4 minutes ago" settles it at a
+ * glance, where a timestamp still has to be compared against the clock.
+ *
+ * The exact time and the commit are underneath rather than hidden in a
+ * tooltip — a tooltip is nothing on the phone half of these admins use,
+ * and the commit is what turns "it deployed" into "it deployed *this*".
+ *
+ * Ticks every half minute. A page left open on a second monitor saying
+ * "just now" an hour later is worse than no answer, because it reads as
+ * a deploy that has only just landed.
+ */
+function BuildStamp() {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick(n => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const built = new Date(__BUILD_TIME__)
+  if (Number.isNaN(built.getTime())) return null
+
+  const mins = Math.floor((Date.now() - built.getTime()) / 60_000)
+  const ago =
+    mins < 1 ? 'just now'
+    : mins < 60 ? `${mins} minute${mins === 1 ? '' : 's'} ago`
+    : mins < 60 * 24 ? `${Math.floor(mins / 60)} hour${mins < 120 ? '' : 's'} ago`
+    : `${Math.floor(mins / 1440)} day${mins < 2880 ? '' : 's'} ago`
+
+  return (
+    <p className="text-xs leading-tight text-ink-400 sm:text-right">
+      Deployed <span className="font-medium text-ink-600">{ago}</span>
+      <span className="mt-0.5 block">
+        {built.toLocaleString(undefined, {
+          day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+        })}
+        {' · '}
+        <span className="font-mono">{__BUILD_SHA__}</span>
+      </span>
+    </p>
+  )
+}
+
+/**
  * One administration screen for every module rather than one per app.
  *
  * Each module used to be administered from inside itself, which meant
@@ -1593,10 +1640,13 @@ export default function SwAdmin() {
 
   return (
     <div className="space-y-5">
-      <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
-        <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
-        Administration
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
+          <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
+          Administration
+        </h1>
+        <BuildStamp />
+      </div>
 
       {/* Desktop: a row under the heading, where tabs belong on a wide
           screen. */}

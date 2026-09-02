@@ -1,7 +1,35 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'node:child_process'
 import path from 'node:path'
+
+/**
+ * Which build this is, stamped in at build time.
+ *
+ * There is no way to ask a running page when it was deployed — the
+ * bundle has no memory of being made. So the answer has to be baked in
+ * while it is being made, and the only moment that can happen is here.
+ *
+ * It exists because "has my change gone out yet?" was being answered by
+ * reloading and squinting. A hashed filename in the network tab is not
+ * an answer anybody should have to decode.
+ *
+ * The commit comes from Vercel's own environment on a real deploy and
+ * from git on a developer's machine. Neither is guaranteed — a build
+ * from a tarball has no git and no Vercel — so it degrades to a dash
+ * rather than failing the build over a caption.
+ */
+const buildSha = (): string => {
+  const fromVercel = process.env.VERCEL_GIT_COMMIT_SHA
+  if (fromVercel) return fromVercel.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim()
+  } catch {
+    return '—'
+  }
+}
 
 /**
  * The app lives at app.cyrix.in/kpi, not at the root.
@@ -20,6 +48,10 @@ import path from 'node:path'
  */
 export default defineConfig({
   base: '/kpi/',
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __BUILD_SHA__: JSON.stringify(buildSha()),
+  },
   plugins: [
     react(),
     VitePWA({

@@ -10,3 +10,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/**
+ * Stamped in by vite.config.ts at build time — see buildSha() there.
+ * Replaced literally by the bundler, so these are constants in the
+ * shipped code rather than anything read at runtime.
+ */
+declare const __BUILD_TIME__: string
+declare const __BUILD_SHA__: string
