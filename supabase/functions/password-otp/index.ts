@@ -24,7 +24,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
  *           is not the address we have for you" is the whole point.
  *
  * Deploy:  supabase functions deploy password-otp
- * Secrets: supabase secrets set RESEND_API_KEY=... OTP_FROM='Cyrix KPI <no-reply@cyrix.in>'
+ * Secrets: supabase secrets set RESEND_API_KEY=...
+ *          (OTP_FROM is only a fallback — the live value is the otp_from
+ *           row in app_settings, which SW Admin owns. See migration 0052.)
  *          (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY
  *           are injected by the platform. None of them ever go near a
  *           VITE_ variable.)
@@ -169,7 +171,10 @@ async function senderAddress(db: ReturnType<typeof admin>): Promise<string> {
     const { data } = await db.rpc('otp_sender')
     if (typeof data === 'string' && data.includes('@')) return data
   } catch { /* fall through to the secret */ }
-  return Deno.env.get('OTP_FROM') ?? 'Cyrix KPI <no-reply@send.cyrix.in>'
+  // The last-resort default, for a deployment nobody has told anything.
+  // send.cyrix.in was verified with a Resend account that has since been
+  // deleted, so falling back to it is falling back to a guaranteed 403.
+  return Deno.env.get('OTP_FROM') ?? 'Cyrix <no-reply@updates.cyrix.in>'
 }
 
 /**
@@ -194,7 +199,11 @@ async function sendCode(
     body: JSON.stringify({
       from,
       to: [to],
-      subject: `${code} is your Cyrix KPI code`,
+      // Not "Cyrix KPI". Recovery moved to the portal and serves all four
+      // modules, so a code that says KPI while the From line says Cyrix
+      // is an email disagreeing with itself — and the one thing a
+      // one-time code must never look like is a phish.
+      subject: `${code} is your Cyrix code`,
       // Plain text as well as HTML: a code is exactly the kind of mail
       // somebody reads on a locked-down phone client that strips styling.
       text:
@@ -228,7 +237,7 @@ async function sendCode(
  *
  * Deliberately not a six-digit code. The target is now a named
  * colleague rather than the admin themselves, and a message reading
- * "482913 is your Cyrix KPI code" landing unannounced in somebody's
+ * "482913 is your Cyrix code" landing unannounced in somebody's
  * inbox says exactly one thing to them: somebody is trying to get into
  * my account. That is a support call and a scare, from a button meant to
  * check a DNS record.
@@ -244,10 +253,10 @@ async function sendTest(db: ReturnType<typeof admin>, to: string, name: string) 
     body: JSON.stringify({
       from,
       to: [to],
-      subject: 'Test message from Cyrix KPI — no action needed',
+      subject: 'Test message from Cyrix — no action needed',
       text:
         `Hello ${name},\n\n` +
-        `This is a test. Somebody in IT is checking that Cyrix KPI can reach ` +
+        `This is a test. Somebody in IT is checking that Cyrix can reach ` +
         `your email address, so that password codes work when you need one.\n\n` +
         `Nothing has changed on your account and there is nothing to do. ` +
         `You can delete this.\n`,
@@ -255,7 +264,7 @@ async function sendTest(db: ReturnType<typeof admin>, to: string, name: string) 
         `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
         `<p style="color:#39424e">Hello ${name},</p>` +
         `<p style="color:#39424e"><strong>This is a test.</strong> Somebody in IT is checking ` +
-        `that Cyrix KPI can reach your email address, so that password codes work when ` +
+        `that Cyrix can reach your email address, so that password codes work when ` +
         `you need one.</p>` +
         `<p style="color:#8792a2;font-size:13px">Nothing has changed on your account and ` +
         `there is nothing to do. You can delete this.</p></div>`,
