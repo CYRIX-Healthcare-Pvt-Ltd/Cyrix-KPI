@@ -218,7 +218,7 @@ export function ruleTraits(
   const wt = weightage ?? 0
   const capped: RuleTrait = {
     tone: 'capped',
-    label: `Capped at ${pct(wt)}`,
+    label: `Max ${pct(wt)}`,
     detail: `Beating the target earns nothing extra — this row stops at ${pct(wt)} — and it cannot go below zero.`,
   }
 
@@ -262,7 +262,7 @@ export function ruleTraits(
           }
         : {
             tone: 'bonus',
-            label: `Can pass ${pct(wt)}`,
+            label: `Can exceed ${pct(wt)}`,
             detail: `Beating the target keeps earning past the ${pct(wt)} weightage, with no ceiling.`,
           }]
 
@@ -278,7 +278,7 @@ export function ruleTraits(
     case 'lower_penalty':
       return [{
         tone: 'capped',
-        label: `Capped at ${pct(wt)}`,
+        label: `Max ${pct(wt)}`,
         detail: `At or under the target earns the full ${pct(wt)}. Going over reduces it, gently, and never below zero.`,
       }]
 

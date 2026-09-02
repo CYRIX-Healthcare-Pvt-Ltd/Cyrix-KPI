@@ -553,12 +553,23 @@ function RowEditor({
           {index}
         </span>
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-12">
+          {/* The two that name the row are bordered in the accent rather
+              than the ordinary field grey, so the pair is found by colour
+              before anything is read.
+
+              violet-700 rather than the ambient accent: that one moves
+              with the team's score, and a field border that changes
+              colour because somebody had a good month is a border that
+              means nothing. This ramp flips end for end with the theme,
+              so it is deep on the light page and bright on the dark one
+              -- the same idea in both rather than a light-mode colour
+              that has to be corrected in the other. */}
           <div className="sm:col-span-4">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
-              KRA <span className="font-normal normal-case tracking-normal text-ink-400">— the area</span>
+              KRA
             </label>
             <input
-              className="input font-medium"
+              className="input border-violet-700 font-medium focus:border-violet-700"
               value={row.kra}
               onChange={e => onChange({ kra: e.target.value })}
               placeholder="e.g. Response time"
@@ -568,10 +579,10 @@ function RowEditor({
 
           <div className="sm:col-span-8">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
-              KPI <span className="font-normal normal-case tracking-normal text-ink-400">— the measurable parameter</span>
+              KPI
             </label>
             <input
-              className="input font-medium"
+              className="input border-violet-700 font-medium focus:border-violet-700"
               value={row.kpi_description ?? ''}
               onChange={e => onChange({ kpi_description: e.target.value })}
               placeholder="e.g. BD calls assigned to be attended within 48 hours"
