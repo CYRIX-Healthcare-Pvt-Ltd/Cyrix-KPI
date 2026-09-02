@@ -745,7 +745,7 @@ export default function Team() {
               {(reportsById.get(member.id) ?? 0) > 0 && (
                 <button
                   onClick={() => setDrill({ id: member.id, name: member.full_name })}
-                  className="btn-secondary shrink-0 !px-2.5 !py-1.5 text-xs"
+                  className="btn shrink-0 border border-ink-200 bg-surface !px-2.5 !py-1.5 text-xs text-ink-700 hover:bg-ink-100"
                   title={`See who reports to ${member.full_name}`}
                 >
                   <Users className="h-3.5 w-3.5" />
