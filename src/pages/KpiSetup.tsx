@@ -391,10 +391,11 @@ export default function KpiSetup() {
             </div>
 
             <div className="divide-y divide-ink-100">
-              {working.map(row => (
+              {working.map((row, i) => (
                 <RowEditor
                   key={row._key}
                   row={row}
+                  index={i + 1}
                   // Retired rules stay in the table so rows already using
                   // one keep working and keep their label; they are just
                   // not offered as a new choice.
@@ -520,9 +521,11 @@ export default function KpiSetup() {
 }
 
 function RowEditor({
-  row, rules, onChange, onRemove,
+  row, index, rules, onChange, onRemove,
 }: {
   row: Draft
+  /** Its place in the list, 1-based. Shown so a row can be referred to. */
+  index: number
   rules: ScoringRuleMeta[]
   onChange: (patch: Partial<Draft>) => void
   onRemove: () => void
@@ -531,26 +534,54 @@ function RowEditor({
 
   return (
     <div className={`p-4 ${row._inferred ? 'bg-amber-50/60' : ''}`}>
-      <div className="grid gap-3 sm:grid-cols-12">
-        <div className="sm:col-span-4">
-          <label className="label text-xs">KRA</label>
-          <input
-            className="input"
-            value={row.kra}
-            onChange={e => onChange({ kra: e.target.value })}
-            placeholder="e.g. Response time"
-          />
-        </div>
+      {/*
+        The KRA and its KPI are what this row IS; the weightage, target and
+        scoring rule are how it is measured. They were laid out as six
+        equal fields with six identical grey labels, so the two that name
+        the row read no louder than the two that number it -- and people
+        scanning for "where do I write the KRA" had to read every label to
+        find out.
 
-        <div className="sm:col-span-8">
-          <label className="label text-xs">KPI — measurable parameter</label>
-          <input
-            className="input"
-            value={row.kpi_description ?? ''}
-            onChange={e => onChange({ kpi_description: e.target.value })}
-            placeholder="e.g. BD calls assigned to be attended within 48 hours"
-          />
+        A number, because a form of eight rows is discussed out loud:
+        "row three is wrong" needs a row three.
+      */}
+      <div className="mb-3 flex items-start gap-3">
+        <span
+          className="mt-6 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink-800 text-xs font-semibold text-white"
+          aria-hidden
+        >
+          {index}
+        </span>
+        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-12">
+          <div className="sm:col-span-4">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
+              KRA <span className="font-normal normal-case tracking-normal text-ink-400">— the area</span>
+            </label>
+            <input
+              className="input font-medium"
+              value={row.kra}
+              onChange={e => onChange({ kra: e.target.value })}
+              placeholder="e.g. Response time"
+              aria-label={`KRA for row ${index}`}
+            />
+          </div>
+
+          <div className="sm:col-span-8">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
+              KPI <span className="font-normal normal-case tracking-normal text-ink-400">— the measurable parameter</span>
+            </label>
+            <input
+              className="input font-medium"
+              value={row.kpi_description ?? ''}
+              onChange={e => onChange({ kpi_description: e.target.value })}
+              placeholder="e.g. BD calls assigned to be attended within 48 hours"
+              aria-label={`KPI for row ${index}`}
+            />
+          </div>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-12 sm:pl-9">
 
         <div className="sm:col-span-2">
           <label className="label text-xs">Weightage %</label>

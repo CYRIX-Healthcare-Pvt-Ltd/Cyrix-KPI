@@ -300,16 +300,33 @@ function AlternateRow({
           onValue={v => { setDraft({ ...draft, target_value: v }); commit({ target_value: v }) }}
         />
       </td>
+      {/*
+        The four are the four ways a KPI can be scored, and this is the
+        last point anybody can correct a wrong one -- so the manager gets
+        the same choice the employee had rather than a locked box.
+        Explained, though: on the setup screen each option comes with its
+        direction, its cap and a worked example, and here it was four
+        near-identical sentences in a bare dropdown, which is why it read
+        as a list of options nobody asked for. The traits under it say
+        what the current choice actually does.
+      */}
       <td className="px-2 py-1.5">
         <select
           className="input !py-1.5 text-xs"
           value={draft.scoring_rule}
           onChange={e => commit({ scoring_rule: e.target.value as Alternate['scoring_rule'] })}
+          aria-label={`How ${draft.kra || 'this row'} is scored`}
         >
           {(rules ?? []).map(r => (
             <option key={r.code} value={r.code}>{r.label}</option>
           ))}
         </select>
+        <RuleTraits
+          className="mt-1.5"
+          rule={draft.scoring_rule}
+          weightage={item.weightage}
+          params={draft.rule_params}
+        />
       </td>
     </tr>
   )

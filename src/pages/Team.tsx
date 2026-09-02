@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff,
+  Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
   Sigma, CalendarDays, LineChart as LineChartIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -517,8 +517,23 @@ export default function Team() {
         />
       )}
 
+      {/*
+        Whoever is waiting on this manager comes first.
+
+        The list was alphabetical, so a submission needing a score sat
+        wherever the name fell -- somewhere down a list of two hundred, in
+        a row that looked like every other row. The count at the top said
+        how many were waiting and the list would not say which. Order and
+        a marking on the row itself are what answer that; the count only
+        ever raised the question.
+      */}
       <div className="card divide-y divide-ink-100 overflow-hidden">
-        {team.map(member => {
+        {[...team]
+          .sort((a, b) => {
+            const rank = (id: string) => (subsById.get(id)?.status === 'submitted' ? 0 : 1)
+            return rank(a.id) - rank(b.id)
+          })
+          .map(member => {
           const sub = subsById.get(member.id)
           const assign = assignById.get(member.id)
           const needsScoring = sub?.status === 'submitted'
@@ -530,7 +545,18 @@ export default function Team() {
             : null
 
           return (
-            <div key={member.id} className="flex items-center gap-3 p-4 hover:bg-ink-50">
+            <div
+              key={member.id}
+              className={clsx(
+                'flex items-center gap-3 p-4',
+                // Tinted and edged where the manager is the one holding
+                // things up, so the row is findable while scrolling rather
+                // than only once it is read.
+                needsScoring
+                  ? 'border-l-4 border-amber-500 bg-amber-50/60 pl-3 hover:bg-amber-50'
+                  : 'hover:bg-ink-50',
+              )}
+            >
               {/* The face and the name are one target, opening a quick
                   look rather than a page. The chevron beside them still
                   goes to the full record — a peek and a visit are
@@ -542,8 +568,16 @@ export default function Team() {
               >
                 <Avatar name={member.full_name} src={member.avatar} size="sm" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-ink-900">
-                    {member.full_name}
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate font-medium text-ink-900">
+                      {member.full_name}
+                    </span>
+                    {needsScoring && (
+                      <AlertCircle
+                        className="h-4 w-4 shrink-0 text-amber-600"
+                        aria-label="Waiting for your score"
+                      />
+                    )}
                   </span>
                   <span className="block truncate text-xs text-ink-500">
                     {member.ecode}
