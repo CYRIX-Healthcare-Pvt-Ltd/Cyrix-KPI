@@ -103,9 +103,21 @@ export default function MyKpi() {
           </div>
 
           <div className="divide-y divide-ink-100">
-            {items.filter(i => i.section === section).map(item => (
+            {items.filter(i => i.section === section).map((item, i) => (
               <div key={item.id} className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
+                  {/* The same number the setup screen gives this row, so
+                      "row three" means one thing whether somebody is
+                      writing their KPI or reading it back. Numbered within
+                      the section, because that is how each block is
+                      discussed -- the third Job Role row, not the third
+                      row of the page. */}
+                  <span
+                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-violet-700 text-xs font-bold text-violet-700"
+                    aria-hidden
+                  >
+                    {i + 1}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-ink-900">{item.kra}</p>
                     {item.kpi_description && (
