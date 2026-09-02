@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -58,7 +59,10 @@ export default function Login() {
       <aside className="relative hidden flex-col justify-between bg-shade p-12 lg:flex">
         {/* `shade` is pinned black in both themes, so this panel does not
             follow the toggle and neither may the lockup on it. */}
-        <Logo height={40} onDark />
+        {/* The full lockup, tagline and all. This panel has more room
+            than anywhere else in the app, and the tagline is only
+            legible when something gives it the height to be. */}
+        <Logo height={72} showTagline onDark />
 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">
@@ -80,9 +84,6 @@ export default function Login() {
             <li>Manager Review</li>
             <li>Appraisal Insight</li>
           </ul>
-          <p className="text-[11px] font-medium uppercase tracking-label text-white/35">
-            India Operations
-          </p>
         </div>
       </aside>
 
@@ -94,7 +95,7 @@ export default function Login() {
         <div className="flex items-start justify-between gap-3">
           {/* Brand shows here only on small screens, where the panel is hidden. */}
           <div className="lg:hidden">
-            <Logo height={34} />
+            <Logo height={44} />
           </div>
           <ThemeToggle className="ml-auto" />
         </div>
@@ -186,6 +187,17 @@ function Field({
   /** Rendered under the field's rule, e.g. the forgot-password link. */
   below?: React.ReactNode
 }) {
+  /*
+   * Password fields get an eye.
+   *
+   * Not a preference — a phone keyboard with no visible feedback is how
+   * somebody types their password correctly three times and is told
+   * three times that it is wrong. Offered on every password field this
+   * screen has, which is one.
+   */
+  const [shown, setShown] = useState(false)
+  const isPassword = type === 'password'
+
   return (
     <div>
       <label
@@ -194,24 +206,41 @@ function Field({
       >
         {label}
       </label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        autoFocus={autoFocus}
-        autoCapitalize={uppercase ? 'characters' : undefined}
-        autoCorrect="off"
-        spellCheck={false}
-        required
-        onChange={e => onChange(e.target.value)}
-        className={`mt-2 w-full border-0 border-b border-ink-300 bg-transparent px-0 py-2.5
-                    text-lg text-ink-900 placeholder:text-ink-300
-                    focus:border-ink-900 focus:outline-none focus:ring-0 ${
-                      uppercase ? 'uppercase' : ''
-                    }`}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type={isPassword && shown ? 'text' : type}
+          value={value}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          autoFocus={autoFocus}
+          autoCapitalize={uppercase ? 'characters' : undefined}
+          autoCorrect="off"
+          spellCheck={false}
+          required
+          onChange={e => onChange(e.target.value)}
+          className={`mt-2 w-full border-0 border-b border-ink-300 bg-transparent px-0 py-2.5
+                      text-lg text-ink-900 placeholder:text-ink-300
+                      focus:border-ink-900 focus:outline-none focus:ring-0 ${
+                        uppercase ? 'uppercase' : ''
+                      } ${isPassword ? 'pr-10' : ''}`}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShown(s => !s)}
+            // Sits on the rule rather than beside the field, so it cannot
+            // push the underline — that rule is the whole visual language
+            // of this screen.
+            className="absolute bottom-1.5 right-0 rounded p-1.5 text-ink-400 transition-colors hover:text-ink-900"
+            aria-label={shown ? 'Hide password' : 'Show password'}
+            aria-pressed={shown}
+            title={shown ? 'Hide password' : 'Show password'}
+          >
+            {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
       {below && <div className="mt-2.5">{below}</div>}
     </div>
   )

@@ -185,7 +185,11 @@ export default function Shell() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-ink-200 bg-surface">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
+        {/* Taller than it was, to carry the full lockup. The entity line
+            is a seventh of the logo's height, so a bar that fits only a
+            24px mark can only ever render it as a smudge — the height is
+            what buys the second line, not the crop. */}
+        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:h-16">
           <button
             className="btn-icon lg:hidden"
             onClick={() => setMenuOpen(v => !v)}
@@ -208,14 +212,16 @@ export default function Shell() {
               aria-label="All Cyrix apps"
               title="All Cyrix apps"
             >
-              {/* The wordmark alone — the entity line under it is 13px of
-                  letterspaced caps, which at header size is a grey smudge
-                  rather than words.
+              {/* The whole company name, not just CYRIX. This used to be
+                  cropped to the wordmark because the entity line under it
+                  is 13px of letterspaced caps and rendered as a grey
+                  smudge — true at the 24px it was then, and the fix is
+                  the height rather than the crop.
 
                   No `height`: the class sets it, smaller on a phone where
                   the bar is tighter, and an inline height would beat the
                   class and win in both. */}
-              <Logo className="h-[17px] sm:h-6" showSubtitle={false} />
+              <Logo className="h-9 sm:h-11" />
             </a>
             {/* No module name beside the mark. It sat between the wordmark
                 and the navigation as a third grey word belonging to

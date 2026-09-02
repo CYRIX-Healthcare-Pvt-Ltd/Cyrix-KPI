@@ -42,14 +42,14 @@ const PHOTO =
 function Header() {
   return (
     <header className="sticky top-0 z-30 border-b border-ink-200 bg-surface">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:h-16">
         <button className="btn-icon lg:hidden" aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </button>
 
         <div className="flex items-center gap-2.5">
           <a href="/" className="btn-press flex items-center gap-2.5 rounded-lg py-1 pr-1">
-            <Logo className="h-[17px] sm:h-6" showSubtitle={false} />
+            <Logo className="h-9 sm:h-11" />
           </a>
         </div>
 
@@ -92,7 +92,7 @@ function BrandPanel() {
       className="flex flex-col justify-between bg-shade p-8 text-white"
       style={{ height: 360 }}
     >
-      <Logo height={30} showSubtitle={false} onDark />
+      <Logo height={72} showTagline onDark />
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-label text-white/45">
           Cyrix Platform
@@ -101,7 +101,6 @@ function BrandPanel() {
           One account.<br />Every Cyrix tool.
         </h2>
       </div>
-      <p className="text-xs text-white/40">India Operations</p>
     </div>
   )
 }
