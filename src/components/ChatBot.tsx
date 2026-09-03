@@ -1,14 +1,14 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { MessageCircle, X, SendHorizonal, BookOpen, Languages } from 'lucide-react'
+import { MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
   useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
   useKraAttainment, useMyCoreValueTrend, useCoreValues, currentFy,
 } from '@/lib/queries'
-import { currentReportingMonth } from '@/lib/fy'
+import { currentReportingMonth, monthLabel } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
@@ -37,7 +37,31 @@ interface Turn {
   section?: string
   /** Show the link to the manual under this answer. */
   manualLink?: boolean
+  /** Somewhere to go and do the thing this turn is about. */
+  to?: string
+  /** What that link says. English on purpose — it is a screen name. */
+  toLabel?: string
 }
+
+/** One thing waiting on this person, and where to go and do it. */
+interface Nudge {
+  key: string
+  vars?: Record<string, string | number>
+  to: string
+  toLabel: string
+}
+
+/**
+ * Where Cyra's unread mark is remembered.
+ *
+ * Per device, like the language. It stores a signature of what was
+ * outstanding when the panel was last opened, so the mark comes back
+ * when the situation changes — a new month opening, somebody submitting
+ * — and stays away when it is the same list as yesterday. Storing a
+ * count instead would leave the mark up permanently for anybody with a
+ * standing job to do, which is how a badge stops meaning anything.
+ */
+const SEEN_KEY = 'cyrix.cyra.seen'
 
 export default function ChatBot() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
@@ -102,20 +126,114 @@ export default function ChatBot() {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns, open])
 
-  /*
-    Greeted by name, and re-greeted in the new language if they switch.
+  /**
+   * What is waiting on this person, right now.
+   *
+   * Assembled from what this panel already loads, so it costs nothing to
+   * ask. Ordered by who is blocked: their own overdue month first
+   * because only they can move it, then the people held up behind them.
+   *
+   * Nothing here is new information — every line has a badge somewhere
+   * already. The difference is that a badge is a number to interpret and
+   * this is a sentence with the way to fix it attached.
+   */
+  const month = currentReportingMonth()
+  const nudges = useMemo<Nudge[]>(() => {
+    if (systemAccount) return []
+    const list: Nudge[] = []
+    const kpi = assignment?.assignment
+    const startsFrom = kpi?.starts_from ?? null
+    // Not before their KPI begins. A June joiner asked about April is
+    // being chased for a month that was never theirs.
+    const inScope = !startsFrom || month >= startsFrom
+    const sub = (history ?? []).find(s => s.period_month === month)
 
-    Only the opening line is rewritten: everything after it is a real
+    if (!kpi) {
+      list.push({ key: 'nudge.kpi', to: '/my-kpi/setup', toLabel: 'My KPI' })
+    } else if (kpi.status === 'rejected') {
+      list.push({ key: 'nudge.rejected', to: '/my-kpi/setup', toLabel: 'My KPI' })
+    } else if (kpi.status === 'active' && inScope) {
+      if (!sub) {
+        list.push({
+          key: 'nudge.newmonth',
+          vars: { month: monthLabel(month) },
+          to: `/submission/${month}`,
+          toLabel: 'Assessments',
+        })
+      } else if (sub.status === 'draft') {
+        list.push({
+          key: 'nudge.draft',
+          vars: { month: monthLabel(month) },
+          to: `/submission/${month}`,
+          toLabel: 'Assessments',
+        })
+      }
+    }
+
+    if ((pending?.scoring ?? 0) > 0) {
+      list.push({
+        key: 'nudge.score',
+        vars: { n: pending!.scoring },
+        to: '/team',
+        toLabel: 'My Team',
+      })
+    }
+    if ((pending?.approvals ?? 0) > 0) {
+      list.push({
+        key: 'nudge.approve',
+        vars: { n: pending!.approvals },
+        to: '/approvals',
+        toLabel: 'Approvals',
+      })
+    }
+    return list
+  }, [assignment, history, pending, month, systemAccount])
+
+  /*
+    The unread mark.
+
+    Keyed on what is outstanding rather than on how many, so it comes
+    back when the situation changes and stays away when today's list is
+    yesterday's. A mark tied to a count would sit there permanently for
+    anybody with a standing job, and a badge that is always on is a badge
+    nobody looks at.
+  */
+  const signature = JSON.stringify(nudges.map(n => [n.key, n.vars]))
+  const [seen, setSeen] = useState<string>(() => {
+    try { return localStorage.getItem(SEEN_KEY) ?? '' } catch { return '' }
+  })
+  const unread = nudges.length > 0 && seen !== signature
+
+  /*
+    Greeted by name, told what is waiting, and re-greeted in the new
+    language if they switch.
+
+    Only the opening is rewritten: everything after it is a real
     exchange, and silently restating somebody's earlier answers in a
     different language would be rewriting what they were told.
   */
   useEffect(() => {
     if (!open) return
-    setTurns(prev => (prev.length <= 1
-      ? [{ from: 'app', text: c('greeting', { name: firstName }) }]
-      : prev))
+    setTurns(prev => {
+      if (prev.length > (1 + nudges.length)) return prev
+      const opening: Turn[] = [{
+        from: 'app',
+        text: c(nudges.length ? 'nudge.hi' : 'nudge.clear', { name: firstName }),
+      }]
+      for (const n of nudges) {
+        opening.push({
+          from: 'app',
+          text: c(n.key, n.vars),
+          to: n.to,
+          toLabel: n.toLabel,
+        })
+      }
+      return opening
+    })
+    try { localStorage.setItem(SEEN_KEY, signature) } catch { /* private window */ }
+    setSeen(signature)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, firstName, lang])
+  }, [open, firstName, lang, signature])
 
   /**
    * Built from data this screen has loaded anyway. The sentence itself
@@ -178,10 +296,21 @@ export default function ChatBot() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="Ask Cyra about your KPI"
+          aria-label={
+            unread
+              ? `Cyra has ${nudges.length} thing${nudges.length === 1 ? '' : 's'} waiting for you`
+              : 'Ask Cyra about your KPI'
+          }
           className="btn-press fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shade text-white shadow-lg hover:bg-cyrixRed-600 hover:text-white lg:bottom-6"
         >
           <MessageCircle className="h-5 w-5" />
+          {/* Only until they have read it once. The nudges themselves
+              stay — the mark is about news, not about the work. */}
+          {unread && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-canvas bg-cyrixRed-600 px-1 text-[10px] font-bold leading-none text-white">
+              {nudges.length}
+            </span>
+          )}
         </button>
       )}
 
@@ -234,6 +363,18 @@ export default function ChatBot() {
                   )}
                 >
                   {turn.text}
+                  {/* Where to go and do it. A nudge without one is a
+                      complaint; with one it is an errand. */}
+                  {turn.to && (
+                    <Link
+                      to={turn.to}
+                      onClick={() => setOpen(false)}
+                      className="mt-2 flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:text-violet-900"
+                    >
+                      <ArrowRight className="h-3.5 w-3.5" />
+                      {turn.toLabel}
+                    </Link>
+                  )}
                   {(turn.section || turn.manualLink) && (
                     <Link
                       to="/help"
