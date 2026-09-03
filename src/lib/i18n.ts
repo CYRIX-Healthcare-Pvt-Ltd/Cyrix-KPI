@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react'
  * than by remembering — see i18n.test.ts.
  */
 
-export type Lang = 'en' | 'ml' | 'hi' | 'te'
+export type Lang = 'en' | 'ml' | 'hi' | 'te' | 'ta'
 
 /**
  * `ready` is whether the manual is actually translated into it.
@@ -34,6 +34,7 @@ export const LANGS: Array<{
   { code: 'ml', label: 'മലയാളം',    english: 'Malayalam', ready: true },
   { code: 'hi', label: 'हिन्दी',      english: 'Hindi',     ready: true },
   { code: 'te', label: 'తెలుగు',      english: 'Telugu',    ready: true },
+  { code: 'ta', label: 'தமிழ்',       english: 'Tamil',     ready: true },
 ]
 
 export const READY_LANGS = LANGS.filter(l => l.ready)
