@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, type FormEvent } from 'react'
-import { Search, UserPlus, Upload, Download, X } from 'lucide-react'
+import { Search, UserPlus, Upload, Download, X, ArrowLeftRight } from 'lucide-react'
 import { supabase, friendlyError, ecodeToEmail } from '@/lib/supabase'
+import { BulkAssign } from '@/pages/admin/SwAdmin'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOrgKpiStatus, currentFy } from '@/lib/queries'
 import { exportOrgStatus } from '@/lib/export'
@@ -16,6 +17,7 @@ export default function AdminEmployees() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [adding, setAdding] = useState(false)
   const [bulk, setBulk] = useState(false)
+  const [recoding, setRecoding] = useState(false)
 
   const filtered = useMemo(() => {
     if (!org) return []
@@ -68,6 +70,14 @@ export default function AdminEmployees() {
           <button onClick={() => setBulk(true)} className="btn-secondary">
             <Upload className="h-4 w-4" /> Bulk import
           </button>
+          {/* Beside the import on purpose. Both take a sheet of people,
+              and the difference between them is the whole point: import
+              adds somebody, this renames somebody who is already here.
+              Reaching for the wrong one is how a permanent engineer ends
+              up in the system twice. */}
+          <button onClick={() => setRecoding(true)} className="btn-secondary">
+            <ArrowLeftRight className="h-4 w-4" /> Change codes
+          </button>
           <button onClick={download} className="btn-secondary">
             <Download className="h-4 w-4" /> Export
           </button>
@@ -78,6 +88,67 @@ export default function AdminEmployees() {
                               onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
       {bulk && <BulkImport onClose={() => setBulk(false)}
                            onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
+
+      {/*
+        Renaming, not re-creating.
+
+        An engineer on CT111 who goes permanent gets an E code, and until
+        now there was nothing to do about it — so they were added again
+        under the new code and the year they had already been scored on
+        stayed behind with the old one. The employee id is what every
+        submission, assignment and audit row hangs off; this changes the
+        label on it and moves the login with it, and touches nothing else.
+      */}
+      {recoding && (
+        <BulkAssign<string>
+          title="Change employee codes"
+          help={
+            <>
+              Two columns: the code somebody has now, and the code they should
+              have. Their KPI, every month they have been scored and their
+              whole history stay with them — only the code changes, and their
+              login changes with it, so <strong>CT111</strong> signs in as{' '}
+              <strong>E250</strong> from then on. Their password does not
+              change.
+            </>
+          }
+          templateName="cyrix-change-employee-codes.xlsx"
+          templateHeaders={['Current code', 'New code']}
+          templateExamples={[
+            { 'Current code': 'CT111', 'New code': 'E250' },
+            { 'Current code': 'CT618', 'New code': 'E251' },
+          ]}
+          parseRow={row => {
+            const from = String(row['Current code'] ?? '').trim().toUpperCase()
+            const to = String(row['New code'] ?? '').trim().toUpperCase()
+            if (!to) return { ecode: from, problem: 'No new code given' }
+            if (to === from) return { ecode: from, problem: 'Already their code' }
+            return { ecode: from, value: to }
+          }}
+          describe={to => `→ ${to}`}
+          apply={async rows => {
+            // One at a time, and each one reports for itself: a code
+            // already taken is that person's problem to fix, not a reason
+            // to abandon the other seventy-seven.
+            let changed = 0
+            const missing: string[] = []
+            for (const r of rows) {
+              const { data, error } = await supabase.rpc('change_ecode', {
+                p_from: r.ecode, p_to: r.value,
+              })
+              const said = data as { status?: string; detail?: string } | null
+              if (error) missing.push(`${r.ecode} — ${friendlyError(error)}`)
+              else if (said?.status === 'changed') changed++
+              else missing.push(`${r.ecode} — ${said?.detail ?? 'not changed'}`)
+            }
+            return { changed, missing }
+          }}
+          onClose={() => {
+            setRecoding(false)
+            qc.invalidateQueries({ queryKey: ['org_kpi_status'] })
+          }}
+        />
+      )}
 
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-[220px] flex-1">
