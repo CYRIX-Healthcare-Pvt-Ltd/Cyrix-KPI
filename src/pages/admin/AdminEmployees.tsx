@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, type FormEvent } from 'react'
 import { Search, UserPlus, Upload, Download, X, ArrowLeftRight } from 'lucide-react'
-import { supabase, friendlyError, ecodeToEmail } from '@/lib/supabase'
+import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
+import EditEmployee from '@/components/EditEmployee'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOrgKpiStatus, currentFy } from '@/lib/queries'
 import { exportOrgStatus } from '@/lib/export'
@@ -18,6 +19,8 @@ export default function AdminEmployees() {
   const [adding, setAdding] = useState(false)
   const [bulk, setBulk] = useState(false)
   const [recoding, setRecoding] = useState(false)
+  /** Whose record is open for correction, by code. */
+  const [editing, setEditing] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!org) return []
@@ -88,6 +91,17 @@ export default function AdminEmployees() {
                               onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
       {bulk && <BulkImport onClose={() => setBulk(false)}
                            onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
+
+      {/* Correcting one record — and the only way to give somebody a
+          login, because Add employee never made one. Everybody added
+          through that form has a record and no account. */}
+      {editing && (
+        <EditEmployee
+          ecode={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })}
+        />
+      )}
 
       {/*
         Renaming, not re-creating.
@@ -189,7 +203,7 @@ export default function AdminEmployees() {
             </thead>
             <tbody className="divide-y divide-ink-100">
               {filtered.slice(0, 200).map(e => (
-                <Row key={e.employee_id} e={e} />
+                <Row key={e.employee_id} e={e} onEdit={() => setEditing(e.ecode)} />
               ))}
             </tbody>
           </table>
@@ -204,9 +218,11 @@ export default function AdminEmployees() {
   )
 }
 
-function Row({ e }: { e: OrgKpiStatusRow }) {
+function Row({ e, onEdit }: { e: OrgKpiStatusRow; onEdit: () => void }) {
   return (
-    <tr className="hover:bg-ink-50">
+    // The whole row opens it. A pencil in the last column is a target to
+    // aim at on a list of 1,148; the row is the thing being corrected.
+    <tr className="cursor-pointer hover:bg-ink-50" onClick={onEdit}>
       <td className="px-4 py-3">
         <p className="font-medium text-ink-900">{e.full_name}</p>
         <p className="text-xs text-ink-500">
@@ -245,7 +261,7 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
+  const [done, setDone] = useState<{ ecode: string; loginMade: boolean } | null>(null)
 
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm({ ...form, [k]: e.target.value })
@@ -281,7 +297,28 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       })
       if (insErr) throw new Error(friendlyError(insErr))
 
-      setDone(ecode)
+      /*
+        And a login, which this form used to leave to a terminal.
+
+        It printed a scripts/user-admin.mjs command and told HR to go and
+        run it with the service key, so in practice it did not get run --
+        the person had a record, no account, and a sign-in screen that
+        could only tell them the password was wrong.
+
+        Not fatal if it fails: the employee row is already saved and
+        correct, and Edit offers the login again. Losing the record
+        because the account could not be made would be the worse half.
+      */
+      let loginMade = true
+      try {
+        const { data: made, error: loginErr } =
+          await supabase.rpc('hr_create_login', { p_ecode: ecode })
+        if (loginErr || !(made as { ok?: boolean })?.ok) loginMade = false
+      } catch {
+        loginMade = false
+      }
+
+      setDone({ ecode, loginMade })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add that employee.')
@@ -294,17 +331,21 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     <Panel title="Add an employee" onClose={onClose}>
       {error && <Alert kind="error">{error}</Alert>}
       {done ? (
-        <Alert kind="success" title={`${done} added`}>
-          <p>
-            Their record exists but has no login yet. Issue one by running:
-          </p>
-          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
-            node scripts/user-admin.mjs issue-login {done}
-          </code>
-          <p className="mt-2">
-            They will then sign in with <strong>{done}</strong> / <strong>{done}</strong>
-            {' '}({ecodeToEmail(done)}).
-          </p>
+        <Alert
+          kind={done.loginMade ? 'success' : 'warning'}
+          title={`${done.ecode} added`}
+        >
+          {done.loginMade ? (
+            <p>
+              They sign in as <strong>{done.ecode}</strong> with
+              {' '}<strong>{done.ecode}</strong> as the password, and should change it.
+            </p>
+          ) : (
+            <p>
+              The record is saved, but their login could not be created. Open
+              their row and use <strong>Create their login</strong>.
+            </p>
+          )}
         </Alert>
       ) : (
         <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
