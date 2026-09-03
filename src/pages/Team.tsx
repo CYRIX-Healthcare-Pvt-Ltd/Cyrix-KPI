@@ -265,6 +265,42 @@ export default function Team() {
     })
   }, [allSubs, fy])
 
+  /**
+   * Everyone waiting on this manager, in every month of the year.
+   *
+   * The banner used to read the selected month only, which meant a
+   * submission sat unseen the moment the picker moved off its month —
+   * and the picker defaults to the current one, so an August assessment
+   * submitted in September was invisible on the screen built to catch
+   * it. The manager's answer to "is anything waiting on me" cannot
+   * depend on which month they happen to be looking at.
+   *
+   * Oldest first: the one that has been waiting longest is the one
+   * holding somebody up.
+   */
+  const pending = useMemo(() => {
+    const byId = new Map((data?.team ?? []).map(t => [t.id, t]))
+    return (allSubs ?? [])
+      .filter(s => s.status === 'submitted' && byId.has(s.employee_id))
+      .sort((a, b) => a.period_month.localeCompare(b.period_month))
+      .map(s => ({ sub: s, person: byId.get(s.employee_id)! }))
+  }, [allSubs, data])
+
+  /**
+   * "Three submissions" or "Submissions across two months".
+   *
+   * Named rather than counted when they are all one month, because a
+   * manager who knows they are all August knows whether that is the
+   * backlog they were expecting.
+   */
+  const pendingMonths = useMemo(() => {
+    const months = [...new Set(pending.map(p => p.sub.period_month))]
+    if (months.length === 0) return ''
+    return months.length === 1
+      ? `${monthLabel(months[0])} assessments`
+      : `Assessments across ${months.length} months`
+  }, [pending])
+
   /** How many people are below this manager, beyond their own reports. */
   const wholeLine = subtree?.length ?? 0
   const reportsById = useMemo(
@@ -373,10 +409,6 @@ export default function Team() {
   }).length
   const done = covered.filter(t => SCORED.has(subsById.get(t.id)?.status ?? '')).length
 
-  // The call to action has to land on something to score. It pointed at
-  // /team — the page it is already on — so the button did nothing.
-  const firstToScore = waiting.length ? subsById.get(waiting[0].id) : undefined
-
   return (
     <div className="space-y-5">
       <ScoreHeader
@@ -389,16 +421,30 @@ export default function Team() {
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
 
-      {awaiting > 0 && firstToScore && (
+      {/*
+        Directly under the hero, which is where the dashboard puts the
+        same panel for somebody's own overdue month. A manager reads this
+        screen the way everybody reads that one — top first — and the
+        thing that is blocking another person belongs above the charts
+        rather than after them.
+
+        The month is always named. This counts the whole year while the
+        list below shows one month, so a banner about August over a
+        September list has to say August or it reads as a bug.
+      */}
+      {pending.length > 0 && (
         <ActionRequired
           eyebrow="Scoring Due"
-          title={`${awaiting} assessment${awaiting === 1 ? '' : 's'} waiting for you`}
+          title={`${pending.length} assessment${pending.length === 1 ? '' : 's'} waiting for you`}
           body={
-            awaiting === 1
-              ? `${waiting[0].full_name} has submitted ${monthLabel(month)} and it cannot be finalised until you score it.`
-              : `Your team has submitted ${monthLabel(month)} and those months cannot be finalised until you score them. Starting with ${waiting[0].full_name}.`
+            pending.length === 1
+              ? `${pending[0].person.full_name} submitted ${monthLabel(pending[0].sub.period_month)}` +
+                ' and it cannot be finalised until you score it.'
+              : `${pendingMonths} cannot be finalised until you score them. ` +
+                `Starting with ${pending[0].person.full_name}, ` +
+                `${monthLabel(pending[0].sub.period_month)}.`
           }
-          to={`/score/${firstToScore.id}`}
+          to={`/score/${pending[0].sub.id}`}
           cta="Start Scoring"
         />
       )}
