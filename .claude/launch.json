@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "D:/Projects/Blue-Star", "run", "dev", "--", "--port", "5174"],
       "port": 5174
+    },
+    {
+      "name": "cyrix-bemmp",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["D:/Cyrix Coding/scripts/serve.mjs"],
+      "port": 4173
     }
   ]
 }
