@@ -291,6 +291,77 @@ export const CHAT: Record<string, Phrase> = {
     te: 'ఇంకా ఏ నెలా స్కోర్ కాలేదు, పోల్చడానికి ఏమీ లేదు.',
     ta: 'இன்னும் எந்த மாதத்திற்கும் மதிப்பெண் அளிக்கப்படவில்லை, எனவே ஒப்பிட எதுவும் இல்லை.',
   },
+  /*
+    Where the year is heading, and what to do about it.
+
+    Warmer than the figures around them on purpose. Everything else here
+    reports something that already happened, where plainness is the whole
+    virtue; these two are the answers somebody came looking for when they
+    are worried, and a bare decimal in reply to "am I going to be alright"
+    is technically responsive and no help at all.
+
+    The hedging is in the words rather than the arithmetic. "If the last
+    few months are anything to go by" is the honest description of what
+    the number is, and it stops a projection being read as a promise —
+    which matters, because this figure will be quoted back at somebody's
+    appraisal.
+  */
+  'forecast.tooearly': {
+    en: 'Too early to say — one scored month cannot tell us much about twelve. Ask me again once a couple more are marked.',
+    ml: 'ഇപ്പോൾ പറയാൻ നേരമായില്ല — സ്കോർ ചെയ്ത ഒരു മാസം കൊണ്ട് പന്ത്രണ്ട് മാസത്തെക്കുറിച്ച് അധികമൊന്നും പറയാനാവില്ല. രണ്ട് മാസം കൂടി കഴിഞ്ഞ് വീണ്ടും ചോദിക്കൂ.',
+    hi: 'अभी कहना जल्दबाज़ी होगी — एक स्कोर किया हुआ महीना बारह महीनों के बारे में ज़्यादा नहीं बता सकता। दो महीने और हो जाएँ, तब फिर पूछिए।',
+    te: 'ఇప్పుడే చెప్పలేం — స్కోర్ అయిన ఒక నెల పన్నెండు నెలల గురించి పెద్దగా చెప్పలేదు. మరో రెండు నెలలు అయ్యాక మళ్ళీ అడగండి.',
+    ta: 'இப்போது சொல்ல முடியாது — மதிப்பெண் பெற்ற ஒரு மாதம் பன்னிரண்டு மாதங்களைப் பற்றி அதிகம் சொல்லாது. இன்னும் இரண்டு மாதங்கள் கழித்து மீண்டும் கேளுங்கள்.',
+  },
+  'forecast.low': {
+    en: 'Only {scored} months in, so treat this lightly: you are averaging {soFar}, and at that rate the year lands near {projected} — {band}.',
+    ml: '{scored} മാസം മാത്രമേ ആയിട്ടുള്ളൂ, അതിനാൽ ഇത് ഉറപ്പായി എടുക്കരുത്: നിങ്ങളുടെ ശരാശരി {soFar} ആണ്, ഈ നിലയിൽ പോയാൽ വർഷം {projected}-ന് അടുത്ത് എത്തും — {band}.',
+    hi: 'अभी सिर्फ़ {scored} महीने हुए हैं, इसलिए इसे हल्के में लें: आपका औसत {soFar} है, और इसी रफ़्तार से साल {projected} के आसपास रहेगा — {band}।',
+    te: 'ఇంకా {scored} నెలలే అయ్యాయి, కాబట్టి దీన్ని గట్టిగా తీసుకోవద్దు: మీ సగటు {soFar}, ఇదే వేగంతో సంవత్సరం {projected} దగ్గర ముగుస్తుంది — {band}.',
+    ta: 'இன்னும் {scored} மாதங்களே ஆகியுள்ளன, எனவே இதை உறுதியாக எடுக்க வேண்டாம்: உங்கள் சராசரி {soFar}, இதே வேகத்தில் ஆண்டு {projected} அருகில் முடியும் — {band}.',
+  },
+  'forecast.flat': {
+    en: 'You are steady — averaging {soFar} across {scored} months. Keep that up over the {remaining} still to come and the year finishes around {projected} — {band}.',
+    ml: 'നിങ്ങൾ സ്ഥിരതയോടെയാണ് — {scored} മാസത്തിൽ ശരാശരി {soFar}. ബാക്കിയുള്ള {remaining} മാസവും ഇങ്ങനെ പോയാൽ വർഷം {projected}-ന് അടുത്ത് അവസാനിക്കും — {band}.',
+    hi: 'आप स्थिर हैं — {scored} महीनों में औसत {soFar}। बाकी {remaining} महीनों में भी यही रफ़्तार रही तो साल {projected} के आसपास पूरा होगा — {band}।',
+    te: 'మీరు స్థిరంగా ఉన్నారు — {scored} నెలల్లో సగటు {soFar}. మిగిలిన {remaining} నెలల్లోనూ ఇదే కొనసాగితే సంవత్సరం {projected} దగ్గర ముగుస్తుంది — {band}.',
+    ta: 'நீங்கள் நிலையாக இருக்கிறீர்கள் — {scored} மாதங்களில் சராசரி {soFar}. மீதமுள்ள {remaining} மாதங்களிலும் இதே தொடர்ந்தால் ஆண்டு {projected} அளவில் முடியும் — {band}.',
+  },
+  'forecast.up': {
+    en: 'You are climbing — {soFar} across the year but {recent} lately. If the last few months are anything to go by, you finish near {projected} — {band}.',
+    ml: 'നിങ്ങൾ മെച്ചപ്പെടുകയാണ് — വർഷം മുഴുവൻ {soFar}, പക്ഷേ അടുത്തിടെ {recent}. കഴിഞ്ഞ ഏതാനും മാസങ്ങൾ വെച്ച് നോക്കിയാൽ നിങ്ങൾ {projected}-ന് അടുത്ത് എത്തും — {band}.',
+    hi: 'आप ऊपर जा रहे हैं — साल भर में {soFar}, लेकिन हाल में {recent}। पिछले कुछ महीनों को देखें तो आप {projected} के करीब पहुँचेंगे — {band}।',
+    te: 'మీరు మెరుగవుతున్నారు — ఏడాది మొత్తం {soFar}, కానీ ఇటీవల {recent}. గత కొన్ని నెలలను బట్టి చూస్తే మీరు {projected} దగ్గరకు చేరుతారు — {band}.',
+    ta: 'நீங்கள் முன்னேறுகிறீர்கள் — ஆண்டு முழுவதும் {soFar}, ஆனால் சமீபத்தில் {recent}. கடந்த சில மாதங்களை வைத்துப் பார்த்தால் நீங்கள் {projected} அருகில் முடிப்பீர்கள் — {band}.',
+  },
+  'forecast.down': {
+    en: 'Worth a look — {soFar} across the year but {recent} lately. If that carries on the year settles near {projected} — {band}. There are {remaining} months left to turn it around.',
+    ml: 'ശ്രദ്ധിക്കേണ്ടതുണ്ട് — വർഷം മുഴുവൻ {soFar}, പക്ഷേ അടുത്തിടെ {recent}. ഇത് തുടർന്നാൽ വർഷം {projected}-ന് അടുത്ത് നിൽക്കും — {band}. തിരിച്ചുവരാൻ {remaining} മാസം ബാക്കിയുണ്ട്.',
+    hi: 'ध्यान देने लायक है — साल भर में {soFar}, लेकिन हाल में {recent}। यही चलता रहा तो साल {projected} के आसपास रहेगा — {band}। सुधारने के लिए {remaining} महीने बाकी हैं।',
+    te: 'గమనించాల్సిన విషయం — ఏడాది మొత్తం {soFar}, కానీ ఇటీవల {recent}. ఇదే కొనసాగితే సంవత్సరం {projected} దగ్గర ఉంటుంది — {band}. సరిచేసుకోవడానికి {remaining} నెలలు ఉన్నాయి.',
+    ta: 'கவனிக்க வேண்டியது — ஆண்டு முழுவதும் {soFar}, ஆனால் சமீபத்தில் {recent}. இது தொடர்ந்தால் ஆண்டு {projected} அளவில் நிற்கும் — {band}. திருத்திக்கொள்ள {remaining} மாதங்கள் உள்ளன.',
+  },
+  'forecast.done': {
+    en: 'The year is complete — {scored} months scored, averaging {soFar} — {band}.',
+    ml: 'വർഷം പൂർത്തിയായി — {scored} മാസം സ്കോർ ചെയ്തു, ശരാശരി {soFar} — {band}.',
+    hi: 'साल पूरा हो गया — {scored} महीने स्कोर हुए, औसत {soFar} — {band}।',
+    te: 'సంవత్సరం పూర్తయింది — {scored} నెలలు స్కోర్ అయ్యాయి, సగటు {soFar} — {band}.',
+    ta: 'ஆண்டு முடிந்தது — {scored} மாதங்கள் மதிப்பெண் பெற்றன, சராசரி {soFar} — {band}.',
+  },
+  'lever': {
+    en: 'If you pick one thing, make it {kra}. It is worth {weightage}% and running at {pct}% of that — getting it to {target}% would add about {gain} to your total, more than any other row.',
+    ml: 'ഒരു കാര്യം മാത്രം എടുക്കുകയാണെങ്കിൽ അത് {kra} ആകട്ടെ. ഇതിന് {weightage}% വിലയുണ്ട്, ഇപ്പോൾ അതിന്റെ {pct}% ആണ് — {target}% വരെ എത്തിച്ചാൽ നിങ്ങളുടെ ആകെ സ്കോറിൽ ഏകദേശം {gain} കൂടും, മറ്റേതൊരു വരിയേക്കാളും കൂടുതൽ.',
+    hi: 'अगर एक ही चीज़ चुननी हो तो {kra} चुनिए। यह {weightage}% की है और अभी उसका {pct}% चल रही है — इसे {target}% तक ले जाने से आपके कुल स्कोर में करीब {gain} जुड़ेंगे, किसी भी दूसरी पंक्ति से ज़्यादा।',
+    te: 'ఒకే ఒక దానిపై దృష్టి పెట్టాలంటే {kra} తీసుకోండి. దీని విలువ {weightage}%, ప్రస్తుతం అందులో {pct}% ఉంది — దీన్ని {target}% కి తీసుకెళ్తే మీ మొత్తం స్కోరుకు సుమారు {gain} కలుస్తుంది, మిగతా ఏ వరుస కంటే ఎక్కువ.',
+    ta: 'ஒரே ஒன்றைத் தேர்ந்தெடுக்க வேண்டுமானால் {kra} ஐ எடுங்கள். இதன் மதிப்பு {weightage}%, தற்போது அதில் {pct}% உள்ளது — இதை {target}% க்கு கொண்டு சென்றால் உங்கள் மொத்த மதிப்பெண்ணில் சுமார் {gain} சேரும், வேறு எந்த வரிசையையும் விட அதிகம்.',
+  },
+  'lever.none': {
+    en: 'Nothing obvious to push on — every row is at 90% of its weightage or better. That is a good place to be.',
+    ml: 'പ്രത്യേകിച്ച് ഒന്നും ചെയ്യാനില്ല — എല്ലാ വരികളും അതിന്റെ weightage-ന്റെ 90% അല്ലെങ്കിൽ അതിലധികമാണ്. ഇത് നല്ല അവസ്ഥയാണ്.',
+    hi: 'कुछ खास सुधारने को नहीं है — हर पंक्ति अपने weightage के 90% या उससे ऊपर है। यह अच्छी स्थिति है।',
+    te: 'ప్రత్యేకంగా చేయాల్సింది ఏమీ లేదు — ప్రతి వరుసా దాని weightage లో 90% లేదా అంతకంటే ఎక్కువ ఉంది. ఇది మంచి స్థితి.',
+    ta: 'குறிப்பாக மேம்படுத்த ஒன்றும் இல்லை — ஒவ்வொரு வரிசையும் அதன் weightage இல் 90% அல்லது அதற்கு மேல் உள்ளது. இது நல்ல நிலை.',
+  },
   'core.weakest': {
     en: 'Your lowest core value is {name}, averaging {pct} out of 100.',
     ml: 'ഏറ്റവും കുറഞ്ഞ core value {name} ആണ്, ശരാശരി 100-ൽ {pct}.',

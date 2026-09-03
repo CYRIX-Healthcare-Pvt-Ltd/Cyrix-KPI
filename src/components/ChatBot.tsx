@@ -11,7 +11,7 @@ import {
   useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
   useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket, currentFy,
 } from '@/lib/queries'
-import { currentReportingMonth, monthLabel } from '@/lib/fy'
+import { currentReportingMonth, monthLabel, fyMonthsFrom } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
@@ -268,6 +268,18 @@ export default function ChatBot() {
       kras: kras ?? [],
       coreTrend: coreTrend ?? [],
       coreValues: coreValues ?? [],
+      /*
+        Months still ahead of this person, which is what a projection has
+        to spread the recent run across.
+
+        Counted from their own KPI's start month rather than from April —
+        a June joiner has nine months in their year, not twelve — and
+        only months later than the one currently being reported on. A
+        month that is late is overdue rather than upcoming, and counting
+        it as future would quietly forgive it.
+      */
+      remainingMonths: fyMonthsFrom(fy, assignment?.assignment?.starts_from)
+        .filter(m => m > currentReportingMonth()).length,
       month, ecode,
     })
 

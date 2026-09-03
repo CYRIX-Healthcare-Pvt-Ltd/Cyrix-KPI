@@ -67,6 +67,17 @@ export type FactId =
   | 'kra.declining'
   | 'core.weakest'
   | 'core.declining'
+  /*
+   * The two questions people actually open the panel with.
+   *
+   * Everything above reports the past, accurately, and none of it
+   * answers "am I going to be alright" or "so what do I do". Those got
+   * matched to whichever past-tense fact shared the most words —
+   * "how am I doing" landed on the year average, which is the question
+   * restated rather than answered.
+   */
+  | 'score.forecast'
+  | 'kra.lever'
 
 /**
  * Who a section of the manual is written for.
@@ -334,6 +345,45 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
     any: ['average', 'avg', 'this year', 'year score', 'overall', 'annual',
           'ശരാശരി', 'औसत', 'సగటు'],
   },
+  /*
+    Placed above the past-tense facts on purpose: these patterns are
+    narrower, and the first match wins. "How will I finish the year"
+    contains "year", which would otherwise be answered with the year
+    average — the very number the question is asking to have projected
+    forward.
+  */
+  {
+    id: 'score.forecast',
+    /*
+      Every phrase here names the score or the year.
+
+      'will i get' and 'am i going to' were in this list and had to come
+      out: "how much increment will i get" matched, and an appraisal bot
+      answering a salary question with a projected KPI figure is the one
+      confusion this app must never create. The test that asserts those
+      questions stay unknown is what caught it, and it is worth more than
+      the extra recall was.
+    */
+    any: ['forecast', 'predict', 'prediction', 'projection', 'projected',
+          'on track', 'am i on track', 'how will i finish', 'where will i end',
+          'end of year', 'year end', 'finish the year', 'final score',
+          'expected score', 'score looking like', 'how will my score',
+          'how am i doing overall', 'am i doing well', 'am i ok',
+          'എങ്ങനെ അവസാനിക്കും', 'क्या मैं ठीक हूं', 'साल के अंत',
+          'నేను బాగున్నానా', 'நான் சரியாக இருக்கிறேனா'],
+  },
+  {
+    // "So what do I do about it" — the only question whose answer is an
+    // instruction rather than a figure.
+    id: 'kra.lever',
+    any: ['what should i improve', 'what should i focus', 'what to improve',
+          'how do i improve', 'how can i improve', 'what will help',
+          'biggest impact', 'most impact', 'where should i focus',
+          'what should i work on', 'how to increase my score',
+          'how to improve my score', 'what would help most', 'best use of my time',
+          'എന്ത് മെച്ചപ്പെടുത്തണം', 'क्या सुधारूं', 'ఏమి మెరుగుపరచాలి',
+          'எதை மேம்படுத்த வேண்டும்'],
+  },
   {
     // A named row of the KPI, rather than the block it sits in.
     id: 'kra.weakest',
@@ -583,6 +633,30 @@ const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => 
 const TEACH_ME =
   /\bhow\s+(do|to|can|should|does)\b|\bwhat\s+(is|are|does)\b[^?]*\bmeans?\b|\bwhat\s+(is|are)\s+(a|an)\b/
 
+/**
+ * Money, which this app does not decide and must not appear to.
+ *
+ * "will i get a raise this year" was answered with the year average,
+ * because 'this year' is one of the words score.year matches on. The
+ * figure was correct and the exchange was not: a KPI average offered in
+ * reply to a pay question reads as the answer to it, and the one thing
+ * an appraisal tool must never do is imply what an appraisal is worth in
+ * rupees. Nothing here knows, so nothing here should sound like it does.
+ *
+ * These come back as unknown, which is not a dead end — an unknown
+ * offers to hand the question to HR, who can actually answer it.
+ *
+ * 'raise' carries a second meaning in this app: you raise a query and
+ * raise a ticket, and both are things the manual explains. So it counts
+ * only when it is not one of those.
+ */
+const NOT_MINE = new RegExp(
+  '\\b(salary|increment|hike|bonus|ctc|payslip|wage|wages|promotion|promoted|'
+  + 'appraisal\\s+amount|pay\\s+(rise|revision))\\b'
+  + '|\\braise\\b(?!\\s+(a\\s+|an\\s+)?(query|ticket|request|issue|concern|complaint|dispute))',
+  'i',
+)
+
 export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
   const asked = tokens(query)
   const teachMe = TEACH_ME.test(normalise(query))
@@ -605,6 +679,11 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
     return { kind: 'fact', id: 'chit.whoisbot' }
   }
 
+  // Before anything that could produce a figure. A pay question that
+  // reaches the matchers comes back with a score, and a score offered in
+  // answer to "will I get a raise" is read as a yes.
+  if (NOT_MINE.test(query)) return { kind: 'unknown' }
+
   // A manager's question is usually about somebody else, and reading it
   // as if it were about them is the worst kind of wrong answer here: a
   // real number, confidently given, for the wrong person.
@@ -625,8 +704,18 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
     const score = factScore(query, p)
     if (score > 0 && (!bestFact || score > bestFact.score)) bestFact = { id: p.id, score }
   }
-  // The manual answer to "what is this" is the manual itself.
-  if (bestFact && (!teachMe || bestFact.id === 'manual')) {
+  /*
+    The manual answer to "what is this" is the manual itself.
+
+    kra.lever is the other exception, and for the same reason: "how can I
+    improve my score" trips TEACH_ME on "how can", which is right for
+    every other fact — somebody asking how to do something wants the
+    procedure, not a number. But kra.lever IS the procedure. It is the
+    only fact here whose answer is an instruction, so sending it to the
+    manual hands back a page about how scoring works to somebody who
+    asked what to work on.
+  */
+  if (bestFact && (!teachMe || bestFact.id === 'manual' || bestFact.id === 'kra.lever')) {
     return { kind: 'fact', id: bestFact.id }
   }
 

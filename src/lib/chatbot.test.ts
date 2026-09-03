@@ -175,6 +175,51 @@ describe('what people actually type', () => {
     expect(asks('who is the best engineer').kind).not.toBe('fact')
   })
 
+  it('understands the two questions people open the panel with', () => {
+    // "How am I doing" and "what do I do about it" are the questions the
+    // panel existed to answer and could not: every fact in it reported
+    // the past, so these matched whichever past-tense answer shared the
+    // most words.
+    for (const q of [
+      'am i on track', 'how will i finish the year', 'what is my projected score',
+      'am i doing well', 'forecast my score',
+    ]) {
+      expect(asks(q)).toMatchObject({ kind: 'fact', id: 'score.forecast' })
+    }
+    for (const q of [
+      'what should i improve', 'where should i focus',
+      'how can i improve my score', 'what would help most',
+    ]) {
+      expect(asks(q)).toMatchObject({ kind: 'fact', id: 'kra.lever' })
+    }
+  })
+
+  it('does not read a pay question as a KPI projection', () => {
+    // The trap the forecast patterns fell into first time: 'will i get'
+    // matched "how much increment will i get", and answering that with a
+    // projected KPI figure invites somebody to read a score as a salary
+    // promise. Kept as its own case because the phrasing is the point.
+    for (const q of [
+      'how much increment will i get',
+      'will i get a raise this year',
+      'am i going to get a promotion',
+      'what is my salary hike',
+      'when is my bonus',
+    ]) {
+      expect(asks(q).kind).toBe('unknown')
+    }
+  })
+
+  it('still answers the query and ticket questions that use the word raise', () => {
+    // 'raise' had to count as a pay word to stop "will I get a raise"
+    // being answered with a score. But you also raise a query and raise a
+    // ticket in this app, and both are things the manual explains — so
+    // the exclusion has to be narrower than the word.
+    for (const q of ['how do i raise a query', 'how to raise a ticket']) {
+      expect(asks(q).kind).not.toBe('unknown')
+    }
+  })
+
   it('says it does not know rather than guessing', () => {
     // None of these are in the manual, and every one of them is the kind
     // of thing somebody would believe an answer to.

@@ -4,6 +4,7 @@ import { monthLabel } from './fy'
 import { bandFor } from './bands'
 import { ratingToPoints } from './scoring'
 import { WEAK_THRESHOLD } from './bands'
+import { forecastYear, biggestLever, averageRows } from './forecast'
 import type { FactId } from './chatbot'
 
 /**
@@ -55,6 +56,15 @@ export interface AnswerContext {
   team?: Person[]
   /** Every month of theirs, for the year. */
   teamMonths?: Scored[]
+  /**
+   * How many months of this year the person is still expected to submit.
+   *
+   * Passed in rather than derived here, because it depends on when their
+   * KPI starts and which months the company has opened — both of which
+   * the caller already holds and this module deliberately does not
+   * query for.
+   */
+  remainingMonths?: number
   /** Which month was named, 0-11. */
   month?: number
   /** Which person was named. */
@@ -282,6 +292,55 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
     }
 
     // ---- one row of the KPI ---------------------------------------
+    /*
+      Where the year is heading.
+
+      Hedged in the wording rather than in the arithmetic: the figure is
+      the plain average-plus-recent-run from lib/forecast, and how much
+      to trust it is said out loud instead of being buried in a decimal
+      place. Two scored months produce a real number and an honest
+      warning, which is better than either a confident lie or silence.
+    */
+    case 'score.forecast': {
+      const points = mine.map(s => ({ period_month: s.period_month, value: scoreOf(s)! }))
+      const f = forecastYear(points, ctx.remainingMonths ?? 0)
+      if (!f) return t('forecast.tooearly')
+
+      const key = f.remaining === 0
+        ? 'forecast.done'
+        : f.confidence === 'low' ? 'forecast.low' : `forecast.${f.direction}`
+      return t(key, {
+        soFar: f.soFar.toFixed(1),
+        recent: f.recent.toFixed(1),
+        projected: f.projected.toFixed(1),
+        band: band(f.projected),
+        scored: f.scored,
+        remaining: f.remaining,
+      })
+    }
+
+    /*
+      The one answer that is an instruction.
+
+      Weightage times the room above it, so the row named is the one
+      where a month of effort buys the most — not the one with the
+      ugliest percentage, which is what "weakest" returns and is a
+      different question with a frequently different answer.
+    */
+    case 'kra.lever': {
+      const rows = averageRows(ctx.kras ?? [])
+      if (rows.length === 0) return t('kra.none')
+      const lever = biggestLever(rows)
+      if (!lever) return t('lever.none')
+      return t('lever', {
+        kra: lever.kra,
+        pct: lever.attainmentPct.toFixed(1),
+        weightage: lever.weightage,
+        target: lever.target,
+        gain: lever.gain.toFixed(1),
+      })
+    }
+
     case 'kra.weakest':
     case 'kra.best': {
       const rows = ctx.kras ?? []
