@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   calcKpiScore,
+  UNCAPPED_MAX_MULTIPLIER,
   averageCoreValueRatings,
   blendScores,
   computeTotals,
@@ -36,14 +37,37 @@ describe('higher_capped — MIN(F/E*D, D)', () => {
   })
 })
 
-describe('higher_uncapped — overachievement can cross the weightage', () => {
-  it('goes past the weightage', () => {
-    expect(calcKpiScore('higher_uncapped', 25, 100, 150)).toBe(37.5)
+describe('higher_uncapped — crosses the weightage, but stops at 120% of it', () => {
+  it('pays for beating the target', () => {
+    expect(calcKpiScore('higher_uncapped', 25, 100, 110)).toBe(27.5)
   })
 
-  it('respects max_multiplier as a ceiling', () => {
-    expect(calcKpiScore('higher_uncapped', 25, 100, 150, { max_multiplier: 1.2 })).toBe(30)
-    expect(calcKpiScore('higher_uncapped', 25, 100, 110, { max_multiplier: 1.2 })).toBe(27.5)
+  it('stops at 120% of the weightage however far past the target', () => {
+    // Management's ceiling: a row worth 25% can earn 30% and no more.
+    // 150% of target would once have paid 37.5 — one extraordinary month
+    // on one row carrying a year is what this exists to prevent.
+    expect(calcKpiScore('higher_uncapped', 25, 100, 120)).toBe(30)
+    expect(calcKpiScore('higher_uncapped', 25, 100, 150)).toBe(30)
+    expect(calcKpiScore('higher_uncapped', 25, 100, 1000)).toBe(30)
+  })
+
+  it('is exactly the weightage at the target', () => {
+    expect(calcKpiScore('higher_uncapped', 25, 100, 100)).toBe(25)
+  })
+
+  it('lets a row state its own ceiling either way', () => {
+    expect(calcKpiScore('higher_uncapped', 25, 100, 300, { max_multiplier: 2 })).toBe(50)
+    expect(calcKpiScore('higher_uncapped', 25, 100, 150, { max_multiplier: 1 })).toBe(25)
+  })
+
+  /*
+    The number that has to agree with calc_kpi_score in the database.
+    That one decides the appraisal; this one is what the screen shows
+    while somebody types, and a disagreement between them is a score that
+    changes when the page reloads.
+  */
+  it('caps at the multiplier the database uses', () => {
+    expect(UNCAPPED_MAX_MULTIPLIER).toBe(1.2)
   })
 })
 

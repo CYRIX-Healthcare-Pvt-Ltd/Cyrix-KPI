@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { buildBulkTemplate, readEcodeSheet, readStartMonth } from './bulkKpi'
+import { unzipSync, strFromU8 } from 'fflate'
+import {
+  buildBulkTemplate, readEcodeSheet, readStartMonth, templateBytes, CAPPING_OPTIONS,
+} from './bulkKpi'
 import { parseKpiWorkbook } from './excel'
 
 /**
@@ -56,6 +59,48 @@ describe('the bulk template', () => {
       { ecode: 'E390', startsFrom: '2026-09-01' },
       { ecode: 'E772', startsFrom: '2026-09-01' },
     ])
+  })
+})
+
+/*
+  The Capping dropdown, checked in the file rather than in the code.
+
+  SheetJS's community build accepts a `!dataValidation` on a sheet and
+  writes nothing at all — no error, no warning. The first attempt at this
+  looked correct in the source and produced a file with no dropdown in
+  it, so the only test worth having is one that opens the zip.
+*/
+describe('the Capping dropdown', () => {
+  const sheetXml = () => {
+    const files = unzipSync(templateBytes())
+    return strFromU8(files['xl/worksheets/sheet1.xml'])
+  }
+
+  it('is really in the file', () => {
+    expect(sheetXml()).toContain('<dataValidations count="1">')
+  })
+
+  it('offers exactly the four labels the parser understands', () => {
+    const list = sheetXml().match(/<formula1>"(.*?)"<\/formula1>/)
+    expect(list).not.toBeNull()
+    expect(list![1].split(',')).toEqual([...CAPPING_OPTIONS])
+  })
+
+  it('sits after sheetData, where the schema requires it', () => {
+    // Appended at the end of the worksheet instead, Excel refuses to open
+    // the file — the elements are a sequence, not a set.
+    const xml = sheetXml()
+    expect(xml.indexOf('</sheetData>')).toBeLessThan(xml.indexOf('<dataValidations'))
+  })
+
+  it('covers the column the rules are typed into', () => {
+    expect(sheetXml()).toContain('sqref="F2:F500"')
+  })
+
+  it('still reads back through the parser with the validation in it', () => {
+    const parsed = parseKpiWorkbook(templateBytes().buffer as ArrayBuffer)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.jobRoleTotal).toBe(80)
   })
 })
 

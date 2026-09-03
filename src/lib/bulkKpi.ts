@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate'
 import { supabase } from './supabase'
 import { parseKpiWorkbook, type ParseResult } from './excel'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from './sections'
@@ -30,6 +31,30 @@ export interface BulkPlan {
 }
 
 const norm = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The four scoring rules, spelled exactly as the parser expects them.
+ *
+ * These are the labels ruleFromCappingLabel() reads, and the order is
+ * the order they appear on the setup screen — the two "higher" rules,
+ * then the two "lower" ones — so somebody moving between the sheet and
+ * the screen meets them in the same order both times.
+ */
+export const CAPPING_OPTIONS = [
+  'Higher is better (max weightage)',
+  'Higher is better (can exceed weightage)',
+  'Lower is better (min 0 %)',
+  'Lower is better (can go below 0 %)',
+] as const
+
+/**
+ * How far down the sheet the dropdown reaches.
+ *
+ * Excel applies validation to a stated range, not to a column, so this
+ * has to be a number. 500 covers the largest KRA set anybody has written
+ * — the biggest so far is eight rows — without making the file heavy.
+ */
+const MAX_TEMPLATE_ROWS = 500
 
 /** One person on the Ecode sheet, and the month their KPI begins. */
 export interface BulkTarget {
@@ -283,7 +308,69 @@ export async function applyBulkUpload(
  * to restate them is a column they can only get wrong.
  */
 export function downloadBulkTemplate(): void {
-  XLSX.writeFile(buildBulkTemplate(), 'kpi_bulk_template.xlsx')
+  // Copied into a plain ArrayBuffer. A Uint8Array view is not a BlobPart
+  // the DOM types accept, and fflate's own buffer widens to
+  // ArrayBufferLike — so the bytes are copied into one this can name.
+  const bytes = templateBytes()
+  const buf = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buf).set(bytes)
+  const blob = new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'kpi_bulk_template.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * The workbook as bytes, with the Capping dropdown put back in.
+ *
+ * SheetJS's community build accepts a `!dataValidation` on a sheet and
+ * writes nothing — no error, no warning, just a file without it. So the
+ * validation is injected into the sheet XML afterwards, which means
+ * opening the zip it just produced and putting it back.
+ *
+ * Worth the trouble because Capping is the column that decides how a row
+ * scores, and the parser matches it on meaning: "Higher is better
+ * (uncapped)" is understood, "higher, no limit" is not and falls back to
+ * a rule guessed from the target. A typed column is one that will be
+ * typed wrong eventually, and wrong here changes an appraisal with
+ * nothing on screen looking broken.
+ *
+ * `dataValidations` belongs after sheetData and before pageMargins in
+ * the schema's sequence; appending it at the end of the worksheet makes
+ * a file Excel refuses to open.
+ */
+export function templateBytes(): Uint8Array {
+  const raw = XLSX.write(buildBulkTemplate(), {
+    type: 'array', bookType: 'xlsx',
+  }) as ArrayBuffer
+
+  const files = unzipSync(new Uint8Array(raw))
+  const sheetPath = 'xl/worksheets/sheet1.xml'
+  const xml = strFromU8(files[sheetPath])
+
+  // Quoted inline list. Excel's own separator inside these quotes is a
+  // comma, so a label containing one would need a range on another
+  // sheet instead — none of the four do, and the test says so.
+  const list = CAPPING_OPTIONS.join(',')
+  const validation =
+    '<dataValidations count="1">' +
+    `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1"` +
+    ` errorTitle="Not a scoring rule" error="Pick one of the four from the list."` +
+    ` sqref="F2:F${MAX_TEMPLATE_ROWS}">` +
+    `<formula1>"${list}"</formula1>` +
+    '</dataValidation></dataValidations>'
+
+  const at = xml.indexOf('</sheetData>')
+  if (at === -1) throw new Error('No sheetData in the generated sheet')
+  const after = at + '</sheetData>'.length
+  files[sheetPath] = strToU8(xml.slice(0, after) + validation + xml.slice(after))
+
+  return zipSync(files)
 }
 
 /**
@@ -334,8 +421,9 @@ export function buildBulkTemplate(): XLSX.WorkBook {
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
   ws['!cols'] = [
-    { wch: 20 }, { wch: 42 }, { wch: 60 }, { wch: 11 }, { wch: 11 }, { wch: 34 }, { wch: 16 },
+    { wch: 20 }, { wch: 42 }, { wch: 60 }, { wch: 11 }, { wch: 11 }, { wch: 38 }, { wch: 16 },
   ]
+
   // Percent format on both percentage columns, so 0.4 reads as 40% and
   // 0.01 as 1.0% on screen — and both come back through the parser as the
   // number of percentage points they show.

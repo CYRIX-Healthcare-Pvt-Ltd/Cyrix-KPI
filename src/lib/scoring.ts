@@ -19,6 +19,22 @@ export type ScoringRule =
   | 'boolean'
   | 'rating_scale'
 
+/**
+ * How far past its weightage an uncapped row may go — 120% of it.
+ *
+ * Management's ceiling: a row worth 25% can earn at most 30%, however
+ * far past the target somebody goes. "Can exceed weightage" always meant
+ * exceed, never unbounded — without a limit one extraordinary month on
+ * one row could carry a whole year, which is not what a weightage is
+ * for.
+ *
+ * The same number lives in calc_kpi_score (migration 0087), which is the
+ * scorer that actually decides an appraisal; this one is what the screen
+ * shows while somebody types. They have to agree, and scoring.test.ts
+ * checks the arithmetic here against the same cases.
+ */
+export const UNCAPPED_MAX_MULTIPLIER = 1.2
+
 export interface RuleParams {
   /** Permit the score to fall below zero. Default false. */
   allow_negative?: boolean
@@ -89,10 +105,10 @@ export function calcKpiScore(
 
     case 'higher_uncapped': {
       if (!target) { result = 0; break }
-      result = (achieved / target) * wt
-      if (params.max_multiplier != null) {
-        result = Math.min(result, wt * params.max_multiplier)
-      }
+      // Beating the target earns more than the weightage, but not without
+      // limit — see UNCAPPED_MAX_MULTIPLIER. A row may state its own.
+      const mult = params.max_multiplier ?? UNCAPPED_MAX_MULTIPLIER
+      result = Math.min((achieved / target) * wt, wt * mult)
       break
     }
 
@@ -253,18 +269,14 @@ export function ruleTraits(
   }
 
   switch (rule) {
-    case 'higher_uncapped':
-      return [params.max_multiplier != null
-        ? {
-            tone: 'bonus',
-            label: `Up to ${pct(wt * params.max_multiplier)}`,
-            detail: `Beating the target earns more than the ${pct(wt)} weightage, as far as ${pct(wt * params.max_multiplier)}.`,
-          }
-        : {
-            tone: 'bonus',
-            label: `Can exceed ${pct(wt)}`,
-            detail: `Beating the target keeps earning past the ${pct(wt)} weightage, with no ceiling.`,
-          }]
+    case 'higher_uncapped': {
+      const mult = params.max_multiplier ?? UNCAPPED_MAX_MULTIPLIER
+      return [{
+        tone: 'bonus',
+        label: `Up to ${pct(wt * mult)}`,
+        detail: `Beating the target earns more than the ${pct(wt)} weightage, as far as ${pct(wt * mult)} — ${Math.round(mult * 100)}% of it.`,
+      }]
+    }
 
     // A working penalty is already handled above; what is left is the
     // proportional slice, which keeps going after it runs out.
