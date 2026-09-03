@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Trophy, TrendingDown, AlertTriangle, Users, Download, ArrowUp, ArrowDown,
+  ArrowLeft,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -436,6 +437,15 @@ export default function TeamAnalysis() {
 
   return (
     <div className="space-y-5">
+      {/* The way back, in the words and the position every other screen
+          below My Team uses. This page is reached from a button rather
+          than from a tab, so nothing in the navigation is lit while you
+          are on it — without this the only way out was to press My Team
+          again and hope that was the right guess. */}
+      <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
+        <ArrowLeft className="h-4 w-4" /> Back to my team
+      </Link>
+
       <ScoreHeader
         title="Team analysis"
         subtitle={`${team.length} team members · FY ${fy}`}

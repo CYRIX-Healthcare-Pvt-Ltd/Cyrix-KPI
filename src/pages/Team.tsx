@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
-  Sigma, CalendarDays, LineChart as LineChartIcon,
+  Sigma, CalendarDays, LineChart as LineChartIcon, FileSpreadsheet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -593,12 +593,20 @@ export default function Team() {
             <Link to="/team/analysis" className="btn-analysis">
               <BarChart3 className="h-4 w-4" /> Team analysis
             </Link>
+            {/* Quiet, beside two filled buttons, because it is the one
+                thing here nobody does weekly: templates are written once
+                and used every time somebody joins. A third saturated
+                colour would make this row a rainbow and say all three
+                matter equally. */}
+            <Link to="/team/templates" className="btn-secondary whitespace-nowrap">
+              <FileSpreadsheet className="h-4 w-4" /> KPI templates
+            </Link>
             {/* Only asks when the two answers differ. A manager whose
                 reports manage nobody would be answering a question with
                 one possible answer. */}
             <button
               onClick={() => (wholeLine > team.length ? setAskScope(true) : download('direct'))}
-              className="btn-excel"
+              className="btn-excel col-span-2 sm:col-span-1"
               disabled={busy}
             >
               {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}

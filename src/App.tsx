@@ -17,6 +17,7 @@ const MyHistory         = lazyRoute(() => import('@/pages/MyHistory'))
 const Profile           = lazyRoute(() => import('@/pages/Profile'))
 const Team              = lazyRoute(() => import('@/pages/Team'))
 const TeamAnalysis      = lazyRoute(() => import('@/pages/TeamAnalysis'))
+const TeamTemplates     = lazyRoute(() => import('@/pages/TeamTemplates'))
 const Approvals         = lazyRoute(() => import('@/pages/Approvals'))
 const ScoreSubmission   = lazyRoute(() => import('@/pages/ScoreSubmission'))
 const TeamMember        = lazyRoute(() => import('@/pages/TeamMember'))
@@ -138,6 +139,10 @@ export default function App() {
 
           <Route path="team" element={<RequireManager><Team /></RequireManager>} />
           <Route path="team/analysis" element={<RequireManager><TeamAnalysis /></RequireManager>} />
+          {/* Under team rather than beside it: a template is a team-level
+              thing a manager keeps, and the manager's tab bar is already
+              full. Reached from a button on My Team. */}
+          <Route path="team/templates" element={<RequireManager><TeamTemplates /></RequireManager>} />
           <Route path="team/:employeeId" element={<RequireManager><TeamMember /></RequireManager>} />
           <Route path="approvals" element={<RequireManager><Approvals /></RequireManager>} />
           <Route path="score/:submissionId" element={<RequireManager><ScoreSubmission /></RequireManager>} />

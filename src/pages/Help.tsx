@@ -192,6 +192,8 @@ export default function Help() {
             title={t('s1.title')}
             lead={t('s1.lead')}
             points={[
+              // First, because for most people it is now the whole answer.
+              { what: t('s1.p0.what'), how: t('s1.p0.how'), to: '/my-kpi/setup', cta: 'Set up my KPI' },
               { what: t('s1.p1.what'), how: t('s1.p1.how'), to: '/my-kpi', cta: 'Open my KPI' },
               { what: t('s1.p2.what'), how: t('s1.p2.how'), to: '/my-kpi', cta: 'Open my KPI' },
               { what: t('s1.p3.what'), how: t('s1.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
@@ -261,6 +263,8 @@ export default function Help() {
             { what: t('team.p10.what'), how: t('team.p10.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p11.what'), how: t('team.p11.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p12.what'), how: t('team.p12.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p13.what'), how: t('team.p13.how'), to: '/team/templates', cta: 'Open KPI templates' },
+            { what: t('team.p14.what'), how: t('team.p14.how'), to: '/approvals', cta: 'Open approvals' },
           ]}
         />
       )}

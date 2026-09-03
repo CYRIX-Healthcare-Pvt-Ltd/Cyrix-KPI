@@ -135,6 +135,25 @@ export interface KpiTemplate {
   financial_year: string | null
   status: 'draft' | 'active' | 'archived'
   notes: string | null
+  /** The manager who keeps it. Null for HR's company templates. */
+  owner_id?: string | null
+}
+
+/**
+ * One row of visible_kpi_templates — a template somebody may start from,
+ * with enough about its owner to tell two "Engineer"s apart.
+ */
+export interface VisibleTemplate {
+  id: string
+  name: string
+  owner_id: string | null
+  owner_name: string | null
+  owner_ecode: string | null
+  /** HR's, offered by job role, belonging to nobody in particular. */
+  is_company: boolean
+  /** Mine to rename and delete, rather than somebody else's to use. */
+  is_mine: boolean
+  item_count: number
 }
 
 /** Shared shape of a KPI row across templates, assignments and submissions. */
@@ -153,6 +172,12 @@ export interface KpiRowDefinition {
 export interface KpiTemplateItem extends KpiRowDefinition {
   id: string
   template_id: string
+  /**
+   * The same shape as an assignment row's, because a template row
+   * becomes one — see migration 0094. Optional only for rows read back
+   * from a query that did not ask for the column.
+   */
+  alternates?: Alternate[]
 }
 
 export interface KpiAssignment {

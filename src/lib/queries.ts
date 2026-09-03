@@ -9,8 +9,9 @@ import type {
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
   ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
   ScoreQuery, ScoreQueryPoint, ScoreQueryState, ScoreQueryKind,
-  KraBenchmarkRow, SupportTicket, SupportDesk, DeskTicket,
+  KraBenchmarkRow, SupportTicket, SupportDesk, DeskTicket, VisibleTemplate,
 } from '@/types/db'
+import type { TemplateRowInput } from './templates'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
 async function unwrap<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -94,6 +95,118 @@ export function useTemplatesForRole(jobRoleId: string | null | undefined, fy: st
           .eq('template_id', tpls[0].id).order('sort_order'),
       )
       return { template: tpls[0], items }
+    },
+  })
+}
+
+/**
+ * Every template this person may start from — their line's and HR's.
+ *
+ * The row policy on kpi_templates lets anybody read any of them, which is
+ * right for a table of job descriptions and useless for a dropdown: what
+ * belongs in the list is what the reader's own reporting line has agreed.
+ * visible_kpi_templates (migration 0093) walks up from the caller and
+ * answers exactly that.
+ */
+export function useVisibleTemplates(fy: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ['visible_templates', fy],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('visible_kpi_templates', { p_fy: fy })
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as VisibleTemplate[]
+    },
+  })
+}
+
+/**
+ * The rows behind a set of templates, in one round trip.
+ *
+ * Every screen that offers templates needs all of their rows, not one
+ * template's: the picker previews whichever is highlighted, and the
+ * editor compares a draft against every other template to catch a
+ * duplicate. A query per template would be one request per entry in a
+ * dropdown.
+ */
+export function useTemplateItems(ids: string[] | undefined) {
+  const key = [...(ids ?? [])].sort().join(',')
+  return useQuery({
+    enabled: !!ids && ids.length > 0,
+    queryKey: ['template_items', key],
+    queryFn: async () => {
+      const rows = await unwrap<KpiTemplateItem[]>(
+        supabase.from('kpi_template_items').select('*')
+          .in('template_id', ids!).order('sort_order'),
+      )
+      const byTemplate = new Map<string, KpiTemplateItem[]>()
+      for (const r of rows) {
+        const list = byTemplate.get(r.template_id) ?? []
+        list.push(r)
+        byTemplate.set(r.template_id, list)
+      }
+      return byTemplate
+    },
+  })
+}
+
+export function useSaveTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      name: string
+      fy: string
+      rows: TemplateRowInput[]
+      /** Set when editing an existing one; null creates a new one. */
+      templateId?: string | null
+    }) => {
+      const { data, error } = await supabase.rpc('save_team_template', {
+        p_name: args.name,
+        p_fy: args.fy,
+        p_rows: args.rows,
+        p_template_id: args.templateId ?? null,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as string
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['template_items'] })
+    },
+  })
+}
+
+/** Keeps the rows a manager has just agreed, as a template. */
+export function useTemplateFromAssignment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { assignmentId: string; name: string }) => {
+      const { data, error } = await supabase.rpc('template_from_assignment', {
+        p_assignment_id: args.assignmentId, p_name: args.name,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as string
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['template_items'] })
+    },
+  })
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      // Straight through the row policy rather than a function: it allows
+      // exactly the rows this is allowed to remove, and the items go with
+      // the template on the cascade 0002 put there.
+      const { error } = await supabase.from('kpi_templates').delete().eq('id', templateId)
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['template_items'] })
     },
   })
 }

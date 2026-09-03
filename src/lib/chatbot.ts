@@ -241,6 +241,15 @@ const ALIASES: Record<string, string[]> = {
   // meant a manager asking how to approve a KPI was told how to send
   // one to their own manager.
   's1.p4': ['submit kpi', 'send kpi', 'waiting for approval'],
+  // "Template" appears in the answer but not the heading, which is a
+  // question phrased as a question — so the word people actually type has
+  // to be listed. Both entries carry it: a manager asking about templates
+  // wants team.p13, a team member wants this one, and the section each
+  // belongs to is what tells them apart.
+  's1.p0': ['template', 'templates', 'my role template', 'team template',
+            'ready made', 'copy my manager', 'same as my colleague'],
+  'team.p13': ['template', 'templates', 'save a template', 'team template',
+               'reuse', 'same kpi for everyone', 'standard kpi'],
   // A manager correcting somebody else's row before approving it. The
   // answer says so; the heading does not, so the words never matched.
   'team.p1': ['approve', 'their target', 'their weightage', 'change their',

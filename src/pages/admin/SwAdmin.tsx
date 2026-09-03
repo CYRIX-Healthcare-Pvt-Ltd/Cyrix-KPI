@@ -14,7 +14,7 @@ import SupportDeskQueue from '@/components/SupportDeskQueue'
 import SpareWarehouses from './SpareWarehouses'
 import {
   useOtpSender, useSaveOtpSender,
-  useAppModules, useModuleGrants, useSetModuleAccess,
+  useAppModules, useModuleGrants, useSetModuleAccess, useOpenTicketCount,
 } from '@/lib/queries'
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
@@ -1646,6 +1646,15 @@ export default function SwAdmin() {
   const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
   const active = ADMIN_TABS.find(t => t.id === tab) ?? ADMIN_TABS[0]
 
+  /*
+    How many people are waiting, on the tab rather than only inside it.
+    Four of these five tabs are settings that sit still; this one fills up
+    on its own, and until the number was on the tab the only way to find
+    out somebody had asked something was to open it and look. Which means
+    an administrator who did not think to look did not answer.
+  */
+  const { data: waiting } = useOpenTicketCount('software', true)
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -1672,6 +1681,11 @@ export default function SwAdmin() {
             )}
           >
             {t.label}
+            {t.id === 'support' && !!waiting && (
+              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
+                {waiting > 99 ? '99+' : waiting}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1710,7 +1724,17 @@ export default function SwAdmin() {
                 t.id === tab ? 'text-[color:var(--page-strong)]' : 'text-ink-400',
               )}
             >
-              <t.icon className={clsx('h-5 w-5', t.id === tab ? '' : 'text-ink-400')} />
+              {/* The badge rides the icon here rather than the label:
+                  the cell is a fifth of a phone screen, and a number
+                  after "Support" is what pushes it to an ellipsis. */}
+              <span className="relative">
+                <t.icon className={clsx('h-5 w-5', t.id === tab ? '' : 'text-ink-400')} />
+                {t.id === 'support' && !!waiting && (
+                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">
+                    {waiting > 99 ? '99+' : waiting}
+                  </span>
+                )}
+              </span>
               <span className="w-full truncate px-0.5 text-center">{t.short}</span>
             </button>
           ))}

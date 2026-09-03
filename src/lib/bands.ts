@@ -38,6 +38,16 @@ export interface Band {
    * Tokens for the dark score hero. Band colour reads far more strongly
    * against black than as a pale wash on white, which is what makes the
    * score legible at a glance rather than merely decorative.
+   *
+   * Every colour here must be a LITERAL — a 300-to-600 step, or a hex in
+   * brackets. The hero sits on `shade`, which is #000 in both themes, so
+   * these are the one set of tokens in the app that must NOT move with
+   * the theme. The 50/100/200 and 700/800/900 steps do move: they flip
+   * end for end in dark, which is exactly right on a page that inverts
+   * and exactly wrong on a panel that does not. Excellent's chip was
+   * text-emerald-200 and went from pale mint to a deep green on the same
+   * black card, so the one band nobody wants to miss became the only one
+   * you could not read.
    */
   onDark: {
     text: string
@@ -81,7 +91,10 @@ export const BANDS: Band[] = [
     onDark: {
       // Lighter than the light-mode base: #059669 on black is a smudge.
       text: 'text-emerald-300', bar: 'bg-emerald-400',
-      chip: 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-400/30',
+      // #a7f3d0 is emerald-200 as the light theme renders it, written out
+      // so the chip keeps exactly the colour it has always had on the
+      // light page while no longer following the ramp into the dark one.
+      chip: 'bg-emerald-400/15 text-[#a7f3d0] ring-1 ring-emerald-400/30',
       glow: 'bg-emerald-500/20',
     },
   },

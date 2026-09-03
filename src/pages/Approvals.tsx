@@ -1,13 +1,15 @@
 import { useState, Fragment } from 'react'
 import {
   CheckSquare, Check, X, Pencil, CheckCheck, Shuffle, TrendingDown,
+  FileSpreadsheet, Save,
 } from 'lucide-react'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   usePendingApprovals, useAssignmentAction, useEditAssignmentItem, useSetKpiStart,
-  useScoringRules, currentFy,
+  useScoringRules, useVisibleTemplates, useTemplateFromAssignment, currentFy,
 } from '@/lib/queries'
+import { freeName } from '@/lib/templates'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
@@ -500,6 +502,95 @@ function EditableRow({
   )
 }
 
+/**
+ * Keeping the rows on screen as a template for the rest of the team.
+ *
+ * The name is offered rather than demanded — it is the person's
+ * designation, which is what the template is nearly always for — and
+ * numbered if that name is already taken, because a suggestion the
+ * server will refuse is worse than no suggestion.
+ *
+ * Deliberately not part of Approve. Approving is agreeing one person's
+ * year; keeping a template is a decision about everybody else's, and
+ * bundling them would have every approval quietly minting a template.
+ */
+function KeepAsTemplate({
+  assignmentId, suggested,
+}: {
+  assignmentId: string
+  suggested: string
+}) {
+  const fy = currentFy()
+  const { data: templates } = useVisibleTemplates(fy)
+  const keep = useTemplateFromAssignment()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
+
+  const start = () => {
+    setError(null); setSaved(null)
+    setName(freeName(suggested, (templates ?? []).filter(t => t.is_mine).map(t => t.name)))
+    setOpen(true)
+  }
+
+  const run = async () => {
+    setError(null)
+    try {
+      await keep.mutateAsync({ assignmentId, name: name.trim() })
+      setSaved(name.trim())
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that template.')
+    }
+  }
+
+  if (saved) {
+    return (
+      <span className="inline-flex items-center gap-1.5 self-center text-sm text-emerald-700">
+        <Check className="h-4 w-4" /> Kept as “{saved}”
+      </span>
+    )
+  }
+
+  if (!open) {
+    return (
+      <button onClick={start} className="btn-secondary">
+        <FileSpreadsheet className="h-4 w-4" /> Save as team template
+      </button>
+    )
+  }
+
+  return (
+    <div className="w-full space-y-2">
+      {error && <Alert kind="error">{error}</Alert>}
+      <label className="label" htmlFor={`tpl-${assignmentId}`}>
+        Save these Job Role rows as a template called
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <input
+          id={`tpl-${assignmentId}`}
+          className="input max-w-xs"
+          value={name}
+          onChange={e => setName(e.target.value.slice(0, 60))}
+          placeholder="e.g. Service Engineer"
+          autoFocus
+        />
+        <button onClick={run} disabled={!name.trim() || keep.isPending} className="btn-primary">
+          {keep.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+          Save it
+        </button>
+        <button onClick={() => setOpen(false)} className="btn-secondary">Cancel</button>
+      </div>
+      <p className="text-xs text-ink-500">
+        Everybody below you can then start their own KPI from it. Core values
+        and ESMS are not included — those are the same for everyone and are
+        added to every KPI automatically.
+      </p>
+    </div>
+  )
+}
+
 function ApprovalCard({
   assignment, name, ecode, designation, expanded, onToggle,
 }: {
@@ -688,6 +779,14 @@ function ApprovalCard({
                     <button onClick={() => setRejecting(true)} className="btn-secondary">
                       <X className="h-4 w-4" /> Send back
                     </button>
+                    {/* Here because this is the moment the rows are worth
+                        keeping: they have just been read and agreed. Ask
+                        anywhere else and the manager is retyping a KPI
+                        they have already approved. */}
+                    <KeepAsTemplate
+                      assignmentId={assignmentId}
+                      suggested={designation ?? ''}
+                    />
                   </div>
                 ) : (
                   <div className="space-y-2">
