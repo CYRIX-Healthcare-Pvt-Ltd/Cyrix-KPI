@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
-  useSubmissionHistory, usePendingCounts,
+  useSubmissionHistory,
   currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
@@ -53,20 +53,6 @@ export default function Dashboard() {
     isManager || isHrAdmin ? employee?.id : undefined, month, fy,
   )
   const { data: approvals } = usePendingApprovals(
-    isManager || isHrAdmin ? employee?.id : undefined, fy,
-  )
-  /*
-    Every month, not just this one — and the same query the header badge
-    already runs, so it costs this screen nothing to ask.
-
-    The tile below counts the current month, which is the right question
-    for a tile sitting under the words "My team". It is the wrong
-    question for "is anybody waiting on me": an August assessment
-    submitted in September was counted by neither the tile nor the
-    banner, and a manager who never opens the notification bell had
-    nothing on any screen telling them.
-  */
-  const { data: counts } = usePendingCounts(
     isManager || isHrAdmin ? employee?.id : undefined, fy,
   )
 
@@ -188,48 +174,15 @@ export default function Dashboard() {
       )}
 
       {/*
-        What the team is waiting on, in the same panel their own overdue
-        month uses.
+        No team panel here, deliberately.
 
-        A submission used to announce itself with a number on the bell and
-        a number on a nav badge, both of which are small, grey until
-        counted, and easy to have never noticed. The person who submitted
-        is then blocked — their month cannot be finalised — and has no way
-        to tell whether their manager has seen it.
-
-        Below the manager's own obligations on purpose: this screen opens
-        with what only they can do about themselves, and the team's queue
-        follows it rather than pushing it down.
+        Everything above is this person's own — their KPI, their month,
+        their overdue assessment — and a screen that mixes "you have not
+        submitted August" with "somebody is waiting on you" makes the
+        reader sort two kinds of obligation out of one stack of identical
+        black panels. The team's queue belongs on the team's screen,
+        which is one tap away and carries a count on the tab.
       */}
-      {(counts?.scoring ?? 0) > 0 && (
-        <ActionRequired
-          eyebrow="Scoring Due"
-          title={
-            `${counts!.scoring} assessment${counts!.scoring === 1 ? '' : 's'} ` +
-            'from your team waiting for you'
-          }
-          body={
-            counts!.scoring === 1
-              ? 'Someone has submitted their month and it cannot be finalised until you score it.'
-              : 'Your team have submitted these months and none of them can be finalised until you score them.'
-          }
-          to="/team"
-          cta="Score Them"
-        />
-      )}
-
-      {(counts?.approvals ?? 0) > 0 && (
-        <ActionRequired
-          eyebrow="Approval Due"
-          title={
-            `${counts!.approvals} KPI${counts!.approvals === 1 ? '' : 's'} ` +
-            'waiting for your approval'
-          }
-          body="Nobody can submit a monthly assessment until the KPI it is scored against is approved."
-          to="/approvals"
-          cta="Review Them"
-        />
-      )}
 
       {/* Under whatever is shouting, not instead of it.
 
