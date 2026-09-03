@@ -401,12 +401,22 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
       `Job Role weightages total ${result.jobRoleTotal}%, they must total 80%.`,
     )
   }
-  // Checked as one block rather than two numbers. ESMS is carved out of
-  // the core values 20% — 15 + 5 and 20 + 0 are both correct, and a
-  // sheet with ESMS would otherwise fail for a core values total of 15
-  // that is exactly what it should be.
+  /*
+    Core values are the company's five and the same for everybody, so a
+    sheet is not required to carry them — leaving them out is now the
+    normal shape, and the standard row is added on save at whatever the
+    remainder comes to. A sheet that does list them still has to add up,
+    because a stated 15 that should be 20 is a mistake rather than an
+    omission.
+
+    Checked as one block rather than two numbers. ESMS is carved out of
+    the core values 20% — 15 + 5 and 20 + 0 are both correct, and a sheet
+    with ESMS would otherwise fail for a core values total of 15 that is
+    exactly what it should be.
+  */
+  const statesCoreValues = result.rows.some(r => r.section === 'core_values')
   const remainder = round3(result.coreValuesTotal + result.esmsTotal)
-  if (remainder !== 20) {
+  if (statesCoreValues && remainder !== 20) {
     result.errors.push(
       result.hasEsms
         ? `Core Values and ESMS total ${remainder}%, together they must total 20% ` +

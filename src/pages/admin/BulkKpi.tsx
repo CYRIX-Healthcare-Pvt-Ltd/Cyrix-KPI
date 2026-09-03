@@ -6,8 +6,9 @@ import { currentFy } from '@/lib/queries'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import {
   planBulkUpload, applyBulkUpload, downloadBulkResult, downloadBulkTemplate,
-  type BulkPlan, type BulkOutcome,
+  type BulkPlan, type BulkOutcome, type BulkTarget,
 } from '@/lib/bulkKpi'
+import { monthLabel } from '@/lib/fy'
 
 /* ---------------------------------------------------------------------
  * Spare · bulk KPI assignment
@@ -45,7 +46,7 @@ export default function BulkKpi() {
   async function apply() {
     if (!plan) return
     setBusy(true)
-    setProgress({ done: 0, total: plan.ecodes.length })
+    setProgress({ done: 0, total: plan.targets.length })
     const result = await applyBulkUpload(plan, fy, (done, total) => setProgress({ done, total }))
     setOutcomes(result)
     setBusy(false)
@@ -57,7 +58,7 @@ export default function BulkKpi() {
 
   const jobRows = plan?.parsed.rows.filter(r => r.section === 'job_role') ?? []
   const jobTotal = Math.round(jobRows.reduce((a, r) => a + r.weightage, 0) * 10) / 10
-  const canApply = !!plan && plan.errors.length === 0 && plan.ecodes.length > 0
+  const canApply = !!plan && plan.errors.length === 0 && plan.targets.length > 0
 
   const tally = (s: BulkOutcome['status']) => outcomes?.filter(o => o.status === s).length ?? 0
 
@@ -137,7 +138,7 @@ export default function BulkKpi() {
               value={`${jobTotal}%`}
               bad={jobTotal !== JOB_ROLE_TOTAL}
             />
-            <Stat icon={Users} label="People" value={String(plan.ecodes.length)} />
+            <Stat icon={Users} label="People" value={String(plan.targets.length)} />
           </div>
 
           {jobRows.length > 0 && (
@@ -185,12 +186,21 @@ export default function BulkKpi() {
             </div>
           )}
 
-          {plan.ecodes.length > 0 && (
-            <p className="text-xs text-ink-500">
-              <strong className="font-medium text-ink-700">Applying to:</strong>{' '}
-              {plan.ecodes.slice(0, 25).join(', ')}
-              {plan.ecodes.length > 25 && ` … and ${plan.ecodes.length - 25} more`}
-            </p>
+          {plan.targets.length > 0 && (
+            <div className="space-y-1.5 text-xs text-ink-500">
+              <p>
+                <strong className="font-medium text-ink-700">Applying to:</strong>{' '}
+                {plan.targets.slice(0, 25).map(t => t.ecode).join(', ')}
+                {plan.targets.length > 25 && ` … and ${plan.targets.length - 25} more`}
+              </p>
+              {/* The start month decides which months these people are
+                  ever assessed on, and it now comes from the sheet rather
+                  than from anything on this screen. Said out loud before
+                  applying, because a date read wrongly from a file is not
+                  something to find out afterwards across two hundred
+                  records. */}
+              <StartMonths targets={plan.targets} />
+            </div>
           )}
 
           <div className="flex items-center gap-3">
@@ -198,7 +208,7 @@ export default function BulkKpi() {
               {busy ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
               {busy && progress
                 ? `Assigning ${progress.done}/${progress.total}…`
-                : `Assign to ${plan.ecodes.length} ${plan.ecodes.length === 1 ? 'person' : 'people'}`}
+                : `Assign to ${plan.targets.length} ${plan.targets.length === 1 ? 'person' : 'people'}`}
             </button>
             {!canApply && plan.errors.length > 0 && (
               <span className="text-xs text-ink-500">Fix the file and choose it again.</span>
@@ -258,6 +268,49 @@ export default function BulkKpi() {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Which months these KPIs begin in, read off the sheet.
+ *
+ * Grouped rather than listed per person: a batch of two hundred is
+ * usually one or two months, and two hundred lines saying "Sep 2026"
+ * hides the one saying October. Blank is called out separately, because
+ * leaving the record alone is a real answer and not the same as an
+ * unreadable date — a file with no month column at all is the whole
+ * second group and nothing is wrong with it.
+ */
+function StartMonths({ targets }: { targets: BulkTarget[] }) {
+  const counts = new Map<string, number>()
+  for (const t of targets) {
+    const key = t.startsFrom ?? ''
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const stated = [...counts.entries()].filter(([k]) => k !== '').sort()
+  const blank = counts.get('') ?? 0
+
+  if (stated.length === 0) {
+    return (
+      <p>
+        <strong className="font-medium text-ink-700">Starting:</strong>{' '}
+        no month on the sheet — each record keeps the start month it already has.
+      </p>
+    )
+  }
+
+  return (
+    <p>
+      <strong className="font-medium text-ink-700">Starting:</strong>{' '}
+      {stated.map(([month, n], i) => (
+        <span key={month}>
+          {i > 0 && ', '}
+          <span className="font-medium text-ink-700">{monthLabel(month)}</span>
+          {' '}({n})
+        </span>
+      ))}
+      {blank > 0 && `, and ${blank} with no month — those keep what they have`}
+    </p>
   )
 }
 
