@@ -106,6 +106,36 @@ export const CHAT: Record<string, Phrase> = {
     ta: 'அது எனக்குத் தெரியாது, {name}. மேனுவலில் இருக்கலாம் — அல்லது உங்கள் மேலாளரிடம் கேளுங்கள்.',
   },
 
+  /*
+    When Cyra cannot answer, and a person can.
+
+    This is the honest end of a bot that refuses to guess: it says it does
+    not know, and the very next thing it offers is somebody who does. The
+    question they already typed becomes the request, so nobody writes it
+    twice.
+  */
+  'sup.mode': {
+    en: 'Writing to {desk}. Send it as it is, or change it first.',
+    ml: '{desk}-ന് എഴുതുന്നു. ഇതേപടി അയയ്ക്കുക, അല്ലെങ്കിൽ ആദ്യം മാറ്റുക.',
+    hi: '{desk} को लिख रहे हैं। ऐसे ही भेजें, या पहले बदल लें।',
+    te: '{desk} కు రాస్తున్నారు. ఇలాగే పంపండి, లేదా ముందు మార్చండి.',
+    ta: '{desk} க்கு எழுதுகிறீர்கள். இப்படியே அனுப்புங்கள், அல்லது முதலில் மாற்றுங்கள்.',
+  },
+  'sup.sent': {
+    en: 'Sent to {desk}. Their answer will be under Contact support on your profile.',
+    ml: '{desk}-ന് അയച്ചു. അവരുടെ മറുപടി നിങ്ങളുടെ പ്രൊഫൈലിലെ Contact support-ൽ ഉണ്ടാകും.',
+    hi: '{desk} को भेज दिया। उनका जवाब आपकी प्रोफ़ाइल पर Contact support में मिलेगा।',
+    te: '{desk} కు పంపాం. వారి సమాధానం మీ ప్రొఫైల్‌లోని Contact support లో ఉంటుంది.',
+    ta: '{desk} க்கு அனுப்பப்பட்டது. அவர்களின் பதில் உங்கள் சுயவிவரத்தில் Contact support இல் இருக்கும்.',
+  },
+  'sup.failed': {
+    en: 'That did not send. {why}',
+    ml: 'അത് അയയ്ക്കാൻ കഴിഞ്ഞില്ല. {why}',
+    hi: 'यह नहीं भेजा जा सका। {why}',
+    te: 'అది పంపబడలేదు. {why}',
+    ta: 'அதை அனுப்ப முடியவில்லை. {why}',
+  },
+
   manual: {
     en: 'The manual is one short page about your own login — what to do each month, and when.',
     ml: 'മാനുവൽ എന്നത് നിങ്ങളുടെ ലോഗിനെക്കുറിച്ചുള്ള ഒരു ചെറിയ പേജാണ് — ഓരോ മാസവും എന്ത് ചെയ്യണം, എപ്പോൾ ചെയ്യണം.',

@@ -299,8 +299,15 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
     // it with "I do not know that one" is the bot failing its very
     // first exchange.
     id: 'chit.hello',
-    any: ['hi', 'hii', 'hello', 'hey', 'good morning', 'good evening',
-          'ഹലോ', 'നമസ്കാരം', 'नमस्ते', 'हैलो', 'హలో', 'నమస్కారం'],
+    // Spelled the way people actually type it on a phone. The fuzzy
+    // fallback below catches a slip of one letter, but "hlo" is two
+    // letters short of "hello" and no threshold loose enough to reach it
+    // is tight enough to be safe — so the common ones are listed
+    // outright, which is both cheaper and exact.
+    any: ['hi', 'hii', 'hiii', 'hello', 'helo', 'hlo', 'hallo', 'halo',
+          'hey', 'heyy', 'hai', 'haai', 'yo',
+          'good morning', 'good evening', 'good afternoon',
+          'ഹലോ', 'നമസ്കാരം', 'नमस्ते', 'हैलो', 'హలో', 'నమస్కారం', 'வணக்கம்'],
   },
   {
     // It knows. Being asked and saying no reads as a bot that knows
@@ -470,6 +477,43 @@ export function manualIndex(): ManualEntry[] {
 /** Only for tests, which build a fresh index per case. */
 export const resetManualIndex = () => { index = null }
 
+/**
+ * How many single-character edits separate two words.
+ *
+ * Two rows rather than a full matrix. The words here are short, so the
+ * saving is not the point — it is that two rows fit on a screen and a
+ * full matrix does not.
+ */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a.length || !b.length) return Math.max(a.length, b.length)
+
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j] + 1,                                        // delete
+        row[j - 1] + 1,                                     // insert
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),      // substitute
+      )
+    }
+    prev = row
+  }
+  return prev[b.length]
+}
+
+/**
+ * How far a word of this length is allowed to be wrong.
+ *
+ * Nothing under five characters, because at four a single edit reaches
+ * half the language: "hi" is one edit from "his", "him" and "hit", and a
+ * bot that reads "his score" as a greeting is worse than one that misses
+ * a typo. Longer words can afford more slack — "assessment" is not one
+ * edit from anything.
+ */
+const slackFor = (len: number) => (len >= 9 ? 2 : len >= 5 ? 1 : 0)
+
 const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => {
   const flat = normalise(query)
   const words = new Set(flat.split(' '))
@@ -487,7 +531,25 @@ const factScore = (query: string, p: (typeof FACT_PATTERNS)[number]): number => 
     // Without the first half, "hi" fires on "this", "achieved" and
     // half the manual.
     const found = needle.includes(' ') ? flat.includes(needle) : words.has(needle)
-    if (found) hits += 2
+    if (found) { hits += 2; continue }
+
+    /*
+      A typo is worth half of the real thing.
+
+      Phones and thumbs: "submitt", "achived", "assesment". Scored lower
+      than an exact hit on purpose, so a question that genuinely matches
+      one pattern is never beaten by a near-miss on another — the fuzzy
+      match only decides between patterns that would all otherwise have
+      scored nothing.
+    */
+    const slack = needle.includes(' ') ? 0 : slackFor(needle.length)
+    if (slack > 0) {
+      for (const w of words) {
+        // Length alone rules most of them out before the expensive part.
+        if (Math.abs(w.length - needle.length) > slack) continue
+        if (editDistance(w, needle) <= slack) { hits += 1; break }
+      }
+    }
   }
   return hits
 }

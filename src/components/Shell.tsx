@@ -4,12 +4,12 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, MessageSquare, Grid2x2,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   usePendingCounts, useRemovalRequests, useAnnualSummary,
-  usePendingRecordRequests, useOpenScoreQueries, currentFy,
+  usePendingRecordRequests, useOpenScoreQueries, useOpenTicketCount, currentFy,
 } from '@/lib/queries'
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
@@ -45,6 +45,7 @@ const NAV_TINT: Record<string, string> = {
   '/admin/reports':    'text-sky-600',      // looking, not acting
   '/admin/requests':   'text-cyrixRed-600', // leavers
   '/admin/queries':    'text-amber-600',
+  '/admin/support':    'text-teal-600',     // people asking for help
   '/admin/logins':     'text-cyrixRed-600', // security
   '/admin/timing':     'text-amber-600',    // deadlines
 }
@@ -75,6 +76,7 @@ export default function Shell() {
   const { data: removals } = useRemovalRequests('pending')
   const { data: recordRequests } = usePendingRecordRequests(isManager || isHrAdmin)
   const { data: openQueries } = useOpenScoreQueries(isManager && !isHrAdmin)
+  const { data: hrTickets } = useOpenTicketCount('hr', isHrAdmin)
 
   // Set here rather than on the dashboard so the tint survives navigation —
   // every screen carries the signed-in person's band, not just the one that
@@ -129,6 +131,14 @@ export default function Shell() {
         // oversight surface that only appears when something is wrong is
         // one nobody knows exists.
         { to: '/admin/queries', label: 'Queries', icon: MessageSquare },
+        // What people have asked HR directly — not about a score, which
+        // is the tab above and belongs to the manager. Badged, because
+        // unlike Queries this one is a queue HR has to work rather than
+        // watch.
+        {
+          to: '/admin/support', label: 'Support', icon: LifeBuoy,
+          badge: hrTickets ?? 0,
+        },
         records,
         ...(isSwAdmin
           ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]

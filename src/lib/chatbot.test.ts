@@ -300,3 +300,41 @@ describe('a manager asking about their team', () => {
     expect(mgr('what is this')).toEqual({ kind: 'fact', id: 'manual' })
   })
 })
+
+/*
+  Typos, which is how people actually type on a phone.
+
+  The greeting is the case that prompted this — "hlo" and "helo" came
+  back as "I do not know that one", which is the bot failing its very
+  first exchange. Two fixes: the common spellings are listed outright,
+  and anything five letters or longer tolerates a slip.
+*/
+describe('spelled the way people type it', () => {
+  const greets = (q: string) =>
+    expect(matchQuestion(q), q).toMatchObject({ kind: 'fact', id: 'chit.hello' })
+
+  it('takes every spelling of hello anybody uses', () => {
+    for (const q of ['hi', 'hii', 'hello', 'helo', 'hlo', 'hey', 'heyy',
+                     'hai', 'hallo', 'halo', 'good morning']) {
+      greets(q)
+    }
+  })
+
+  it('forgives one letter in a longer word', () => {
+    // "assessment" and "submitted" are the two people misspell most.
+    expect(matchQuestion('how do i submitt my month').kind).not.toBe('none')
+    expect(matchQuestion('what is my assesment score').kind).not.toBe('none')
+  })
+
+  /*
+    The half of this that matters more than the forgiving half. A short
+    word is one edit from far too much: read "his" as "hi" and a manager
+    asking about somebody's score is greeted instead.
+  */
+  it('does not turn a short real word into a greeting', () => {
+    for (const q of ['his score', 'him', 'hit target', 'his kpi']) {
+      const m = matchQuestion(q)
+      expect(m.kind === 'fact' && m.id === 'chit.hello', q).toBe(false)
+    }
+  })
+})

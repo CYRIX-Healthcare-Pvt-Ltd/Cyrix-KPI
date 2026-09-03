@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight } from 'lucide-react'
+import {
+  MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight,
+  IdCard, Wrench,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
   useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
-  useKraAttainment, useMyCoreValueTrend, useCoreValues, currentFy,
+  useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket, currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
@@ -14,6 +17,7 @@ import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
 import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
+import type { SupportDesk } from '@/types/db'
 
 /**
  * Answering the fifteen questions the floor actually asks.
@@ -41,6 +45,8 @@ interface Turn {
   to?: string
   /** What that link says. English on purpose — it is a screen name. */
   toLabel?: string
+  /** Offer to hand this question to a person. */
+  offerDesks?: boolean
 }
 
 /** One thing waiting on this person, and where to go and do it. */
@@ -63,6 +69,9 @@ interface Nudge {
  */
 const SEEN_KEY = 'cyrix.cyra.seen'
 
+/** English on purpose: they are the names on the tabs the answer comes from. */
+const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
+
 export default function ChatBot() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const fy = currentFy()
@@ -70,6 +79,11 @@ export default function ChatBot() {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
+  const [ticketDesk, setTicketDesk] = useState<SupportDesk | null>(null)
+  // What they last asked, so handing it to a person does not ask them to
+  // type it again.
+  const lastAsked = useRef('')
+  const raise = useRaiseTicket()
   const endRef = useRef<HTMLDivElement>(null)
 
   const { data: annual } = useAnnualSummary(employee?.id, fy)
@@ -282,9 +296,56 @@ export default function ChatBot() {
               from: 'app',
               text: c('lost', { name: firstName }),
               manualLink: true,
+              // The honest end of a bot that refuses to guess: it says so,
+              // and immediately offers somebody who does know.
+              offerDesks: true,
             }
     setTurns(prev => [...prev, { from: 'them', text: q }, reply])
     setDraft('')
+    lastAsked.current = q
+  }
+
+  /**
+   * Hand the question to a person.
+   *
+   * The composer becomes the request and the send button says where it
+   * is going, so there is no second screen and no second typing — what
+   * they already asked is already in the box.
+   */
+  const startTicket = (desk: SupportDesk) => {
+    setTicketDesk(desk)
+    setDraft(lastAsked.current)
+    setTurns(prev => [...prev, {
+      from: 'app',
+      text: c('sup.mode', { desk: DESK_NAME[desk] }),
+    }])
+  }
+
+  const sendTicket = async () => {
+    if (!ticketDesk) return
+    const note = draft.trim()
+    if (note.length < 5) return
+    try {
+      await raise.mutateAsync({ desk: ticketDesk, note })
+      setTurns(prev => [...prev,
+        { from: 'them', text: note },
+        {
+          from: 'app',
+          text: c('sup.sent', { desk: DESK_NAME[ticketDesk] }),
+          to: '/support',
+          toLabel: 'My requests',
+        },
+      ])
+      setDraft('')
+      setTicketDesk(null)
+    } catch (err) {
+      setTurns(prev => [...prev, {
+        from: 'app',
+        text: c('sup.failed', {
+          why: err instanceof Error ? err.message : '',
+        }),
+      }])
+    }
   }
 
   if (!employee) return null
@@ -375,6 +436,22 @@ export default function ChatBot() {
                       {turn.toLabel}
                     </Link>
                   )}
+                  {/* The bot failing is the best moment to offer a
+                      person: they have just typed the question, and it
+                      becomes the request as it stands. */}
+                  {turn.offerDesks && !ticketDesk && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {([['hr', IdCard], ['software', Wrench]] as const).map(([d, Icon]) => (
+                        <button
+                          key={d}
+                          onClick={() => startTicket(d)}
+                          className="btn-press inline-flex items-center gap-1 rounded-full border border-ink-300 px-2.5 py-1 text-xs font-medium text-ink-700 hover:border-ink-400 hover:text-ink-900"
+                        >
+                          <Icon className="h-3.5 w-3.5" /> Ask {DESK_NAME[d]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {(turn.section || turn.manualLink) && (
                     <Link
                       to="/help"
@@ -426,21 +503,49 @@ export default function ChatBot() {
             <div ref={endRef} />
           </div>
 
+          {/*
+            One composer, two jobs.
+
+            In ticket mode the same box becomes the request and the
+            button says where it is going, so handing a question to a
+            person is not a second screen and not a second typing.
+          */}
           <form
-            onSubmit={e => { e.preventDefault(); ask(draft) }}
-            className="flex items-center gap-2 border-t border-ink-200 p-2"
+            onSubmit={e => {
+              e.preventDefault()
+              if (ticketDesk) void sendTicket()
+              else ask(draft)
+            }}
+            className={clsx(
+              "flex items-center gap-2 border-t p-2",
+              ticketDesk ? "border-violet-700 bg-violet-50" : "border-ink-200",
+            )}
           >
+            {ticketDesk && (
+              <button
+                type="button"
+                onClick={() => { setTicketDesk(null); setDraft("") }}
+                aria-label="Back to asking Cyra"
+                title="Back to asking Cyra"
+                className="btn-icon shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
             <input
               className="input !py-2"
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              placeholder="Type your question…"
-              aria-label="Your question"
+              placeholder={ticketDesk
+                ? `What should ${DESK_NAME[ticketDesk]} know?`
+                : "Type your question…"}
+              aria-label={ticketDesk ? `Your request to ${DESK_NAME[ticketDesk]}` : "Your question"}
             />
             <button
               type="submit"
-              disabled={!draft.trim()}
-              aria-label="Send"
+              disabled={ticketDesk ? draft.trim().length < 5 || raise.isPending : !draft.trim()}
+              aria-label={ticketDesk ? `Send to ${DESK_NAME[ticketDesk]}` : "Send"}
+              title={ticketDesk ? `Send to ${DESK_NAME[ticketDesk]}` : undefined}
               className="btn-press flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-shade text-white disabled:opacity-40"
             >
               <SendHorizonal className="h-4 w-4" />

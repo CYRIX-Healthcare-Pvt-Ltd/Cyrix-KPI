@@ -3,13 +3,14 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
 import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
 import SpareFields from './SpareFields'
+import SupportDeskQueue from '@/components/SupportDeskQueue'
 import SpareWarehouses from './SpareWarehouses'
 import {
   useOtpSender, useSaveOtpSender,
@@ -1577,6 +1578,13 @@ const ADMIN_TABS = [
   { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTab /> },
   { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
   { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
+  // Last, because it is the only tab that is somebody else's work
+  // rather than a setting. Everything to its left is configuration;
+  // this is a queue with people waiting in it.
+  {
+    id: 'support', label: 'Support', short: 'Support', icon: LifeBuoy,
+    render: () => <SupportDeskQueue desk="software" enabled />,
+  },
 ] as const
 
 /**

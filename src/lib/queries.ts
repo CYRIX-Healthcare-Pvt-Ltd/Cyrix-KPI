@@ -9,7 +9,7 @@ import type {
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
   ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
   ScoreQuery, ScoreQueryPoint, ScoreQueryState, ScoreQueryKind,
-  KraBenchmarkRow,
+  KraBenchmarkRow, SupportTicket, SupportDesk, DeskTicket,
 } from '@/types/db'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
@@ -1750,5 +1750,100 @@ export function useTeamSubtree(
       if (error) throw new Error(friendlyError(error))
       return (data ?? []) as SubtreeRow[]
     },
+  })
+}
+
+// ---------------------------------------------------------------------
+// Support — asking HR or Software something
+// ---------------------------------------------------------------------
+
+/**
+ * My own tickets, both desks, newest first.
+ *
+ * The row policy already limits this to the caller's own plus whichever
+ * desk they staff, so the filter here is what separates "mine" from "my
+ * queue" for somebody who is both an employee and an admin — which every
+ * admin is.
+ */
+export function useMyTickets(employeeId: string | undefined) {
+  return useQuery({
+    enabled: !!employeeId,
+    queryKey: ['support_tickets', 'mine', employeeId],
+    queryFn: () =>
+      unwrap<SupportTicket[]>(
+        supabase.from('support_tickets').select('*')
+          .eq('employee_id', employeeId!)
+          .order('raised_at', { ascending: false }),
+      ),
+  })
+}
+
+/**
+ * One desk's queue. Empty for anybody who does not staff it.
+ *
+ * The asker comes along on the row. A queue of anonymous paragraphs is
+ * unanswerable — half of what HR needs to reply is knowing whose record
+ * to open.
+ *
+ * Unanswered first, oldest first within that: the order the work should
+ * be done in. Newest-first quietly buries whoever has waited longest,
+ * and they are the person the queue exists for.
+ */
+export function useDeskTickets(desk: SupportDesk, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['support_tickets', 'desk', desk],
+    refetchInterval: 60_000,
+    queryFn: () =>
+      unwrap<DeskTicket[]>(
+        supabase.from('support_tickets')
+          .select('*, employee:employees!support_tickets_employee_id_fkey(full_name, ecode, avatar)')
+          .eq('desk', desk)
+          .order('answered_at', { ascending: true, nullsFirst: true })
+          .order('raised_at', { ascending: true }),
+      ),
+  })
+}
+
+/** How many are unanswered on a desk, for the badge on its tab. */
+export function useOpenTicketCount(desk: SupportDesk, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['support_tickets', 'open', desk],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('desk', desk).eq('status', 'open')
+      if (error) throw new Error(friendlyError(error))
+      return count ?? 0
+    },
+  })
+}
+
+export function useRaiseTicket() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { desk: SupportDesk; note: string }) => {
+      const { error } = await supabase.rpc('raise_support_ticket', {
+        p_desk: args.desk, p_note: args.note,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['support_tickets'] }),
+  })
+}
+
+export function useAnswerTicket() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { id: string; response: string }) => {
+      const { error } = await supabase.rpc('answer_support_ticket', {
+        p_id: args.id, p_response: args.response,
+      })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['support_tickets'] }),
   })
 }

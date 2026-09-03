@@ -29,6 +29,8 @@ const KpiTiming         = lazyRoute(() => import('@/pages/admin/KpiTiming'))
 const DeletionRequests  = lazyRoute(() => import('@/pages/DeletionRequests'))
 const ScoreQueries      = lazyRoute(() => import('@/pages/ScoreQueries'))
 const Help              = lazyRoute(() => import('@/pages/Help'))
+const Support           = lazyRoute(() => import('@/pages/Support'))
+const HrSupport         = lazyRoute(() => import('@/pages/admin/HrSupport'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, employee, loading, forcePasswordChange } = useAuth()
@@ -130,6 +132,9 @@ export default function App() {
           {/* Everyone, whatever their role — the page is what THIS login
               can do, so it has to exist for every login there is. */}
           <Route path="help" element={<Help />} />
+          {/* Everybody, including the admins who staff the desks — an
+              admin is an employee with questions of their own. */}
+          <Route path="support" element={<Support />} />
 
           <Route path="team" element={<RequireManager><Team /></RequireManager>} />
           <Route path="team/analysis" element={<RequireManager><TeamAnalysis /></RequireManager>} />
@@ -141,6 +146,7 @@ export default function App() {
           <Route path="admin/employees" element={<RequireHr><AdminEmployees /></RequireHr>} />
           <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
           <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
+          <Route path="admin/support" element={<RequireHr><HrSupport /></RequireHr>} />
           <Route path="admin/logins" element={<RequireSw><SwAdmin /></RequireSw>} />
           {/* When the clock starts is a rollout decision, so it sits with
               the people who ran the rollout rather than with the people

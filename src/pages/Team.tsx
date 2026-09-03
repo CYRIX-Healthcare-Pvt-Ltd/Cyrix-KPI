@@ -882,7 +882,7 @@ export default function Team() {
 
             <button
               onClick={() => download('direct')}
-              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-brand-300 hover:bg-brand-50/50"
+              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-ink-400 hover:bg-ink-50"
             >
               <p className="font-medium text-ink-900">
                 My direct reports
@@ -895,7 +895,7 @@ export default function Team() {
 
             <button
               onClick={() => download('deep')}
-              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-brand-300 hover:bg-brand-50/50"
+              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-ink-400 hover:bg-ink-50"
             >
               <p className="font-medium text-ink-900">
                 Everyone under me

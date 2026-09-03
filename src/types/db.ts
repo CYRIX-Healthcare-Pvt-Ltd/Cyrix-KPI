@@ -573,3 +573,31 @@ export interface TeamStatusRow {
   mgr_total_score: number | null
   final_total_score: number | null
 }
+
+/**
+ * A question for HR or for Software.
+ *
+ * Deliberately not attached to a record. Everything else that travels
+ * through this app is about one score or one month and goes up the
+ * reporting line; this is the other kind — "my leave balance looks
+ * wrong", "the page will not load" — and it goes to a desk.
+ */
+export type SupportDesk = 'hr' | 'software'
+
+export interface SupportTicket {
+  id: string
+  employee_id: string
+  desk: SupportDesk
+  employee_note: string
+  raised_at: string
+  response: string | null
+  answered_by: string | null
+  answered_at: string | null
+  status: 'open' | 'answered'
+  created_at: string
+}
+
+/** A ticket as a desk sees it — with whoever asked it attached. */
+export interface DeskTicket extends SupportTicket {
+  employee: { full_name: string; ecode: string; avatar: string | null } | null
+}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
-  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, UserRound,
+  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, LifeBuoy, UserRound,
   Languages,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -312,6 +312,23 @@ export default function Help() {
           // coming to them when the sign-in dialog was removed. The
           // manual is now the only thing that says it exists.
           { what: t('prof.p5.what'), how: t('prof.p5.how'), to: '/me', cta: 'Open my profile' },
+        ]}
+      />
+
+      {/* Before "Things people ask" on purpose. Half of that section is
+          somebody who could not find an answer, and this is where they
+          go next — so it has to be read before they get there, not
+          after. */}
+      <Section
+        icon={LifeBuoy}
+        tint="text-teal-600"
+        title={t('sup.title')}
+        lead={t('sup.lead')}
+        points={[
+          { what: t('sup.p1.what'), how: t('sup.p1.how'), to: '/support', cta: 'Contact support' },
+          { what: t('sup.p2.what'), how: t('sup.p2.how'), to: '/support', cta: 'Contact support' },
+          { what: t('sup.p3.what'), how: t('sup.p3.how'), to: '/history', cta: 'Open assessments' },
+          { what: t('sup.p4.what'), how: t('sup.p4.how'), to: '/support', cta: 'My requests' },
         ]}
       />
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BookOpen, Camera, Info, KeyRound, Medal, Timer, Trophy, UserRound,
+  ArrowLeft, BookOpen, Camera, Info, KeyRound, LifeBuoy, Medal, Timer, Trophy, UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -535,6 +535,15 @@ export default function Profile() {
           className="btn-secondary btn-press inline-flex"
         >
           <KeyRound className="h-4 w-4" /> Change my password
+        </Link>
+        {/* Beside the manual on purpose. That one answers what the app
+            does; this one is where you go when the answer is not in it,
+            and the two questions arrive together. */}
+        <Link
+          to="/support"
+          className="btn-secondary btn-press inline-flex"
+        >
+          <LifeBuoy className="h-4 w-4" /> Contact support
         </Link>
         {/* Renders nothing where it is already installed, or where the
             browser cannot install at all. */}
