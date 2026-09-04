@@ -1,9 +1,8 @@
 import { CHAT } from './chat-strings'
 import { say, type Lang } from './i18n'
 import { monthLabel } from './fy'
-import { bandFor } from './bands'
+import { bandFor, isWeak } from './bands'
 import { ratingToPoints } from './scoring'
-import { WEAK_THRESHOLD } from './bands'
 import { forecastYear, biggestLever, averageRows } from './forecast'
 import type { FactId } from './chatbot'
 
@@ -267,7 +266,11 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
     case 'team.weak': {
       const rows = perPerson()
       if (rows.length === 0) return t('team.nodata', { scope })
-      const weak = rows.filter(r => r.score < WEAK_THRESHOLD)
+      // isWeak rather than < WEAK_THRESHOLD: on the slab 60 exactly is a
+      // 2, Satisfactory, and so belongs on this list — a bare < 60 test
+      // silently calls it Good and leaves that person out of the answer
+      // to "who is below Good".
+      const weak = rows.filter(r => isWeak(r.score))
       if (weak.length === 0) return t('team.allgood', { scope })
       return t('team.weak', {
         n: weak.length, scope,

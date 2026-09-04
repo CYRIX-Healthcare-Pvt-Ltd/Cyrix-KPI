@@ -82,7 +82,20 @@ export default function ScoreSubmission() {
       data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
     ))
     setRatings(Object.fromEntries(
-      data.ratings.map(r => [r.id, r.manager_rating ?? r.self_rating ?? '']),
+      /*
+        The manager's own rating, or nothing.
+
+        This fell back to the team member's self rating, which was
+        reasonable when both of them rated core values — it opened the
+        form on what the person had said about themselves. It is not any
+        more: they no longer rate these at all, so the fallback can only
+        fire on a month from before the change, and there it pre-fills
+        the manager's box with the employee's answer. A manager who saves
+        without touching it has adopted the employee's rating without
+        deciding anything, which is the arrangement management moved away
+        from when they made this the manager's judgement.
+      */
+      data.ratings.map(r => [r.id, r.manager_rating ?? '']),
     ))
     setRemarks(data.submission.manager_remarks ?? '')
     setCutReason(data.submission.score_cut_reason ?? '')
@@ -151,7 +164,33 @@ export default function ScoreSubmission() {
    * types rather than from the saved row — so the box appears while the
    * score is being decided, not after it has been submitted and refused.
    */
-  const cutGap = selfTotal - mgrTotal
+  /*
+    Job role and ESMS only, on both sides — the rows the two of them
+    actually both filled in.
+
+    This was the two whole totals, which matched submit_manager_scores
+    until 0101 changed that comparison for the same reason: the team
+    member no longer rates core values, so their total is job role and
+    ESMS while the manager's is that plus core values, and the manager's
+    is now almost always the larger. Left alone here the box would never
+    appear — and worse, the two would disagree, so the server would
+    refuse a submission demanding a reason the screen had never asked
+    for, as a raw exception instead of the inline prompt.
+  */
+  /*
+    Core values the manager has not rated yet.
+
+    submit_manager_scores refuses these since 0101, and a server refusal
+    the screen never warned about arrives as a raw exception on the one
+    button that matters. The same reasoning as the cut-reason box: say it
+    where the decision is being made, not after it has been sent.
+  */
+  const unratedCore = (data?.ratings ?? []).filter(r => !ratings[r.id]).length
+
+  const bothAssess = (i: KpiSubmissionItem) => i.section !== 'core_values'
+  const cutGap =
+    items.filter(bothAssess).reduce((a, i) => a + (selfScore(i) ?? 0), 0)
+    - items.filter(bothAssess).reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
   const needsCutReason = cutGap > SCORE_CUT_POINTS && !cutReason.trim()
 
   const save = async () => {
@@ -616,12 +655,18 @@ export default function ScoreSubmission() {
               ) : (
                 <button
                   onClick={() => { setError(null); setArming(true) }}
-                  disabled={busy || needsCutReason}
+                  disabled={busy || needsCutReason || unratedCore > 0}
                   className="btn-primary"
-                  title={needsCutReason ? 'Say why the score is lower first' : undefined}
+                  title={
+                    unratedCore > 0
+                      ? 'Rate the core values first — they are worth 20% of the score'
+                      : needsCutReason ? 'Say why the score is lower first' : undefined
+                  }
                 >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  {needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
+                  {unratedCore > 0
+                    ? `Rate ${unratedCore} more core value${unratedCore === 1 ? '' : 's'}`
+                    : needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
                 </button>
               )
             )}

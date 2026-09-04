@@ -355,12 +355,27 @@ export function averageCoreValueRatings(
   return round4(points.reduce((a, b) => a + b, 0) / points.length)
 }
 
-/** How self and manager scores blend. Defaults match AVERAGE(G,K). */
+/**
+ * How self and manager scores blend.
+ *
+ * The manager's figure alone, which is what migration 0095 made it and
+ * what app_settings.score_blend has said since.
+ *
+ * This was 0.5/0.5 — the spreadsheet's AVERAGE(G,K) — and nothing on the
+ * client fetches the real setting, so this default IS the client's
+ * behaviour. That made the manager's own scoring screen preview a total
+ * that averaged their figure with the team member's while the database
+ * stored theirs alone: a number that changed the moment it was saved,
+ * on the one screen where somebody is deciding an appraisal.
+ *
+ * recompute_submission_totals holds the same pair as its own fallback.
+ * If one moves, move both.
+ */
 export interface ScoreBlend {
   self_weight: number
   manager_weight: number
 }
-export const DEFAULT_BLEND: ScoreBlend = { self_weight: 0.5, manager_weight: 0.5 }
+export const DEFAULT_BLEND: ScoreBlend = { self_weight: 0, manager_weight: 1 }
 
 /**
  * The final per-row score.

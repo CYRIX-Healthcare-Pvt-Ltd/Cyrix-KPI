@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  calcKpiScore,
+  calcKpiScore, DEFAULT_BLEND,
   UNCAPPED_MAX_MULTIPLIER,
   averageCoreValueRatings,
   blendScores,
@@ -409,8 +409,14 @@ describe('core value roll-up — AVERAGE(E11:E15)', () => {
 })
 
 describe('blending self and manager', () => {
-  it('averages the two, matching AVERAGE(G,K)', () => {
-    expect(blendScores(20, 16)).toBe(18)
+  it('takes the manager figure, which is the score', () => {
+    // The spreadsheet averaged the two and so did this, until 0095 made
+    // the manager's number the appraisal. Nothing on the client fetches
+    // the stored setting, so this default IS the client's behaviour —
+    // and while it said 0.5 the manager's own scoring screen previewed a
+    // total that changed the moment it was saved.
+    expect(blendScores(20, 16)).toBe(16)
+    expect(blendScores(4, 19)).toBe(19)
   })
 
   it('stays null until the manager has scored', () => {
@@ -418,8 +424,17 @@ describe('blending self and manager', () => {
     expect(blendScores(20, null)).toBeNull()
   })
 
-  it('supports manager-only scoring', () => {
+  it('still honours a blend passed in', () => {
+    // The mechanism is unchanged; only the default moved. An explicit
+    // 50/50 is what every month before 0095 was scored on, so anything
+    // recomputing history can still ask for it.
     expect(blendScores(25, 10, { self_weight: 0, manager_weight: 1 })).toBe(10)
+    expect(blendScores(20, 16, { self_weight: 0.5, manager_weight: 0.5 })).toBe(18)
+  })
+
+  it('agrees with the database default', () => {
+    // recompute_submission_totals falls back to the same pair since 0102.
+    expect(DEFAULT_BLEND).toEqual({ self_weight: 0, manager_weight: 1 })
   })
 })
 
@@ -454,11 +469,17 @@ describe('full submission roll-up', () => {
     expect(t.manager?.total).toBe(91)
   })
 
-  it('blends into the final score', () => {
+  it('takes the manager figure as the final score', () => {
+    // Was the mean of the two — jobRole 76.25 from (77.5 + 75) / 2 — and
+    // is now simply the manager's, so every final figure equals the
+    // manager block above it. That equality is the assertion worth
+    // making: it is what "the manager decides the score" means, and it
+    // is what the database does since 0095.
     const t = computeTotals(rows)
-    expect(t.final?.jobRole).toBe(76.25) // (77.5 + 75) / 2
-    expect(t.final?.coreValues).toBe(18)
-    expect(t.final?.total).toBe(94.25)
+    expect(t.final?.jobRole).toBe(t.manager?.jobRole)
+    expect(t.final?.coreValues).toBe(t.manager?.coreValues)
+    expect(t.final?.total).toBe(t.manager?.total)
+    expect(t.final?.total).toBe(91)
   })
 
   it('withholds manager and final totals until scoring starts', () => {
