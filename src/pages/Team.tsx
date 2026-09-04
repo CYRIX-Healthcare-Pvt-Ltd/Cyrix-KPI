@@ -190,9 +190,17 @@ export default function Team() {
         ? mean(months.map(m => m.final_job_role_score === null
             ? null : (Number(m.final_job_role_score) / jobW) * 100))
         : null
-      const corePct = coreW > 0
+      // ESMS rides with core values, because it is carved out of the same
+      // 20: five ESMS and fifteen core for anybody who carries it, twenty
+      // core for everybody else. Measuring an ESMS carrier on fifteen
+      // would rank the one group with an extra obligation as though they
+      // did not have it. Mirrors migration 0099.
+      const esmsW = Number(a?.esms_weight ?? 0)
+      const blockW = coreW + esmsW
+      const corePct = blockW > 0
         ? mean(months.map(m => m.final_core_score === null
-            ? null : (Number(m.final_core_score) / coreW) * 100))
+            ? null
+            : ((Number(m.final_core_score) + Number(m.final_esms_score ?? 0)) / blockW) * 100))
         : null
       const { combined } = rankScore({ jobPct, corePct })
       if (combined !== null) values.push(combined)

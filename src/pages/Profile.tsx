@@ -356,13 +356,18 @@ export default function Profile() {
   const BAND_RANK_RULE =
     'Ranked on your 1–5 bands rather than the raw percentage, so one '
     + 'exceptional row cannot carry a year. Your job role band counts for '
-    + 'six tenths and core values for four. Where two people come out '
+    + 'six tenths and the other 20% for four. Where two people come out '
     + 'level, the higher job role band goes first.'
 
+  const hasEsms = esmsWeight > 0
   const bandRows: Array<[string, string]> = [
     ['Job role band',
       ranking?.job_band != null ? `${ranking.job_band} of 5` : '—'],
-    ['Core values band',
+    // Named for the block rather than for core values alone: ESMS is
+    // five of the same twenty and counts here too, so labelling this
+    // "Core values band" would understate what it is measuring for the
+    // people who carry ESMS.
+    [hasEsms ? 'Core values + ESMS band' : 'Core values band',
       ranking?.core_band != null ? `${ranking.core_band} of 5` : '—'],
     // The figure actually sorted on, so the two lines above visibly add
     // up to it and the rule is checkable rather than merely stated.
