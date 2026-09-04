@@ -439,11 +439,12 @@ export default function ScoreSubmission() {
           <h3 className="text-sm font-semibold text-ink-800">
             {label} <span className="font-normal text-ink-500">— {weight}%</span>
           </h3>
-          {key === 'job_role' && editable && (
-            <p className="text-xs text-ink-500">
-              Correcting a target rescores both assessments for that row.
-            </p>
-          )}
+          {/* "Correcting a target rescores both assessments for that
+              row" came off. It was explaining a consequence that no
+              longer has one worth mentioning — only the manager's
+              assessment counts now, so there are not "both" of them to
+              rescore — and it sat in the header of the block a manager
+              is reading to do the actual work. */}
         </div>
         <div className="divide-y divide-ink-100">
           {rows.map(item => (
@@ -561,12 +562,15 @@ export default function ScoreSubmission() {
               Somebody scrolling past needs to know this section is
               unfinished without having reached the button at the bottom
               to be told. */}
-          {editable && unratedCore > 0 ? (
+          {/* Only what is still to do. The "my avg 40/100" that used to
+              sit here was the rolled-up rating out of 100, which is not
+              a figure anybody works in — the score it produces is on the
+              row beside it, out of the weightage, and saying the same
+              thing twice in two scales is worse than saying it once. */}
+          {editable && unratedCore > 0 && (
             <span className="badge bg-amber-200 text-amber-900">
               {unratedCore} to rate
             </span>
-          ) : coreAverage !== null && (
-            <span className="text-xs text-ink-500">my avg {coreAverage.toFixed(0)}/100</span>
           )}
         </div>
         <div className="divide-y divide-ink-100">
