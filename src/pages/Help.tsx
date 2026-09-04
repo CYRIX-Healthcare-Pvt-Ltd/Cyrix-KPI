@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
-  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, LifeBuoy, UserRound,
+  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, LifeBuoy, UserRound, Scale,
   Languages,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -239,6 +239,31 @@ export default function Help() {
               { what: t('s3.p3.what'), how: t('s3.p3.how'), to: '/history', cta: 'Open assessments' },
               { what: t('s3.p4.what'), how: t('s3.p4.how') },
               { what: t('s3.p5.what'), how: t('s3.p5.how') },
+            ]}
+          />
+
+          {/*
+            The rules behind the numbers, rather than what to do each
+            month.
+
+            Last of the sections everybody reads, because it answers
+            questions that only occur to somebody once they have seen
+            their own record — why the manager's figure is the whole
+            score, where the 1-5 came from, why somebody with a lower
+            percentage is ranked above them. All four changed at once
+            after the September demo, and every one of them is visible on
+            a person's own page without being explained anywhere else.
+          */}
+          <Section
+            icon={Scale}
+            tint="text-sky-600"
+            title={t('s4.title')}
+            lead={t('s4.lead')}
+            points={[
+              { what: t('s4.p1.what'), how: t('s4.p1.how') },
+              { what: t('s4.p2.what'), how: t('s4.p2.how') },
+              { what: t('s4.p3.what'), how: t('s4.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
+              { what: t('s4.p4.what'), how: t('s4.p4.how'), to: '/me', cta: 'See my rating' },
             ]}
           />
         </>

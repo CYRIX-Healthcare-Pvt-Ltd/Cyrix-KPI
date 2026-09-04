@@ -236,7 +236,7 @@ const canRead = (section: string, who: Reader): boolean => {
 }
 
 /** Sections about the reader's own record come first on a tie. */
-const OWN_SECTIONS = new Set(['s1', 's2', 's3', 'ask', 'prof'])
+const OWN_SECTIONS = new Set(['s1', 's2', 's3', 's4', 'ask', 'prof'])
 
 /**
  * Phrasings the manual does not use for things people ask about daily.
@@ -754,7 +754,7 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
 
 /** Where in the manual an answer came from, for the link under it. */
 export const SECTION_TITLE: Record<string, string> = {
-  s1: 's1.title', s2: 's2.title', s3: 's3.title',
+  s1: 's1.title', s2: 's2.title', s3: 's3.title', s4: 's4.title',
   team: 'team.title.plain', hr: 'hr.title', sw: 'sw.title',
   prof: 'prof.title', ask: 'ask.title',
 }
