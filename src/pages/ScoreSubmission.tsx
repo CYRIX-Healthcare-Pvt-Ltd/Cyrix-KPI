@@ -13,6 +13,7 @@ import {
   useSaveMonthlyTarget, useMonthClose, useScoreQueryState,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
+import { BANDS } from '@/lib/bands'
 import {
   calcKpiScore, averageCoreValueRatings, ratingToPoints, RATING_SCALE,
   SCORE_CUT_POINTS, type ScoringRule, type RuleParams,
@@ -696,24 +697,47 @@ export default function ScoreSubmission() {
                     already open by the time the manager wonders whether
                     to explain themselves.
                   */}
-                  {editable && needsWhy(ratings[rating.id]) && (
-                    <div className="mt-2">
-                      <label
-                        htmlFor={`why-${rating.id}`}
-                        className="mb-1 block text-xs font-medium text-amber-800"
-                      >
-                        Why {ratings[rating.id]?.toLowerCase()}? {data?.employee.full_name.split(' ')[0]} will see this.
-                      </label>
-                      <textarea
-                        id={`why-${rating.id}`}
-                        rows={2}
-                        className="input text-sm"
-                        value={coreWhy[rating.id] ?? ''}
-                        onChange={e => setCoreWhy({ ...coreWhy, [rating.id]: e.target.value })}
-                        placeholder="e.g. three reports went out with figures that had to be corrected"
-                      />
-                    </div>
-                  )}
+                  {editable && needsWhy(ratings[rating.id]) && (() => {
+                    /*
+                      The prompt wears the rating's own colour: amber for
+                      Satisfactory, red for Poor.
+
+                      Taken from BANDS by label rather than picked here,
+                      because the five ratings and the five bands are the
+                      same five words — Excellent through Poor — so the
+                      match is meaningful rather than a coincidence, and
+                      the colour cannot drift from the one the rest of
+                      the app uses for that word.
+
+                      Deliberately NOT bandFor(points): the rating scale
+                      puts Satisfactory at 40, and on the score slab 40
+                      is Poor, so that route would paint both of these
+                      red and lose the distinction being drawn.
+                    */
+                    const tone = BANDS.find(b => b.label === ratings[rating.id])
+                    return (
+                      <div className="mt-2">
+                        <label
+                          htmlFor={`why-${rating.id}`}
+                          className={clsx(
+                            'mb-1 block text-xs font-medium',
+                            tone?.accent ?? 'text-ink-700',
+                          )}
+                        >
+                          Why {ratings[rating.id]?.toLowerCase()}?{' '}
+                          {data?.employee.full_name.split(' ')[0]} will see this.
+                        </label>
+                        <textarea
+                          id={`why-${rating.id}`}
+                          rows={2}
+                          className="input text-sm"
+                          value={coreWhy[rating.id] ?? ''}
+                          onChange={e => setCoreWhy({ ...coreWhy, [rating.id]: e.target.value })}
+                          placeholder="e.g. three reports went out with figures that had to be corrected"
+                        />
+                      </div>
+                    )
+                  })()}
                   {/* Once scored, the same note read back rather than typed. */}
                   {!editable && rating.manager_remarks && (
                     <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
