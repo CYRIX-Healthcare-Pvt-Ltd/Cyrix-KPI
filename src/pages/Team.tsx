@@ -19,6 +19,7 @@ import {
 import { ScoreHeader, ActionRequired, TeamBands } from '@/components/analysis'
 import BellCurve from '@/components/BellCurve'
 import { teamBandShare, teamAverages, attainmentPct } from '@/lib/bands'
+import { rankScore, ratingLabel } from '@/lib/rating'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import BandTrend from '@/components/BandTrend'
 import Avatar from '@/components/Avatar'
@@ -136,6 +137,49 @@ export default function Team() {
     const perPerson = [...byPerson.values()].map(v => v.reduce((a, b) => a + b, 0) / v.length)
     return Math.round((perPerson.reduce((a, b) => a + b, 0) / perPerson.length) * 10) / 10
   }, [allSubs])
+
+  /**
+   * The team's average band, exactly as the manager ranking computes it.
+   *
+   * Each person's own job and core attainment across the year, each onto
+   * the 1–5 slab, combined 0.6/0.4, then averaged over the people who
+   * have a band at all. Mirrors the `team_band` CTE in migration 0096 —
+   * the band of the team's average score is a different number and
+   * showing that instead would disagree with the rank on their profile.
+   */
+  const teamBand = useMemo(() => {
+    const weights = new Map((data?.assignments ?? []).map(a => [a.employee_id, a]))
+    const byEmp = new Map<string, KpiSubmission[]>()
+    for (const s of allSubs ?? []) {
+      if (!SCORED.has(s.status)) continue
+      const list = byEmp.get(s.employee_id) ?? []
+      list.push(s)
+      byEmp.set(s.employee_id, list)
+    }
+    const values: number[] = []
+    for (const [empId, months] of byEmp) {
+      const a = weights.get(empId)
+      const jobW = Number(a?.job_role_weight ?? JOB_ROLE_TOTAL)
+      const coreW = Number(a?.core_values_weight ?? REMAINDER_TOTAL)
+      const mean = (xs: Array<number | null>) => {
+        const real = xs.filter((x): x is number => x !== null && Number.isFinite(x))
+        return real.length ? real.reduce((p, q) => p + q, 0) / real.length : null
+      }
+      const jobPct = jobW > 0
+        ? mean(months.map(m => m.final_job_role_score === null
+            ? null : (Number(m.final_job_role_score) / jobW) * 100))
+        : null
+      const corePct = coreW > 0
+        ? mean(months.map(m => m.final_core_score === null
+            ? null : (Number(m.final_core_score) / coreW) * 100))
+        : null
+      const { combined } = rankScore({ jobPct, corePct })
+      if (combined !== null) values.push(combined)
+    }
+    return values.length
+      ? Math.round((values.reduce((p, q) => p + q, 0) / values.length) * 10) / 10
+      : null
+  }, [allSubs, data])
 
   /**
    * The same year the hero reports on, split into the bands it is made
@@ -623,7 +667,25 @@ export default function Team() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
+        {/*
+          The team's average band — seven tenths of this manager's own
+          standing, so it is the single number they are most measured by
+          and the one they could not see.
+
+          Computed the way the ranking computes it: each person's own
+          0.6 job + 0.4 core band, then averaged across the people who
+          have one. That is deliberately not the band of the team's
+          average score, which is a different figure and would quietly
+          disagree with the position on their profile.
+        */}
+        <StatTile
+          label="Team average band"
+          value={teamBand === null ? '—' : teamBand.toFixed(1)}
+          sub={teamBand === null
+            ? 'nobody scored yet'
+            : `of 5 · ${ratingLabel(Math.round(teamBand) as 1 | 2 | 3 | 4 | 5)}`}
+        />
         <StatTile
           label="Waiting for my score"
           value={awaiting}

@@ -73,6 +73,19 @@ export interface KpiRanking {
   mgr_rank: number | null
   mgr_of: number | null
   /**
+   * The 1–5 slab for each half, and the figure the ranking sorts on —
+   * 0.6 x job + 0.4 x core. See migration 0096 and src/lib/rating.ts.
+   *
+   * Returned so a screen can show its working. A position with no way to
+   * see how it was reached is the kind of number people stop believing,
+   * and this one decides who is called the best.
+   */
+  job_band: number | null
+  core_band: number | null
+  rank_value: number | null
+  /** A manager's 0–100 mark, already scaled by how much they have scored. */
+  mgr_overall: number | null
+  /**
    * Of every month the whole team owes — not only the ones that reached
    * the manager. The same figure as scored_pct on their row in HR's
    * report.

@@ -121,14 +121,21 @@ export function compareRank(a: RankScore, b: RankScore): number {
  * Manager ranking
  * ------------------------------------------------------------------- */
 
-/** What a best-manager figure is made of. */
+/**
+ * What a best-manager figure is made of.
+ *
+ * The two turnaround figures together cap at 30 and the team's own
+ * standing carries the other 70, so a manager with a strong team is a
+ * strong manager and promptness is the smaller half of the job. These
+ * mirror migration 0097 and must not drift from it.
+ */
 export const MANAGER_WEIGHTS = {
   /** How promptly their team submits. Theirs to chase, not to do. */
-  submissionTat: 0.2,
+  submissionTat: 0.1,
   /** How promptly they score what arrives. The part that is theirs. */
-  completionTat: 0.4,
+  completionTat: 0.2,
   /** How the team is actually doing, as the average of their slabs. */
-  teamBand: 0.4,
+  teamBand: 0.7,
 } as const
 
 /**
@@ -161,6 +168,21 @@ export interface ManagerRankInput {
   completeDays: number | null
   /** Each scored reportee's combined 1–5, already computed. */
   teamRatings: number[]
+  /**
+   * The share of the team's owed months actually scored, 0–1.
+   *
+   * This multiplies the whole figure rather than joining the weighted
+   * sum, and that is the load-bearing decision in the whole ranking.
+   * Adding it as a fourth weight was tried against real data and failed:
+   * a manager who had scored ONE of eighty-one months came first,
+   * because every other component — both turnarounds and the team band —
+   * was computed from that single month, and scored full marks on it. No
+   * set of weights fixes that, because the problem is not how much
+   * completion counts; it is that the other three numbers mean nothing
+   * without it. A fast turnaround on 1% of your team is not a prompt
+   * manager, it is an unmeasured one.
+   */
+  coverage: number | null
   /** From the live TAT policy, so the marks move when the policy does. */
   submitAllowance: number
   completeAllowance: number
@@ -199,13 +221,21 @@ export function managerRank(input: ManagerRankInput): ManagerRank {
   ]
   const present = parts.filter(([v]) => v !== null) as Array<[number, number]>
   const weight = present.reduce((a, [, w]) => a + w, 0)
+  const quality = weight === 0
+    ? null
+    : present.reduce((a, [v, w]) => a + v * w, 0) / weight
+
+  // Coverage scales the lot. Missing coverage is treated as none rather
+  // than as full: a manager we cannot measure has not demonstrated
+  // anything, and defaulting to 1 would hand them everybody else's marks.
+  const cover = input.coverage === null || !Number.isFinite(input.coverage)
+    ? 0
+    : Math.max(0, Math.min(1, input.coverage))
 
   return {
     submission,
     completion,
     team,
-    overall: weight === 0
-      ? null
-      : Math.round((present.reduce((a, [v, w]) => a + v * w, 0) / weight) * 1000) / 10,
+    overall: quality === null ? null : Math.round(quality * cover * 1000) / 10,
   }
 }

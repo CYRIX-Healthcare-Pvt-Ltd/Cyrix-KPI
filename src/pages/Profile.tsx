@@ -342,6 +342,34 @@ export default function Profile() {
   // as a small team until you know eleven others have not been assessed.
   const teamUnscored = (ranking?.team_size ?? 0) - (ranking?.team_of ?? 0)
 
+  /*
+    Why a position is what it is, in the words somebody being ranked
+    would use.
+
+    Ranking stopped running on the raw percentage in migration 0096.
+    Without the 120% ceiling one tripled target could carry a year, so
+    both positions now come off the 1–5 slab, where 190% and 95% are
+    equally a 5. That is a real change in how somebody is placed against
+    their colleagues, and it should be legible from the tile rather than
+    only from a migration nobody outside this repository will read.
+  */
+  const BAND_RANK_RULE =
+    'Ranked on your 1–5 bands rather than the raw percentage, so one '
+    + 'exceptional row cannot carry a year. Your job role band counts for '
+    + 'six tenths and core values for four. Where two people come out '
+    + 'level, the higher job role band goes first.'
+
+  const bandRows: Array<[string, string]> = [
+    ['Job role band',
+      ranking?.job_band != null ? `${ranking.job_band} of 5` : '—'],
+    ['Core values band',
+      ranking?.core_band != null ? `${ranking.core_band} of 5` : '—'],
+    // The figure actually sorted on, so the two lines above visibly add
+    // up to it and the rule is checkable rather than merely stated.
+    ['Ranked on',
+      ranking?.rank_value != null ? Number(ranking.rank_value).toFixed(2) : '—'],
+  ]
+
   return (
     <div className="space-y-5">
       <div>
@@ -383,6 +411,8 @@ export default function Profile() {
               ? `${ranking?.team_of} of ${ranking?.team_size} scored so far`
               : 'everyone in your team'
           }
+          detailLead={BAND_RANK_RULE}
+          detail={bandRows}
         />
         <RankTile
           label="Cyrix rank"
@@ -390,6 +420,8 @@ export default function Profile() {
           rank={ranking?.org_rank}
           of={ranking?.org_of}
           note="scored across Cyrix"
+          detailLead={BAND_RANK_RULE}
+          detail={bandRows}
         />
         {/*
           Managers only. Everyone is ranked on their own score; only a
@@ -416,7 +448,23 @@ export default function Profile() {
             // Plain words. An earlier draft said "submissions answerable"
             // and "turned around in time", which is precise and means
             // nothing to the person being measured by it.
-            detailLead="Ranked on how much of your team's work is scored, then on how long what is left has been waiting."
+            /*
+              The rule this position was actually computed from.
+
+              It said "ranked on how much of your team's work is scored,
+              then on how long what is left has been waiting", which
+              described the old sort and is simply no longer true. A
+              caption that explains a number by the wrong rule is worse
+              than none: it is checkable, and it fails the check.
+            */
+            detailLead={
+              'Mostly your team’s own standing — seven tenths of it. '
+              + 'The rest is turnaround: two tenths how quickly you score '
+              + 'what arrives, one tenth how promptly your team sends it. '
+              + 'The whole figure is then scaled by how much of the year '
+              + 'you have actually scored, so being quick on a little '
+              + 'counts for little.'
+            }
             detail={[
               ['Months your team owes',
                 ranking?.due_months != null ? String(ranking.due_months) : '—'],

@@ -137,17 +137,19 @@ describe('tatScore — fewer days is a higher mark', () => {
   })
 })
 
-describe('managerRank — 20 submission, 40 completion, 40 team', () => {
+describe('managerRank — 10 submission, 20 completion, 70 team, times coverage', () => {
   it('uses the weights management gave', () => {
+    // The two turnarounds cap at 30 together; the team carries 70.
     expect(MANAGER_WEIGHTS).toEqual({
-      submissionTat: 0.2, completionTat: 0.4, teamBand: 0.4,
+      submissionTat: 0.1, completionTat: 0.2, teamBand: 0.7,
     })
+    expect(MANAGER_WEIGHTS.submissionTat + MANAGER_WEIGHTS.completionTat).toBeCloseTo(0.3)
   })
 
   it('gives a perfect manager 100', () => {
     const r = managerRank({
       submitDays: 0, completeDays: 0, teamRatings: [5, 5, 5],
-      submitAllowance: 5, completeAllowance: 7,
+      submitAllowance: 5, completeAllowance: 7, coverage: 1,
     })
     expect(r.overall).toBe(100)
   })
@@ -155,14 +157,14 @@ describe('managerRank — 20 submission, 40 completion, 40 team', () => {
   it('gives the worst measurable manager 0', () => {
     const r = managerRank({
       submitDays: 99, completeDays: 99, teamRatings: [1, 1],
-      submitAllowance: 5, completeAllowance: 7,
+      submitAllowance: 5, completeAllowance: 7, coverage: 1,
     })
     expect(r.overall).toBe(0)
   })
 
-  it('weights completion twice as heavily as submission', () => {
-    const base = { teamRatings: [3], submitAllowance: 5, completeAllowance: 5 }
-    // Perfect on the 40% component, worst on the 20% one.
+  it('weights the manager own turnaround twice as heavily as the team chasing', () => {
+    const base = { teamRatings: [3], submitAllowance: 5, completeAllowance: 5, coverage: 1 }
+    // Perfect on the 20% component, worst on the 10% one.
     const goodAtScoring = managerRank({ ...base, submitDays: 99, completeDays: 0 })
     // The other way round.
     const goodAtChasing = managerRank({ ...base, submitDays: 0, completeDays: 99 })
@@ -173,11 +175,11 @@ describe('managerRank — 20 submission, 40 completion, 40 team', () => {
     // A team of all 5s is full marks on that component; all 1s is none.
     const top = managerRank({
       submitDays: null, completeDays: null, teamRatings: [5],
-      submitAllowance: 5, completeAllowance: 5,
+      submitAllowance: 5, completeAllowance: 5, coverage: 1,
     })
     const bottom = managerRank({
       submitDays: null, completeDays: null, teamRatings: [1],
-      submitAllowance: 5, completeAllowance: 5,
+      submitAllowance: 5, completeAllowance: 5, coverage: 1,
     })
     expect(top.overall).toBe(100)
     expect(bottom.overall).toBe(0)
@@ -189,7 +191,7 @@ describe('managerRank — 20 submission, 40 completion, 40 team', () => {
     // everything late, which is an absence of evidence read as failure.
     const r = managerRank({
       submitDays: null, completeDays: null, teamRatings: [5, 5],
-      submitAllowance: 5, completeAllowance: 7,
+      submitAllowance: 5, completeAllowance: 7, coverage: 1,
     })
     expect(r.submission).toBeNull()
     expect(r.completion).toBeNull()
@@ -199,22 +201,53 @@ describe('managerRank — 20 submission, 40 completion, 40 team', () => {
   it('has nothing to say about a manager with nothing measurable', () => {
     const r = managerRank({
       submitDays: null, completeDays: null, teamRatings: [],
-      submitAllowance: 5, completeAllowance: 7,
+      submitAllowance: 5, completeAllowance: 7, coverage: 1,
     })
     expect(r.overall).toBeNull()
   })
 
   it('works the example through end to end', () => {
     // Team submits in 2 of an allowed 5, manager scores in 3 of an
-    // allowed 7, team averages a band of 4.
-    //   submission 1 - 2/10  = 0.8   x 0.2 = 0.16
-    //   completion 1 - 3/14  = 0.786 x 0.4 = 0.314
-    //   team       (4-1)/4   = 0.75  x 0.4 = 0.30
-    //                                       = 0.774 -> 77.4
+    // allowed 7, team averages a band of 4, everything scored.
+    //   submission 1 - 2/10  = 0.8   x 0.1 = 0.08
+    //   completion 1 - 3/14  = 0.786 x 0.2 = 0.157
+    //   team       (4-1)/4   = 0.75  x 0.7 = 0.525
+    //                                       = 0.762 -> 76.2
     const r = managerRank({
       submitDays: 2, completeDays: 3, teamRatings: [4, 4],
-      submitAllowance: 5, completeAllowance: 7,
+      submitAllowance: 5, completeAllowance: 7, coverage: 1,
     })
-    expect(r.overall).toBeCloseTo(77.4, 1)
+    expect(r.overall).toBeCloseTo(76.2, 1)
+  })
+
+  it('scales the whole figure by coverage rather than adding it in', () => {
+    // The case that broke the additive version on real data: a manager
+    // perfect on every measurable component, on 1.2% of the work. Under
+    // any weighting they came first; multiplied by coverage they cannot.
+    const perfect = {
+      submitDays: 0, completeDays: 0, teamRatings: [5],
+      submitAllowance: 5, completeAllowance: 7,
+    }
+    expect(managerRank({ ...perfect, coverage: 1 }).overall).toBe(100)
+    expect(managerRank({ ...perfect, coverage: 0.012 }).overall).toBeCloseTo(1.2, 1)
+
+    // And the comparison that matters: 80% of the work done adequately
+    // beats 1.2% done perfectly.
+    const thorough = managerRank({
+      submitDays: 6, completeDays: 8, teamRatings: [3, 3],
+      submitAllowance: 5, completeAllowance: 7, coverage: 0.8,
+    })
+    expect(thorough.overall!).toBeGreaterThan(
+      managerRank({ ...perfect, coverage: 0.012 }).overall!)
+  })
+
+  it('treats coverage it cannot measure as none, not as full', () => {
+    // Defaulting an unknown to 1 would hand an unmeasured manager
+    // everybody else's marks.
+    const r = managerRank({
+      submitDays: 0, completeDays: 0, teamRatings: [5],
+      submitAllowance: 5, completeAllowance: 7, coverage: null,
+    })
+    expect(r.overall).toBe(0)
   })
 })
