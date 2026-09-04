@@ -56,6 +56,8 @@ export default function ScoreSubmission() {
   const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [cutReason, setCutReason] = useState('')
+  /** Submit asks once first — the manager's figure is now the score. */
+  const [arming, setArming] = useState(false)
   const [returnReason, setReturnReason] = useState('')
   const [showReturn, setShowReturn] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -201,11 +203,30 @@ export default function ScoreSubmission() {
         submissionId: submission.id,
         reason: cutReason.trim() || undefined,
       })
-      setNotice(
-        `Submitted. ${data?.employee.full_name.split(' ')[0]} can now see your ` +
-        'scores and query them until the month closes. You can still correct ' +
-        'anything until then.',
-      )
+      /*
+        Back to the team, the way the team member's own submit goes back
+        to their history.
+
+        Staying here was deliberate once — the month can still be
+        corrected until it closes — but it left the manager on a form
+        whose primary button had silently become "Save changes", which
+        reads as work still outstanding on a job they have just finished.
+        Correcting a score is a thing you come back to do, not a thing
+        you are held on the page in case of.
+
+        The confirmation travels with the navigation so it lands beside
+        the row that has just changed, and still says the month stays
+        open.
+      */
+      const who = data?.employee.full_name.split(' ')[0] ?? 'They'
+      navigate(fromQuery ? '/queries' : '/team', {
+        replace: true,
+        state: {
+          notice:
+            `Scores submitted. ${who} can see them now and can query them ` +
+            'until the month closes — you can still correct anything until then.',
+        },
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit scores.')
     }
@@ -551,16 +572,58 @@ export default function ScoreSubmission() {
       {editable && (
         <div className="space-y-3">
           <div className="sticky bottom-16 flex flex-wrap gap-2 lg:bottom-0">
+            {/*
+              Asked once before it counts.
+
+              The manager's figure used to be averaged with the team
+              member's own; since 0095 it IS the score. That is a real
+              change in what this button does, and the people pressing it
+              have been pressing it for months under the old rule. So it
+              arms rather than fires — the same two-step the bulk approve
+              on the approvals screen uses.
+
+              The second line matters as much as the first: this is not a
+              point of no return, and saying so is what keeps the warning
+              from reading as a threat. The month stays open, the scores
+              stay editable, and the team member can query them.
+            */}
             {submission.status === 'submitted' && (
-              <button
-                onClick={onSubmitScores}
-                disabled={busy || needsCutReason}
-                className="btn-primary"
-                title={needsCutReason ? 'Say why the score is lower first' : undefined}
-              >
-                {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                {needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
-              </button>
+              arming ? (
+                <div className="card w-full space-y-3 border-amber-300 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-ink-900">
+                      Submit these as {data?.employee.full_name.split(' ')[0]}'s
+                      score for {monthLabel(submission.period_month)}?
+                    </p>
+                    <p className="mt-0.5 text-sm text-ink-500">
+                      Your scores are the final score — the self-assessment
+                      beside them is for comparison and does not count toward
+                      the total. You can still correct anything until the month
+                      closes, and {data?.employee.full_name.split(' ')[0]} can
+                      raise a query on it.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={onSubmitScores} disabled={busy} className="btn-primary">
+                      {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                      Yes, submit my scores
+                    </button>
+                    <button onClick={() => setArming(false)} disabled={busy} className="btn-secondary">
+                      Not yet
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setError(null); setArming(true) }}
+                  disabled={busy || needsCutReason}
+                  className="btn-primary"
+                  title={needsCutReason ? 'Say why the score is lower first' : undefined}
+                >
+                  {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                  {needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
+                </button>
+              )
             )}
             {/* Exactly one thing closes a month, and which one depends
                 on the setting. With a closing date, the calendar does it

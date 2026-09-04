@@ -10,14 +10,14 @@ import RuleTraits from '@/components/RuleTraits'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
-  useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
+  useSubmission, useOpenSubmission, useSaveItemValues,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
   useScoreQueries, useUseAlternate, currentFy, type QueryPointInput,
 } from '@/lib/queries'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
-  calcKpiScore, averageCoreValueRatings, RATING_SCALE, type ScoringRule, type RuleParams,
+  calcKpiScore, averageCoreValueRatings, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
@@ -35,14 +35,12 @@ export default function MonthlySubmission() {
   const { data: coreValues } = useCoreValues()
   const openSub = useOpenSubmission()
   const saveItems = useSaveItemValues()
-  const saveRatings = useSaveCoreRatings()
   const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
-  const [ratings, setRatings] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [showDelete, setShowDelete] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
@@ -65,21 +63,26 @@ export default function MonthlySubmission() {
     setTargets(Object.fromEntries(
       data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
     ))
-    setRatings(Object.fromEntries(
-      data.ratings.map(r => [r.id, r.self_rating ?? '']),
-    ))
     setRemarks(data.submission.employee_remarks ?? '')
   }, [data])
 
-  // Core-value ratings roll into a 0–100 figure that scores the 20% row.
-  const coreAverage = useMemo(() => {
-    const list = (data?.ratings ?? []).map(r => ratings[r.id] || null)
-    return averageCoreValueRatings(list)
-  }, [ratings, data])
+  /*
+    The manager's core-value ratings, rolled into the 0–100 figure that
+    scores the block.
+
+    It used to be the employee's own ratings, live as they typed. They no
+    longer rate them, so the only figure that exists is the manager's —
+    null until the month is scored, which is correct: an unrated block
+    should read as blank rather than as nought out of twenty.
+  */
+  const coreRolled = useMemo(
+    () => averageCoreValueRatings((data?.ratings ?? []).map(r => r.manager_rating)),
+    [data],
+  )
 
   const liveScore = (item: KpiSubmissionItem) => {
     const raw = item.section === 'core_values'
-      ? coreAverage
+      ? coreRolled
       : achieved[item.id] === '' || achieved[item.id] === undefined
       ? null
       : Number(achieved[item.id])
@@ -105,12 +108,6 @@ export default function MonthlySubmission() {
       (a, b) => (order.get(a.core_value_id) ?? 0) - (order.get(b.core_value_id) ?? 0),
     )
   }, [data, coreValues])
-
-  /** The manager's own core-value average, shown once they have scored. */
-  const managerCoreAverage = useMemo(
-    () => averageCoreValueRatings((data?.ratings ?? []).map(r => r.manager_rating)),
-    [data],
-  )
 
   const jobRows = items.filter(i => i.section === 'job_role')
   const esmsRows = items.filter(i => i.section === 'esms')
@@ -183,12 +180,12 @@ export default function MonthlySubmission() {
               ? null : Number(achieved[i.id]),
           })),
       })
-      await saveRatings.mutateAsync({
-        role: 'self',
-        updates: (data?.ratings ?? []).map(r => ({
-          id: r.id, rating: ratings[r.id] || null,
-        })),
-      })
+      /*
+        Core values are no longer self-rated, so nothing is written for
+        them here. The rows still exist and the manager still fills them;
+        what has gone is the employee's copy of the judgement, which
+        stopped counting when the manager's figure became the score.
+      */
       if (submission && remarks !== (submission.employee_remarks ?? '')) {
         await supabase.from('kpi_submissions')
           .update({ employee_remarks: remarks }).eq('id', submission.id)
@@ -294,7 +291,7 @@ export default function MonthlySubmission() {
     )
   }
 
-  const busy = saveItems.isPending || saveRatings.isPending || action.isPending
+  const busy = saveItems.isPending || action.isPending
 
   return (
     <div className="space-y-5">
@@ -501,22 +498,27 @@ export default function MonthlySubmission() {
               — {coreWeight}%
             </span>
           </h3>
+          {/* The manager's figure alone. "Mine" came off with the
+              dropdown that produced it. */}
           <div className="flex items-center gap-3 text-xs text-ink-500">
-            <span>
-              Mine {coreAverage === null ? '—' : `${coreAverage.toFixed(0)}/100`}
-              {isScored && (
-                <> · Manager {managerCoreAverage === null ? '—' : `${managerCoreAverage.toFixed(0)}/100`}</>
-              )}
-            </span>
-            <ScorePill value={coreTotal} outOf={coreWeight} size="sm" />
+            {isScored ? (
+              <>
+                <span>
+                  Manager {coreRolled === null ? '—' : `${coreRolled.toFixed(0)}/100`}
+                </span>
+                <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
+              </>
+            ) : (
+              <span>Rated by your manager</span>
+            )}
           </div>
         </div>
 
         {/* Header row so the two assessments read as columns once scored. */}
+        {/* One column, not two. There is no "my rating" any more. */}
         {isScored && (
           <div className="hidden border-b border-ink-100 bg-ink-50/60 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-400 sm:flex sm:gap-4">
             <span className="flex-1">Core value</span>
-            <span className="w-48 text-center">My rating</span>
             <span className="w-40 text-center">Manager's rating</span>
           </div>
         )}
@@ -538,21 +540,30 @@ export default function MonthlySubmission() {
                   )}
                 </div>
 
-                <div className="mt-2 sm:mt-0 sm:w-48">
-                  <select
-                    className="input"
-                    disabled={!editable}
-                    value={ratings[rating.id] ?? ''}
-                    onChange={e => setRatings({ ...ratings, [rating.id]: e.target.value })}
-                  >
-                    <option value="">Not rated</option>
-                    {RATING_SCALE.map(r => (
-                      <option key={r.label} value={r.label}>
-                        {r.label} ({r.points})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/*
+                  Read-only for the person being appraised.
+
+                  Rating your own alignment to the company's values was
+                  always the softest question on the form and, since 0095
+                  made the manager's figure the score, it counts for
+                  nothing either. Leaving the dropdown there asked people
+                  to make a judgement about themselves that no longer
+                  goes anywhere -- and a control that changes nothing is
+                  worse than no control, because the first time somebody
+                  notices is when they compare it to their score.
+
+                  Shown rather than removed: the five values are part of
+                  what the month is marked out of, and a block that
+                  vanishes from the employee's copy makes the 80/20 stop
+                  adding up on the one screen where it should be plainest.
+                */}
+                {!isScored && (
+                  <div className="mt-2 sm:mt-0 sm:w-48">
+                    <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-500">
+                      Your manager rates this
+                    </p>
+                  </div>
+                )}
 
                 {/* The manager's verdict. Highlighted when it differs from
                     the self rating, since that is the useful signal. */}

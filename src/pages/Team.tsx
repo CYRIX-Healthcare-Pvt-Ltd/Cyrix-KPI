@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
@@ -93,7 +93,14 @@ export default function Team() {
   const [photoFor, setPhotoFor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  /*
+    Seeded from the navigation, so a manager who has just scored somebody
+    is told so where the eye lands — beside the row that has changed —
+    rather than on the form they have already left. Same pattern as
+    MyHistory, which does this for the team member's own submission.
+  */
+  const arrived = (useLocation().state as { notice?: string } | null)?.notice
+  const [notice, setNotice] = useState<string | null>(arrived ?? null)
   const [chartTab, setChartTab] = useState<'trend' | 'bell'>('trend')
   const [bellMonth, setBellMonth] = useState('')
   const [bellMetric, setBellMetric] = useState<BellMetric>('total')
