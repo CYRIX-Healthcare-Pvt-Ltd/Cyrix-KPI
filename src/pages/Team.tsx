@@ -139,6 +139,27 @@ export default function Team() {
   }, [allSubs])
 
   /**
+   * Submitted months this manager owes a score on, other than the one on
+   * screen — newest first, so the most recent backlog leads.
+   *
+   * Read from allSubs, which is the whole year for the whole team and is
+   * already loaded for the charts. The month currently selected is
+   * excluded because the tiles below already count it; repeating it here
+   * would read as a second, different figure for the same thing.
+   */
+  const olderWaiting = useMemo(() => {
+    const byMonth = new Map<string, number>()
+    for (const s of allSubs ?? []) {
+      if (s.status !== 'submitted') continue
+      if (s.period_month === month) continue
+      byMonth.set(s.period_month, (byMonth.get(s.period_month) ?? 0) + 1)
+    }
+    return [...byMonth]
+      .map(([m, count]) => ({ month: m, count }))
+      .sort((a, b) => b.month.localeCompare(a.month))
+  }, [allSubs, month])
+
+  /**
    * The team's average band, exactly as the manager ranking computes it.
    *
    * Each person's own job and core attainment across the year, each onto
@@ -471,6 +492,42 @@ export default function Team() {
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+
+      {/*
+        Months waiting on this manager that are not the month on screen.
+
+        This screen has always shown exactly one month, so somebody who
+        submitted June while the dropdown said August was invisible: the
+        tile read "waiting for my score: 0" and the only hint was a tab
+        badge counting every month, which is why the badge and the tile
+        disagreed and looked like a bug. It was not a bug in the count —
+        it was the screen having nowhere to say "and there is older work".
+
+        Only when there is some, and it names the months rather than
+        totalling them, because "3 waiting" gives you nothing to click.
+        Each one switches the dropdown, which is the action the sentence
+        is describing.
+      */}
+      {olderWaiting.length > 0 && (
+        <Alert kind="warning" title="Waiting for your score in other months">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span>
+              {olderWaiting.reduce((a, m) => a + m.count, 0)} submission
+              {olderWaiting.reduce((a, m) => a + m.count, 0) === 1 ? '' : 's'} outside{' '}
+              {monthLabel(month)}:
+            </span>
+            {olderWaiting.map(m => (
+              <button
+                key={m.month}
+                onClick={() => setMonth(m.month)}
+                className="badge cursor-pointer bg-amber-200 text-amber-900 hover:bg-amber-300"
+              >
+                {monthLabel(m.month)} · {m.count}
+              </button>
+            ))}
+          </div>
+        </Alert>
+      )}
 
       {/*
         Directly under the hero, which is where the dashboard puts the

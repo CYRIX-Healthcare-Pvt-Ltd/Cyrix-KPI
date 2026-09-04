@@ -25,13 +25,25 @@ describe('a score is banded on its share, not its size', () => {
   })
 
   it('bands the core-values block against its own weightage', () => {
+    // On management's slab the bands close at the top, so 80% is the top
+    // of Good rather than the bottom of Very Good, and 60% is the top of
+    // Satisfactory. Both of these read one band higher before 0098.
     // 20-point band: the standard split.
-    expect(bandOf(16, 20)).toBe('Very Good')
-    expect(bandOf(12, 20)).toBe('Good')
-    expect(bandOf(7, 20)).toBe('Poor')
+    expect(bandOf(16, 20)).toBe('Good')          // 80%
+    expect(bandOf(17, 20)).toBe('Very Good')     // 85%
+    expect(bandOf(12, 20)).toBe('Satisfactory')  // 60%
+    expect(bandOf(7, 20)).toBe('Poor')           // 35%
     // 15-point band: the people who also carry ESMS.
-    expect(bandOf(12, 15)).toBe('Very Good')
-    expect(bandOf(14, 15)).toBe('Excellent')
+    expect(bandOf(12, 15)).toBe('Good')          // 80%
+    expect(bandOf(14, 15)).toBe('Excellent')     // 93.3%
+  })
+
+  it('calls below 50% Poor, which is the change management asked for', () => {
+    // 45% was Satisfactory under the app's own scale and is Poor under
+    // the company's. This is the relabelling somebody will notice on
+    // their own record without their score having moved.
+    expect(bandOf(9, 20)).toBe('Poor')            // 45%
+    expect(bandOf(10, 20)).toBe('Satisfactory')   // 50% exactly
   })
 
   it('ranks 14 of 15 above 16 of 20, which the raw scores reverse', () => {
@@ -75,8 +87,13 @@ describe('the band scale the meter draws', () => {
   })
 
   it('puts each band boundary where bandFor agrees it is', () => {
+    // Just inside each end rather than on it. The slab's bands are open
+    // at the bottom and closed at the top — 60 belongs to Satisfactory,
+    // not to the Good that starts above it — so a boundary value itself
+    // belongs to the band below and testing it here would be asserting
+    // the opposite of the table.
     for (const { band, from, to } of BAND_SCALE) {
-      expect(bandFor(from)?.key).toBe(band.key)
+      expect(bandFor(from + 0.01)?.key).toBe(band.key)
       expect(bandFor(to - 0.01)?.key).toBe(band.key)
     }
   })

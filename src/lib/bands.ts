@@ -1,3 +1,4 @@
+import { ratingFor, type Rating } from './rating'
 /**
  * Score bands — the shared language for "how good is this number".
  *
@@ -123,7 +124,9 @@ export const BANDS: Band[] = [
     },
   },
   {
-    key: 'satisfactory', label: 'Satisfactory', min: 40,
+    // 50, not 40. Management's slab makes below 50 a 1 — Poor — and the
+    // meter drawn from these mins has to break where the colour breaks.
+    key: 'satisfactory', label: 'Satisfactory', min: 50,
     hex: { base: '#f59e0b', soft: '#fef3c7', strong: '#92400e' },
     chip: 'bg-amber-100 text-amber-800',
     tint: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100',
@@ -181,13 +184,39 @@ export const bandScaleGradient = (): string =>
       .join(', ')
   })`
 
-export function bandFor(pct: number | null | undefined): Band | null {
-  if (pct === null || pct === undefined || Number.isNaN(pct)) return null
-  return BANDS.find(b => pct >= b.min) ?? BANDS[BANDS.length - 1]
+/**
+ * The colour band for a figure — read off management's 1–5 slab.
+ *
+ * It used to be its own `pct >= b.min` search, which is where the two
+ * scales came apart: the slab calls 90 a 4 and this called it Excellent,
+ * so a chip showing both said "EXCELLENT 4/5". Delegating means the words
+ * and the digit cannot disagree again, whatever either is changed to.
+ *
+ * The `min` values above still describe where each band starts and are
+ * what BAND_SCALE draws the meter from; they are no longer the lookup.
+ */
+const BAND_OF_RATING: Record<Rating, BandKey> = {
+  5: 'excellent', 4: 'veryGood', 3: 'good', 2: 'satisfactory', 1: 'poor',
 }
 
-export const isWeak = (pct: number | null | undefined) =>
-  pct !== null && pct !== undefined && pct < WEAK_THRESHOLD
+export function bandFor(pct: number | null | undefined): Band | null {
+  const rating = ratingFor(pct)
+  if (rating === null) return null
+  const key = BAND_OF_RATING[rating]
+  return BANDS.find(b => b.key === key) ?? null
+}
+
+/**
+ * Below Good — which on the slab is a rating of 2 or 1.
+ *
+ * Read off the rating rather than compared against WEAK_THRESHOLD, so
+ * the boundary case goes the way the table says: 60 exactly is a 2, and
+ * a `pct < 60` test would have called it Good.
+ */
+export const isWeak = (pct: number | null | undefined) => {
+  const rating = ratingFor(pct)
+  return rating !== null && rating <= 2
+}
 
 /** A KRA's attainment as a percentage of its own weightage. */
 export const attainmentPct = (score: number | null, weightage: number) =>
