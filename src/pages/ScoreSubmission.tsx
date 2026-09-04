@@ -221,6 +221,21 @@ export default function ScoreSubmission() {
   const unratedCore = (data?.ratings ?? []).filter(r => !ratings[r.id]).length
 
   /**
+   * Low ratings still owing an explanation.
+   *
+   * Same standing as an unrated one: the month cannot be submitted on
+   * it. A Satisfactory or a Poor with no reason attached is the score a
+   * person is least able to do anything about, and the reason is shown
+   * to them.
+   */
+  const missingWhy = (data?.ratings ?? []).filter(
+    r => needsWhy(ratings[r.id]) && !coreWhy[r.id]?.trim(),
+  ).length
+
+  /** Anything on the core-values block that stops this being submitted. */
+  const coreIncomplete = unratedCore > 0 || missingWhy > 0
+
+  /**
    * How far below their own assessment this lands, live as the manager
    * types rather than from the saved row — so the box appears while the
    * score is being decided, not after it has been submitted and refused.
@@ -656,9 +671,9 @@ export default function ScoreSubmission() {
               a figure anybody works in — the score it produces is on the
               row beside it, out of the weightage, and saying the same
               thing twice in two scales is worse than saying it once. */}
-          {editable && unratedCore > 0 && (
+          {editable && coreIncomplete && (
             <span className="badge bg-amber-200 text-amber-900">
-              {unratedCore} to rate
+              {unratedCore > 0 ? `${unratedCore} to rate` : `${missingWhy} need a reason`}
             </span>
           )}
         </div>
@@ -859,23 +874,56 @@ export default function ScoreSubmission() {
                   without "and here is the 20% you have not scored" is
                   half an answer.
                 */
-                unratedCore > 0 ? (
+                coreIncomplete ? (
                   <div className="card w-full space-y-3 border-amber-300 bg-amber-50/50 p-4">
+                    {/* One panel for both, because they are one job —
+                        finishing the core values — and two stacked
+                        warnings for the same block would read as two
+                        separate problems. */}
                     <div>
                       <p className="text-sm font-medium text-ink-900">
-                        {unratedCore} core value{unratedCore === 1 ? '' : 's'} still
-                        {unratedCore === 1 ? ' needs' : ' need'} a rating
+                        {unratedCore > 0 && (
+                          <>
+                            {unratedCore} core value{unratedCore === 1 ? '' : 's'} still
+                            {unratedCore === 1 ? ' needs' : ' need'} a rating
+                          </>
+                        )}
+                        {unratedCore > 0 && missingWhy > 0 && ', and '}
+                        {missingWhy > 0 && (
+                          <>
+                            {unratedCore > 0 ? '' : `${missingWhy} `}
+                            low rating{missingWhy === 1 ? '' : 's'}
+                            {unratedCore > 0 ? ` (${missingWhy})` : ''}{' '}
+                            {missingWhy === 1 ? 'needs' : 'need'} a reason
+                          </>
+                        )}
                       </p>
                       <p className="mt-0.5 text-sm text-ink-600">
-                        They are worth {items.filter(i => i.section === 'core_values')
-                          .reduce((a, i) => a + Number(i.weightage), 0)}% of{' '}
-                        {data?.employee.full_name.split(' ')[0]}'s score, and only you
-                        rate them — an unrated one scores nothing.
+                        {unratedCore > 0 ? (
+                          <>
+                            They are worth {items.filter(i => i.section === 'core_values')
+                              .reduce((a, i) => a + Number(i.weightage), 0)}% of{' '}
+                            {data?.employee.full_name.split(' ')[0]}'s score, and only you
+                            rate them — an unrated one scores nothing.
+                          </>
+                        ) : (
+                          <>
+                            Satisfactory or Poor is the score{' '}
+                            {data?.employee.full_name.split(' ')[0]} can do least about
+                            without knowing why. Say what happened — they will see it.
+                          </>
+                        )}
                       </p>
                     </div>
                     <button
                       onClick={() => {
-                        const first = sortedRatings.find(r => !ratings[r.id])
+                        // Whichever comes first in the block: something
+                        // unrated, or a low rating with no reason. Sending
+                        // them to the top every time would make the second
+                        // pass hunt for the row again.
+                        const first = sortedRatings.find(
+                          r => !ratings[r.id] || (needsWhy(ratings[r.id]) && !coreWhy[r.id]?.trim()),
+                        )
                         // Focus first and tell the browser not to scroll for
                         // it, then scroll deliberately. Focusing after a
                         // timed delay was the other option and it is a race:
@@ -883,9 +931,13 @@ export default function ScoreSubmission() {
                         // and the cursor arrives after the person has
                         // started reading.
                         if (first) {
-                          document
-                            .getElementById(`core-${first.id}`)
-                            ?.focus({ preventScroll: true })
+                          // The dropdown if it is unrated, otherwise the
+                          // box asking why — land on the field that is
+                          // actually missing, not on the one above it.
+                          const target = !ratings[first.id]
+                            ? `core-${first.id}`
+                            : `why-${first.id}`
+                          document.getElementById(target)?.focus({ preventScroll: true })
                         }
                         document.getElementById('core-values')?.scrollIntoView({
                           block: 'start',
@@ -936,16 +988,18 @@ export default function ScoreSubmission() {
                   // month that is already scored is edited through here,
                   // and clearing a rating drops the core-values figure
                   // without anything on screen saying so.
-                  disabled={busy || unratedCore > 0}
-                  title={unratedCore > 0
-                    ? 'Every core value needs a rating — they are worth 20% of the score'
+                  disabled={busy || coreIncomplete}
+                  title={coreIncomplete
+                    ? 'Every core value needs a rating, and a low one needs a reason'
                     : undefined}
                   className="btn-primary"
                 >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                   {unratedCore > 0
                     ? `Rate ${unratedCore} more core value${unratedCore === 1 ? '' : 's'}`
-                    : fromQuery ? 'Save and go back to the query' : 'Save changes'}
+                    : missingWhy > 0
+                      ? `Give a reason for ${missingWhy} low rating${missingWhy === 1 ? '' : 's'}`
+                      : fromQuery ? 'Save and go back to the query' : 'Save changes'}
                 </button>
                 {/* Offering a button that can only fail is how somebody
                      ends up reading a database error. While a query is
