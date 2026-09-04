@@ -157,7 +157,11 @@ export default function RowEditor({
 
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-label text-ink-700">
-            Target <span className="font-normal normal-case tracking-normal text-ink-400">— to hit</span>
+            {/* "— to hit" came off. Target already says what it is, and
+                the gloss read as a label that had not finished — the
+                weightage beside it needs its "% of 100" because the unit
+                is genuinely ambiguous; a target does not. */}
+            Target
           </label>
           <NumberInput
             step="any"

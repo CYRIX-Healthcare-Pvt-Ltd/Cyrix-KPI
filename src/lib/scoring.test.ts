@@ -37,18 +37,20 @@ describe('higher_capped — MIN(F/E*D, D)', () => {
   })
 })
 
-describe('higher_uncapped — crosses the weightage, but stops at 120% of it', () => {
+describe('higher_uncapped — crosses the weightage, and keeps going', () => {
   it('pays for beating the target', () => {
     expect(calcKpiScore('higher_uncapped', 25, 100, 110)).toBe(27.5)
   })
 
-  it('stops at 120% of the weightage however far past the target', () => {
-    // Management's ceiling: a row worth 25% can earn 30% and no more.
-    // 150% of target would once have paid 37.5 — one extraordinary month
-    // on one row carrying a year is what this exists to prevent.
+  it('has no ceiling of its own', () => {
+    // There was one — 120% of the weightage, so a 25% row stopped at 30
+    // — added on management's instruction and withdrawn on theirs after
+    // the demo. Triple the target is triple the marks again. What the
+    // cap was really protecting was ranking, and migration 0096 protects
+    // that with band slabs instead of by falsifying the score.
     expect(calcKpiScore('higher_uncapped', 25, 100, 120)).toBe(30)
-    expect(calcKpiScore('higher_uncapped', 25, 100, 150)).toBe(30)
-    expect(calcKpiScore('higher_uncapped', 25, 100, 1000)).toBe(30)
+    expect(calcKpiScore('higher_uncapped', 25, 100, 150)).toBe(37.5)
+    expect(calcKpiScore('higher_uncapped', 25, 100, 300)).toBe(75)
   })
 
   it('is exactly the weightage at the target', () => {
@@ -56,18 +58,20 @@ describe('higher_uncapped — crosses the weightage, but stops at 120% of it', (
   })
 
   it('lets a row state its own ceiling either way', () => {
+    // Removing the default did not remove the mechanism: a KPI is still
+    // entitled to say where its own bonus stops.
     expect(calcKpiScore('higher_uncapped', 25, 100, 300, { max_multiplier: 2 })).toBe(50)
     expect(calcKpiScore('higher_uncapped', 25, 100, 150, { max_multiplier: 1 })).toBe(25)
   })
 
   /*
-    The number that has to agree with calc_kpi_score in the database.
-    That one decides the appraisal; this one is what the screen shows
-    while somebody types, and a disagreement between them is a score that
-    changes when the page reloads.
+    Has to agree with calc_kpi_score in the database. That one decides
+    the appraisal; this one is what the screen shows while somebody
+    types, and a disagreement between them is a score that changes when
+    the page reloads.
   */
-  it('caps at the multiplier the database uses', () => {
-    expect(UNCAPPED_MAX_MULTIPLIER).toBe(1.2)
+  it('has no default multiplier, matching the database', () => {
+    expect(UNCAPPED_MAX_MULTIPLIER).toBeUndefined()
   })
 })
 

@@ -20,20 +20,28 @@ export type ScoringRule =
   | 'rating_scale'
 
 /**
- * How far past its weightage an uncapped row may go — 120% of it.
+ * How far past its weightage an uncapped row may go: as far as it goes.
  *
- * Management's ceiling: a row worth 25% can earn at most 30%, however
- * far past the target somebody goes. "Can exceed weightage" always meant
- * exceed, never unbounded — without a limit one extraordinary month on
- * one row could carry a whole year, which is not what a weightage is
- * for.
+ * There was a ceiling here — 120% of the weightage, so a 25% row could
+ * earn at most 30 — added on management's instruction and withdrawn on
+ * theirs after the demo. Their reasoning both times was about ranking:
+ * an uncapped row can carry a whole year, and somebody outstanding on
+ * one KRA and poor on the rest should not top a list. That is a real
+ * problem and a ceiling was the wrong tool for it, because it solved a
+ * ranking question by falsifying a score. Migration 0096 ranks on band
+ * slabs instead, which fixes it where it lives, so the score is free to
+ * say what actually happened.
  *
- * The same number lives in calc_kpi_score (migration 0087), which is the
- * scorer that actually decides an appraisal; this one is what the screen
- * shows while somebody types. They have to agree, and scoring.test.ts
- * checks the arithmetic here against the same cases.
+ * undefined means no ceiling. A row may still declare its own
+ * max_multiplier and that is honoured — a KPI is entitled to say where
+ * its own bonus stops.
+ *
+ * calc_kpi_score (migration 0095) is the scorer that decides an
+ * appraisal; this one is what the screen shows while somebody types.
+ * They have to agree, and scoring.test.ts checks the arithmetic here
+ * against the same cases.
  */
-export const UNCAPPED_MAX_MULTIPLIER = 1.2
+export const UNCAPPED_MAX_MULTIPLIER: number | undefined = undefined
 
 export interface RuleParams {
   /** Permit the score to fall below zero. Default false. */
@@ -105,10 +113,12 @@ export function calcKpiScore(
 
     case 'higher_uncapped': {
       if (!target) { result = 0; break }
-      // Beating the target earns more than the weightage, but not without
-      // limit — see UNCAPPED_MAX_MULTIPLIER. A row may state its own.
+      // No ceiling unless the row states one. Triple the target and the
+      // row is worth triple — see UNCAPPED_MAX_MULTIPLIER for why the
+      // 120% cap that used to sit here has gone.
       const mult = params.max_multiplier ?? UNCAPPED_MAX_MULTIPLIER
-      result = Math.min((achieved / target) * wt, wt * mult)
+      result = (achieved / target) * wt
+      if (mult !== undefined) result = Math.min(result, wt * mult)
       break
     }
 
@@ -271,11 +281,21 @@ export function ruleTraits(
   switch (rule) {
     case 'higher_uncapped': {
       const mult = params.max_multiplier ?? UNCAPPED_MAX_MULTIPLIER
-      return [{
-        tone: 'bonus',
-        label: `Up to ${pct(wt * mult)}`,
-        detail: `Beating the target earns more than the ${pct(wt)} weightage, as far as ${pct(wt * mult)} — ${Math.round(mult * 100)}% of it.`,
-      }]
+      // A row that names its own ceiling says where it stops; one that
+      // does not has none, and the chip has to say which of the two this
+      // is. "Up to 30%" on a row with no ceiling was the old cap's
+      // wording and would now be a promise the scorer does not keep.
+      return [mult === undefined
+        ? {
+            tone: 'bonus' as const,
+            label: 'No ceiling',
+            detail: `Beating the target earns more than the ${pct(wt)} weightage, with no upper limit — double the target is double the marks.`,
+          }
+        : {
+            tone: 'bonus' as const,
+            label: `Up to ${pct(wt * mult)}`,
+            detail: `Beating the target earns more than the ${pct(wt)} weightage, as far as ${pct(wt * mult)} — ${Math.round(mult * 100)}% of it.`,
+          }]
     }
 
     // A working penalty is already handled above; what is left is the

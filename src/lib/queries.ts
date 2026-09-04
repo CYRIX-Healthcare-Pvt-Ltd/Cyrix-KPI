@@ -692,9 +692,17 @@ export function usePendingCounts(managerId: string | undefined, fy: string) {
         supabase.from('kpi_assignments')
           .select('id', { count: 'exact', head: true })
           .in('employee_id', ids).eq('financial_year', fy).eq('status', 'pending_approval'),
+        // Scoped to the year, like the approvals count beside it. Without
+        // it this counted months submitted in previous financial years,
+        // so the My Team badge could read 1 while every tile on the team
+        // screen read 0 — and nothing on the screen said where the one
+        // was. Across all MONTHS of the year is deliberate and is the
+        // other half of that mismatch: a June submission still waiting
+        // is real work, and the team screen only ever shows the month in
+        // its dropdown.
         supabase.from('kpi_submissions')
           .select('id', { count: 'exact', head: true })
-          .in('employee_id', ids).eq('status', 'submitted'),
+          .in('employee_id', ids).eq('financial_year', fy).eq('status', 'submitted'),
       ])
       return { approvals: approvals ?? 0, scoring: scoring ?? 0 }
     },
