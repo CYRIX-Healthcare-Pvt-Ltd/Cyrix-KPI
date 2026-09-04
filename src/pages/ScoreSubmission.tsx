@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
+import clsx from 'clsx'
 import {
-  ArrowLeft, Check, Undo2, Lock, Trash2, MessageSquare,
+  ArrowLeft, ArrowDown, Check, Undo2, Lock, Trash2, MessageSquare,
 } from 'lucide-react'
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
@@ -547,7 +548,7 @@ export default function ScoreSubmission() {
       })}
 
       {/* ---- core values ---- */}
-      <div className="card overflow-hidden">
+      <div id="core-values" className="card overflow-hidden scroll-mt-20">
         <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
             Alignment To Core Values{' '}
@@ -556,15 +557,33 @@ export default function ScoreSubmission() {
                     .reduce((a, i) => a + Number(i.weightage), 0)}%
             </span>
           </h3>
-          {coreAverage !== null && (
+          {/* How many are left, on the block itself.
+              Somebody scrolling past needs to know this section is
+              unfinished without having reached the button at the bottom
+              to be told. */}
+          {editable && unratedCore > 0 ? (
+            <span className="badge bg-amber-200 text-amber-900">
+              {unratedCore} to rate
+            </span>
+          ) : coreAverage !== null && (
             <span className="text-xs text-ink-500">my avg {coreAverage.toFixed(0)}/100</span>
           )}
         </div>
         <div className="divide-y divide-ink-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
+            // The ones still to do, marked where they are. A count at the
+            // top says how many; this says which, so finding them is not
+            // a matter of reading five dropdowns.
+            const needsRating = editable && !ratings[rating.id]
             return (
-              <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
+              <div
+                key={rating.id}
+                className={clsx(
+                  'p-4 sm:flex sm:items-center sm:gap-4',
+                  needsRating && 'bg-amber-50/60',
+                )}
+              >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink-900">{def?.name}</p>
                   {def?.description && (
@@ -577,12 +596,19 @@ export default function ScoreSubmission() {
                     <p className="text-sm text-ink-600">{rating.self_rating ?? '—'}</p>
                   </div>
                   <select
-                    className="input w-44"
+                    id={`core-${rating.id}`}
+                    className={clsx(
+                      'input w-44',
+                      needsRating && 'border-amber-400 ring-1 ring-amber-300',
+                    )}
                     disabled={!editable}
                     value={ratings[rating.id] ?? ''}
                     onChange={e => setRatings({ ...ratings, [rating.id]: e.target.value })}
                   >
-                    <option value="">Not rated</option>
+                    {/* "Not rated" reads like a choice you may leave
+                        selected. It is not one — the month cannot be
+                        submitted on it — so it says what it is. */}
+                    <option value="">Choose a rating…</option>
                     {RATING_SCALE.map(r => (
                       <option key={r.label} value={r.label}>{r.label} ({r.points})</option>
                     ))}
@@ -653,21 +679,78 @@ export default function ScoreSubmission() {
                   </div>
                 </div>
               ) : (
+                /*
+                  Unfinished work sends you to it rather than refusing.
+
+                  A disabled Submit is the lazy version of this: it says
+                  no, gives no way to fix it, and on a phone there is no
+                  tooltip to explain why. This screen already argues
+                  against that a few lines below — "offering a button
+                  that can only fail is how somebody ends up reading a
+                  database error" — and the answer there is the same,
+                  which is to put the thing they should do where the
+                  thing they cannot do would have been.
+
+                  So it is a real button that scrolls to the block and
+                  focuses the first rating still to be given. It says how
+                  many, and why it matters, because "you cannot submit"
+                  without "and here is the 20% you have not scored" is
+                  half an answer.
+                */
+                unratedCore > 0 ? (
+                  <div className="card w-full space-y-3 border-amber-300 bg-amber-50/50 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-ink-900">
+                        {unratedCore} core value{unratedCore === 1 ? '' : 's'} still
+                        {unratedCore === 1 ? ' needs' : ' need'} a rating
+                      </p>
+                      <p className="mt-0.5 text-sm text-ink-600">
+                        They are worth {items.filter(i => i.section === 'core_values')
+                          .reduce((a, i) => a + Number(i.weightage), 0)}% of{' '}
+                        {data?.employee.full_name.split(' ')[0]}'s score, and only you
+                        rate them — an unrated one scores nothing.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const first = sortedRatings.find(r => !ratings[r.id])
+                        // Focus first and tell the browser not to scroll for
+                        // it, then scroll deliberately. Focusing after a
+                        // timed delay was the other option and it is a race:
+                        // too short and the smooth scroll cancels, too long
+                        // and the cursor arrives after the person has
+                        // started reading.
+                        if (first) {
+                          document
+                            .getElementById(`core-${first.id}`)
+                            ?.focus({ preventScroll: true })
+                        }
+                        document.getElementById('core-values')?.scrollIntoView({
+                          block: 'start',
+                          // Somebody who has asked for less motion has asked
+                          // for it here too.
+                          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                            ? 'auto'
+                            : 'smooth',
+                        })
+                      }}
+                      className="btn-primary"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                      Rate them now
+                    </button>
+                  </div>
+                ) : (
                 <button
                   onClick={() => { setError(null); setArming(true) }}
-                  disabled={busy || needsCutReason || unratedCore > 0}
+                  disabled={busy || needsCutReason}
                   className="btn-primary"
-                  title={
-                    unratedCore > 0
-                      ? 'Rate the core values first — they are worth 20% of the score'
-                      : needsCutReason ? 'Say why the score is lower first' : undefined
-                  }
+                  title={needsCutReason ? 'Say why the score is lower first' : undefined}
                 >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  {unratedCore > 0
-                    ? `Rate ${unratedCore} more core value${unratedCore === 1 ? '' : 's'}`
-                    : needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
+                  {needsCutReason ? 'Say why the score is lower' : 'Submit my scores'}
                 </button>
+                )
               )
             )}
             {/* Exactly one thing closes a month, and which one depends
