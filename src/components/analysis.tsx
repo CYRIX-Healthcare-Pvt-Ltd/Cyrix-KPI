@@ -687,17 +687,29 @@ function SlippingRow({
  * first, weakest at the top; core values always last, on its own.
  */
 export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
-  const byKra = new Map<string, { section: string; total: number; n: number }>()
+  const byKra = new Map<
+    string,
+    { section: string; total: number; marks: number; weightage: number; n: number }
+  >()
   for (const r of rows) {
     if (r.attainment_pct === null) continue
-    const cur = byKra.get(r.kra) ?? { section: r.section, total: 0, n: 0 }
+    const cur = byKra.get(r.kra)
+      ?? { section: r.section, total: 0, marks: 0, weightage: Number(r.weightage), n: 0 }
     cur.total += r.attainment_pct
+    cur.marks += Number(r.score ?? 0)
+    // A KPI corrected mid-year changes the weightage; the later one is
+    // the one in force.
+    cur.weightage = Number(r.weightage)
     cur.n += 1
     byKra.set(r.kra, cur)
   }
 
   const all = [...byKra.entries()].map(([kra, v]) => ({
-    kra, section: v.section, pct: v.total / v.n,
+    kra,
+    section: v.section,
+    pct: v.total / v.n,
+    marks: v.marks / v.n,
+    weightage: v.weightage,
   }))
   const jobRole = all.filter(i => i.section === 'job_role').sort((a, b) => a.pct - b.pct)
   // The standard bands, in the order they appear on the KPI. Kept out of
@@ -718,7 +730,7 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
           <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
             Job Role — 80%
           </p>
-          {jobRole.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
+          {jobRole.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} marks={i.marks} weightage={i.weightage} />)}
         </div>
       )}
 
@@ -727,7 +739,7 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
           <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
             {SECTION_SHORT[key]}
           </p>
-          {group.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} />)}
+          {group.map(i => <Bar key={i.kra} kra={i.kra} pct={i.pct} marks={i.marks} weightage={i.weightage} />)}
         </div>
       ))}
 
@@ -738,14 +750,38 @@ export function KraBars({ rows }: { rows: KraAttainmentRow[] }) {
   )
 }
 
-function Bar({ kra, pct }: { kra: string; pct: number }) {
+function Bar({
+  kra, pct, marks, weightage,
+}: {
+  kra: string
+  pct: number
+  marks: number
+  weightage: number
+}) {
   const band = bandFor(pct) as Band
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <span className="truncate text-sm text-ink-700">{kra}</span>
-        <span className={clsx('text-xs font-semibold tabular-nums', band.accent)}>
-          {pct.toFixed(0)}%
+        {/*
+          The marks first, then the share they are of.
+
+          It was the percentage alone, under a heading that reads
+          "Job Role — 80%" — so a row saying 96% invited exactly one
+          reading, that somebody had scored 96 of the 80, which is not a
+          thing. It is 96% of that KRA's own weightage: 38.3 of its 40.
+          Both numbers are useful and only the pair is unambiguous, so
+          the marks lead and the percentage sits beside them as the
+          colour-carrying summary.
+        */}
+        <span className="flex shrink-0 items-baseline gap-1.5">
+          <span className="text-xs tabular-nums text-ink-500">
+            {marks.toFixed(1)}
+            <span className="text-ink-400"> of {weightage}</span>
+          </span>
+          <span className={clsx('text-xs font-semibold tabular-nums', band.accent)}>
+            {pct.toFixed(0)}%
+          </span>
         </span>
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-ink-100">
