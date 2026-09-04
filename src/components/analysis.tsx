@@ -8,6 +8,7 @@ import {
   bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
   type Band, type BandShare,
 } from '@/lib/bands'
+import { ratingFor, ratingLabel } from '@/lib/rating'
 import {
   SECTION_SHORT, JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT,
 } from '@/lib/sections'
@@ -36,6 +37,9 @@ export function ScoreHeader({
   children?: ReactNode
 }) {
   const band = bandFor(score)
+  // The same 1-5 slab the rankings run on, so the hero and a leaderboard
+  // can never disagree about what somebody's rating is.
+  const rating = ratingFor(score)
   const pct = Math.max(0, Math.min(100, score ?? 0))
 
   return (
@@ -90,13 +94,52 @@ export function ScoreHeader({
               {score.toFixed(1)}
               <span className="ml-1 text-lg font-medium text-white/30">/100</span>
             </p>
+            {/*
+              The band, and the 1–5 rating beside it.
+
+              Both, not one: the words are what people recognise on a
+              screen, and the digit is what appraisal paperwork and the
+              rankings are written in. Showing only the digit would make
+              the hero speak a language the rest of the app does not;
+              showing only the words leaves somebody working out their own
+              rating from a slab table.
+
+              Hairline divider and a lighter weight on the digit, so it
+              reads as an annotation on the band rather than a second
+              score competing with the 84.7 above it.
+            */}
             <span
               className={clsx(
-                'mt-3 inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-label',
+                'mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-label',
                 band.onDark.chip,
               )}
             >
-              {band.label}
+              {/*
+                The words come from the slab, not from BANDS.
+
+                The two scales were set independently and they disagree:
+                BANDS calls 90 Excellent and the slab calls it a 4, and
+                calls 60 Good where the slab calls it a 2. Reading the
+                label off BANDS and the digit off the slab put both on one
+                chip, so it said "EXCELLENT 4/5" — a contradiction in four
+                characters.
+
+                Until the thresholds are reconciled, this chip speaks one
+                language: management's, because that is the one the
+                appraisal paperwork and the rankings use. The COLOUR still
+                comes from BANDS, so at a boundary the tint can be one
+                band out of step with the word. That is the small half of
+                the mismatch and it is visible here in the harness.
+              */}
+              {rating === null ? band.label : ratingLabel(rating)}
+              {rating !== null && (
+                <>
+                  <span className="h-2.5 w-px bg-current opacity-30" aria-hidden />
+                  <span className="font-semibold tabular-nums opacity-90">
+                    <span className="sr-only">Rating </span>{rating}<span className="opacity-50">/5</span>
+                  </span>
+                </>
+              )}
             </span>
           </div>
         ) : (

@@ -20,6 +20,7 @@ import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
 import { ViewTeamButton } from './components/TeamDrill'
 import { ScorePill, StatusBadge } from './components/ui'
+import { ScoreHeader } from './components/analysis'
 import { BulkAssign } from './pages/admin/SwAdmin'
 import SpareFields from './pages/admin/SpareFields'
 import './index.css'
@@ -135,6 +136,47 @@ function UploadPanel() {
 }
 
 /*
+ * The score hero at every band, so the 1-5 rating chip can be checked
+ * against the slab without an account.
+ *
+ * One per band and both sides of the two boundaries people will argue
+ * about — 90 is a 4 and 90.1 is a 5; 60 is a 2 and 60.1 is a 3 — because
+ * the chip is where anybody will notice if the slab and the words ever
+ * disagree. The last row is the unscored case, which has no rating and
+ * must not invent one.
+ */
+function ScoreHeaders() {
+  const cases: Array<{ label: string; score: number | null }> = [
+    { label: 'Excellent — 5', score: 94.2 },
+    { label: 'On the 90 boundary — still a 4', score: 90 },
+    { label: 'Just over it — a 5', score: 90.1 },
+    { label: 'Very Good — 4', score: 84.7 },
+    { label: 'Good — 3', score: 72.5 },
+    { label: 'On the 60 boundary — a 2, not a 3', score: 60 },
+    { label: 'Satisfactory — 2', score: 55.0 },
+    { label: 'Poor — 1', score: 38.4 },
+    { label: 'Nothing scored yet', score: null },
+  ]
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
+      {cases.map(c => (
+        <div key={c.label}>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-label text-ink-400">
+            {c.label}
+          </p>
+          <ScoreHeader
+            title="Hello, Kevin"
+            subtitle="FY 2026-27 · reporting on Aug-26"
+            score={c.score}
+            scoreLabel="My year average"
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/*
  * The team list's row, at every band its View team button can wear.
  *
  * The button is tinted by the average of the team behind it, and the
@@ -197,6 +239,7 @@ function Harness() {
       <Header />
       <TeamButtons />
       <BrandPanel />
+      <ScoreHeaders />
       <UploadPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">
         {['Jul-26 status', 'Jul-26 score', 'Months scored', 'Job role / core values'].map(t => (
