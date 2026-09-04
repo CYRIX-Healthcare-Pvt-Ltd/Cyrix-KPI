@@ -953,7 +953,10 @@ export default function Team() {
               </div>
 
               <div className="w-24 shrink-0 text-right sm:w-32">
-                <ScorePill value={sub?.final_total_score ?? sub?.self_total_score} size="sm" />
+                {/* Only once scored. The self total is the job role
+                    alone now, so the fallback showed a figure that was
+                    neither their score nor out of the same 100. */}
+                <ScorePill value={sub?.final_total_score ?? null} size="sm" />
                 <SectionSplit
                   sub={sub}
                   hasEsms={Number(assign?.esms_weight ?? 0) > 0}
@@ -1149,13 +1152,27 @@ function MemberPeek({
           <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
             {monthLabel(month)}
           </p>
+          {/*
+            Same correction as the dashboard tile, for the same reason.
+
+            The self total is now the job role with core values counted
+            as nought, because the person no longer rates those — so
+            falling back to it showed a manager a number for their report
+            that was neither the report's score nor out of the same 100.
+            The section split underneath still shows what WAS submitted,
+            which is the useful part and is honestly labelled.
+          */}
           <div className="mt-2 flex items-baseline gap-3">
-            <ScorePill value={sub?.final_total_score ?? sub?.self_total_score} size="lg" />
+            {final
+              ? <ScorePill value={sub?.final_total_score} size="lg" />
+              : <span className="text-2xl font-semibold text-ink-300">—</span>}
             <SectionSplit sub={sub} hasEsms={esms > 0} />
           </div>
           {sub && !final && (
             <p className="mt-1.5 text-xs text-ink-500">
-              Self assessment only — not scored yet.
+              {sub.status === 'submitted'
+                ? 'Submitted — waiting for your score.'
+                : 'Not scored yet.'}
             </p>
           )}
         </div>

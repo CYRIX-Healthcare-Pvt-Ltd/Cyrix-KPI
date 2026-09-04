@@ -198,11 +198,16 @@ export default function MyHistory() {
                         Somebody reading their own record should not have
                         to take "88" on trust while the person scoring
                         them can see what it is made of. */}
+                    {/* No self TOTAL and no self CORE any more: the person
+                        fills in only the job role, so a total would be the job
+                        role with core counted as nought, and a core figure
+                        would be a zero nobody entered. What they did submit
+                        still shows. */}
                     <BandCell
-                      total={open ? s?.self_total_score : null}
+                      total={null}
                       job={s?.self_job_role_score}
                       esms={s?.self_esms_score}
-                      core={s?.self_core_score}
+                      core={null}
                       hasEsms={hasEsms}
                     />
                     <BandCell

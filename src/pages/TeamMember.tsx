@@ -138,11 +138,16 @@ export default function TeamMember() {
                         core-values score is a different conversation
                         from one built the other way round, and the total
                         alone cannot tell them apart. */}
+                    {/* No self TOTAL and no self CORE any more: the person
+                        fills in only the job role, so a total would be the job
+                        role with core counted as nought, and a core figure
+                        would be a zero nobody entered. What they did submit
+                        still shows. */}
                     <BandCell
-                      total={s?.self_total_score}
+                      total={null}
                       job={s?.self_job_role_score}
                       esms={s?.self_esms_score}
-                      core={s?.self_core_score}
+                      core={null}
                       hasEsms={hasEsms}
                     />
                     <BandCell

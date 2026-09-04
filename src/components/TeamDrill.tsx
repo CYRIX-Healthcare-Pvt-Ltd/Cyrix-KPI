@@ -246,7 +246,10 @@ function PersonRow({
 }) {
   const needsScoring = row.submission_status === 'submitted'
   const final = SCORED_STATUSES.has(row.submission_status ?? '')
-  const score = final ? row.final_total_score : row.self_total_score
+  // Nothing until it is scored. The self total stopped being half the
+  // final score in 0095 and stopped covering core values when those
+  // moved to the manager, so it is no longer a figure to stand in.
+  const score = final ? row.final_total_score : null
 
   return (
     <div

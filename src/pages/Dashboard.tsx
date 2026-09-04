@@ -247,10 +247,35 @@ export default function Dashboard() {
             ? undefined
             : `Your KPI starts in ${monthLabel(startsFrom)}`}
         />
+        {/*
+          Nothing until the manager has scored it.
+
+          This used to fall back to the self-assessment and label it
+          "Self assessment only", which was fair when that figure was
+          half the final score. It is not any more, on two counts. Since
+          0095 the manager's number IS the score, so the self figure
+          counts for nothing; and since core values moved to the manager
+          the employee fills in only the job role, so the self total is
+          the job role with core values counted as nought — and with the
+          ceiling gone it can pass its own denominator. That is how a
+          tile headed "Aug-26 score" came to read 93.95 for somebody whose
+          score did not exist yet and would not be near it.
+
+          A dash and the reason. There is no honest number to show here
+          before the manager has submitted one.
+        */}
         <StatTile
           label={`${monthLabel(month)} score`}
-          value={<ScorePill value={sub?.final_total_score ?? sub?.self_total_score} size="lg" />}
-          sub={sub?.final_total_score == null ? 'Self assessment only' : 'Final, out of 100'}
+          value={sub?.final_total_score == null
+            ? <span className="text-2xl font-semibold text-ink-300">—</span>
+            : <ScorePill value={sub.final_total_score} size="lg" />}
+          sub={sub?.final_total_score != null
+            ? 'Final, out of 100'
+            : sub?.status === 'submitted'
+              ? 'Waiting for your manager to score it'
+              : monthInScope
+                ? 'Not scored yet'
+                : undefined}
         />
         <StatTile
           label="Months scored"
