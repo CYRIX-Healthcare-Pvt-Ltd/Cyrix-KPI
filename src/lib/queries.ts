@@ -543,12 +543,21 @@ export function useSaveCoreRatings() {
   return useMutation({
     mutationFn: async (args: {
       role: 'self' | 'manager'
-      updates: Array<{ id: string; rating: string | null }>
+      /**
+       * `remarks` is why a low rating was given, and only a manager has
+       * one — the column is manager_remarks and the question only
+       * applies to the person doing the rating.
+       */
+      updates: Array<{ id: string; rating: string | null; remarks?: string | null }>
     }) => {
       const field = args.role === 'self' ? 'self_rating' : 'manager_rating'
       for (const u of args.updates) {
+        const patch: Record<string, string | null> = { [field]: u.rating }
+        if (args.role === 'manager' && u.remarks !== undefined) {
+          patch.manager_remarks = u.remarks
+        }
         const { error } = await supabase
-          .from('core_value_ratings').update({ [field]: u.rating }).eq('id', u.id)
+          .from('core_value_ratings').update(patch).eq('id', u.id)
         if (error) throw new Error(friendlyError(error))
       }
     },

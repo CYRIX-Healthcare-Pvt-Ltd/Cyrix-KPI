@@ -14,7 +14,7 @@ import {
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import {
-  calcKpiScore, averageCoreValueRatings, blendScores, RATING_SCALE,
+  calcKpiScore, averageCoreValueRatings, ratingToPoints, RATING_SCALE,
   SCORE_CUT_POINTS, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
@@ -55,6 +55,8 @@ export default function ScoreSubmission() {
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, string>>({})
+  /** Why a low core value was given, keyed by rating row. */
+  const [coreWhy, setCoreWhy] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [cutReason, setCutReason] = useState('')
   /** Submit asks once first — the manager's figure is now the score. */
@@ -97,6 +99,9 @@ export default function ScoreSubmission() {
         from when they made this the manager's judgement.
       */
       data.ratings.map(r => [r.id, r.manager_rating ?? '']),
+    ))
+    setCoreWhy(Object.fromEntries(
+      data.ratings.map(r => [r.id, r.manager_remarks ?? '']),
     ))
     setRemarks(data.submission.manager_remarks ?? '')
     setCutReason(data.submission.score_cut_reason ?? '')
@@ -154,44 +159,84 @@ export default function ScoreSubmission() {
     )
   }, [data, coreValues])
 
-  const selfTotal = items.reduce((a, i) => a + (selfScore(i) ?? 0), 0)
-  const mgrTotal = items.reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
-  const finalTotal = items.reduce(
-    (a, i) => a + (blendScores(selfScore(i), mgrScore(i)) ?? 0), 0,
-  )
+  /**
+   * Each assessment split into the parts it is actually made of.
+   *
+   * The team member fills the job role and nothing else, so their figure
+   * belongs against the job-role weightage rather than against 100. The
+   * manager fills everything, so theirs splits.
+   */
+  const sumOf = (
+    pick: (i: KpiSubmissionItem) => number | null,
+    where: (i: KpiSubmissionItem) => boolean,
+  ) => items.filter(where).reduce((a, i) => a + (pick(i) ?? 0), 0)
 
   /**
-   * How far below their own assessment this lands, live as the manager
-   * types rather than from the saved row — so the box appears while the
-   * score is being decided, not after it has been submitted and refused.
+   * A core value low enough to owe an explanation.
+   *
+   * Satisfactory is 40 and Poor is 20 on the rating scale, so this is
+   * the bottom two of the five. Read off the scale rather than compared
+   * against a literal, because the scale is data and somebody will
+   * eventually reword it.
    */
-  /*
-    Job role and ESMS only, on both sides — the rows the two of them
-    actually both filled in.
+  const needsWhy = (label: string | undefined) => {
+    const points = ratingToPoints(label ?? null)
+    return points !== null && points <= 40
+  }
 
-    This was the two whole totals, which matched submit_manager_scores
-    until 0101 changed that comparison for the same reason: the team
-    member no longer rates core values, so their total is job role and
-    ESMS while the manager's is that plus core values, and the manager's
-    is now almost always the larger. Left alone here the box would never
-    appear — and worse, the two would disagree, so the server would
-    refuse a submission demanding a reason the screen had never asked
-    for, as a raw exception instead of the inline prompt.
-  */
+  const isJob = (i: KpiSubmissionItem) => i.section === 'job_role'
+
+  const selfJob = sumOf(selfScore, isJob)
+  const mgrJob = sumOf(mgrScore, isJob)
+  const mgrCore = sumOf(mgrScore, i => i.section === 'core_values')
+  const mgrEsms = sumOf(mgrScore, i => i.section === 'esms')
+  const hasEsms = items.some(i => i.section === 'esms')
+  const jobWeight = items.filter(isJob).reduce((a, i) => a + Number(i.weightage), 0)
+
+  /**
+   * What the manager's total is made of, each block named.
+   *
+   * This said "job role 68.59 · the rest 0.00", which is dismissive of
+   * twenty per cent of somebody's appraisal and vague besides — "the
+   * rest" is core values, and for anybody carrying ESMS it is two
+   * different things lumped together. Each block gets its own name and
+   * its own figure.
+   */
+  const mgrSplit = [
+    `job role ${mgrJob.toFixed(2)}`,
+    ...(hasEsms ? [`ESMS ${mgrEsms.toFixed(2)}`] : []),
+    `core values ${mgrCore.toFixed(2)}`,
+  ].join(' · ')
+
+  const mgrTotal = items.reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
+
   /*
     Core values the manager has not rated yet.
 
     submit_manager_scores refuses these since 0101, and a server refusal
     the screen never warned about arrives as a raw exception on the one
-    button that matters. The same reasoning as the cut-reason box: say it
-    where the decision is being made, not after it has been sent.
+    button that matters.
   */
   const unratedCore = (data?.ratings ?? []).filter(r => !ratings[r.id]).length
 
-  const bothAssess = (i: KpiSubmissionItem) => i.section !== 'core_values'
-  const cutGap =
-    items.filter(bothAssess).reduce((a, i) => a + (selfScore(i) ?? 0), 0)
-    - items.filter(bothAssess).reduce((a, i) => a + (mgrScore(i) ?? 0), 0)
+  /**
+   * How far below their own assessment this lands, live as the manager
+   * types rather than from the saved row — so the box appears while the
+   * score is being decided, not after it has been submitted and refused.
+   *
+   * The job role alone, on both sides.
+   *
+   * It was the two whole totals, which was like for like only while the
+   * team member also rated core values. Since they stopped, their total
+   * is the job role and the manager's is everything, so the manager's is
+   * almost always the larger and the gap comes out negative — a
+   * safeguard for catching somebody being marked down that could never
+   * fire. Briefly it compared job role and ESMS together, which is
+   * closer but still not what the two of them are disagreeing about:
+   * ESMS is scored against a fixed target of 100 and is not where a
+   * manager and a team member differ. The job role is.
+   */
+  const cutGap = selfJob - mgrJob
   const needsCutReason = cutGap > SCORE_CUT_POINTS && !cutReason.trim()
 
   const save = async () => {
@@ -220,7 +265,14 @@ export default function ScoreSubmission() {
       })
       await saveRatings.mutateAsync({
         role: 'manager',
-        updates: (data?.ratings ?? []).map(r => ({ id: r.id, rating: ratings[r.id] || null })),
+        updates: (data?.ratings ?? []).map(r => ({
+          id: r.id,
+          rating: ratings[r.id] || null,
+          // Cleared when the rating rises back out of the range that
+          // asked for it, so last version's explanation is not left
+          // attached to a rating it no longer describes.
+          remarks: needsWhy(ratings[r.id]) ? (coreWhy[r.id]?.trim() || null) : null,
+        })),
       })
       if (submission && remarks !== (submission.manager_remarks ?? '')) {
         await supabase.from('kpi_submissions')
@@ -384,13 +436,43 @@ export default function ScoreSubmission() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
-        <StatTile label="Self assessment" value={selfTotal.toFixed(2)} sub="out of 100" />
-        <StatTile label="My assessment" value={mgrTotal.toFixed(2)} sub="out of 100" />
+      {/*
+        Three figures that were three bare numbers out of 100, which is
+        the one thing they are not comparable on any more.
+
+        The team member fills in the job role and nothing else, so their
+        68.59 is 68.59 of the 80 that is theirs to fill; the manager's
+        76.59 covers all 100. Put side by side with "out of 100" under
+        both, the pair invited exactly the comparison it cannot support —
+        and gave no way to see the thing a manager actually wants, which
+        is how much of the difference is job role.
+
+        So each says what it is made of. The split is the point of the
+        row; the totals are the summary of it.
+      */}
+      {/*
+        Two tiles, not three.
+
+        There was a Final beside these captioned "average of the two",
+        which stopped being true in 0095 and was by then simply the
+        manager's figure repeated — the same number, the same width, a
+        third of the row.
+
+        What is left is the comparison a manager is actually making: what
+        the person claimed for their own 80, and what this scores. The
+        manager's tile carries the accent because it is the one that
+        counts.
+      */}
+      <div className="grid grid-cols-2 gap-3 grid-pairs">
         <StatTile
-          label="Final"
-          value={<ScorePill value={finalTotal} size="lg" />}
-          sub="average of the two"
+          label="Self assessment"
+          value={selfJob.toFixed(2)}
+          sub={`job role, out of ${jobWeight}`}
+        />
+        <StatTile
+          label="Final score"
+          value={<ScorePill value={mgrTotal} size="lg" />}
+          sub={mgrSplit}
           tone="brand"
         />
       </div>
@@ -470,7 +552,7 @@ export default function ScoreSubmission() {
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-5">
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 {/* The manager sets the target, not just checks it. The
                     team member can type one while the month is theirs,
                     but the number that decides whether 42 calls is good
@@ -524,20 +606,26 @@ export default function ScoreSubmission() {
                   />
                 </div>
 
+                {/*
+                  One pill, labelled "Score".
+
+                  It was "My score" and "Final" stacked, printing the
+                  same figure twice since the manager's number became the
+                  score — two labels and two rows of a phone for one
+                  value.
+
+                  Not "Final": that word is already the status of a
+                  closed month in this app, so putting it on a live
+                  editable row invites "is this month final?" when it is
+                  not. Not "My score" either — everything on this screen
+                  is the manager's, the target and the achieved value
+                  included, so "my" separates it from nothing. "Score" is
+                  what it is.
+                */}
                 <div>
-                  <label className="label text-xs">My score</label>
+                  <label className="label text-xs">Score</label>
                   <div className="py-1.5">
                     <ScorePill value={mgrScore(item)} outOf={item.weightage} />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label text-xs">Final</label>
-                  <div className="py-1.5">
-                    <ScorePill
-                      value={blendScores(selfScore(item), mgrScore(item))}
-                      outOf={item.weightage}
-                    />
                   </div>
                 </div>
               </div>
@@ -592,6 +680,45 @@ export default function ScoreSubmission() {
                   <p className="font-medium text-ink-900">{def?.name}</p>
                   {def?.description && (
                     <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
+                  )}
+                  {/*
+                    Why, on the two lowest ratings.
+
+                    Satisfactory or Poor on a core value is a judgement
+                    about how somebody conducts themselves rather than a
+                    figure they missed, and it is the hardest kind of
+                    score to receive with no reason attached. It appears
+                    where the value is described, so the sentence sits
+                    with the thing it is about rather than in a remarks
+                    box at the bottom covering all five at once.
+
+                    Appears on the rating, not on a button, so it is
+                    already open by the time the manager wonders whether
+                    to explain themselves.
+                  */}
+                  {editable && needsWhy(ratings[rating.id]) && (
+                    <div className="mt-2">
+                      <label
+                        htmlFor={`why-${rating.id}`}
+                        className="mb-1 block text-xs font-medium text-amber-800"
+                      >
+                        Why {ratings[rating.id]?.toLowerCase()}? {data?.employee.full_name.split(' ')[0]} will see this.
+                      </label>
+                      <textarea
+                        id={`why-${rating.id}`}
+                        rows={2}
+                        className="input text-sm"
+                        value={coreWhy[rating.id] ?? ''}
+                        onChange={e => setCoreWhy({ ...coreWhy, [rating.id]: e.target.value })}
+                        placeholder="e.g. three reports went out with figures that had to be corrected"
+                      />
+                    </div>
+                  )}
+                  {/* Once scored, the same note read back rather than typed. */}
+                  {!editable && rating.manager_remarks && (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      {rating.manager_remarks}
+                    </p>
                   )}
                 </div>
                 {/*
