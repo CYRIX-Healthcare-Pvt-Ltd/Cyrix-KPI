@@ -590,11 +590,18 @@ export default function ScoreSubmission() {
                     <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
                   )}
                 </div>
+                {/*
+                  No "They said" column.
+
+                  It showed the team member's own rating beside the
+                  manager's box, which was the useful half of this row
+                  while both of them rated core values. They no longer
+                  rate them at all, so on any new month it can only ever
+                  print a dash — a column heading over nothing, in the
+                  one place a manager is trying to concentrate on five
+                  judgements.
+                */}
                 <div className="mt-2 flex items-center gap-3 sm:mt-0">
-                  <div className="text-right">
-                    <p className="text-xs text-ink-400">They said</p>
-                    <p className="text-sm text-ink-600">{rating.self_rating ?? '—'}</p>
-                  </div>
                   <select
                     id={`core-${rating.id}`}
                     className={clsx(
