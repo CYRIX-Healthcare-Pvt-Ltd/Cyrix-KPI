@@ -687,11 +687,20 @@ export default function ScoreSubmission() {
                     if (fromQuery) navigate('/queries')
                     else setNotice('Saved.')
                   }}
-                  disabled={busy}
+                  // Mandatory on this path too. Submit is gated, but a
+                  // month that is already scored is edited through here,
+                  // and clearing a rating drops the core-values figure
+                  // without anything on screen saying so.
+                  disabled={busy || unratedCore > 0}
+                  title={unratedCore > 0
+                    ? 'Every core value needs a rating — they are worth 20% of the score'
+                    : undefined}
                   className="btn-primary"
                 >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  {fromQuery ? 'Save and go back to the query' : 'Save changes'}
+                  {unratedCore > 0
+                    ? `Rate ${unratedCore} more core value${unratedCore === 1 ? '' : 's'}`
+                    : fromQuery ? 'Save and go back to the query' : 'Save changes'}
                 </button>
                 {/* Offering a button that can only fail is how somebody
                      ends up reading a database error. While a query is
