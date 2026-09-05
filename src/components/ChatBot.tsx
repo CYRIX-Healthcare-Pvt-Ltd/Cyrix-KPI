@@ -17,6 +17,7 @@ import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
 import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
+import { pickTip } from '@/lib/tips'
 import type { SupportDesk } from '@/types/db'
 
 /**
@@ -68,6 +69,21 @@ interface Nudge {
  * standing job to do, which is how a badge stops meaning anything.
  */
 const SEEN_KEY = 'cyrix.cyra.seen'
+
+/**
+ * How many "did you know" tips this device has been shown, and whether
+ * this sitting has already taken one.
+ *
+ * Once per SESSION rather than once per opening. Somebody who opens the
+ * panel four times in an afternoon — to check a score, then a month,
+ * then ask something — should not be handed four different facts about
+ * the app; that is a colleague who will not stop talking. One per
+ * sitting, a different one next time, working through the list in order
+ * rather than at random so nothing is repeated before everything has
+ * been seen.
+ */
+const TIP_KEY = 'cyrix.cyra.tip'
+const TIP_SESSION = 'cyrix.cyra.tip.session'
 
 /** English on purpose: they are the names on the tabs the answer comes from. */
 const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
@@ -139,6 +155,36 @@ export default function ChatBot() {
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns, open])
+
+  /*
+    Which tip this sitting gets.
+
+    Read once at mount so it cannot change under the panel mid-session,
+    and advanced in an effect rather than while computing — a counter
+    that increments inside a useMemo would step twice under StrictMode
+    and skip a tip every time in development.
+  */
+  const [tipSeen] = useState(() => {
+    try { return Number(localStorage.getItem(TIP_KEY) ?? '0') || 0 } catch { return 0 }
+  })
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(TIP_SESSION)) return
+      sessionStorage.setItem(TIP_SESSION, '1')
+      localStorage.setItem(TIP_KEY, String(tipSeen + 1))
+    } catch { /* private window, or storage switched off */ }
+  }, [tipSeen])
+
+  const tip = useMemo(
+    () => (systemAccount ? null : pickTip({
+      isManager,
+      isHrAdmin,
+      hasKpi: !!assignment?.assignment,
+      hasScoredMonth: (annual?.months_scored ?? 0) > 0,
+    }, tipSeen)),
+    [systemAccount, isManager, isHrAdmin, assignment, annual, tipSeen],
+  )
 
   /**
    * What is waiting on this person, right now.
@@ -240,6 +286,22 @@ export default function ChatBot() {
           text: c(n.key, n.vars),
           to: n.to,
           toLabel: n.toLabel,
+        })
+      }
+      /*
+        One thing they probably do not know about, last.
+
+        After the outstanding work rather than before it: somebody with
+        a month overdue does not want a fact about dark mode first. And
+        one only — a panel that opens with a list of suggestions is one
+        people stop opening.
+      */
+      if (tip) {
+        opening.push({
+          from: 'app',
+          text: `${c('tip.lead')} ${c(tip.key)}`,
+          to: tip.to ?? undefined,
+          toLabel: tip.toLabel || undefined,
         })
       }
       return opening
