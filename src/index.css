@@ -755,6 +755,25 @@
      fade — slow enough to sit below the threshold where the eye registers
      motion at all, which is why it read as a static wash. Halved, with a
      longer path, so the movement is actually perceptible. */
+  /*
+    Cyra composing. Three dots that rise and fade in turn.
+
+    Opacity and transform only, so it composites on its own layer and
+    never touches layout — this sits inside a scrolling message list and
+    a dot that reflowed would shift every bubble above it.
+
+    The pause between cycles is most of the duration on purpose: dots
+    that pulse continuously read as a loading spinner, and this is
+    somebody about to speak.
+  */
+  @keyframes cyra-dot {
+    0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+    30%           { opacity: 1;    transform: translateY(-3px); }
+  }
+  .animate-cyra-dot {
+    animation: cyra-dot 1.25s var(--ease-in-out) infinite;
+  }
+
   @keyframes score-drift {
     0%   { transform: translate3d(14%, -14%, 0) scale(1); }
     50%  { transform: translate3d(-56%, 40%, 0) scale(1.28); }

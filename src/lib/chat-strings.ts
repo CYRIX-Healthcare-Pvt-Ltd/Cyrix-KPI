@@ -209,6 +209,43 @@ export const CHAT: Record<string, Phrase> = {
     te: 'హాయ్ {name} — ఇప్పుడు మీరు చేయాల్సింది ఏమీ లేదు. అంతా పూర్తయింది.',
     ta: 'ஹாய் {name} — இப்போது நீங்கள் செய்ய எதுவும் இல்லை. எல்லாம் முடிந்துவிட்டது.',
   },
+  /*
+    When nothing is waiting, ask about the work instead.
+
+    "All caught up" is true and is a dead end — it closes the
+    conversation on the one occasion somebody has the time to have it.
+    Everything needed to say something better is already loaded: which
+    core value is lowest, which KRA would repay the effort, whether the
+    year is climbing.
+
+    Phrased as a question, and as a question about a PLAN rather than
+    about a number. "Customer Delight is at 42%" is an accusation with a
+    decimal point; "what is the plan for Customer Delight?" hands the
+    person the next move, which is the only thing they can actually do
+    with the information. Cyra has no idea what the answer is and does
+    not pretend to — she is asking, not advising.
+  */
+  'nudge.plancore': {
+    en: 'Hey {name} — nothing is waiting on you. So while there is a minute: {name2} is your lowest core value at {pct}%. What is the plan there?',
+    ml: 'ഹായ് {name} — നിങ്ങൾക്കായി ഒന്നും കാത്തിരിക്കുന്നില്ല. ഒരു നിമിഷമുള്ളപ്പോൾ: {name2} ആണ് നിങ്ങളുടെ ഏറ്റവും കുറഞ്ഞ കോർ വാല്യൂ, {pct}%. അതിന് എന്താണ് പദ്ധതി?',
+    hi: 'नमस्ते {name} — आपके लिए कुछ बाकी नहीं है। जब वक़्त है तब: {name2} आपकी सबसे कम कोर वैल्यू है, {pct}%। उसके लिए क्या योजना है?',
+    te: 'హాయ్ {name} — మీ కోసం ఏదీ ఆగి లేదు. కాస్త సమయం ఉన్నప్పుడు: {name2} మీ అత్యల్ప కోర్ వాల్యూ, {pct}%. దానికి ప్రణాళిక ఏమిటి?',
+    ta: 'ஹாய் {name} — உங்களுக்காக எதுவும் காத்திருக்கவில்லை. நேரம் இருக்கும்போது: {name2} உங்கள் மிகக் குறைந்த கோர் வேல்யூ, {pct}%. அதற்கு என்ன திட்டம்?',
+  },
+  'nudge.planlever': {
+    en: 'Hey {name} — nothing is waiting on you. Worth a thought though: {kra} is where effort pays most right now — {gain} more on your total if it reaches {target}%.',
+    ml: 'ഹായ് {name} — നിങ്ങൾക്കായി ഒന്നും കാത്തിരിക്കുന്നില്ല. എങ്കിലും ആലോചിക്കാൻ: ഇപ്പോൾ {kra} ആണ് പരിശ്രമം ഏറ്റവും ഫലം തരുന്നത് — {target}% എത്തിയാൽ ആകെ സ്കോറിൽ {gain} കൂടും.',
+    hi: 'नमस्ते {name} — आपके लिए कुछ बाकी नहीं है। फिर भी सोचने लायक: अभी {kra} में मेहनत सबसे ज़्यादा काम आती है — {target}% तक पहुँचे तो कुल में {gain} और।',
+    te: 'హాయ్ {name} — మీ కోసం ఏదీ ఆగి లేదు. అయినా ఆలోచించదగినది: ప్రస్తుతం {kra} లో కృషి ఎక్కువ ఫలితం ఇస్తుంది — {target}% చేరితే మొత్తానికి {gain} అదనం.',
+    ta: 'ஹாய் {name} — உங்களுக்காக எதுவும் காத்திருக்கவில்லை. இருந்தாலும் யோசிக்கத் தக்கது: இப்போது {kra} இல் முயற்சி அதிக பலன் தரும் — {target}% அடைந்தால் மொத்தத்தில் {gain} கூடும்.',
+  },
+  'nudge.planclimb': {
+    en: 'Hey {name} — nothing is waiting on you, and you are climbing: {soFar} across the year, {recent} lately. Whatever changed, keep doing it.',
+    ml: 'ഹായ് {name} — നിങ്ങൾക്കായി ഒന്നും കാത്തിരിക്കുന്നില്ല, നിങ്ങൾ മെച്ചപ്പെടുകയുമാണ്: വർഷം മുഴുവൻ {soFar}, അടുത്തിടെ {recent}. എന്ത് മാറ്റിയാലും അത് തുടരൂ.',
+    hi: 'नमस्ते {name} — आपके लिए कुछ बाकी नहीं, और आप ऊपर जा रहे हैं: साल भर में {soFar}, हाल में {recent}। जो भी बदला है, वही करते रहिए।',
+    te: 'హాయ్ {name} — మీ కోసం ఏదీ ఆగి లేదు, పైగా మీరు మెరుగవుతున్నారు: ఏడాదికి {soFar}, ఇటీవల {recent}. ఏం మార్చారో అదే కొనసాగించండి.',
+    ta: 'ஹாய் {name} — உங்களுக்காக எதுவும் காத்திருக்கவில்லை, மேலும் நீங்கள் முன்னேறுகிறீர்கள்: ஆண்டுக்கு {soFar}, சமீபத்தில் {recent}. எதை மாற்றினீர்களோ அதைத் தொடருங்கள்.',
+  },
   'nudge.newmonth': {
     en: '{month} is open now — you can fill it in.',
     ml: '{month} ഇപ്പോൾ തുറന്നിരിക്കുന്നു — നിങ്ങൾക്ക് ഇത് പൂരിപ്പിക്കാം.',

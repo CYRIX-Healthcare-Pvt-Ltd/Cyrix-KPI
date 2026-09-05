@@ -18,6 +18,8 @@ import { CHAT } from '@/lib/chat-strings'
 import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
 import { pickTip } from '@/lib/tips'
+import { forecastYear, biggestLever, averageRows, weakestOf } from '@/lib/forecast'
+import { ratingToPoints } from '@/lib/scoring'
 import type { SupportDesk } from '@/types/db'
 
 /**
@@ -96,6 +98,8 @@ export default function ChatBot() {
   const [draft, setDraft] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [ticketDesk, setTicketDesk] = useState<SupportDesk | null>(null)
+  /** Cyra is composing. See ask(). */
+  const [thinking, setThinking] = useState(false)
   // What they last asked, so handing it to a person does not ask them to
   // type it again.
   const lastAsked = useRef('')
@@ -154,7 +158,7 @@ export default function ChatBot() {
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: 'end' })
-  }, [turns, open])
+  }, [turns, thinking, open])
 
   /*
     Which tip this sitting gets.
@@ -175,6 +179,60 @@ export default function ChatBot() {
       localStorage.setItem(TIP_KEY, String(tipSeen + 1))
     } catch { /* private window, or storage switched off */ }
   }, [tipSeen])
+
+  /**
+   * What to open with when nothing is waiting.
+   *
+   * "All caught up" is true and is a dead end — it closes the
+   * conversation on the one occasion the person has time for it. All of
+   * this is already loaded for the facts Cyra answers with, so asking
+   * something real costs nothing.
+   *
+   * Order is deliberate. The lowest core value first, because that is
+   * the half of the score nobody discusses and the one a person can
+   * actually change by deciding to; then the KRA where effort pays most,
+   * which is arithmetic rather than judgement; then praise for a year
+   * that is climbing. If none applies — nothing scored yet, or nothing
+   * to single out — it falls back to saying so plainly, which is honest
+   * and better than inventing a concern.
+   */
+  const idleOpening = useMemo<{ key: string; vars: Record<string, string | number> } | null>(() => {
+    const names = new Map((coreValues ?? []).map(v => [v.id, v.name]))
+    const weakCore = weakestOf(
+      (coreTrend ?? []).map(r => ({ id: r.core_value_id, value: ratingToPoints(r.rating) })),
+    )
+    // Only worth raising below Good. Asking somebody's plan for a core
+    // value they are already scoring 80 on is a question with no answer.
+    if (weakCore && weakCore.pct <= 60 && names.has(weakCore.id)) {
+      return {
+        key: 'nudge.plancore' as string,
+        vars: { name: firstName, name2: names.get(weakCore.id)!, pct: weakCore.pct.toFixed(0) } as Record<string, string | number>,
+      }
+    }
+
+    const lever = biggestLever(averageRows(kras ?? []))
+    if (lever) {
+      return {
+        key: 'nudge.planlever',
+        vars: {
+          name: firstName, kra: lever.kra,
+          gain: lever.gain.toFixed(1), target: lever.target,
+        } as Record<string, string | number>,
+      }
+    }
+
+    const points = (history ?? [])
+      .filter(s => s.final_total_score !== null)
+      .map(s => ({ period_month: s.period_month, value: Number(s.final_total_score) }))
+    const f = forecastYear(points, 0)
+    if (f && f.direction === 'up') {
+      return {
+        key: 'nudge.planclimb',
+        vars: { name: firstName, soFar: f.soFar.toFixed(1), recent: f.recent.toFixed(1) } as Record<string, string | number>,
+      }
+    }
+    return null
+  }, [coreValues, coreTrend, kras, history, firstName])
 
   const tip = useMemo(
     () => (systemAccount ? null : pickTip({
@@ -278,7 +336,12 @@ export default function ChatBot() {
       if (prev.length > (1 + nudges.length)) return prev
       const opening: Turn[] = [{
         from: 'app',
-        text: c(nudges.length ? 'nudge.hi' : 'nudge.clear', { name: firstName }),
+        // Nothing waiting is not nothing to say. See idleOpening.
+        text: nudges.length
+          ? c('nudge.hi', { name: firstName })
+          : idleOpening
+            ? c(idleOpening.key, idleOpening.vars)
+            : c('nudge.clear', { name: firstName }),
       }]
       for (const n of nudges) {
         opening.push({
@@ -309,7 +372,7 @@ export default function ChatBot() {
     try { localStorage.setItem(SEEN_KEY, signature) } catch { /* private window */ }
     setSeen(signature)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, firstName, lang, signature])
+  }, [open, firstName, lang, signature, idleOpening, tip])
 
   /**
    * Built from data this screen has loaded anyway. The sentence itself
@@ -374,9 +437,34 @@ export default function ChatBot() {
               // and immediately offers somebody who does know.
               offerDesks: true,
             }
-    setTurns(prev => [...prev, { from: 'them', text: q }, reply])
+    /*
+      The question lands at once; the answer takes a beat.
+
+      Every answer here is computed on the device, so it was appearing in
+      the same frame as the question — which reads as a lookup table
+      rather than a reply, and people said so. The pause is not
+      pretending to think: it is the pause a person leaves before
+      answering, and without it the exchange does not read as one.
+
+      Long enough to register, short enough not to wait for. Somebody who
+      has asked for less motion gets the answer immediately, since for
+      them the dots are the animation.
+    */
+    setTurns(prev => [...prev, { from: 'them', text: q }])
     setDraft('')
     lastAsked.current = q
+
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (instant) {
+      setTurns(prev => [...prev, reply])
+      return
+    }
+    setThinking(true)
+    window.setTimeout(() => {
+      setThinking(false)
+      setTurns(prev => [...prev, reply])
+    }, 520)
+    return
   }
 
   /**
@@ -572,6 +660,33 @@ export default function ChatBot() {
                     {q}
                   </button>
                 ))}
+              </div>
+            )}
+            {/*
+              Three dots, in a bubble the same shape as an answer.
+
+              Deliberately in the answer's own bubble rather than a bar
+              somewhere else: it stands where the reply will stand, so
+              the reply does not arrive somewhere the eye was not
+              already. aria-live tells a screen reader an answer is
+              coming, which is the one thing dots cannot say.
+            */}
+            {thinking && (
+              <div
+                className="max-w-[85%] self-start rounded-2xl rounded-bl-sm bg-ink-100 px-4 py-3"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="sr-only">Cyra is answering</span>
+                <span className="flex items-center gap-1" aria-hidden>
+                  {[0, 1, 2].map(i => (
+                    <span
+                      key={i}
+                      className="h-1.5 w-1.5 animate-cyra-dot rounded-full bg-ink-400"
+                      style={{ animationDelay: `${i * 160}ms` }}
+                    />
+                  ))}
+                </span>
               </div>
             )}
             <div ref={endRef} />

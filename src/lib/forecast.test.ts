@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { forecastYear, biggestLever, averageRows } from './forecast'
+import { forecastYear, biggestLever, averageRows, weakestOf } from './forecast'
 
 const months = (...values: number[]) =>
   values.map((value, i) => ({
@@ -146,5 +146,30 @@ describe('averageRows', () => {
     ]))!
     expect(lever.kra).toBe('Big')
     expect(lever.gain).toBe(8)
+  })
+})
+
+describe('weakestOf', () => {
+  it('finds the lowest across its months, not its worst single month', () => {
+    const worst = weakestOf([
+      { id: 'delight', value: 40 }, { id: 'delight', value: 40 },
+      // One bad month, strong otherwise — not the weakest overall.
+      { id: 'trust', value: 20 }, { id: 'trust', value: 100 },
+    ])!
+    expect(worst.id).toBe('delight')
+    expect(worst.pct).toBe(40)
+  })
+
+  it('ignores months a value was not rated in', () => {
+    const worst = weakestOf([
+      { id: 'care', value: 80 }, { id: 'care', value: null },
+      { id: 'speed', value: 60 },
+    ])!
+    expect(worst.id).toBe('speed')
+  })
+
+  it('says nothing when nothing has been rated', () => {
+    expect(weakestOf([])).toBeNull()
+    expect(weakestOf([{ id: 'a', value: null }])).toBeNull()
   })
 })

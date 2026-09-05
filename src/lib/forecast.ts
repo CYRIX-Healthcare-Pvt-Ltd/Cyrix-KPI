@@ -151,6 +151,33 @@ export function biggestLever(rows: LeverRow[], target = 90): Lever | null {
 }
 
 /**
+ * The weakest of a set of things rated month by month.
+ *
+ * Used for the core values, where each is rated separately and the
+ * question worth asking is which one to work on rather than what the
+ * block came to. Averaged across the months so a single hard month does
+ * not become the whole answer.
+ *
+ * Returns null when nothing has been rated, which is not the same as
+ * everything being equal and must not be reported as a weakest anything.
+ */
+export function weakestOf(
+  points: Array<{ id: string; value: number | null }>,
+): { id: string; pct: number } | null {
+  const byId = new Map<string, number[]>()
+  for (const p of points) {
+    if (p.value === null || !Number.isFinite(p.value)) continue
+    byId.set(p.id, [...(byId.get(p.id) ?? []), p.value])
+  }
+  let worst: { id: string; pct: number } | null = null
+  for (const [id, values] of byId) {
+    const pct = values.reduce((a, b) => a + b, 0) / values.length
+    if (!worst || pct < worst.pct) worst = { id, pct: round(pct) }
+  }
+  return worst
+}
+
+/**
  * Averages a KRA's months into one figure per row.
  *
  * A row is asked about across the year, not in one month: a single bad
