@@ -568,7 +568,7 @@ export default function ScoreSubmission() {
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {/* The manager sets the target, not just checks it. The
                     team member can type one while the month is theirs,
                     but the number that decides whether 42 calls is good
@@ -654,7 +654,7 @@ export default function ScoreSubmission() {
 
       {/* ---- core values ---- */}
       <div id="core-values" className="card overflow-hidden scroll-mt-20">
-        <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">
             Alignment To Core Values{' '}
             <span className="font-normal text-ink-500">
@@ -672,7 +672,7 @@ export default function ScoreSubmission() {
               row beside it, out of the weightage, and saying the same
               thing twice in two scales is worse than saying it once. */}
           {editable && coreIncomplete && (
-            <span className="badge bg-amber-200 text-amber-900">
+            <span className="badge shrink-0 bg-amber-200 text-amber-900">
               {unratedCore > 0 ? `${unratedCore} to rate` : `${missingWhy} need a reason`}
             </span>
           )}

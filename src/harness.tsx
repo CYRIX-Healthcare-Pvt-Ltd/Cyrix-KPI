@@ -10,7 +10,8 @@
  *
  * Vite builds index.html only, so none of this ships.
  */
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
+import clsx from 'clsx'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -21,6 +22,7 @@ import ThemeToggle from './components/ThemeToggle'
 import { ViewTeamButton } from './components/TeamDrill'
 import { ScorePill, StatusBadge } from './components/ui'
 import { ScoreHeader } from './components/analysis'
+import { BANDS } from './lib/bands'
 import { BulkAssign } from './pages/admin/SwAdmin'
 import SpareFields from './pages/admin/SpareFields'
 import './index.css'
@@ -136,6 +138,132 @@ function UploadPanel() {
 }
 
 /*
+ * The manager's scoring row, and the core value beneath it.
+ *
+ * A COPY of the two blocks in ScoreSubmission.tsx, which is the thing
+ * that can drift — change one, change the other. Same convention as the
+ * header bar above: that is a copy of Shell.tsx's for the same reason.
+ *
+ * It is here because the real screen sits behind a manager sign-in, so
+ * the one question nobody could answer was how these rows reflow on a
+ * phone — where each field becomes its own row and the block grows a
+ * textarea the moment a rating goes low. That is the layout most likely
+ * to be wrong and was the only part of the scoring screen never looked
+ * at.
+ */
+function ScoringRows() {
+  const [rating, setRating] = useState('Satisfactory')
+  const low = rating === 'Satisfactory' || rating === 'Poor'
+  const tone = BANDS.find(b => b.label === rating)
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
+      <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
+        Scoring row — four fields, one per cell above 640px
+      </p>
+
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Job Role <span className="font-normal text-ink-500">— 80%</span>
+          </h3>
+        </div>
+        <div className="divide-y divide-ink-100">
+          {[
+            { kra: 'Business/ Vertical growth', kpi: 'Revenue against the quarterly plan', wt: 40 },
+            { kra: 'Salesforce Usage Compliance and KPI', kpi: 'Calls logged the same day', wt: 10 },
+          ].map(r => (
+            <div key={r.kra} className="p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink-900">{r.kra}</p>
+                  <p className="mt-0.5 text-sm text-ink-500">{r.kpi}</p>
+                </div>
+                <span className="badge bg-ink-100 text-ink-600">{r.wt}%</span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="label text-xs">Target</label>
+                  <input className="input" defaultValue="100" />
+                </div>
+                <div>
+                  <label className="label text-xs">They claimed</label>
+                  <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
+                    96 <span className="ml-2 text-xs text-ink-400">= 38.40</span>
+                  </p>
+                </div>
+                <div>
+                  <label className="label text-xs">My value</label>
+                  <input className="input" defaultValue="94" />
+                </div>
+                <div>
+                  <label className="label text-xs">Score</label>
+                  <div className="py-1.5">
+                    <ScorePill value={37.6} outOf={r.wt} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-xs font-semibold uppercase tracking-label text-ink-400">
+        Core value — the "why" box appears on Satisfactory and Poor
+      </p>
+
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-800">
+            Alignment To Core Values <span className="font-normal text-ink-500">— 20%</span>
+          </h3>
+          {low && (
+            <span className="badge shrink-0 bg-amber-200 text-amber-900">1 needs a reason</span>
+          )}
+        </div>
+        <div className="divide-y divide-ink-100">
+          <div className={clsx('p-4 sm:flex sm:items-center sm:gap-4', low && 'bg-amber-50/60')}>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-ink-900">Customer Delight</p>
+              <p className="mt-0.5 text-sm text-ink-500">
+                Responds effectively to negative feedback and appreciates team contributions.
+              </p>
+              {low && (
+                <div className="mt-2">
+                  <label
+                    className={clsx('mb-1 block text-xs font-medium', tone?.accent ?? 'text-ink-700')}
+                  >
+                    Why {rating.toLowerCase()}? Kevin will see this.
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="input text-sm"
+                    placeholder="e.g. three reports went out with figures that had to be corrected"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex items-center gap-3 sm:mt-0">
+              <select
+                className={clsx('input w-44', low && 'border-amber-400 ring-1 ring-amber-300')}
+                value={rating}
+                onChange={e => setRating(e.target.value)}
+              >
+                <option value="">Choose a rating…</option>
+                {['Excellent', 'Very Good', 'Good', 'Satisfactory', 'Poor'].map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/*
  * The score hero at every band, so the 1-5 rating chip can be checked
  * against the slab without an account.
  *
@@ -239,6 +367,7 @@ function Harness() {
       <Header />
       <TeamButtons />
       <BrandPanel />
+      <ScoringRows />
       <ScoreHeaders />
       <UploadPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">
