@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
   MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, LifeBuoy, UserRound, Scale,
-  Languages,
+  Languages, MessageCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy, useMonthClose } from '@/lib/queries'
@@ -290,6 +290,12 @@ export default function Help() {
             { what: t('team.p12.what'), how: t('team.p12.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p13.what'), how: t('team.p13.how'), to: '/team/templates', cta: 'Open KPI templates' },
             { what: t('team.p14.what'), how: t('team.p14.how'), to: '/approvals', cta: 'Open approvals' },
+            // The three rules that arrived with the manager's own
+            // scoring screen: every core value rated, a reason for a low
+            // one, and how their own position is worked out.
+            { what: t('team.p15.what'), how: t('team.p15.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p16.what'), how: t('team.p16.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p17.what'), how: t('team.p17.how'), to: '/me', cta: 'See my rating' },
           ]}
         />
       )}
@@ -341,6 +347,33 @@ export default function Help() {
           // coming to them when the sign-in dialog was removed. The
           // manual is now the only thing that says it exists.
           { what: t('prof.p5.what'), how: t('prof.p5.how'), to: '/me', cta: 'Open my profile' },
+          // The band and the two sub-bands only exist once something has
+          // been scored. Offered on the same condition as the rank above.
+          ...(appraised
+            ? [{ what: t('prof.p6.what'), how: t('prof.p6.how'), to: '/me', cta: 'Open my profile' }]
+            : []),
+        ]}
+      />
+
+      {/*
+        Cyra, before the two sections about not finding an answer.
+
+        She is where most people will actually ask first — the button is
+        on every screen — and the support section below already refers to
+        her by name, so it cannot be the first mention. Everyone gets
+        this one: the panel is on every screen for every role.
+      */}
+      <Section
+        icon={MessageCircle}
+        tint="text-violet-600"
+        title={t('cyra.title')}
+        lead={t('cyra.lead')}
+        points={[
+          { what: t('cyra.p1.what'), how: t('cyra.p1.how') },
+          { what: t('cyra.p2.what'), how: t('cyra.p2.how') },
+          { what: t('cyra.p3.what'), how: t('cyra.p3.how') },
+          { what: t('cyra.p4.what'), how: t('cyra.p4.how') },
+          { what: t('cyra.p5.what'), how: t('cyra.p5.how'), to: '/support', cta: 'My requests' },
         ]}
       />
 

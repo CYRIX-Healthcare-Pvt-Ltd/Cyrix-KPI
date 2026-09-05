@@ -756,5 +756,5 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
 export const SECTION_TITLE: Record<string, string> = {
   s1: 's1.title', s2: 's2.title', s3: 's3.title', s4: 's4.title',
   team: 'team.title.plain', hr: 'hr.title', sw: 'sw.title',
-  prof: 'prof.title', ask: 'ask.title',
+  prof: 'prof.title', ask: 'ask.title', cyra: 'cyra.title',
 }

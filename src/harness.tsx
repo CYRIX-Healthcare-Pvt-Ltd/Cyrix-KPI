@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Menu, LogOut, Bell } from 'lucide-react'
+import { Menu, LogOut, Bell, MessageCircle } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
@@ -361,10 +361,58 @@ function TeamButtons() {
   )
 }
 
+/**
+ * Cyra's button, in the three states it actually takes.
+ *
+ * A copy of the block in ChatBot, which cannot be rendered here because
+ * it wants an account, a team and eight queries behind it. The badge is
+ * the part worth looking at: the count has to stay legible at two
+ * digits, and the ring has to sit behind the number rather than over it.
+ */
+function CyraButton() {
+  const states: Array<{ label: string; n: number; unread: boolean }> = [
+    { label: 'New since they looked', n: 3, unread: true },
+    { label: 'Same list as before', n: 3, unread: false },
+    { label: 'Two digits', n: 12, unread: true },
+    { label: 'Nothing waiting', n: 0, unread: false },
+  ]
+
+  return (
+    <div className="mx-auto max-w-5xl p-4">
+      <div className="card flex flex-wrap items-center gap-8 p-6">
+        {states.map(s => (
+          <div key={s.label} className="flex flex-col items-center gap-3">
+            <div className="relative">
+              <button
+                aria-label={s.n ? `Cyra has ${s.n} things waiting for you` : 'Ask Cyra about your KPI'}
+                className="btn-press flex h-12 w-12 items-center justify-center rounded-full bg-shade text-white shadow-lg"
+              >
+                <MessageCircle className="h-5 w-5" />
+                {s.n > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center">
+                    {s.unread && (
+                      <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
+                    )}
+                    <span className="relative flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-canvas bg-cyrixRed-600 px-1 text-[10px] font-bold leading-none text-white">
+                      {s.n}
+                    </span>
+                  </span>
+                )}
+              </button>
+            </div>
+            <p className="max-w-[7rem] text-center text-xs text-ink-500">{s.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Harness() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
+      <CyraButton />
       <TeamButtons />
       <BrandPanel />
       <ScoringRows />

@@ -37,9 +37,36 @@ import type { SupportDesk } from '@/types/db'
  * points at the same place.
  */
 
+/**
+ * What a turn IS, rather than what it said.
+ *
+ * Stored as the ingredients — a phrase key and its numbers, a question
+ * in somebody's own words — and turned into a sentence only when it is
+ * drawn. That is what lets the language selector reach backwards: the
+ * whole conversation is rendered again in the new language instead of
+ * only what is said next.
+ *
+ * Holding the finished sentence, as this did, left a panel half in
+ * English and half in Malayalam after a switch, which is worse than
+ * either. The argument for it was that restating somebody's earlier
+ * answers rewrites what they were told — true of their own words, which
+ * is why 'said' is kept verbatim and never translated, and not true of
+ * ours, which are the same sentence in both languages by construction.
+ */
+type Speech =
+  /** Their own words. Never touched. */
+  | { kind: 'said'; text: string }
+  /** A phrase from CHAT, with whatever numbers it takes. */
+  | { kind: 'chat'; key: string; vars?: Record<string, string | number> }
+  /** The lead-in and a did-you-know, which is two phrases in one bubble. */
+  | { kind: 'tip'; key: string }
+  /** The manual's own answer, in whichever language it is being read in. */
+  | { kind: 'manual'; key: string }
+  /** Computed from their own figures — recomputed, not re-translated. */
+  | { kind: 'fact'; id: FactId; month?: number; ecode?: string }
+
 interface Turn {
-  from: 'them' | 'app'
-  text: string
+  say: Speech
   /** Manual section this came from, for the link under it. */
   section?: string
   /** Show the link to the manual under this answer. */
@@ -323,30 +350,28 @@ export default function ChatBot() {
   const unread = nudges.length > 0 && seen !== signature
 
   /*
-    Greeted by name, told what is waiting, and re-greeted in the new
-    language if they switch.
+    Greeted by name and told what is waiting.
 
-    Only the opening is rewritten: everything after it is a real
-    exchange, and silently restating somebody's earlier answers in a
-    different language would be rewriting what they were told.
+    Built once, as keys rather than sentences, so a language switch
+    re-renders it along with the rest of the conversation rather than
+    forcing it to be assembled again. The guard is against clobbering a
+    real exchange in progress, not against translating one.
   */
   useEffect(() => {
     if (!open) return
     setTurns(prev => {
       if (prev.length > (1 + nudges.length)) return prev
       const opening: Turn[] = [{
-        from: 'app',
         // Nothing waiting is not nothing to say. See idleOpening.
-        text: nudges.length
-          ? c('nudge.hi', { name: firstName })
+        say: nudges.length
+          ? { kind: 'chat', key: 'nudge.hi', vars: { name: firstName } }
           : idleOpening
-            ? c(idleOpening.key, idleOpening.vars)
-            : c('nudge.clear', { name: firstName }),
+            ? { kind: 'chat', key: idleOpening.key, vars: idleOpening.vars }
+            : { kind: 'chat', key: 'nudge.clear', vars: { name: firstName } },
       }]
       for (const n of nudges) {
         opening.push({
-          from: 'app',
-          text: c(n.key, n.vars),
+          say: { kind: 'chat', key: n.key, vars: n.vars },
           to: n.to,
           toLabel: n.toLabel,
         })
@@ -361,8 +386,7 @@ export default function ChatBot() {
       */
       if (tip) {
         opening.push({
-          from: 'app',
-          text: `${c('tip.lead')} ${c(tip.key)}`,
+          say: { kind: 'tip', key: tip.key },
           to: tip.to ?? undefined,
           toLabel: tip.toLabel || undefined,
         })
@@ -372,7 +396,10 @@ export default function ChatBot() {
     try { localStorage.setItem(SEEN_KEY, signature) } catch { /* private window */ }
     setSeen(signature)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, firstName, lang, signature, idleOpening, tip])
+    // `lang` is deliberately not a dependency any more. It was here to
+    // rebuild the opening in the new language; the opening is keys now,
+    // and rendering handles that.
+  }, [open, firstName, signature, idleOpening, tip])
 
   /**
    * Built from data this screen has loaded anyway. The sentence itself
@@ -408,6 +435,34 @@ export default function ChatBot() {
       month, ecode,
     })
 
+  /**
+   * The sentence for a turn, in whichever language is selected now.
+   *
+   * Called while drawing rather than when the turn was made, which is
+   * the whole mechanism behind the language switch reaching backwards
+   * through the conversation. Everything it calls is a pure function of
+   * `lang` and data this screen has already loaded, so re-rendering the
+   * panel in Malayalam costs no fetch and cannot fail halfway.
+   *
+   * One consequence worth knowing: a 'fact' is recomputed, not replayed.
+   * If somebody asks how many approvals are waiting, clears them, and
+   * scrolls back, that bubble will say none are left rather than what it
+   * said at the time. A scrollback that corrects itself is the better
+   * side of the trade — the alternative is an answer that is now wrong
+   * sitting above the screen that proves it — but it does mean these
+   * bubbles are a live reading rather than a transcript.
+   */
+  const render = (s: Speech): string => {
+    switch (s.kind) {
+      // Somebody's own question, exactly as they typed it.
+      case 'said': return s.text
+      case 'chat': return c(s.key, s.vars)
+      case 'tip': return `${c('tip.lead')} ${c(s.key)}`
+      case 'manual': return t(`${s.key}.how`) || t(`${s.key}.how.base`)
+      case 'fact': return factAnswer(s.id, s.month, s.ecode)
+    }
+  }
+
   const ask = (question: string) => {
     const q = question.trim()
     if (!q) return
@@ -417,21 +472,18 @@ export default function ChatBot() {
     const reply: Turn =
       found.kind === 'fact'
         ? {
-            from: 'app',
-            text: factAnswer(found.id, found.month, found.ecode),
+            say: { kind: 'fact', id: found.id, month: found.month, ecode: found.ecode },
             manualLink: found.id === 'manual',
           }
         : found.kind === 'manual'
           ? {
-              from: 'app',
               // The manual's own answer, in their language, so nothing is
               // paraphrased into meaning something slightly different.
-              text: t(`${found.key}.how`) || t(`${found.key}.how.base`),
+              say: { kind: 'manual', key: found.key },
               section: found.section,
             }
           : {
-              from: 'app',
-              text: c('lost', { name: firstName }),
+              say: { kind: 'chat', key: 'lost', vars: { name: firstName } },
               manualLink: true,
               // The honest end of a bot that refuses to guess: it says so,
               // and immediately offers somebody who does know.
@@ -450,7 +502,7 @@ export default function ChatBot() {
       has asked for less motion gets the answer immediately, since for
       them the dots are the animation.
     */
-    setTurns(prev => [...prev, { from: 'them', text: q }])
+    setTurns(prev => [...prev, { say: { kind: 'said', text: q } }])
     setDraft('')
     lastAsked.current = q
 
@@ -478,8 +530,7 @@ export default function ChatBot() {
     setTicketDesk(desk)
     setDraft(lastAsked.current)
     setTurns(prev => [...prev, {
-      from: 'app',
-      text: c('sup.mode', { desk: DESK_NAME[desk] }),
+      say: { kind: 'chat', key: 'sup.mode', vars: { desk: DESK_NAME[desk] } },
     }])
   }
 
@@ -490,10 +541,9 @@ export default function ChatBot() {
     try {
       await raise.mutateAsync({ desk: ticketDesk, note })
       setTurns(prev => [...prev,
-        { from: 'them', text: note },
+        { say: { kind: 'said', text: note } },
         {
-          from: 'app',
-          text: c('sup.sent', { desk: DESK_NAME[ticketDesk] }),
+          say: { kind: 'chat', key: 'sup.sent', vars: { desk: DESK_NAME[ticketDesk] } },
           to: '/support',
           toLabel: 'My requests',
         },
@@ -502,10 +552,12 @@ export default function ChatBot() {
       setTicketDesk(null)
     } catch (err) {
       setTurns(prev => [...prev, {
-        from: 'app',
-        text: c('sup.failed', {
-          why: err instanceof Error ? err.message : '',
-        }),
+        say: {
+          kind: 'chat',
+          key: 'sup.failed',
+          // The server's own words. Not ours to translate.
+          vars: { why: err instanceof Error ? err.message : '' },
+        },
       }])
     }
   }
@@ -520,18 +572,35 @@ export default function ChatBot() {
         <button
           onClick={() => setOpen(true)}
           aria-label={
-            unread
+            nudges.length
               ? `Cyra has ${nudges.length} thing${nudges.length === 1 ? '' : 's'} waiting for you`
               : 'Ask Cyra about your KPI'
           }
           className="btn-press fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shade text-white shadow-lg hover:bg-cyrixRed-600 hover:text-white lg:bottom-6"
         >
           <MessageCircle className="h-5 w-5" />
-          {/* Only until they have read it once. The nudges themselves
-              stay — the mark is about news, not about the work. */}
-          {unread && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-canvas bg-cyrixRed-600 px-1 text-[10px] font-bold leading-none text-white">
-              {nudges.length}
+          {/*
+            The count stays up while the work does.
+
+            It used to disappear the moment they opened the panel once,
+            on the argument that the mark was about news rather than
+            about the work. That is right about the ring and wrong about
+            the number: somebody with a month still to submit opened
+            Cyra on Monday and had no reminder of it for the rest of the
+            week, which is the one person the badge exists for.
+
+            So the two are split. The number is the work, and it clears
+            when the work is done. The ring is the news, and it clears
+            when they have looked.
+          */}
+          {nudges.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center">
+              {unread && (
+                <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
+              )}
+              <span className="relative flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-canvas bg-cyrixRed-600 px-1 text-[10px] font-bold leading-none text-white">
+                {nudges.length}
+              </span>
             </span>
           )}
         </button>
@@ -575,17 +644,20 @@ export default function ChatBot() {
             {turns.map((turn, i) => (
               <div
                 key={i}
-                className={clsx('flex', turn.from === 'them' ? 'justify-end' : 'justify-start')}
+                className={clsx(
+                  'flex',
+                  turn.say.kind === 'said' ? 'justify-end' : 'justify-start',
+                )}
               >
                 <div
                   className={clsx(
                     'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
-                    turn.from === 'them'
+                    turn.say.kind === 'said'
                       ? 'rounded-br-sm bg-ink-900 text-onInk'
                       : 'rounded-bl-sm bg-ink-100 text-ink-800',
                   )}
                 >
-                  {turn.text}
+                  {render(turn.say)}
                   {/* Where to go and do it. A nudge without one is a
                       complaint; with one it is an errand. */}
                   {turn.to && (
