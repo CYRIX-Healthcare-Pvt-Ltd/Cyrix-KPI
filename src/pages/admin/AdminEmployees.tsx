@@ -520,8 +520,13 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     if (!rows) return
     setBusy(true); setError(null)
     try {
-      const { data: existing } = await supabase.from('employees').select('id, ecode')
-      const byEcode = new Map((existing ?? []).map(e => [e.ecode.toUpperCase(), e.id]))
+      const { data: existing } = await supabase
+        .from('employees').select('id, ecode, must_change_password')
+      const priorByEcode = new Map(
+        ((existing ?? []) as Array<{ id: string; ecode: string; must_change_password: boolean }>)
+          .map(e => [e.ecode.toUpperCase(), e]),
+      )
+      const byEcode = new Map([...priorByEcode].map(([code, e]) => [code, e.id]))
 
       /*
         Codes this upload has never seen before.
@@ -541,8 +546,27 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         department: r.department || null,
         location: r.location || null,
         work_email: r.work_email || null,
+        // In the file means on the payroll, which also brings a returner
+        // back with the record and the scored months they already had.
         is_active: true,
-        must_change_password: true,
+        /*
+          Only somebody genuinely new is made to pick a password.
+
+          This said `true` for every row, so uploading the full master
+          would have set the flag on all 1,151 people and met each of
+          them with a change-your-password screen — including everybody
+          who had already chosen a real one. Harmless-looking on the day
+          the import was written for a one-off migration, and wrong the
+          moment the master upload became the routine way to keep the
+          roster straight.
+
+          The key stays on every row rather than being omitted for some:
+          PostgREST needs identical keys across a batch upsert, and a
+          missing one is sent as NULL against a NOT NULL column. Same
+          reasoning, and the same line, as import-employees.mjs.
+        */
+        must_change_password:
+          priorByEcode.get(r.ecode.toUpperCase())?.must_change_password ?? true,
       }))
 
       const { error: upErr } = await supabase
