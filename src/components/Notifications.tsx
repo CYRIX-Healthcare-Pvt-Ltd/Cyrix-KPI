@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Bell, CalendarCheck, CheckCircle2, CheckSquare, ClipboardList,
-  MessageSquare, Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
+  LifeBuoy, MessageSquare, Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -116,6 +116,17 @@ const CATALOGUE: Record<NotificationKind, Entry> = {
     title: n => `${plural(n, 'query')} answered`,
     body: 'Your manager has replied to what you asked about.',
     href: '/history',
+  },
+  // Last, because it is the least urgent kind of news: the thing is
+  // already finished and this is the only way anybody finds out. Asking
+  // put a badge on somebody else's screen; the answer put nothing on
+  // theirs, so the people who did not think to go back and look never
+  // learned they had been answered at all.
+  support_answered: {
+    icon: LifeBuoy, priority: 11, action: false,
+    title: n => `${plural(n, 'request')} answered`,
+    body: 'HR or Software has replied to what you asked.',
+    href: '/support',
   },
 }
 

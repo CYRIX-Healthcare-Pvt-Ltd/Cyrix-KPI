@@ -424,6 +424,7 @@ export type NotificationKind =
   | 'approvals' | 'scoring' | 'records_manager'
   | 'records_hr' | 'leavers'
   | 'score_query' | 'score_query_answered'
+  | 'support_answered'
 
 export interface NotificationRow {
   kind: NotificationKind
