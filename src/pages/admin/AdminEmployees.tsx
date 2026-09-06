@@ -442,6 +442,9 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     gone: Array<{ ecode: string; full_name: string }>
     /** Codes this upload saw for the first time, for the report. */
     joined: Array<Record<string, string>>
+    /** Accounts made, so nobody has to run a script afterwards. */
+    logins: string[]
+    loginProblems: string[]
   } | null>(null)
   /**
    * Active people the file does not mention — read as having left.
@@ -582,7 +585,45 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       if (goneErr) throw new Error(friendlyError(goneErr))
       const gone = (goneRows ?? []) as Array<{ ecode: string; full_name: string }>
 
-      setResult({ added: payload.length, failed, gone, joined })
+      /*
+        And give the new people a way in.
+
+        This used to end with "now run import-employees.mjs", because
+        making an account needs the service role key and that cannot go
+        anywhere near a browser. It can go in an edge function, so it
+        does — the same accounts, the same first password, the same
+        forced change, just without somebody having to remember.
+
+        Looped because the function works in batches: a joiner batch is
+        one call, and a first-ever import of the whole company is a few.
+        A failure here is reported and does not undo the import — the
+        records are correct either way, and the script is still there to
+        finish the job.
+      */
+      const madeLogins: string[] = []
+      const loginProblems: string[] = []
+      try {
+        for (let round = 0; round < 20; round++) {
+          const { data, error: fnErr } = await supabase.functions.invoke('create-logins', {})
+          if (fnErr) throw fnErr
+          const said = data as {
+            created?: string[]; failed?: string[]; remaining?: number
+          } | null
+          madeLogins.push(...(said?.created ?? []))
+          loginProblems.push(...(said?.failed ?? []))
+          // Nothing left, or nothing moving — either way, stop asking.
+          if (!said?.remaining || (said.created ?? []).length === 0) break
+        }
+      } catch (e) {
+        loginProblems.push(
+          e instanceof Error ? e.message : 'Logins could not be created just now.',
+        )
+      }
+
+      setResult({
+        added: payload.length, failed, gone, joined,
+        logins: madeLogins, loginProblems,
+      })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not import.')
@@ -620,12 +661,17 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                 {
                   name: 'New team members',
                   headers: ['Employee_Code', 'Employee_Name', 'Designation',
-                            'Department', 'Location', 'ReportingManager_Code', 'Email'],
+                            'Department', 'Location', 'ReportingManager_Code', 'Email',
+                            'Sign_in_with', 'First_password'],
                   rows: result.joined.map(j => ({
                     Employee_Code: j.ecode, Employee_Name: j.full_name,
                     Designation: j.designation, Department: j.department,
                     Location: j.location, ReportingManager_Code: j.manager_ecode,
                     Email: j.work_email,
+                    // What to actually tell the person on their first day.
+                    // HR was reading this off a script's console output.
+                    Sign_in_with: j.ecode.toUpperCase(),
+                    First_password: j.ecode.toUpperCase(),
                   })),
                 },
               ],
@@ -635,10 +681,28 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           >
             <Download className="h-4 w-4" /> Download the report
           </button>
-          <p className="mt-3">Logins still need issuing for new joiners — run:</p>
-          <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
-            node scripts/import-employees.mjs "your-file.xlsx"
-          </code>
+          {result.logins.length > 0 && (
+            <p className="mt-3">
+              {result.logins.length} login(s) created. They sign in with their
+              employee code as both the user and the password, and are asked to
+              change it the first time.
+            </p>
+          )}
+          {/* Only when it actually went wrong. The script is the fallback
+              rather than the instruction it used to be. */}
+          {result.loginProblems.length > 0 && (
+            <>
+              <p className="mt-3">
+                {result.loginProblems.length} login(s) could not be created:{' '}
+                {result.loginProblems.slice(0, 3).join('; ')}
+                {result.loginProblems.length > 3 && ' …'}
+              </p>
+              <p className="mt-2">To finish them off:</p>
+              <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
+                node scripts/import-employees.mjs "your-file.xlsx"
+              </code>
+            </>
+          )}
           {result.failed.length > 0 && (
             <p className="mt-2">
               {result.failed.length} reporting line(s) could not be resolved:{' '}
