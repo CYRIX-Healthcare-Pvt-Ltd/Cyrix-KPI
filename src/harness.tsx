@@ -15,7 +15,10 @@ import clsx from 'clsx'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Menu, LogOut, Bell, MessageCircle, UserMinus, Check, X } from 'lucide-react'
+import {
+  Menu, LogOut, Bell, MessageCircle, UserMinus, Check, X,
+  LayoutDashboard, Building2, BarChart3, MessageSquare, LifeBuoy, Trash2, Grid2x2,
+} from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
@@ -50,13 +53,47 @@ function Header() {
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2.5">
           <a href="/" className="btn-press flex items-center gap-2.5 rounded-lg py-1 pr-1">
             <Logo className="h-9 sm:h-11" />
           </a>
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
+        {/*
+          HR's tab row, which is the widest anybody gets — eight of them
+          plus the way out. At 100% on an ordinary laptop these, a
+          two-line name and three icon buttons were wider than the bar,
+          and the sign-out button went off the right edge; the only way
+          to reach it was to zoom the browser out. The row scrolls now,
+          and the block on the right never moves.
+        */}
+        <nav className="nav-scroll ml-6 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex">
+          {([
+            ['Overview', LayoutDashboard, 0],
+            ['Employees', Building2, 0],
+            ['Reports', BarChart3, 0],
+            ['Leavers', UserMinus, 2],
+            ['Queries', MessageSquare, 0],
+            ['Support', LifeBuoy, 0],
+            ['Records', Trash2, 1],
+          ] as const).map(([label, Icon, badge]) => (
+            <NavLink key={label} to="/" className="nav-link">
+              <Icon className="h-4 w-4" />
+              {label}
+              {badge > 0 && (
+                <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
+                  {badge}
+                </span>
+              )}
+            </NavLink>
+          ))}
+          <a href="/" className="nav-link" title="All Cyrix modules">
+            <Grid2x2 className="h-4 w-4 text-ink-400" />
+            Modules
+          </a>
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
           <NavLink
             to="/me"
             className="nav-profile btn-press flex items-center gap-3 rounded-lg py-1 pl-2 pr-1"

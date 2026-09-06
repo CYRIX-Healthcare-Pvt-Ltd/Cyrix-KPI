@@ -215,7 +215,7 @@ export default function Shell() {
               which is why the label stays outside the link. Opened on its
               own domain instead of under the portal, "/" bounces straight
               back here, so this is safe either way. */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5">
             <a
               href="/"
               className="btn-press flex items-center gap-2.5 rounded-lg py-1 pr-1"
@@ -244,7 +244,7 @@ export default function Shell() {
               scrolled sideways — and HR carries more tabs than anyone,
               so trimming padding would only move the width it breaks at.
               The bottom nav covers tablets instead. */}
-          <nav className="ml-6 hidden items-center gap-1 lg:flex">
+          <nav className="nav-scroll ml-6 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex">
             {items.map(item => (
               <NavLink
                 key={item.to}
@@ -280,7 +280,7 @@ export default function Shell() {
               floating between the wordmark and the icons. The desktop
               spacing is unchanged — there the name sits beside the face and
               the row needs the air. */}
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
             {/* The name was the obvious place to look for your own record
                 and did nothing, so it is now the way in. One target
                 covering the name and the avatar: they read as one thing,

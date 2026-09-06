@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BookOpen, Camera, Info, KeyRound, LifeBuoy, Medal, Timer, Trophy, UserRound,
+  ArrowLeft, BookOpen, Camera, Info, KeyRound, LifeBuoy, Medal, Plus, Timer, Trophy, UserRound, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment,
-  useSetMyAvatar, useSetMyWorkEmail, currentFy,
+  useSetMyAvatar, useSetMyWorkEmail, useHrNotifyCc, useSaveHrNotifyCc, currentFy,
 } from '@/lib/queries'
 import { bandFor } from '@/lib/bands'
 import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
@@ -391,6 +391,104 @@ function WorkEmailCard({ employee }: { employee: Employee }) {
   )
 }
 
+/**
+ * Who else is copied on the notifications HR Admin receives.
+ *
+ * Beside the address they receive them AT, because the two are one
+ * subject: "where does this reach me, and who else sees it". It sat on
+ * the organisation overview, which is a screen of charts about other
+ * people, and settings about your own mail do not belong among them.
+ *
+ * A list you add to and remove from, rather than a box of lines. The box
+ * worked and answered nothing when somebody wanted a second address —
+ * an empty textarea with a placeholder does not tell you it will take
+ * more than one, and the way to find out was to guess.
+ */
+function NotifyCcCard() {
+  const { data: cc } = useHrNotifyCc()
+  const save = useSaveHrNotifyCc()
+  const [draft, setDraft] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  const list = cc ?? []
+  const next = draft.trim().toLowerCase()
+  const problem = emailFeedback(draft, touched)
+  const duplicate = next !== '' && list.some(a => a.toLowerCase() === next)
+  const canAdd = next !== '' && !problem && !duplicate && !save.isPending
+
+  const add = async () => {
+    if (!canAdd) return
+    try { await save.mutateAsync([...list, next]); setDraft(''); setTouched(false) }
+    catch { /* shown below */ }
+  }
+  const remove = (who: string) => save.mutate(list.filter(a => a !== who))
+
+  return (
+    <div className="card p-4">
+      <p className="text-sm font-medium text-ink-900">Who else is copied</p>
+      <p className="mt-0.5 text-sm text-ink-500">
+        Support questions, leavers, records and KPI revisions are emailed to you
+        as they arrive. Anyone here is copied on all of them. Up to ten official
+        @{OFFICIAL_DOMAIN} addresses.
+      </p>
+
+      {list.length > 0 && (
+        <ul className="mt-3 divide-y divide-ink-100 rounded-lg border border-ink-200">
+          {list.map(who => (
+            <li key={who} className="flex items-center gap-2 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink-800">{who}</span>
+              <button
+                onClick={() => remove(who)}
+                disabled={save.isPending}
+                aria-label={`Stop copying ${who}`}
+                className="btn-icon"
+              >
+                <X className="h-4 w-4 text-ink-400" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {list.length < 10 && (
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <input
+              type="email"
+              className="input w-full"
+              placeholder={`colleague@${OFFICIAL_DOMAIN}`}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={() => setTouched(true)}
+              // Enter is what a hand does after typing an address.
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void add() } }}
+              disabled={save.isPending}
+            />
+            {problem && <p className="mt-1 text-xs text-cyrixRed-700">{problem}</p>}
+            {!problem && duplicate && (
+              <p className="mt-1 text-xs text-ink-500">Already on the list.</p>
+            )}
+          </div>
+          <button onClick={add} disabled={!canAdd} className="btn-secondary">
+            {save.isPending ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            Add
+          </button>
+        </div>
+      )}
+
+      <p className="mt-2 text-xs text-ink-400">
+        {list.length === 0
+          ? 'Nobody else is copied — these come to you alone.'
+          : `${list.length} of 10 copied.`}
+      </p>
+
+      {save.error && (
+        <div className="mt-3"><Alert kind="error">{save.error.message}</Alert></div>
+      )}
+    </div>
+  )
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 px-4 py-3">
@@ -639,6 +737,8 @@ export default function Profile() {
 
       {/* The two shared logins only. See WorkEmailCard. */}
       {(isHrAdmin || isSwAdmin) && <WorkEmailCard employee={employee} />}
+      {/* HR Admin only: the CC list is theirs, and the RPC enforces it. */}
+      {isHrAdmin && <NotifyCcCard />}
 
       <div className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">

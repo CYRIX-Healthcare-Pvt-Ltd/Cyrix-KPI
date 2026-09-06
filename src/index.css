@@ -604,9 +604,30 @@
   /* Nav: active and hover both pick up the band colour, so the chrome
      reflects performance without shouting about it. */
   .nav-link {
-    @apply flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+    @apply flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
            text-ink-500 transition-colors;
   }
+
+  /*
+   * The tab row scrolls sideways rather than pushing sign-out off screen.
+   *
+   * HR carries eight tabs, and at 100% on an ordinary laptop those plus a
+   * two-line name and three icon buttons were wider than the bar — so the
+   * theme toggle, the bell and the way out went past the right edge and
+   * the only way to reach them was to zoom the browser to 75%. Choosing a
+   * later breakpoint only moved the width it broke at, which the note
+   * beside the nav already says.
+   *
+   * The bar with no scrollbar drawn: a cut-off tab is its own signal that
+   * there is more, and a grey bar under the navigation on every screen
+   * that does not need it is worse than none. Scrolling still works by
+   * wheel, trackpad and keyboard.
+   */
+  .nav-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .nav-scroll::-webkit-scrollbar { display: none; }
   .nav-link:hover {
     background-color: var(--score-soft);
     color: var(--score-strong);
