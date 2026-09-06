@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Menu, LogOut, Bell, MessageCircle } from 'lucide-react'
+import { Menu, LogOut, Bell, MessageCircle, UserMinus, Check, X } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
@@ -408,10 +408,70 @@ function CyraButton() {
   )
 }
 
+/**
+ * A removal request, in both the states it can be in.
+ *
+ * A copy of the card in AdminRequests, which sits behind an HR Admin
+ * sign-in. The pair is the point: two managers flagging the same leaver
+ * is ordinary, and after the first is actioned the second offers to
+ * deactivate somebody who already is. The badge and the button have to
+ * agree with each other at a glance.
+ */
+function RemovalCards() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-3 p-4">
+      {[false, true].map(gone => (
+        <div key={String(gone)} className="card p-4">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="rounded-lg bg-cyrixRed-50 p-2 text-cyrixRed-700">
+              <UserMinus className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-ink-900">
+                Fazlin Gafoor
+                <span className="ml-2 text-sm font-normal text-ink-500">E2236</span>
+                {gone && (
+                  <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">
+                    Already deactivated
+                  </span>
+                )}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Requested by Sabin Sunny (E1388) on 05/09/2026 · last working day 04/08/2026
+              </p>
+              <p className="mt-2 rounded-lg bg-ink-50 p-2.5 text-sm italic text-ink-700">
+                “Terminated”
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <input className="input" placeholder="Note (optional)" readOnly />
+            <div className="flex flex-wrap gap-2">
+              <button className={gone ? 'btn-secondary' : 'btn-danger'}>
+                <Check className="h-4 w-4" />
+                {gone ? 'Close this request' : 'Approve and deactivate'}
+              </button>
+              <button className="btn-secondary"><X className="h-4 w-4" /> Reject</button>
+            </div>
+            <p className="text-xs text-ink-400">
+              {gone
+                ? 'Already deactivated — their login is gone and their KPI history is kept. '
+                  + 'Closing marks this request done; nothing else changes.'
+                : 'Approving deactivates the account and removes their login access. Their KPI '
+                  + 'history is kept. Anyone reporting to them will need a new manager.'}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Harness() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
+      <RemovalCards />
       <CyraButton />
       <TeamButtons />
       <BrandPanel />

@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, type FormEvent } from 'react'
 import { Search, UserPlus, Upload, Download, X, ArrowLeftRight } from 'lucide-react'
-import { downloadTemplate } from '@/lib/sheet'
+import { downloadTemplate, bigDeactivation } from '@/lib/sheet'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
 import EditEmployee from '@/components/EditEmployee'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOrgKpiStatus, currentFy } from '@/lib/queries'
-import { exportOrgStatus } from '@/lib/export'
+import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { Alert, PageLoader, Spinner, ScorePill, StatusBadge } from '@/components/ui'
 import type { OrgKpiStatusRow, AssignmentStatus } from '@/types/db'
 
@@ -374,12 +374,89 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 // ---------------------------------------------------------------------
 // Bulk import
 // ---------------------------------------------------------------------
+
+/**
+ * The stop before a large deactivation.
+ *
+ * Modelled on the one in SpareFields: a number has to be typed, and it
+ * is the count itself rather than a word, so the only way past is to
+ * have read how many people this affects. "Yes" and "Confirm" are things
+ * a hand does; 1101 is a thing an eye has to look at first.
+ */
+function ConfirmDeactivation({
+  going, activeNow, busy, onCancel, onConfirm,
+}: {
+  going: number; activeNow: number; busy: boolean
+  onCancel: () => void; onConfirm: () => void
+}) {
+  const [typed, setTyped] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-shade/60 p-4">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-ink-200 bg-surface p-5 shadow-2xl">
+        <div>
+          <h4 className="font-semibold text-ink-900">
+            Deactivate {going} of {activeNow} people?
+          </h4>
+          <p className="mt-1 text-sm text-ink-600">
+            That is most of the payroll, which usually means the file is a
+            part of the master rather than all of it. Everyone missing from
+            it loses their login. Their records and scored months are kept,
+            and you can reactivate somebody by including them in the next
+            upload.
+          </p>
+        </div>
+        <label className="block text-sm">
+          <span className="text-ink-600">Type {going} to confirm</span>
+          <input
+            autoFocus
+            className="input mt-1 font-mono"
+            placeholder={String(going)}
+            value={typed}
+            onChange={e => setTyped(e.target.value)}
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-secondary">Cancel</button>
+          <button
+            onClick={onConfirm}
+            disabled={busy || typed.trim() !== String(going)}
+            className="btn-danger"
+          >
+            Import and deactivate {going}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<Array<Record<string, string>> | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ added: number; failed: string[] } | null>(null)
+  const [result, setResult] = useState<{
+    added: number
+    failed: string[]
+    /** Deactivated by this upload, for the report. */
+    gone: Array<{ ecode: string; full_name: string }>
+    /** Codes this upload saw for the first time, for the report. */
+    joined: Array<Record<string, string>>
+  } | null>(null)
+  /**
+   * Active people the file does not mention — read as having left.
+   *
+   * Worked out while reading the file rather than while saving it, so
+   * the number is on screen before anything is pressed. That ordering is
+   * the whole safeguard: this reads "missing means left", which is true
+   * of a complete master and catastrophically false of a partial one, and
+   * "1,101 will be deactivated" is a sentence somebody stops reading.
+   */
+  const [leaving, setLeaving] = useState<Array<{ ecode: string; full_name: string }>>([])
+  /** Active headcount when the file was read, for judging the scale. */
+  const [activeNow, setActiveNow] = useState(0)
+  /** The confirmation is open. Only ever for a big deactivation. */
+  const [confirming, setConfirming] = useState(false)
 
   const read = async (file: File) => {
     setError(null); setResult(null)
@@ -414,6 +491,23 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         return
       }
       setRows(parsed)
+
+      // Who is active now and not in this file. Compared on upper case,
+      // the same way the codes are stored and the same way the server
+      // compares them, so a lower-case sheet does not read as a company
+      // that has all resigned.
+      const inFile = new Set(parsed.map(r => r.ecode.toUpperCase()))
+      const { data: activeRows, error: activeErr } = await supabase
+        .from('employees').select('ecode, full_name').eq('is_active', true)
+      if (activeErr) throw new Error(friendlyError(activeErr))
+      const active = (activeRows ?? []) as Array<{ ecode: string; full_name: string }>
+
+      setActiveNow(active.length)
+      setLeaving(
+        active
+          .filter(e => !inFile.has(e.ecode.toUpperCase()))
+          .sort((a, b) => a.ecode.localeCompare(b.ecode)),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.')
     }
@@ -425,6 +519,17 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     try {
       const { data: existing } = await supabase.from('employees').select('id, ecode')
       const byEcode = new Map((existing ?? []).map(e => [e.ecode.toUpperCase(), e.id]))
+
+      /*
+        Codes this upload has never seen before.
+
+        Worked out against every employee row, active or not, so somebody
+        coming back after a break is a return rather than a new joiner —
+        their old record, and the year they were scored on, is still
+        theirs. Captured here because after the upsert everybody looks
+        like they were always there.
+      */
+      const joined = rows.filter(r => !byEcode.has(r.ecode.toUpperCase()))
 
       const payload = rows.map(r => ({
         ecode: r.ecode.toUpperCase(),
@@ -458,7 +563,26 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           .update({ reporting_manager_id: mgrId }).eq('id', selfId)
       }
 
-      setResult({ added: payload.length, failed })
+      /*
+        Anybody not in the file has left.
+
+        After the upsert, never before it: somebody who moved branch is
+        in the file under the same code, and deactivating first would
+        take their login away and hand it back a second later. Doing it
+        last also means a failure above stops here, rather than leaving
+        the company deactivated and half-imported.
+
+        Deactivated, not deleted — deleting the row takes the appraisal
+        history with it, and a year of somebody's scoring should not be
+        destroyed by leaving them out of a spreadsheet.
+      */
+      const { data: goneRows, error: goneErr } = await supabase.rpc(
+        'deactivate_missing', { p_ecodes: payload.map(p => p.ecode) },
+      )
+      if (goneErr) throw new Error(friendlyError(goneErr))
+      const gone = (goneRows ?? []) as Array<{ ecode: string; full_name: string }>
+
+      setResult({ added: payload.length, failed, gone, joined })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not import.')
@@ -473,7 +597,45 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
       {result ? (
         <Alert kind="success" title={`${result.added} employee record(s) imported`}>
-          <p>Logins still need issuing — run:</p>
+          <p>
+            {result.joined.length} new, {result.gone.length} deactivated.
+          </p>
+          {/*
+            The two answers this upload produced, in one file.
+
+            Offered rather than described: who joined and who left is
+            what HR has to pass on to payroll and IT, and reading it off
+            a panel that closes is how it gets retyped wrong.
+          */}
+          <button
+            onClick={() => exportSheets(
+              [
+                {
+                  name: 'Deactivated',
+                  headers: ['Employee_Code', 'Employee_Name'],
+                  rows: result.gone.map(g => ({
+                    Employee_Code: g.ecode, Employee_Name: g.full_name,
+                  })),
+                },
+                {
+                  name: 'New team members',
+                  headers: ['Employee_Code', 'Employee_Name', 'Designation',
+                            'Department', 'Location', 'ReportingManager_Code', 'Email'],
+                  rows: result.joined.map(j => ({
+                    Employee_Code: j.ecode, Employee_Name: j.full_name,
+                    Designation: j.designation, Department: j.department,
+                    Location: j.location, ReportingManager_Code: j.manager_ecode,
+                    Email: j.work_email,
+                  })),
+                },
+              ],
+              `cyrix-master-upload-${new Date().toISOString().slice(0, 10)}.xlsx`,
+            )}
+            className="btn-secondary mt-3"
+          >
+            <Download className="h-4 w-4" /> Download the report
+          </button>
+          <p className="mt-3">Logins still need issuing for new joiners — run:</p>
           <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
             node scripts/import-employees.mjs "your-file.xlsx"
           </code>
@@ -490,6 +652,30 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           <p className="text-sm text-ink-600">
             {rows.length} row(s) ready. Existing employee codes are updated, not duplicated.
           </p>
+
+          {/*
+            Who this file says has left, before anything is pressed.
+
+            Named rather than counted. "12 will be deactivated" is a
+            number people accept; twelve names is a list somebody reads
+            and recognises, which is how a wrong file gets caught.
+          */}
+          {leaving.length > 0 && (
+            <Alert
+              kind={bigDeactivation(leaving.length, activeNow) ? 'error' : 'warning'}
+              title={`${leaving.length} of ${activeNow} will be deactivated`}
+            >
+              <p>
+                They are active now and not in this file, so it reads them as
+                having left. Their record, KPI and every scored month stay —
+                only their login stops working.
+              </p>
+              <p className="mt-2 text-xs">
+                {leaving.slice(0, 12).map(e => `${e.full_name} (${e.ecode})`).join(', ')}
+                {leaving.length > 12 && ` … and ${leaving.length - 12} more`}
+              </p>
+            </Alert>
+          )}
           <div className="max-h-64 overflow-auto rounded-lg border border-ink-200">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-ink-50">
@@ -513,11 +699,30 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </table>
           </div>
           <div className="flex gap-2">
-            <button onClick={save} className="btn-primary" disabled={busy}>
-              {busy && <Spinner className="h-4 w-4" />} Import {rows.length} employee(s)
+            {/* The button says what it will do, including the half that
+                is not an import. "Import 50" hides the other 1,101. */}
+            <button
+              onClick={() =>
+                bigDeactivation(leaving.length, activeNow) ? setConfirming(true) : save()}
+              className="btn-primary"
+              disabled={busy}
+            >
+              {busy && <Spinner className="h-4 w-4" />}
+              Import {rows.length}
+              {leaving.length > 0 && ` and deactivate ${leaving.length}`}
             </button>
             <button onClick={() => setRows(null)} className="btn-secondary">Choose another file</button>
           </div>
+
+          {confirming && (
+            <ConfirmDeactivation
+              going={leaving.length}
+              activeNow={activeNow}
+              busy={busy}
+              onCancel={() => setConfirming(false)}
+              onConfirm={() => { setConfirming(false); void save() }}
+            />
+          )}
         </>
       ) : (
         <>

@@ -72,3 +72,25 @@ export async function downloadTemplate(
   XLSX.utils.book_append_sheet(wb, sheet, 'Template')
   XLSX.writeFile(wb, filename)
 }
+
+/**
+ * When a master upload stops looking like a month of leavers.
+ *
+ * The employee import reads "missing from the file" as "has left", which
+ * is true of a complete master and catastrophically false of a partial
+ * one: a fifty-row correction sheet would otherwise take the logins off
+ * eleven hundred people in a click. Past this line the screen stops and
+ * makes somebody type the number.
+ *
+ * Both conditions, not either. A share on its own nags a small
+ * department every time two people leave; a flat count on its own waves
+ * through a fifth of a big company. Ordinary churn is a handful a month
+ * against eleven hundred, so a tenth of the payroll is either a
+ * restructuring somebody already knows about or the wrong file — and
+ * both are worth stopping for.
+ *
+ * Deliberately not a hard block. A real restructuring can be most of a
+ * branch, and a rule that refuses the honest case gets worked around.
+ */
+export const bigDeactivation = (going: number, activeNow: number): boolean =>
+  going >= 10 && going > activeNow * 0.1

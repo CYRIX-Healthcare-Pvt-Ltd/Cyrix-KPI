@@ -146,3 +146,35 @@ export async function exportOrgStatus(
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
   XLSX.writeFile(wb, filename)
 }
+
+/**
+ * Several tables in one workbook.
+ *
+ * exportOrgStatus writes one sheet, which is right for a single table. A
+ * master upload answers two questions that belong together — who joined
+ * and who left — and handing those over as two files is two things to
+ * lose track of.
+ *
+ * An empty sheet is still written, with its headers on it. "Nobody left"
+ * is an answer, and a tab that is missing entirely reads as an export
+ * that went wrong.
+ */
+export async function exportSheets(
+  sheets: Array<{
+    name: string
+    headers: string[]
+    rows: Array<Record<string, unknown>>
+  }>,
+  filename: string,
+) {
+  const XLSX = await import('xlsx')
+  const wb = XLSX.utils.book_new()
+  for (const s of sheets) {
+    const ws = XLSX.utils.json_to_sheet(s.rows, { header: s.headers })
+    ws['!cols'] = s.headers.map(h => ({ wch: Math.max(14, h.length + 2) }))
+    // Excel refuses a tab name past 31 characters, and refuses the whole
+    // file rather than truncating it.
+    XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31))
+  }
+  XLSX.writeFile(wb, filename)
+}

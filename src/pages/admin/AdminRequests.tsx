@@ -48,7 +48,30 @@ export default function AdminRequests() {
         </EmptyState>
       ) : (
         <div className="space-y-3">
-          {pending.map(({ request, employee, requester }) => (
+          {pending.map(({ request, employee, requester }) => {
+            /*
+              Already gone.
+
+              Two managers flagging the same leaver is the ordinary way
+              this happens: HR actions the first request, the person is
+              deactivated, and the second one sits here still offering to
+              deactivate somebody who already is. Pressing it worked and
+              said nothing, because the update is a no-op against a row
+              that is already false.
+
+              Said before the press rather than after it. "You have just
+              done a thing that was already done" is a worse sentence
+              than not offering it in the first place — the request still
+              wants closing, so the button stays and only tells the truth
+              about what it will do.
+
+              An employee the query could not resolve is NOT this: that
+              card already says "Unknown employee", and treating a
+              missing row as a deactivated one would put the wrong
+              sentence under it.
+            */
+            const gone = !!employee && !employee.is_active
+            return (
             <div key={request.id} className="card p-4">
               <div className="flex flex-wrap items-start gap-3">
                 <div className="rounded-lg bg-cyrixRed-50 p-2 text-cyrixRed-700">
@@ -60,6 +83,13 @@ export default function AdminRequests() {
                     <span className="ml-2 text-sm font-normal text-ink-500">
                       {employee?.ecode}
                     </span>
+                    {/* At the name, because that is where the eye lands
+                        before it reaches the buttons underneath. */}
+                    {gone && (
+                      <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">
+                        Already deactivated
+                      </span>
+                    )}
                   </p>
                   <p className="mt-0.5 text-xs text-ink-500">
                     Requested by {requester?.full_name ?? '—'} ({requester?.ecode}) on{' '}
@@ -85,10 +115,10 @@ export default function AdminRequests() {
                   <button
                     onClick={() => run(request.id, true)}
                     disabled={action.isPending}
-                    className="btn-danger"
+                    className={gone ? 'btn-secondary' : 'btn-danger'}
                   >
                     {action.isPending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                    Approve and deactivate
+                    {gone ? 'Close this request' : 'Approve and deactivate'}
                   </button>
                   <button
                     onClick={() => run(request.id, false)}
@@ -99,12 +129,16 @@ export default function AdminRequests() {
                   </button>
                 </div>
                 <p className="text-xs text-ink-400">
-                  Approving deactivates the account and removes their login access. Their KPI
-                  history is kept. Anyone reporting to them will need a new manager.
+                  {gone
+                    ? 'Already deactivated — their login is gone and their KPI history is kept. '
+                      + 'Closing marks this request done; nothing else changes.'
+                    : 'Approving deactivates the account and removes their login access. Their KPI '
+                      + 'history is kept. Anyone reporting to them will need a new manager.'}
                 </p>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

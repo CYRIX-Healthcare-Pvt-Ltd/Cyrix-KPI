@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pick } from './sheet'
+import { pick, bigDeactivation } from './sheet'
 import { normaliseRole, saysAdmin, SPARE_ROLES } from './spareRoles'
 
 /**
@@ -102,5 +102,37 @@ describe('reading a role somebody typed', () => {
       expect(normaliseRole(r.label)).toBe(r.value)
       expect(normaliseRole(r.value)).toBe(r.value)
     }
+  })
+})
+
+describe('bigDeactivation', () => {
+  it('waves through an ordinary month of leavers', () => {
+    // Twelve out of 1151 is a normal month. Stopping for it would train
+    // people to type the number without reading it.
+    expect(bigDeactivation(12, 1151)).toBe(false)
+    expect(bigDeactivation(0, 1151)).toBe(false)
+  })
+
+  it('stops the partial file that would empty the company', () => {
+    // The case this exists for: a 50-row correction sheet against 1151.
+    expect(bigDeactivation(1101, 1151)).toBe(true)
+    expect(bigDeactivation(200, 1151)).toBe(true)
+  })
+
+  it('needs both a big share and a real number, not either', () => {
+    // Two of eight is a quarter of a small team and not worth a dialog.
+    expect(bigDeactivation(2, 8)).toBe(false)
+    // Fifty is a lot of people but a twentieth of the company — the file
+    // still looks like a master, so this is a real round of leavers.
+    expect(bigDeactivation(50, 1151)).toBe(false)
+    // Ten out of forty is both.
+    expect(bigDeactivation(10, 40)).toBe(true)
+  })
+
+  it('does not divide by a headcount it was never given', () => {
+    // If the active count failed to load it must not read as "everyone
+    // is leaving" and block a legitimate import behind a 0 to type.
+    expect(bigDeactivation(5, 0)).toBe(false)
+    expect(bigDeactivation(10, 0)).toBe(true)
   })
 })
