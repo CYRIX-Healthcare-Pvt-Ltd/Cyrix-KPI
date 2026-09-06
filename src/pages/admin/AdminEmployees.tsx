@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, type FormEvent } from 'react'
 import { Search, UserPlus, Upload, Download, X, ArrowLeftRight } from 'lucide-react'
+import { downloadTemplate } from '@/lib/sheet'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
 import EditEmployee from '@/components/EditEmployee'
@@ -521,13 +522,47 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       ) : (
         <>
           <p className="text-sm text-ink-600">
-            Upload an Excel or CSV file. Column headers are matched loosely — recognised names
-            include Employee_Code, Employee_Name, Designation, Department, Location,
-            ReportingManager_Code and Email.
+            Start from the template, or upload your own Excel or CSV. Column headers are
+            matched loosely — recognised names include Employee_Code, Employee_Name,
+            Designation, Department, Location, ReportingManager_Code and Email.
           </p>
-          <button onClick={() => fileRef.current?.click()} className="btn-primary">
-            <Upload className="h-4 w-4" /> Choose file
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {/*
+              The template first, and the same way round as every other
+              import in the app. A paragraph describing seven columns is
+              a paragraph somebody has to translate into a spreadsheet;
+              the file cannot be misread, and what comes back already
+              matches. The two example rows are the test accounts, which
+              makes the shape of a code obvious and shows a manager code
+              pointing at another row in the same file — the one thing
+              about this format nobody guesses right first time.
+            */}
+            <button
+              onClick={() => downloadTemplate(
+                'cyrix-employees-template.xlsx',
+                ['Employee_Code', 'Employee_Name', 'Designation', 'Department',
+                 'Location', 'ReportingManager_Code', 'Email'],
+                [
+                  {
+                    Employee_Code: 'E8888', Employee_Name: 'Kevin - Test',
+                    Designation: 'MIS', Department: 'AI', Location: 'HO',
+                    ReportingManager_Code: 'E9999', Email: 'kevin.test@cyrix.in',
+                  },
+                  {
+                    Employee_Code: 'E9999', Employee_Name: 'Saranya - Test',
+                    Designation: 'Manager', Department: 'AI', Location: 'HO',
+                    ReportingManager_Code: 'E2', Email: 'saranya.test@cyrix.in',
+                  },
+                ],
+              )}
+              className="btn-secondary"
+            >
+              <Download className="h-4 w-4" /> Download the template
+            </button>
+            <button onClick={() => fileRef.current?.click()} className="btn-primary">
+              <Upload className="h-4 w-4" /> Choose file
+            </button>
+          </div>
           <input
             ref={fileRef}
             type="file"
