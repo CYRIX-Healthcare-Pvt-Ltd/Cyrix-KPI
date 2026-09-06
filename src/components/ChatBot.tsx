@@ -285,6 +285,21 @@ export default function ChatBot() {
   const month = currentReportingMonth()
   const nudges = useMemo<Nudge[]>(() => {
     if (systemAccount) return []
+    /*
+      Nothing at all until the record has actually arrived.
+
+      These are undefined while their queries are in flight, and
+      undefined reads here as "has no KPI" and "has submitted nothing" —
+      so for the two or three seconds before the data landed, everybody
+      was handed "Set up your KPI for the year" for a KPI they already
+      had, and the badge lit up and then went out again by itself.
+
+      The distinction is available and was simply not used: a person with
+      no KPI gets `{ assignment: null }` from the query, which is a fact.
+      Undefined is not a fact, it is the absence of one, and nothing
+      should be said on the strength of it.
+    */
+    if (assignment === undefined || history === undefined) return []
     const list: Nudge[] = []
     const kpi = assignment?.assignment
     const startsFrom = kpi?.starts_from ?? null

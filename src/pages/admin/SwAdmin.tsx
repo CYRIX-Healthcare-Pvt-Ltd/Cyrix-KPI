@@ -1703,7 +1703,7 @@ export default function SwAdmin() {
         under the thumb rather than at the top of a scrolling page you have
         to return to in order to move.
 
-        No Apps cell. In the other modules that cell is how you leave for
+        No Modules cell. In the other modules that cell is how you leave for
         a different one, but an administrator arrives here from the portal
         and has no second module to leave for — it offered a round trip to
         the page they just came from, and cost every real tab a fifth of

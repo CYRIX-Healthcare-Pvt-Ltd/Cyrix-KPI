@@ -1064,6 +1064,31 @@ export function useSetMyAvatar() {
   })
 }
 
+/**
+ * HR Admin / SW Admin setting their own official address.
+ *
+ * Only those two, and only their own row — the server decides both, see
+ * migration 0105. It is here rather than in the HR screens because these
+ * are shared logins with no person behind them for HR to maintain, and
+ * the address is what turns on the emailed code when either of them
+ * changes a password.
+ */
+export function useSetMyWorkEmail() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase.rpc('set_my_work_email', { p_email: email })
+      if (error) throw new Error(friendlyError(error))
+    },
+    // ChangePassword reads work_email off the same employee row to decide
+    // whether to ask for a code, so it has to see this straight away.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['me'] })
+      qc.invalidateQueries({ queryKey: ['employees'] })
+    },
+  })
+}
+
 export function useRemoveAvatar() {
   const qc = useQueryClient()
   return useMutation({

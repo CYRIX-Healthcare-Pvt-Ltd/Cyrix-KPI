@@ -7,9 +7,10 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment,
-  useSetMyAvatar, currentFy,
+  useSetMyAvatar, useSetMyWorkEmail, currentFy,
 } from '@/lib/queries'
 import { bandFor } from '@/lib/bands'
+import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 import { monthLabel } from '@/lib/fy'
 import { PageLoader, StatTile, Alert, Spinner } from '@/components/ui'
 import Avatar from '@/components/Avatar'
@@ -308,6 +309,88 @@ function AvatarCard({ employee }: { employee: Employee }) {
 }
 
 /** One line of the details card. Empty values read as "—", never blank. */
+/**
+ * The official address for the two shared admin logins.
+ *
+ * HR_ADMIN and SW_ADMIN are logins rather than people, so the HR import
+ * never gave either one an address and nothing in the app could add one.
+ * That field is what decides whether changing a password needs an
+ * emailed code — so the two accounts that can do the most were the two
+ * with no second step, and no way to ask for one.
+ *
+ * Only these two see this. For everybody else the address is a fact HR
+ * maintains on the record, and self-service would turn the field that
+ * governs password recovery into one anybody with a borrowed session
+ * could point somewhere else. The server enforces the same two rules
+ * (migration 0105); this is here so the person typing finds out now.
+ */
+function WorkEmailCard({ employee }: { employee: Employee }) {
+  const saved = (employee.work_email ?? '').trim()
+  const [email, setEmail] = useState(saved)
+  const [touched, setTouched] = useState(false)
+  const [done, setDone] = useState(false)
+  const setWorkEmail = useSetMyWorkEmail()
+  // AuthContext keeps the employee row in plain state, not in the query
+  // cache, so invalidating is not enough — this card and ChangePassword
+  // both read work_email from there and would keep the old one.
+  const { refresh } = useAuth()
+
+  const problem = emailFeedback(email, touched)
+  const changed = email.trim().toLowerCase() !== saved.toLowerCase()
+  const blocked = !!problem || !changed || setWorkEmail.isPending
+
+  const save = async () => {
+    setDone(false)
+    try {
+      await setWorkEmail.mutateAsync(email)
+      await refresh()
+      setDone(true)
+    } catch { /* shown from the mutation below */ }
+  }
+
+  return (
+    <div className="card p-4">
+      <p className="text-sm font-medium text-ink-900">My official email</p>
+      <p className="mt-0.5 text-sm text-ink-500">
+        Where a code is sent when you change your password. Without one,
+        this account changes its password with no second step.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <input
+            type="email"
+            className="input w-full"
+            placeholder={`name@${OFFICIAL_DOMAIN}`}
+            value={email}
+            onChange={e => { setEmail(e.target.value); setDone(false) }}
+            onBlur={() => setTouched(true)}
+            disabled={setWorkEmail.isPending}
+          />
+          {problem && <p className="mt-1 text-xs text-cyrixRed-700">{problem}</p>}
+        </div>
+        <button onClick={save} disabled={blocked} className="btn-primary">
+          {setWorkEmail.isPending ? <Spinner className="h-4 w-4" /> : null}
+          Save
+        </button>
+      </div>
+
+      {setWorkEmail.error && (
+        <div className="mt-3">
+          <Alert kind="error">{setWorkEmail.error.message}</Alert>
+        </div>
+      )}
+      {done && !changed && (
+        <div className="mt-3">
+          <Alert kind="success">
+            {saved ? `Codes will go to ${saved}.` : 'Address removed.'}
+          </Alert>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 px-4 py-3">
@@ -322,7 +405,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 export default function Profile() {
-  const { employee, isManager, directReportCount, isHrAdmin } = useAuth()
+  const { employee, isManager, directReportCount, isHrAdmin, isSwAdmin } = useAuth()
   const fy = currentFy()
 
   const { data: annual } = useAnnualSummary(employee?.id, fy)
@@ -553,6 +636,9 @@ export default function Profile() {
           {isHrAdmin && <Row label="Role">HR Admin</Row>}
         </div>
       </div>
+
+      {/* The two shared logins only. See WorkEmailCard. */}
+      {(isHrAdmin || isSwAdmin) && <WorkEmailCard employee={employee} />}
 
       <div className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">

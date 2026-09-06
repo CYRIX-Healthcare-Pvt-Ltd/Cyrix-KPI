@@ -219,8 +219,8 @@ export default function Shell() {
             <a
               href="/"
               className="btn-press flex items-center gap-2.5 rounded-lg py-1 pr-1"
-              aria-label="All Cyrix apps"
-              title="All Cyrix apps"
+              aria-label="All Cyrix modules"
+              title="All Cyrix modules"
             >
               {/* The whole company name, not just CYRIX. This used to be
                   cropped to the wordmark because the entity line under it
@@ -258,18 +258,18 @@ export default function Shell() {
               </NavLink>
             ))}
 
-            {/* The desktop counterpart of the bottom bar's Apps cell. The
+            {/* The desktop counterpart of the bottom bar's Modules cell. The
                 mark on the left reaches the same place, but a clickable logo
                 is a convention you have to already know; this says the word.
                 A plain anchor — the portal is above this app's basename.
 
                 Hidden on the same test as that bar: with one destination
-                there is nothing here to leave, and Apps beside a single
+                there is nothing here to leave, and Modules beside a single
                 tab reads as a second module rather than the way out. */}
             {items.length > 1 && (
-              <a href="/" className="nav-link" title="All Cyrix apps">
+              <a href="/" className="nav-link" title="All Cyrix modules">
                 <Grid2x2 className="h-4 w-4 text-ink-400" />
-                Apps
+                Modules
               </a>
             )}
           </nav>
@@ -410,7 +410,7 @@ export default function Shell() {
             <span className="relative">
               <Grid2x2 className="h-5 w-5" />
             </span>
-            <span className="truncate">Apps</span>
+            <span className="truncate">Modules</span>
           </a>
         </div>
       </nav>
