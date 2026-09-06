@@ -84,7 +84,7 @@ export const CHAT: Record<string, Phrase> = {
     ta: 'நான் மலையாளம், இந்தி, தெலுங்கு, தமிழ் பேசுவேன்? இந்தப் பலகத்தின் மேலே மாற்றிக்கொள்ளுங்கள் — கையேடும் அதனுடன் மாறும்.',
   },
   'tip.manual': {
-    en: 'the whole manual is one page, in your language? Fifty questions, plain answers, no jargon.',
+    en: 'the whole manual is one page, in your language? Fifty questions, plain answers, no difficult words.',
     ml: 'മുഴുവൻ മാനുവലും നിങ്ങളുടെ ഭാഷയിൽ ഒരൊറ്റ പേജിലാണ്? അമ്പത് ചോദ്യങ്ങൾ, ലളിതമായ ഉത്തരങ്ങൾ, സാങ്കേതിക പദങ്ങളില്ല.',
     hi: 'पूरा मैनुअल आपकी भाषा में एक ही पेज पर है? पचास सवाल, सीधे जवाब, कोई तकनीकी भाषा नहीं।',
     te: 'మొత్తం మాన్యువల్ మీ భాషలో ఒకే పేజీలో ఉంది? యాభై ప్రశ్నలు, సూటి సమాధానాలు, సాంకేతిక పదాలు లేవు.',

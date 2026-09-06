@@ -132,7 +132,7 @@ const admin = () =>
  */
 function callerFromToken(req: Request): string | null {
   const header = req.headers.get('Authorization') ?? ''
-  const token = header.replace(/^Bearers+/i, '').trim()
+  const token = header.replace(/^Bearer\s+/i, '').trim()
   const parts = token.split('.')
   if (parts.length !== 3) return null
   try {

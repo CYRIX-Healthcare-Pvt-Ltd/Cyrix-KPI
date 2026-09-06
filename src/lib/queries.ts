@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase, friendlyError } from './supabase'
 import { fyForDate } from './fy'
+import { notifyHr } from './notifyHr'
 import type {
   Employee, KpiAssignment, KpiAssignmentItem, KpiSubmission, KpiSubmissionItem,
   CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
@@ -1449,12 +1450,15 @@ export function useRemovalAction() {
       note?: string
     }) => {
       if (args.action === 'request') {
-        const { error } = await supabase.rpc('request_tm_removal', {
+        const { data, error } = await supabase.rpc('request_tm_removal', {
           p_employee_id: args.employeeId,
           p_reason: args.reason ?? '',
           p_last_working_day: args.lastWorkingDay ?? null,
         })
         if (error) throw new Error(friendlyError(error))
+        // Somebody has left and is still on the payroll screen until HR
+        // acts. Over a weekend that is days, for want of one email.
+        notifyHr('leaver', (data as { id?: string } | null)?.id)
       } else {
         const { error } = await supabase.rpc('review_tm_removal', {
           p_request_id: args.requestId,
@@ -1582,8 +1586,15 @@ export function useRequestAction() {
             p_note: args.note ?? null,
           }
 
-      const { error } = await supabase.rpc(fn, params)
+      const { data, error } = await supabase.rpc(fn, params)
       if (error) throw new Error(friendlyError(error))
+      // Only a new one. Reviewing is HR acting on it, not being told.
+      if (args.action === 'request') {
+        notifyHr(
+          args.kind === 'deletion' ? 'record' : 'revision',
+          (data as { id?: string } | null)?.id,
+        )
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['record_requests'] })
@@ -1730,6 +1741,37 @@ export function useOtpSender() {
       )
       return rows[0]?.value ?? ''
     },
+  })
+}
+
+/**
+ * Who else is copied on HR notifications.
+ *
+ * Readable by anyone signed in, like the other settings — it is a list
+ * of colleagues, not a secret. Writing goes through an RPC so the
+ * @cyrix.in rule and the ceiling are enforced where the write lands.
+ */
+export function useHrNotifyCc() {
+  return useQuery({
+    queryKey: ['hr_notify_cc'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ value: string[] | null }>>(
+        supabase.from('app_settings').select('value').eq('key', 'hr_notify_cc').limit(1),
+      )
+      return rows[0]?.value ?? []
+    },
+  })
+}
+
+export function useSaveHrNotifyCc() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (cc: string[]) => {
+      const { error } = await supabase.rpc('set_hr_notify_cc', { p_cc: cc })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr_notify_cc'] }),
   })
 }
 
@@ -1981,10 +2023,16 @@ export function useRaiseTicket() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (args: { desk: SupportDesk; note: string }) => {
-      const { error } = await supabase.rpc('raise_support_ticket', {
+      const { data, error } = await supabase.rpc('raise_support_ticket', {
         p_desk: args.desk, p_note: args.note,
       })
       if (error) throw new Error(friendlyError(error))
+      // HR reads their desk in an inbox; SW Admin watches theirs in the
+      // app, and routing it here would put every "I cannot sign in" into
+      // HR's mail. The function refuses it too — this saves the trip.
+      if (args.desk === 'hr') {
+        notifyHr('support', (data as { id?: string } | null)?.id)
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['support_tickets'] }),
   })

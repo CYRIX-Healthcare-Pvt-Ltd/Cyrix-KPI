@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis,
@@ -6,9 +6,11 @@ import {
 } from 'recharts'
 import { Users, Clock, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react'
 import {
-  useOrgKpiStatus, useManagerCompletion, useManagerTat, useRemovalRequests, currentFy,
+  useOrgKpiStatus, useManagerCompletion, useManagerTat, useRemovalRequests,
+  useHrNotifyCc, useSaveHrNotifyCc, currentFy,
 } from '@/lib/queries'
-import { PageLoader, StatTile, ScorePill, Alert } from '@/components/ui'
+import { PageLoader, StatTile, ScorePill, Alert, Spinner } from '@/components/ui'
+import { officialEmailProblem, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 import { ScoreHeader } from '@/components/analysis'
 import CompletionByDimension from '@/components/CompletionByDimension'
 import { bandFor } from '@/lib/bands'
@@ -280,6 +282,79 @@ export default function AdminOverview() {
           to="/admin/reports"
         />
       </div>
+
+      <NotifyCcCard />
+    </div>
+  )
+}
+
+/**
+ * Who else hears about the work.
+ *
+ * The four queues above are emailed to HR Admin as they arrive, because
+ * a badge is only seen by somebody already signed in — and two of these
+ * are a person waiting on HR, which over a weekend is measured in days.
+ *
+ * A list rather than "everybody in HR Department": there are some twenty
+ * people in it and almost none of them want every support question. It
+ * starts empty and HR adds colleagues, so nobody is subscribed to
+ * anything they did not ask for.
+ */
+function NotifyCcCard() {
+  const { data: cc } = useHrNotifyCc()
+  const save = useSaveHrNotifyCc()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  // One per line is the shape people already have: they paste from a
+  // list, and a comma-separated box makes them join it up by hand first.
+  const text = draft ?? (cc ?? []).join('\n')
+  const parsed = text.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+  const bad = parsed.find(a => officialEmailProblem(a))
+  const changed = parsed.join('\n') !== (cc ?? []).join('\n')
+
+  return (
+    <div className="card p-4">
+      <h3 className="mb-1 text-sm font-semibold text-ink-800">
+        Who is copied on these
+      </h3>
+      <p className="mb-3 text-xs text-ink-500">
+        Support questions, leavers, records and KPI revisions are emailed to
+        HR Admin as they arrive. Anyone here is copied. One address per line,
+        official @{OFFICIAL_DOMAIN} only.
+      </p>
+      <textarea
+        rows={3}
+        className="input w-full font-mono text-xs"
+        placeholder={`colleague@${OFFICIAL_DOMAIN}`}
+        value={text}
+        onChange={e => { setDraft(e.target.value); setSaved(false) }}
+      />
+      {bad && <p className="mt-1 text-xs text-cyrixRed-700">{officialEmailProblem(bad)}</p>}
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          className="btn-primary"
+          disabled={!!bad || !changed || save.isPending}
+          onClick={async () => {
+            setSaved(false)
+            try { await save.mutateAsync(parsed); setDraft(null); setSaved(true) }
+            catch { /* shown below */ }
+          }}
+        >
+          {save.isPending ? <Spinner className="h-4 w-4" /> : null}
+          Save
+        </button>
+        {saved && !changed && (
+          <span className="text-xs text-emerald-700">
+            {parsed.length === 0
+              ? 'Only HR Admin is emailed.'
+              : `${parsed.length} copied.`}
+          </span>
+        )}
+      </div>
+      {save.error && (
+        <div className="mt-3"><Alert kind="error">{save.error.message}</Alert></div>
+      )}
     </div>
   )
 }
