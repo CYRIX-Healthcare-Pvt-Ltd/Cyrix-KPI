@@ -43,6 +43,18 @@
         "--strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "cyrix-platform",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix Platform/node_modules/vite/bin/vite.js",
+        "D:/Cyrix Platform",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "port": 5176
     }
   ]
 }
