@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -69,6 +69,44 @@ export default function Shell() {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const fy = currentFy()
+
+  /**
+   * Whether the tab row has more in it than fits, and which way.
+   *
+   * Measured rather than guessed. How many tabs somebody has depends on
+   * their role, how wide they are depends on the labels, and whether
+   * that overflows depends on the window — so the only honest source is
+   * the element. Watched for both scrolling and resizing, because the
+   * arrow has to go away the moment you reach the end and come back the
+   * moment the window narrows.
+   */
+  const navRef = useRef<HTMLElement>(null)
+  const [navMore, setNavMore] = useState({ left: false, right: false })
+
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const measure = () => {
+      // A pixel of slack: sub-pixel widths make an element that fits
+      // exactly report one stray pixel of overflow, and an arrow that
+      // scrolls nowhere is worse than no arrow.
+      const max = el.scrollWidth - el.clientWidth
+      setNavMore({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 })
+    }
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', measure)
+      ro.disconnect()
+    }
+    // The tabs themselves change with the role, which changes the width.
+  }, [pathname, isManager, isHrAdmin, isSwAdmin])
+
+  /** About two tabs at a time — far enough to be worth a press. */
+  const nudgeNav = (direction: 1 | -1) =>
+    navRef.current?.scrollBy({ left: direction * 220, behavior: 'smooth' })
 
   const { data: counts } = usePendingCounts(
     isManager ? employee?.id : undefined, fy,
@@ -244,7 +282,22 @@ export default function Shell() {
               scrolled sideways — and HR carries more tabs than anyone,
               so trimming padding would only move the width it breaks at.
               The bottom nav covers tablets instead. */}
-          <nav className="nav-scroll ml-6 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex">
+          {/*
+            The row scrolls, and says so.
+
+            Making it scroll was half the job: with eight tabs the row
+            ended cleanly after a whole tab, so nothing looked cut and
+            there was no reason to think Records and Modules existed. A
+            fade at the live edge, with an arrow to press, is the part
+            that answers "is there more".
+
+            Both edges are conditional and measured rather than assumed —
+            a fade sitting permanently over the last tab would be a
+            worse lie than no fade at all, and the answer changes with
+            the window, the role, and how far it is already scrolled.
+          */}
+          <div className="relative ml-6 hidden min-w-0 flex-1 lg:block">
+          <nav ref={navRef} className="nav-scroll flex items-center gap-1 overflow-x-auto">
             {items.map(item => (
               <NavLink
                 key={item.to}
@@ -273,6 +326,28 @@ export default function Shell() {
               </a>
             )}
           </nav>
+
+          {navMore.left && (
+            <button
+              type="button"
+              onClick={() => nudgeNav(-1)}
+              aria-label="Show earlier tabs"
+              className="nav-more nav-more-left"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
+          {navMore.right && (
+            <button
+              type="button"
+              onClick={() => nudgeNav(1)}
+              aria-label="Show more tabs"
+              className="nav-more nav-more-right"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+          </div>
 
           {/* 6px on a phone, the same as the other two modules. At 12px the
               four controls spread wide enough that the face stopped reading

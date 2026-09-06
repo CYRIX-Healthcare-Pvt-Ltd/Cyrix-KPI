@@ -10,7 +10,7 @@
  *
  * Vite builds index.html only, so none of this ships.
  */
-import { StrictMode, useState } from 'react'
+import { StrictMode, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, NavLink } from 'react-router-dom'
@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   Menu, LogOut, Bell, MessageCircle, UserMinus, Check, X,
   LayoutDashboard, Building2, BarChart3, MessageSquare, LifeBuoy, Trash2, Grid2x2,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { Logo } from './components/Logo'
 import Avatar from './components/Avatar'
@@ -46,6 +47,24 @@ const PHOTO =
   'DAMBAAIRAxEAPwD3+iiigD//2Q=='
 
 function Header() {
+  const navRef = useRef<HTMLElement>(null)
+  const [more, setMore] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const measure = () => {
+      const max = el.scrollWidth - el.clientWidth
+      setMore({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 })
+    }
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', measure); ro.disconnect() }
+  }, [])
+  const nudge = (d: 1 | -1) =>
+    navRef.current?.scrollBy({ left: d * 220, behavior: 'smooth' })
+
   return (
     <header className="sticky top-0 z-30 border-b border-ink-200 bg-surface">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:h-16">
@@ -67,7 +86,8 @@ function Header() {
           to reach it was to zoom the browser out. The row scrolls now,
           and the block on the right never moves.
         */}
-        <nav className="nav-scroll ml-6 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex">
+        <div className="relative ml-6 hidden min-w-0 flex-1 lg:block">
+        <nav ref={navRef} className="nav-scroll flex items-center gap-1 overflow-x-auto">
           {([
             ['Overview', LayoutDashboard, 0],
             ['Employees', Building2, 0],
@@ -92,6 +112,17 @@ function Header() {
             Modules
           </a>
         </nav>
+        {more.left && (
+          <button onClick={() => nudge(-1)} aria-label="Show earlier tabs" className="nav-more nav-more-left">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
+        {more.right && (
+          <button onClick={() => nudge(1)} aria-label="Show more tabs" className="nav-more nav-more-right">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
+        </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
           <NavLink

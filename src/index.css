@@ -1141,3 +1141,37 @@
  */
 .cyrix-logo[data-on='dark'] .cyrix-logo-light { display: none; }
 .cyrix-logo[data-on='dark'] .cyrix-logo-dark { display: block; }
+
+@layer components {
+  /*
+   * "There is more this way."
+   *
+   * The tab row scrolls, and with eight tabs it happened to end after a
+   * whole tab — nothing looked cut, so nobody had any reason to think
+   * Records and Modules were there at all. This is the part that says
+   * so: the row fading out under an arrow you can press.
+   *
+   * The fade is the bar's own colour rather than a shadow, so it reads
+   * as the row continuing underneath rather than as an edge. Rendered
+   * only when there is genuinely something past the edge — a permanent
+   * fade over the last tab would be a worse lie than none.
+   */
+  .nav-more {
+    @apply absolute top-0 bottom-0 z-10 flex w-9 items-center justify-center
+           text-ink-400 transition-colors;
+  }
+  .nav-more:hover { @apply text-ink-700; }
+
+  .nav-more-right {
+    right: 0;
+    justify-content: flex-end;
+    background: linear-gradient(
+      to right, rgb(var(--surface) / 0), rgb(var(--surface)) 55%);
+  }
+  .nav-more-left {
+    left: 0;
+    justify-content: flex-start;
+    background: linear-gradient(
+      to left, rgb(var(--surface) / 0), rgb(var(--surface)) 55%);
+  }
+}
