@@ -4,20 +4,45 @@
     {
       "name": "cyrix-kpi",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "cyrix-spare",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "D:/Projects/Blue-Star", "run", "dev", "--", "--port", "5174"],
+      "runtimeArgs": [
+        "--prefix",
+        "D:/Projects/Blue-Star",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174"
+      ],
       "port": 5174
     },
     {
       "name": "cyrix-bemmp",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["D:/Cyrix Coding/scripts/serve.mjs"],
+      "runtimeArgs": [
+        "D:/Cyrix Coding/scripts/serve.mjs"
+      ],
       "port": 4173
+    },
+    {
+      "name": "cyrix-bemmp-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix Coding/node_modules/vite/bin/vite.js",
+        "D:/Cyrix Coding",
+        "--port",
+        "5175",
+        "--strictPort"
+      ],
+      "port": 5175
     }
   ]
 }
