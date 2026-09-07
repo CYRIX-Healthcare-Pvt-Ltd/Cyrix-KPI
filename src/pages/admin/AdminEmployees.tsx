@@ -516,16 +516,38 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     }
   }
 
+  /*
+    Every employee, not the first thousand of them.
+
+    PostgREST answers an unbounded select with one page, and the ceiling
+    is a thousand rows against 1,236 employees. Everything downstream read
+    that page as the whole company: 236 people already on the roster were
+    invisible, so the import counted them as new joiners, tried to make
+    accounts that exist, reset their must-change-password flag, and could
+    not resolve anybody reporting to them. Nothing failed — it just got
+    the wrong answer, quietly, on every upload.
+  */
+  const everyEmployee = async <T,>(columns: string) => {
+    const PAGE = 1000
+    const out: T[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('employees').select(columns).range(from, from + PAGE - 1)
+      if (error) throw new Error(friendlyError(error))
+      const page = (data ?? []) as T[]
+      out.push(...page)
+      if (page.length < PAGE) return out
+    }
+  }
+
   const save = async () => {
     if (!rows) return
     setBusy(true); setError(null)
     try {
-      const { data: existing } = await supabase
-        .from('employees').select('id, ecode, must_change_password')
-      const priorByEcode = new Map(
-        ((existing ?? []) as Array<{ id: string; ecode: string; must_change_password: boolean }>)
-          .map(e => [e.ecode.toUpperCase(), e]),
-      )
+      const existing = await everyEmployee<
+        { id: string; ecode: string; must_change_password: boolean }
+      >('id, ecode, must_change_password')
+      const priorByEcode = new Map(existing.map(e => [e.ecode.toUpperCase(), e]))
       const byEcode = new Map([...priorByEcode].map(([code, e]) => [code, e.id]))
 
       /*
@@ -574,10 +596,26 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       if (upErr) throw new Error(friendlyError(upErr))
 
       // Second pass for reporting lines, so the sheet need not be ordered.
-      const { data: after } = await supabase.from('employees').select('id, ecode')
-      ;(after ?? []).forEach(e => byEcode.set(e.ecode.toUpperCase(), e.id))
+      const after = await everyEmployee<{ id: string; ecode: string }>('id, ecode')
+      after.forEach(e => byEcode.set(e.ecode.toUpperCase(), e.id))
 
+      /*
+        Reporting lines, one request per manager rather than one per
+        employee.
+
+        This was an awaited update inside a loop over every row: 1,177
+        round trips, taken one after another, which is minutes of a
+        spinner that looks like a hang and was reported as one. There are
+        only as many distinct managers as there are managers — a couple of
+        hundred at most — so grouping by manager and setting all their
+        reports in one call turns the pass from eleven hundred requests
+        into a few hundred, and they can go together.
+
+        Chunked because the ids travel in the URL, and an `in` list of
+        several hundred uuids is longer than PostgREST will accept.
+      */
       const failed: string[] = []
+      const reportsTo = new Map<string, string[]>()
       for (const r of rows) {
         if (!r.manager_ecode) continue
         const mgrId = byEcode.get(r.manager_ecode.toUpperCase())
@@ -586,9 +624,23 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           failed.push(`${r.ecode} → ${r.manager_ecode}`)
           continue
         }
-        await supabase.from('employees')
-          .update({ reporting_manager_id: mgrId }).eq('id', selfId)
+        const have = reportsTo.get(mgrId)
+        if (have) have.push(selfId); else reportsTo.set(mgrId, [selfId])
       }
+
+      const ID_CHUNK = 100
+      const lineWrites: Array<PromiseLike<{ error: unknown }>> = []
+      for (const [mgrId, reports] of reportsTo) {
+        for (let i = 0; i < reports.length; i += ID_CHUNK) {
+          lineWrites.push(
+            supabase.from('employees')
+              .update({ reporting_manager_id: mgrId })
+              .in('id', reports.slice(i, i + ID_CHUNK)),
+          )
+        }
+      }
+      const lineFailure = (await Promise.all(lineWrites)).find(r => r.error)?.error
+      if (lineFailure) throw new Error(friendlyError(lineFailure))
 
       /*
         Anybody not in the file has left.
