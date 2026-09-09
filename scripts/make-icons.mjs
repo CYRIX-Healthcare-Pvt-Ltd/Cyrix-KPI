@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 /**
- * Generates public/icon-192.png and icon-512.png — the PWA home-screen
- * icons referenced by the manifest. A teal rounded square with a white C.
+ * Generates every raster icon the four apps declare, from the same
+ * geometry as public/favicon.svg — the PWA home-screen icons, BEMMP's
+ * apple-touch-icon, and its favicon.ico.
+ *
+ * The .ico is the reason this exists again. BEMMP declares it before its
+ * SVG, so the browser took the stale one and that tab kept the old mark
+ * while the other two changed.
  *
  *   node scripts/make-icons.mjs
  *
@@ -19,9 +24,11 @@ const outDir = join(__dirname, '..', 'public')
 mkdirSync(outDir, { recursive: true })
 
 // The logo mark: black tile, one white stroke and one red, forming the X.
-const INK = [0, 0, 0]
+// Straight off public/favicon.svg, so the raster and the vector cannot
+// drift apart.
+const INK = [0x14, 0x14, 0x14]     // #141414
 const WHITE = [255, 255, 255]
-const RED = [227, 6, 19]       // #e30613
+const RED = [0xe5, 0x23, 0x1d]     // #e5231d
 
 // ---- CRC32 -----------------------------------------------------------
 const CRC_TABLE = (() => {
@@ -89,11 +96,23 @@ function coverage(x, y, test) {
   return hits / 9
 }
 
+/**
+ * The Cyrix mark: two chevrons facing each other across a gap, black on
+ * the left and red on the right, on a white rounded tile.
+ *
+ * The same geometry as public/favicon.svg, at 32 units, scaled to
+ * whatever size is asked for — so the PNG a phone puts on a home screen
+ * and the SVG a browser puts in a tab are the same drawing rather than
+ * two drawings that resemble each other.
+ *
+ * White tile rather than black: the mark is red *and* black, and black
+ * needs a light ground.
+ */
 function makeIcon(size) {
   const rgba = Buffer.alloc(size * size * 4)
-  const r = size * 0.19                       // corner radius
-  const pad = size * 0.24                     // inset of the X arms
-  const half = size * 0.072                   // half stroke width
+  const u = size / 32                         // the SVG's units, scaled
+  const r = 7 * u                             // corner radius
+  const half = 2.5 * u                        // half the 5-unit stroke
 
   const insideSquare = (x, y) => {
     // Rounded rectangle: clamp to the inner rect, then check distance.
@@ -109,27 +128,30 @@ function makeIcon(size) {
     return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) <= half
   }
 
-  const lo = pad, hi = size - pad
-  const onWhite = (x, y) => nearSegment(x, y, lo, lo, hi, hi)   // ↘ stroke
-  const onRed   = (x, y) => nearSegment(x, y, hi, lo, lo, hi)   // ↙ stroke
+  // M6 6 L16 16 L6 26 and M26 6 L16 16 L26 26, straight off the SVG.
+  const onInk = (x, y) =>
+    nearSegment(x, y, 6 * u, 6 * u, 16 * u, 16 * u)
+    || nearSegment(x, y, 16 * u, 16 * u, 6 * u, 26 * u)
+  const onRed = (x, y) =>
+    nearSegment(x, y, 26 * u, 6 * u, 16 * u, 16 * u)
+    || nearSegment(x, y, 16 * u, 16 * u, 26 * u, 26 * u)
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4
       const bg = coverage(x, y, insideSquare)
-      const w = coverage(x, y, onWhite)
-      // Red drawn last so the crossing point reads red, as in the logo.
+      const k = coverage(x, y, onInk)
       const rd = coverage(x, y, onRed)
 
-      let [cr, cg, cb] = INK
-      cr = cr * (1 - w) + WHITE[0] * w
-      cg = cg * (1 - w) + WHITE[1] * w
-      cb = cb * (1 - w) + WHITE[2] * w
+      let [cr, cg, cb] = WHITE
+      cr = cr * (1 - k) + INK[0] * k
+      cg = cg * (1 - k) + INK[1] * k
+      cb = cb * (1 - k) + INK[2] * k
       cr = cr * (1 - rd) + RED[0] * rd
       cg = cg * (1 - rd) + RED[1] * rd
       cb = cb * (1 - rd) + RED[2] * rd
 
-      rgba[i]     = Math.round(cr)
+      rgba[i] = Math.round(cr)
       rgba[i + 1] = Math.round(cg)
       rgba[i + 2] = Math.round(cb)
       rgba[i + 3] = Math.round(255 * bg)
@@ -139,9 +161,49 @@ function makeIcon(size) {
   return encodePng(size, size, rgba)
 }
 
-for (const size of [192, 512]) {
-  const file = join(outDir, `icon-${size}.png`)
-  writeFileSync(file, makeIcon(size))
-  console.log(`  + public/icon-${size}.png`)
+/**
+ * A .ico wrapping a single PNG.
+ *
+ * Every browser that still asks for /favicon.ico accepts PNG-in-ICO, and
+ * it is a header, one directory entry and the PNG bytes. BEMMP declares
+ * the .ico before its SVG, so a stale one wins outright — which is how
+ * that tab kept the old mark while the other two changed.
+ */
+function makeIco(png, size) {
+  const dir = Buffer.alloc(22)
+  dir.writeUInt16LE(0, 0)            // reserved
+  dir.writeUInt16LE(1, 2)            // type: icon
+  dir.writeUInt16LE(1, 4)            // one image
+  dir.writeUInt8(size >= 256 ? 0 : size, 6)   // 0 means 256
+  dir.writeUInt8(size >= 256 ? 0 : size, 7)
+  dir.writeUInt8(0, 8)               // palette size
+  dir.writeUInt8(0, 9)               // reserved
+  dir.writeUInt16LE(1, 10)           // colour planes
+  dir.writeUInt16LE(32, 12)          // bits per pixel
+  dir.writeUInt32LE(png.length, 14)
+  dir.writeUInt32LE(22, 18)          // the PNG starts right after this
+  return Buffer.concat([dir, png])
 }
+
+/*
+ * Every place a raster icon is declared, across the three repos.
+ *
+ * Written from here rather than copied by hand: three apps sharing one
+ * tab strip is the whole point, and an icon set kept in step by somebody
+ * remembering is one that goes out of step.
+ */
+const TARGETS = [
+  ['D:/Cyrix KPI/public/icon-192.png', 192, 'png'],
+  ['D:/Cyrix KPI/public/icon-512.png', 512, 'png'],
+  ['D:/Cyrix Coding/public/apple-touch-icon.png', 180, 'png'],
+  ['D:/Cyrix Coding/public/favicon.ico', 32, 'ico'],
+]
+
+for (const [file, size, kind] of TARGETS) {
+  const png = makeIcon(size)
+  writeFileSync(file, kind === 'ico' ? makeIco(png, size) : png)
+  console.log(`  ${file}  ${size}px`)
+}
+console.log('icons written')
+
 console.log('Done.')
