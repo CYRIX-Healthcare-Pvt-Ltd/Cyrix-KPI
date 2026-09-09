@@ -118,7 +118,14 @@ export default function TeamMember() {
                 {/* "Mine" read as the manager's own row on their own
                     screen. It is their assessment of somebody else, and
                     the word for that is Manager. */}
-                <th className="px-4 py-2.5 text-right font-medium">Self</th>
+                <th className="px-4 py-2.5 text-right font-medium">
+                  Self
+                  {/* Named, because it is not comparable with the columns
+                      beside it: the person scores their job role only. */}
+                  <span className="block text-[10px] font-normal normal-case tracking-normal text-ink-400">
+                    job role only
+                  </span>
+                </th>
                 <th className="px-4 py-2.5 text-right font-medium">Manager</th>
                 <th className="px-4 py-2.5 text-right font-medium">Final</th>
                 <th className="px-4 py-2.5" />
@@ -138,18 +145,36 @@ export default function TeamMember() {
                         core-values score is a different conversation
                         from one built the other way round, and the total
                         alone cannot tell them apart. */}
-                    {/* No self TOTAL and no self CORE any more: the person
-                        fills in only the job role, so a total would be the job
-                        role with core counted as nought, and a core figure
-                        would be a zero nobody entered. What they did submit
-                        still shows. */}
-                    <BandCell
-                      total={null}
-                      job={s?.self_job_role_score}
-                      esms={s?.self_esms_score}
-                      core={null}
-                      hasEsms={hasEsms}
-                    />
+                    {/*
+                      No self TOTAL and no self CORE: the person fills in
+                      only the job role, so a total would be the job role
+                      with core counted as nought and a core figure would be
+                      a zero nobody entered.
+
+                      Which makes the job-role figure the whole of the self
+                      assessment, and it is shown as the number rather than
+                      as a part of one. It used to go through BandCell as a
+                      part with a null total, and BandCell draws its parts
+                      only when there is a total to break down — so a
+                      manager looking at what their report claimed saw an
+                      empty column, on every month, for a figure that was
+                      sitting right there.
+                    */}
+                    <td className="px-4 py-3 text-right">
+                      <span className="tabular-nums text-ink-600">
+                        {s?.self_job_role_score != null
+                          ? s.self_job_role_score.toFixed(2)
+                          : '—'}
+                      </span>
+                      {hasEsms && s?.self_esms_score != null && (
+                        <p className="mt-1 text-[10px] leading-tight text-ink-400">
+                          ESMS{' '}
+                          <span className="font-semibold tabular-nums text-ink-600">
+                            {s.self_esms_score.toFixed(1)}
+                          </span>
+                        </p>
+                      )}
+                    </td>
                     <BandCell
                       total={s?.mgr_total_score}
                       job={s?.mgr_job_role_score}

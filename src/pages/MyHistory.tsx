@@ -165,8 +165,7 @@ export default function MyHistory() {
       */
       const months = fyMonthsFrom(fy, startsFrom)
       const cells = months.map(m => byMonth.get(m))
-      const anySelf = cells.some(c =>
-        c?.self_job_role_score != null || c?.self_esms_score != null)
+      const anySelf = cells.some(c => c?.self_job_role_score != null)
       const adjusted = (c: typeof cells[number]) =>
         c?.final_total_score != null && c?.mgr_total_score != null
         && Math.abs(c.final_total_score - c.mgr_total_score) > 0.005
@@ -249,13 +248,36 @@ export default function MyHistory() {
                         would be a zero nobody entered. What they did submit
                         still shows. */}
                     {anySelf && (
-                      <BandCell
-                        total={null}
-                        job={s?.self_job_role_score}
-                        esms={s?.self_esms_score}
-                        core={null}
-                        hasEsms={hasEsms}
-                      />
+                      /*
+                        The job-role figure IS the self-assessment, so it is
+                        shown as the number rather than as a part of one.
+
+                        It went through BandCell as a part with a null
+                        total, and BandCell draws its parts only when there
+                        is a total to break down — so every self score that
+                        existed was passed in and then not drawn. The column
+                        read as an empty column for months that had one.
+
+                        There is no total to break down here and there never
+                        will be: the person scores their job role and not the
+                        core values, so a "total" would be the job role with
+                        core counted as nought.
+                      */
+                      <td className="px-4 py-3 text-right">
+                        <span className="tabular-nums text-ink-600">
+                          {s?.self_job_role_score != null
+                            ? s.self_job_role_score.toFixed(2)
+                            : '—'}
+                        </span>
+                        {hasEsms && s?.self_esms_score != null && (
+                          <p className="mt-1 text-[10px] leading-tight text-ink-400">
+                            ESMS{' '}
+                            <span className="font-semibold tabular-nums text-ink-600">
+                              {s.self_esms_score.toFixed(1)}
+                            </span>
+                          </p>
+                        )}
+                      </td>
                     )}
                     <BandCell
                       total={open ? s?.mgr_total_score : null}
