@@ -142,8 +142,24 @@ function detectScoringRule(
     }
     // MIN(F/E*D, D) — rises to the weightage and stops there
     if (f.includes('MIN(')) return { rule: 'higher_capped', inferred: false }
-    // No MIN wrapper on a ratio — overachievement is allowed to run past
-    if (/\/[A-Z]+\d+\*/.test(f)) return { rule: 'higher_uncapped', inferred: false }
+    /*
+      A ratio with no MIN wrapper used to be read as "uncapped, certainly".
+
+      It is not certain, and guessing that way is the expensive direction.
+      An uncapped row can score more than its weightage and carry the
+      month's total past 100, so a wrong guess here inflates a score; the
+      same guess made the other way merely fails to reward
+      overachievement, which somebody notices and asks about. Every upload
+      of an older sheet was quietly turning rows into "can exceed
+      weightage" with nothing marked for review, because the guess was
+      recorded as a certainty.
+
+      A missing MIN is now no evidence rather than evidence of the
+      opposite: the row lands on the default and is flagged as a guess, so
+      it shows in the amber "please check" band and a person decides. The
+      Capping column still names the rule outright, and when it does it
+      wins — this is only what happens when nobody has said.
+    */
   }
 
   // No formula to read. A target of 0 can only sensibly mean "keep this

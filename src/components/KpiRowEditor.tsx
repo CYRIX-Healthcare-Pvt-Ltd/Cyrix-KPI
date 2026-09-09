@@ -2,6 +2,7 @@ import { useState, useId } from 'react'
 import clsx from 'clsx'
 import {
   Trash2, Shuffle, Calculator, ArrowUp, ArrowDown, Minus, FlaskConical, TrendingDown,
+  AlertTriangle,
 } from 'lucide-react'
 import RuleTraits from './RuleTraits'
 import { NumberInput, cleanNumberText } from './ui'
@@ -41,6 +42,114 @@ const DIRECTION = {
   neutral:       { label: 'Rated',            icon: Minus, chip: 'bg-ink-100 text-ink-700' },
 } as const
 
+/**
+ * The default, named once.
+ *
+ * Every row starts here — a new one, a guessed one, an imported one whose
+ * label nobody recognised. It is the only rule that cannot surprise
+ * anybody: the score rises to the weightage and stops. Everything else
+ * either pays for beating the target or takes marks off the rest of the
+ * appraisal, and neither should be arrived at by leaving a dropdown alone.
+ */
+export const DEFAULT_RULE: ScoringRule = 'higher_capped'
+
+/**
+ * What each rule does to a score, in the words somebody would use out loud,
+ * and a colour of its own.
+ *
+ * The dropdown had one appearance for seven behaviours that range from
+ * "cannot go above its weightage" to "can go below zero and drag the total
+ * down with it". Read quickly they are the same sentence shape with a word
+ * changed, which is how the wrong one gets picked and stays picked.
+ *
+ * The colour is a ramp, and what it ramps along is how far this row can
+ * move the total: green where the score can only rise to its weightage,
+ * deeper green where it can rise past it, amber where the row can lose
+ * its own weightage, red where it can take marks off everything else.
+ *
+ * Direction alone would have coloured the two "lower is better" rules the
+ * same, and those two are the pair most often confused and the pair that
+ * differs most — one stops at nought, the other does not stop.
+ */
+export const RULE_TONE: Record<string, { chip: string; ink: string; ring: string; bar: string }> = {
+  /*
+    Written out, never assembled.
+
+    The stripe class used to be derived from the border class by string
+    replacement. Tailwind only generates class names it can find in the
+    source, and "bg-green-600" appears nowhere — so that stripe was never
+    built and simply did not draw. Amber survived because its class happens
+    to be used elsewhere in the app, which is luck rather than a system.
+
+    Only the ends of these ramps turn with the theme: 100/200 for a wash,
+    700/800/900 for ink on it, per the note in the Tailwind config. 300 to
+    600 are literal and safe on either ground, which is what a stripe wants.
+  */
+  higher_capped:   { chip: 'bg-emerald-100',  ink: 'text-emerald-800',  ring: 'border-emerald-400',  bar: 'bg-emerald-400' },
+  higher_uncapped: { chip: 'bg-green-200',    ink: 'text-green-800',    ring: 'border-green-600',    bar: 'bg-green-600' },
+  lower_penalty:   { chip: 'bg-amber-100',    ink: 'text-amber-800',    ring: 'border-amber-400',    bar: 'bg-amber-400' },
+  lower_linear:    { chip: 'bg-cyrixRed-100', ink: 'text-cyrixRed-800', ring: 'border-cyrixRed-500', bar: 'bg-cyrixRed-500' },
+  banded:          { chip: 'bg-violet-100',   ink: 'text-violet-800',   ring: 'border-violet-400',   bar: 'bg-violet-400' },
+  boolean:         { chip: 'bg-ink-100',      ink: 'text-ink-800',      ring: 'border-ink-400',      bar: 'bg-ink-400' },
+  rating_scale:    { chip: 'bg-lime-100',     ink: 'text-lime-800',     ring: 'border-lime-500',     bar: 'bg-lime-500' },
+}
+
+const FALLBACK_TONE = { chip: 'bg-ink-100', ink: 'text-ink-800', ring: 'border-ink-300', bar: 'bg-ink-300' }
+export const toneFor = (rule: string) => RULE_TONE[rule] ?? FALLBACK_TONE
+
+/**
+ * The one sentence somebody has to agree with before the rule changes.
+ *
+ * Not a restatement of the label — the label is already on screen and
+ * agreeing with it proves nothing. Each of these says what the rule can do
+ * that the default cannot, because that is the part that gets found out in
+ * March when the totals are wrong.
+ */
+export const RULE_WARNING: Record<string, string> = {
+  higher_capped:
+    'Achieving more than the target earns nothing further. The score rises with what was achieved and stops at the full weightage.',
+  higher_uncapped:
+    "Achievement above the target continues to earn. This row can score more than its weightage, which can take the monthly total above 100.",
+  lower_penalty:
+    'Exceeding the target reduces the score, but this row cannot fall below 0 — at worst it forfeits its own weightage.',
+  lower_linear:
+    "Exceeding the target reduces the score with no floor. This row can fall below 0 and draw marks from the rest of the monthly score, not only its own.",
+  banded:
+    'The score steps at defined thresholds rather than rising smoothly. The bands must be set here — without them this row cannot be scored.',
+  boolean:
+    'All or nothing: the full weightage if completed, zero if not. Any target value entered is not used.',
+  rating_scale:
+    'Assessed on a 0 to 100 scale by judgement rather than from a measured figure, so the target is not used in the calculation.',
+}
+
+/**
+ * The rule, wearing its colour, wherever it is only being read.
+ *
+ * The editor is not the last place this matters — it is arguably not even
+ * the place it matters most. A manager approving a template sees the rule
+ * as three grey words in a narrow column, so "lower linear", the one that
+ * can take marks off the rest of the month, reads exactly like "higher
+ * capped", the one that cannot. Same colours here as on the form the
+ * employee filled in, so the two screens agree about which rows are the
+ * ones to look at twice.
+ */
+export function RuleChip({ rule, label, className }: {
+  rule: string
+  /** The human label when the caller has it; the code, tidied, when not. */
+  label?: string
+  className?: string
+}) {
+  const tone = toneFor(rule)
+  return (
+    <span className={clsx(
+      'badge gap-1 normal-case tracking-normal', tone.chip, tone.ink, className,
+    )}>
+      <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', tone.bar)} aria-hidden />
+      {label ?? rule.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
 export const blankRow = (sortOrder: number): Draft => ({
   _key: crypto.randomUUID(),
   section: 'job_role',
@@ -49,7 +158,7 @@ export const blankRow = (sortOrder: number): Draft => ({
   weightage: 0,
   target_value: null,
   target_unit: null,
-  scoring_rule: 'higher_capped',
+  scoring_rule: DEFAULT_RULE,
   rule_params: {},
   sort_order: sortOrder,
   alternates: [],
@@ -66,6 +175,44 @@ export default function RowEditor({
   onRemove: () => void
 }) {
   const ruleMeta = rules.find(r => r.code === row.scoring_rule)
+  const tone = toneFor(row.scoring_rule)
+
+  /*
+    A rule change is asked about before it is made.
+
+    This dropdown decides whether beating a target earns anything and
+    whether missing one can take marks off the rest of the appraisal, and
+    it was the quietest control on the form: one keystroke on a focused
+    select moves it, and nothing on screen changes enough to notice. The
+    row still reads plausibly afterwards, so it is found in March.
+
+    Held rather than applied, and released by the panel below.
+  */
+  const [pendingRule, setPendingRule] = useState<ScoringRule | null>(null)
+
+  const applyRule = (rule: ScoringRule) => {
+    onChange({
+      scoring_rule: rule,
+      _inferred: false,
+      // The behaviour each rule promises, set from the choice
+      // rather than asked for separately. "Can exceed weightage"
+      // means no ceiling; "can go negative" means exactly that,
+      // and the label would be a lie if a hidden default clamped
+      // it at zero.
+      rule_params: {
+        ...row.rule_params,
+        max_multiplier: undefined,
+        allow_negative: rule === 'lower_linear' ? true : undefined,
+        floor: undefined,
+        // A "% off the total per one over" belongs to this
+        // rule alone. Carried onto any other it is dead
+        // weight that the marks would still be reading.
+        penalty_per_unit:
+          rule === 'lower_linear' ? row.rule_params.penalty_per_unit : undefined,
+      },
+    })
+    setPendingRule(null)
+  }
 
   return (
     <div className={`p-4 ${row._inferred ? 'bg-amber-50/60' : ''}`}>
@@ -197,7 +344,7 @@ export default function RowEditor({
               {ruleMeta && (
                 <span className={clsx(
                   'badge gap-1 normal-case tracking-normal',
-                  DIRECTION[ruleMeta.direction].chip,
+                  tone.chip, tone.ink,
                 )}>
                   {(() => {
                     const Icon = DIRECTION[ruleMeta.direction].icon
@@ -219,37 +366,84 @@ export default function RowEditor({
                 </span>
               )}
             </label>
+            {/* The border is the colour of the rule in the box, not of the
+                one still saved — while a change is pending those differ,
+                and a green ring around "can go below 0 %" says the
+                opposite of what the box says. */}
             <select
-              className="input bg-surface"
-              value={row.scoring_rule}
+              className={clsx('input bg-surface border-2 transition-colors',
+                toneFor(pendingRule ?? row.scoring_rule).ring)}
+              value={pendingRule ?? row.scoring_rule}
               onChange={e => {
                 const rule = e.target.value as ScoringRule
-                onChange({
-                  scoring_rule: rule,
-                  _inferred: false,
-                  // The behaviour each rule promises, set from the choice
-                  // rather than asked for separately. "Can exceed weightage"
-                  // means no ceiling; "can go negative" means exactly that,
-                  // and the label would be a lie if a hidden default clamped
-                  // it at zero.
-                  rule_params: {
-                    ...row.rule_params,
-                    max_multiplier: undefined,
-                    allow_negative: rule === 'lower_linear' ? true : undefined,
-                    floor: undefined,
-                    // A "% off the total per one over" belongs to this
-                    // rule alone. Carried onto any other it is dead
-                    // weight that the marks would still be reading.
-                    penalty_per_unit:
-                      rule === 'lower_linear' ? row.rule_params.penalty_per_unit : undefined,
-                  },
-                })
+                // Choosing what is already set is not a change to confirm.
+                if (rule === row.scoring_rule) { setPendingRule(null); return }
+                setPendingRule(rule)
               }}
             >
               {rules.map(r => (
                 <option key={r.code} value={r.code}>{r.label}</option>
               ))}
             </select>
+
+            {/*
+              Not a browser confirm(): it would have to say all of this in
+              one line of unstyled text, and the thing being agreed to is
+              the consequence, which needs room and the colour of the rule
+              it belongs to. Inline rather than a modal, because the row it
+              is about has to stay readable behind the question.
+            */}
+            {pendingRule && (() => {
+              const to = toneFor(pendingRule)
+              const toLabel = rules.find(r => r.code === pendingRule)?.label
+              return (
+                /*
+                  On the ordinary card surface, with the colour carried by a
+                  stripe and the heading only.
+
+                  Tinting the whole panel meant the buttons sat on a green
+                  or red ground they were never designed for — one of them
+                  came out pale-on-pale and unreadable — and two nested
+                  boxes inside it made a small question look like a form.
+                  Surface underneath, so btn-primary and btn-secondary are
+                  the buttons they are everywhere else in the app.
+                */
+                <div className="mt-2 flex overflow-hidden rounded-lg border border-ink-200 bg-surface shadow-sm">
+                  <span className={clsx('w-1.5 shrink-0', to.bar)} aria-hidden />
+                  <div className="min-w-0 flex-1 p-3">
+                    <p className={clsx('flex items-center gap-1.5 text-sm font-semibold', to.ink)}>
+                      <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                      Change to {toLabel}?
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-ink-700">
+                      {RULE_WARNING[pendingRule]}
+                    </p>
+                    {/* What it replaces, quieter — it is context, not the
+                        question being asked. */}
+                    <p className="mt-1 text-xs leading-relaxed text-ink-500">
+                      Replaces: {RULE_WARNING[row.scoring_rule]}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary whitespace-nowrap px-3 py-1 text-xs"
+                        onClick={() => applyRule(pendingRule)}
+                      >
+                        Change it
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary whitespace-nowrap px-3 py-1 text-xs"
+                        onClick={() => setPendingRule(null)}
+                      >
+                        Keep the current one
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
             {ruleMeta && (
               <p className="mt-1.5 text-xs leading-relaxed text-ink-600">
                 {ruleMeta.description}

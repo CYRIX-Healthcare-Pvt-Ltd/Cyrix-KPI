@@ -15,6 +15,7 @@ import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/component
 import { sectionsOf } from '@/lib/sections'
 import { StartMonthBanner } from '@/components/StartMonth'
 import RuleTraits from '@/components/RuleTraits'
+import { RuleChip } from '@/components/KpiRowEditor'
 import type { KpiAssignment, KpiAssignmentItem, Section, Alternate } from '@/types/db'
 
 export default function Approvals() {
@@ -255,7 +256,7 @@ function AlternateRow({
           {draft.target_value ?? '—'}
         </td>
         <td className="px-4 py-2 text-xs text-ink-500">
-          {draft.scoring_rule.replace(/_/g, ' ')}
+          <RuleChip rule={draft.scoring_rule} />
           <RuleTraits
             className="mt-1.5"
             rule={draft.scoring_rule}
@@ -390,7 +391,7 @@ function EditableRow({
         <td className="px-4 py-2.5 text-right tabular-nums">{draft.weightage}%</td>
         <td className="px-4 py-2.5 text-right tabular-nums">{draft.target_value ?? '—'}</td>
         <td className="px-4 py-2.5 text-xs text-ink-500">
-          {draft.scoring_rule.replace(/_/g, ' ')}
+          <RuleChip rule={draft.scoring_rule} />
           {/* A row worth 0% that quietly takes 2% off every month reads
               as an empty weightage column and nothing else. This is
               where the manager either notices it or approves it. */}

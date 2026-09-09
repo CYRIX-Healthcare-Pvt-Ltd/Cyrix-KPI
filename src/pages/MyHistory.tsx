@@ -147,9 +147,42 @@ export default function MyHistory() {
         </div>
       )}
 
+      {(() => {
+      /*
+        Which columns this table earns.
+
+        It had five and used three. "Self" was empty on every row, because
+        a self-assessment covers the job role only and most people never
+        file one; "Manager" and "Final" held the same number on every
+        settled month, because the final IS the manager's score unless
+        somebody changed it. Three columns of dashes and duplicates is
+        three things to read before finding the one that moved.
+
+        So: Self appears when a self-assessment exists to show, and Manager
+        and Final collapse into one "Score" until a month is actually
+        adjusted — at which point both come back, for every row, so the
+        one that changed can be compared against the ones that did not.
+      */
+      const months = fyMonthsFrom(fy, startsFrom)
+      const cells = months.map(m => byMonth.get(m))
+      const anySelf = cells.some(c =>
+        c?.self_job_role_score != null || c?.self_esms_score != null)
+      const adjusted = (c: typeof cells[number]) =>
+        c?.final_total_score != null && c?.mgr_total_score != null
+        && Math.abs(c.final_total_score - c.mgr_total_score) > 0.005
+      const anyAdjusted = cells.some(adjusted)
+
+      return (
       <div className="card overflow-hidden">
-        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
           <h3 className="text-sm font-semibold text-ink-800">Month by month</h3>
+          {/* Said once, here, rather than left for somebody to work out
+              from a column of dashes. */}
+          {!anyAdjusted && (
+            <span className="text-xs text-ink-500">
+              Final is the manager&rsquo;s score — no month has been adjusted.
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -157,9 +190,21 @@ export default function MyHistory() {
               <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-2.5">Month</th>
                 <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5 text-right">Self</th>
-                <th className="px-4 py-2.5 text-right">Manager</th>
-                <th className="px-4 py-2.5 text-right">Final</th>
+                {anySelf && (
+                  <th className="px-4 py-2.5 text-right">
+                    Self
+                    {/* Named, because it is not comparable with the two
+                        beside it: the person scores their job role and
+                        nothing else. */}
+                    <span className="block text-[10px] font-medium normal-case tracking-normal text-ink-400">
+                      job role only
+                    </span>
+                  </th>
+                )}
+                <th className="px-4 py-2.5 text-right">
+                  {anyAdjusted ? 'Manager' : 'Score'}
+                </th>
+                {anyAdjusted && <th className="px-4 py-2.5 text-right">Final</th>}
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -203,28 +248,35 @@ export default function MyHistory() {
                         role with core counted as nought, and a core figure
                         would be a zero nobody entered. What they did submit
                         still shows. */}
-                    <BandCell
-                      total={null}
-                      job={s?.self_job_role_score}
-                      esms={s?.self_esms_score}
-                      core={null}
-                      hasEsms={hasEsms}
-                    />
+                    {anySelf && (
+                      <BandCell
+                        total={null}
+                        job={s?.self_job_role_score}
+                        esms={s?.self_esms_score}
+                        core={null}
+                        hasEsms={hasEsms}
+                      />
+                    )}
                     <BandCell
                       total={open ? s?.mgr_total_score : null}
                       job={s?.mgr_job_role_score}
                       esms={s?.mgr_esms_score}
                       core={s?.mgr_core_score}
                       hasEsms={hasEsms}
+                      /* The pill marks the score that counts. That is the
+                         manager's, right up until a final overrides it. */
+                      pill={!anyAdjusted}
                     />
-                    <BandCell
-                      total={open ? s?.final_total_score : null}
-                      job={s?.final_job_role_score}
-                      esms={s?.final_esms_score}
-                      core={s?.final_core_score}
-                      hasEsms={hasEsms}
-                      pill
-                    />
+                    {anyAdjusted && (
+                      <BandCell
+                        total={open ? s?.final_total_score : null}
+                        job={s?.final_job_role_score}
+                        esms={s?.final_esms_score}
+                        core={s?.final_core_score}
+                        hasEsms={hasEsms}
+                        pill
+                      />
+                    )}
                     <td className="px-4 py-3 text-right">
                       {open ? (
                         <Link
@@ -244,6 +296,8 @@ export default function MyHistory() {
           </table>
         </div>
       </div>
+      )
+      })()}
     </div>
   )
 }
