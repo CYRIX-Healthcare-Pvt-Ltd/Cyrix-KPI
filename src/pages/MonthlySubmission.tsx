@@ -141,6 +141,30 @@ export default function MonthlySubmission() {
   // in five places — including none of the ones that needed it to colour
   // the score correctly.
   const coreWeight = coreRows.reduce((a, i) => a + Number(i.weightage), 0)
+  // The same treatment for the other two bands, which were summed from
+  // the rows in one place and hard-coded to 80 in another.
+  //
+  // Summed rather than assumed, because these numbers decide the colour
+  // of a block's score as well as its caption, and a colour derived from
+  // a constant that disagreed with the rows would be wrong in exactly
+  // the case worth catching.
+  const jobWeight = jobRows.reduce((a, i) => a + Number(i.weightage), 0)
+  const esmsWeight = esmsRows.reduce((a, i) => a + Number(i.weightage), 0)
+
+  /*
+    What this person actually assessed, and what it is out of.
+
+    Job role and ESMS are the blocks they fill in by hand. Core values
+    are not: they stopped rating those, so the core figure on this page
+    is the manager's, and adding it to the two that are theirs produced a
+    "My total" that was part theirs and part somebody else's — out of
+    100, when 100 was never reachable on their own.
+
+    This is the figure the manager's own screen already shows them
+    against, and it is the one a score query is really about.
+  */
+  const selfTotal = jobTotal + esmsTotal
+  const selfWeight = jobWeight + esmsWeight
 
   // What each row could measure instead, keyed by the KPI row it came
   // from. Read off the assignment rather than the month, because the
@@ -159,18 +183,13 @@ export default function MonthlySubmission() {
    */
   const measuredBlocks = [
     {
-      // Summed from the rows rather than assumed to be 80. It always is
-      // 80, but this number now decides the colour of the block's score,
-      // and a colour derived from a constant that disagreed with the
-      // rows would be wrong in exactly the case worth catching.
       key: 'job_role', label: 'Job Role', rows: jobRows,
-      total: jobTotal,
-      weight: jobRows.reduce((a, i) => a + Number(i.weightage), 0),
+      total: jobTotal, weight: jobWeight,
       targetFixed: false,
     },
     ...(hasEsms ? [{
       key: 'esms', label: 'ESMS', rows: esmsRows,
-      total: esmsTotal, weight: esmsRows.reduce((a, i) => a + Number(i.weightage), 0),
+      total: esmsTotal, weight: esmsWeight,
       targetFixed: true,
     }] : []),
   ]
@@ -352,23 +371,36 @@ export default function MonthlySubmission() {
 
       {/* ---- running totals: one tile per band this person has ---- */}
       <div className={clsx('grid gap-3', hasEsms ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
-        <StatTile label="Job role" value={jobTotal.toFixed(2)} sub="out of 80" />
+        <StatTile label="Job role" value={jobTotal.toFixed(2)} sub={`out of ${jobWeight}`} />
         {hasEsms && (
           <StatTile
             label="ESMS"
             value={esmsTotal.toFixed(2)}
-            sub={`out of ${esmsRows.reduce((a, i) => a + Number(i.weightage), 0)}`}
+            sub={`out of ${esmsWeight}`}
           />
         )}
+        {/* Named for whose it is. Before the month is scored there is no
+            rating to show, and a flat 0.00 out of 20 reads as a verdict
+            rather than as an empty box. */}
         <StatTile
           label="Core values"
-          value={coreTotal.toFixed(2)}
-          sub={`out of ${coreWeight}`}
+          value={isScored
+            ? coreTotal.toFixed(2)
+            : <span className="text-2xl font-semibold text-ink-300">—</span>}
+          sub={isScored
+            ? `your manager's rating, out of ${coreWeight}`
+            : 'Your manager rates these'}
         />
+        {/* The bands this person fills in, and nothing else. It said "My
+            total, out of 100", which added the manager's core-value
+            figure to their own two and then measured the sum against a
+            ceiling they could not reach alone. */}
         <StatTile
-          label={editable ? 'My total so far' : 'My total'}
-          value={<ScorePill value={jobTotal + esmsTotal + coreTotal} size="lg" />}
-          sub="out of 100"
+          label={editable ? 'My assessment so far' : 'My assessment'}
+          value={<ScorePill value={selfTotal} outOf={selfWeight} size="lg" />}
+          sub={hasEsms
+            ? `job role and ESMS, out of ${selfWeight}`
+            : `job role, out of ${selfWeight}`}
           tone="brand"
         />
       </div>
