@@ -303,6 +303,10 @@ export default function MyHistory() {
                       {open ? (
                         <Link
                           to={`/submission/${m}`}
+                          // So the month sends them back to this list
+                          // rather than to the dashboard. Somebody
+                          // reading down the year opens twelve of these.
+                          state={{ from: 'history' }}
                           className="link-accent text-xs font-semibold hover:underline"
                         >
                           {s ? 'View' : 'Start'}

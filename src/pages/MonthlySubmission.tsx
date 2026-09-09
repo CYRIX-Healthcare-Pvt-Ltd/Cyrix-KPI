@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, Paperclip, CheckCircle2,
@@ -1181,10 +1181,33 @@ function AlternatePicker({
   )
 }
 
+/*
+  Back to wherever this month was opened from.
+
+  It always said "Back to dashboard" and always went there, but a month
+  is reached from two places: the dashboard's current-month tile, and the
+  View link on Assessments. Somebody working down the year from
+  Assessments was returned to the dashboard after every month and had to
+  navigate back to the list to open the next one.
+
+  The origin travels with the navigation as a key rather than a path or a
+  label, so a caller says where the person came from and this decides how
+  that place is named — one page owning its own wording. Anything else,
+  including a link pasted in from outside with no history behind it,
+  falls back to the dashboard.
+*/
+const CAME_FROM = {
+  history: { to: '/history', label: 'Back to assessments' },
+} as const
+
 function BackLink() {
+  const { state } = useLocation()
+  const key = (state as { from?: string } | null)?.from
+  const from = (key && key in CAME_FROM ? CAME_FROM[key as keyof typeof CAME_FROM] : null)
+    ?? { to: '/', label: 'Back to dashboard' }
   return (
-    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
-      <ArrowLeft className="h-4 w-4" /> Back to dashboard
+    <Link to={from.to} className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
+      <ArrowLeft className="h-4 w-4" /> {from.label}
     </Link>
   )
 }
