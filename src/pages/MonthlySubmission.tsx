@@ -116,6 +116,26 @@ export default function MonthlySubmission() {
   const esmsTotal = esmsRows.reduce((a, i) => a + liveScore(i), 0)
   const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
   const hasEsms = esmsRows.length > 0
+
+  /*
+    Whether the final figure is anything other than the manager's.
+
+    0095 moved score_blend to 0/1 — the appraisal is the manager's
+    judgement, and the employee's own figure is kept for comparison
+    rather than for counting. So these two are the same number, and have
+    been for every month scored since.
+
+    Asked of the data rather than assumed, because the blend is a row in
+    app_settings and not a constant. If it is ever put back, both tiles
+    return on their own and neither caption has to be remembered.
+
+    Same rule and same tolerance as the Month-by-month table, so the two
+    screens cannot disagree about whether a month was adjusted.
+  */
+  const adjusted =
+    submission?.final_total_score != null
+    && submission.mgr_total_score != null
+    && Math.abs(submission.final_total_score - submission.mgr_total_score) > 0.005
   // 20 normally, 15 for the people who also carry ESMS. Every core-value
   // figure on this page is out of it, and it was being recomputed inline
   // in five places — including none of the ones that needed it to colour
@@ -353,16 +373,24 @@ export default function MonthlySubmission() {
         />
       </div>
 
+      {/* One figure, said once. Two tiles carrying the same number, the
+          second of them explaining itself as an average that stopped
+          happening in 0095, read as though something had been worked out
+          between them. The manager's tile comes back the moment there is
+          genuinely a second number to compare it against. */}
       {submission.status === 'scored' || submission.status === 'finalized' ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          <StatTile
-            label="Manager's total"
-            value={<ScorePill value={submission.mgr_total_score} size="lg" />}
-          />
+          {adjusted && (
+            <StatTile
+              label="Manager's total"
+              value={<ScorePill value={submission.mgr_total_score} size="lg" />}
+              sub="what your manager scored"
+            />
+          )}
           <StatTile
             label="Final score"
             value={<ScorePill value={submission.final_total_score} size="lg" />}
-            sub="average of self and manager"
+            sub={adjusted ? 'self and manager combined' : "your manager's assessment"}
             tone="brand"
           />
         </div>
