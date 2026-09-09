@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus } from '@/lib/export'
@@ -1570,8 +1570,207 @@ function BemmpTab() {
  *  is what the phone bar shows: five cells on a 375px screen is
  * about seven characters each, and "Spare Mapping" is thirteen.
  */
+/**
+ * Who is actually using it.
+ *
+ * The logins tab answers "does this person have an account"; this answers
+ * "did they ever come in", which is the question a rollout is judged on
+ * and was only answerable by exporting the list and counting it elsewhere.
+ *
+ * Managers are pulled out separately because they are where the process
+ * stops. An employee who has never signed in has not filed a self
+ * assessment; a *manager* who has never signed in is holding up everybody
+ * who reports to them. Their number is small and their effect is not, so
+ * it is stated on its own rather than left inside the total.
+ *
+ * Counted from the rows the logins tab already loads, under the same query
+ * key — no second request, and no way for the two tabs to disagree about
+ * the same population.
+ */
+function AdoptionTab() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['login_status'],
+    queryFn: async () => {
+      const all: LoginStatusRow[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .rpc('login_status').order('ecode').range(from, from + 999)
+        if (error) throw new Error(friendlyError(error))
+        const page = (data ?? []) as LoginStatusRow[]
+        all.push(...page)
+        if (page.length < 1000) break
+      }
+      return all
+    },
+  })
+
+  const stats = useMemo(() => {
+    if (!data) return null
+    const active = data.filter(r => r.is_active)
+    const signedIn = (r: LoginStatusRow) => r.last_sign_in_at != null
+
+    // Somebody is a manager because people report to them, not because of
+    // a title: the reporting line is what the process actually follows.
+    const managerCodes = new Set(
+      active.map(r => r.manager_ecode).filter((c): c is string => !!c)
+        .map(c => c.toUpperCase()),
+    )
+    const managers = active.filter(r => managerCodes.has(r.ecode.toUpperCase()))
+    const reportCount = new Map<string, number>()
+    for (const r of active) {
+      const m = r.manager_ecode?.toUpperCase()
+      if (m) reportCount.set(m, (reportCount.get(m) ?? 0) + 1)
+    }
+
+    const byDept = new Map<string, { total: number; here: number }>()
+    for (const r of active) {
+      const d = r.department?.trim() || 'No department'
+      const e = byDept.get(d) ?? { total: 0, here: 0 }
+      e.total += 1
+      if (signedIn(r)) e.here += 1
+      byDept.set(d, e)
+    }
+
+    return {
+      total: active.length,
+      signedIn: active.filter(signedIn).length,
+      onDefault: active.filter(r => r.on_issued_default).length,
+      managers,
+      managersIn: managers.filter(signedIn).length,
+      managersOut: managers.filter(r => !signedIn(r)),
+      reportCount,
+      // Worst first: this list is read to find who to chase.
+      depts: [...byDept.entries()]
+        .map(([name, v]) => ({ name, ...v, pct: v.total ? (v.here / v.total) * 100 : 0 }))
+        .sort((a, b) => a.pct - b.pct || b.total - a.total),
+    }
+  }, [data])
+
+  if (isLoading) return <PageLoader label="Counting sign-ins" />
+  if (error) return <Alert kind="error">{(error as Error).message}</Alert>
+  if (!stats) return null
+
+  const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Active employees" value={stats.total.toLocaleString()} />
+        <StatTile
+          label="Have signed in"
+          value={pct(stats.signedIn, stats.total) + '%'}
+          sub={stats.signedIn.toLocaleString() + ' of ' + stats.total.toLocaleString()}
+        />
+        <StatTile
+          label="Managers signed in"
+          value={pct(stats.managersIn, stats.managers.length) + '%'}
+          sub={stats.managersIn + ' of ' + stats.managers.length}
+        />
+        <StatTile
+          label="Still on the issued password"
+          value={stats.onDefault.toLocaleString()}
+          sub="signed in, never changed it"
+        />
+      </div>
+
+      {/* The managers who have not come in, by name. A percentage gives the
+          size of the problem; this gives somebody to ring. */}
+      <div className="card overflow-hidden">
+        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-900">
+            Managers who have never signed in
+            <span className="ml-2 font-normal text-ink-500">
+              {stats.managersOut.length} of {stats.managers.length}
+            </span>
+          </h3>
+        </div>
+        {stats.managersOut.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-ink-500">
+            Every manager has signed in at least once.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  <th className="px-4 py-2.5">Code</th>
+                  <th className="px-4 py-2.5">Name</th>
+                  <th className="px-4 py-2.5">Department</th>
+                  <th className="px-4 py-2.5 text-right">Reports</th>
+                  <th className="px-4 py-2.5">Account</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {stats.managersOut.map(m => (
+                  <tr key={m.ecode} className="hover:bg-ink-50">
+                    <td className="px-4 py-2.5 font-medium">{m.ecode}</td>
+                    <td className="px-4 py-2.5">{m.full_name}</td>
+                    <td className="px-4 py-2.5 text-ink-500">{m.department || '-'}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-600">
+                      {stats.reportCount.get(m.ecode.toUpperCase()) ?? 0}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={clsx('badge', STATE_STYLE[m.login_state] ?? 'bg-ink-100 text-ink-600')}>
+                        {m.login_state}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card overflow-hidden">
+        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-ink-900">By department</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
+                <th className="px-4 py-2.5">Department</th>
+                <th className="px-4 py-2.5 text-right">Signed in</th>
+                <th className="px-4 py-2.5 text-right">People</th>
+                <th className="px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {stats.depts.map(d => (
+                <tr key={d.name} className="hover:bg-ink-50">
+                  <td className="px-4 py-2.5 font-medium">{d.name}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(d.pct)}%</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
+                    {d.here} / {d.total}
+                  </td>
+                  {/* A bar, because thirty rows of percentages is a column
+                      nobody reads to the bottom of. */}
+                  <td className="w-40 px-4 py-2.5">
+                    <span className="block h-1.5 w-full rounded-full bg-ink-100">
+                      <span
+                        className={clsx('block h-full rounded-full',
+                          d.pct >= 80 ? 'bg-emerald-400'
+                            : d.pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500')}
+                        style={{ width: Math.max(d.pct, 2) + '%' }}
+                      />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const ADMIN_TABS = [
   { id: 'logins', label: 'Logins', short: 'Logins', icon: ShieldAlert, render: () => <LoginsTab /> },
+  // Beside Logins because it reads the same rows: one is the list, the
+  // other is what the list adds up to.
+  { id: 'adoption', label: 'Adoption', short: 'Usage', icon: BarChart3, render: () => <AdoptionTab /> },
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
