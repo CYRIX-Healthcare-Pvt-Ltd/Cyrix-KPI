@@ -1302,7 +1302,7 @@ export const HELP: Record<string, Phrase> = {
   // screen without being told what it means: a dialog that stops them
   // changing a scoring rule, a Self column that used to be empty, two
   // score columns that became one, colours on the approval screen, and
-  // an Adoption tab that did not exist.
+  // a Summary Report tab that did not exist.
   's1.p6.what': {
     en: 'Changing how a row is scored asks you first',
     ml: 'ഒരു വരി എങ്ങനെ സ്കോർ ചെയ്യുന്നു എന്നത് മാറ്റുമ്പോൾ ആദ്യം ചോദിക്കും',
@@ -1371,11 +1371,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'யார் sign in செய்துள்ளார்கள் என்று பார்க்கவும்',
   },
   'hr.p6.how': {
-    en: 'Reports has an Adoption tab. It counts sign-ins by manager, by function and by department. Filter it, download it as Excel, or save the table as an image to share.',
-    ml: 'Reports-ൽ ഒരു Adoption ടാബ് ഉണ്ട്. manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം അത് കാണിക്കും. ഫിൽട്ടർ ചെയ്യാം, Excel ആയി ഡൗൺലോഡ് ചെയ്യാം, അല്ലെങ്കിൽ പങ്കിടാൻ ചിത്രമായി സേവ് ചെയ്യാം.',
-    hi: 'Reports में एक Adoption टैब है। यह manager, function और department के हिसाब से sign in गिनता है। इसे फ़िल्टर करें, Excel में डाउनलोड करें, या साझा करने के लिए तस्वीर के रूप में सेव करें।',
-    te: 'Reports లో ఒక Adoption ట్యాబ్ ఉంది. manager, function, department వారీగా sign in లెక్కిస్తుంది. ఫిల్టర్ చేయండి, Excel గా డౌన్‌లోడ్ చేయండి, లేదా పంచుకోవడానికి చిత్రంగా సేవ్ చేయండి.',
-    ta: 'Reports இல் ஒரு Adoption தாவல் உள்ளது. manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். வடிகட்டலாம், Excel ஆகப் பதிவிறக்கலாம், அல்லது பகிர படமாகச் சேமிக்கலாம்.',
+    en: 'Reports has a Summary Report tab. It counts sign-ins by manager, by function and by department. Filter it, download it as Excel, or save the table as an image to share.',
+    ml: 'Reports-ൽ ഒരു Summary Report ടാബ് ഉണ്ട്. manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം അത് കാണിക്കും. ഫിൽട്ടർ ചെയ്യാം, Excel ആയി ഡൗൺലോഡ് ചെയ്യാം, അല്ലെങ്കിൽ പങ്കിടാൻ ചിത്രമായി സേവ് ചെയ്യാം.',
+    hi: 'Reports में एक Summary Report टैब है। यह manager, function और department के हिसाब से sign in गिनता है। इसे फ़िल्टर करें, Excel में डाउनलोड करें, या साझा करने के लिए तस्वीर के रूप में सेव करें।',
+    te: 'Reports లో ఒక Summary Report ట్యాబ్ ఉంది. manager, function, department వారీగా sign in లెక్కిస్తుంది. ఫిల్టర్ చేయండి, Excel గా డౌన్‌లోడ్ చేయండి, లేదా పంచుకోవడానికి చిత్రంగా సేవ్ చేయండి.',
+    ta: 'Reports இல் ஒரு Summary Report தாவல் உள்ளது. manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். வடிகட்டலாம், Excel ஆகப் பதிவிறக்கலாம், அல்லது பகிர படமாகச் சேமிக்கலாம்.',
   },
 
   'hr.p7.what': {
@@ -1401,11 +1401,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'யார் sign in செய்துள்ளார்கள் என்று பார்க்கவும்',
   },
   'sw.p3.how': {
-    en: 'The Adoption tab counts sign-ins by manager, by function and by department. A manager who has never signed in is holding up everybody who reports to them, so that list comes first. Filter it, export it, or save it as an image.',
-    ml: 'Adoption ടാബ് manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം കാണിക്കും. ഒരിക്കലും സൈൻ ഇൻ ചെയ്യാത്ത ഒരു manager തന്റെ കീഴിലുള്ള എല്ലാവരെയും തടയുന്നു. അതുകൊണ്ട് ആ പട്ടിക ആദ്യം വരും. ഫിൽട്ടർ ചെയ്യാം, എക്സ്പോർട്ട് ചെയ്യാം, ചിത്രമായി സേവ് ചെയ്യാം.',
-    hi: 'Adoption टैब manager, function और department के हिसाब से sign in गिनता है। जिस manager ने कभी sign in नहीं किया, वह अपने नीचे के सभी लोगों को रोक रहा है, इसलिए वह सूची पहले आती है। फ़िल्टर करें, export करें, या तस्वीर के रूप में सेव करें।',
-    te: 'Adoption ట్యాబ్ manager, function, department వారీగా sign in లెక్కిస్తుంది. ఎప్పుడూ sign in చేయని manager తన కింద ఉన్న అందరినీ ఆపుతున్నారు, కాబట్టి ఆ జాబితా ముందు వస్తుంది. ఫిల్టర్ చేయండి, export చేయండి, లేదా చిత్రంగా సేవ్ చేయండి.',
-    ta: 'Adoption தாவல் manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். ஒருபோதும் sign in செய்யாத ஒரு manager தனக்குக் கீழ் உள்ள அனைவரையும் தடுக்கிறார், எனவே அந்தப் பட்டியல் முதலில் வரும். வடிகட்டலாம், export செய்யலாம், அல்லது படமாகச் சேமிக்கலாம்.',
+    en: 'The Summary Report tab counts sign-ins by manager, by function and by department. A manager who has never signed in is holding up everybody who reports to them, so that list comes first. Filter it, export it, or save it as an image.',
+    ml: 'Summary Report ടാബ് manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം കാണിക്കും. ഒരിക്കലും സൈൻ ഇൻ ചെയ്യാത്ത ഒരു manager തന്റെ കീഴിലുള്ള എല്ലാവരെയും തടയുന്നു. അതുകൊണ്ട് ആ പട്ടിക ആദ്യം വരും. ഫിൽട്ടർ ചെയ്യാം, എക്സ്പോർട്ട് ചെയ്യാം, ചിത്രമായി സേവ് ചെയ്യാം.',
+    hi: 'Summary Report टैब manager, function और department के हिसाब से sign in गिनता है। जिस manager ने कभी sign in नहीं किया, वह अपने नीचे के सभी लोगों को रोक रहा है, इसलिए वह सूची पहले आती है। फ़िल्टर करें, export करें, या तस्वीर के रूप में सेव करें।',
+    te: 'Summary Report ట్యాబ్ manager, function, department వారీగా sign in లెక్కిస్తుంది. ఎప్పుడూ sign in చేయని manager తన కింద ఉన్న అందరినీ ఆపుతున్నారు, కాబట్టి ఆ జాబితా ముందు వస్తుంది. ఫిల్టర్ చేయండి, export చేయండి, లేదా చిత్రంగా సేవ్ చేయండి.',
+    ta: 'Summary Report தாவல் manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். ஒருபோதும் sign in செய்யாத ஒரு manager தனக்குக் கீழ் உள்ள அனைவரையும் தடுக்கிறார், எனவே அந்தப் பட்டியல் முதலில் வரும். வடிகட்டலாம், export செய்யலாம், அல்லது படமாகச் சேமிக்கலாம்.',
   },
 
 }

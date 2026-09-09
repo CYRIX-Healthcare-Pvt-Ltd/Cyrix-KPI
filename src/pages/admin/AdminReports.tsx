@@ -13,7 +13,7 @@ import KpiReport from './KpiReport'
   implementations of "how many people have signed in" is two numbers that
   will disagree in front of somebody eventually.
 */
-import { AdoptionTab } from './SwAdmin'
+import { SummaryTab } from './SwAdmin'
 import type { Employee } from '@/types/db'
 
 // Completion by month, completion by manager and turnaround were three
@@ -22,7 +22,7 @@ import type { Employee } from '@/types/db'
 // whose shape is chosen; see KpiReport. The score export stays separate
 // because it is a different artefact — a per-employee workbook, not a
 // summary.
-type Tab = 'report' | 'scores' | 'adoption'
+type Tab = 'report' | 'scores' | 'summary'
 
 export default function AdminReports() {
   const fy = currentFy()
@@ -107,7 +107,7 @@ export default function AdminReports() {
         {([
           ['report', 'KPI report', BarChart3],
           ['scores', 'Score export', Download],
-          ['adoption', 'Adoption', Users],
+          ['summary', 'Summary report', Users],
         ] as Array<[Tab, string, React.ComponentType<{ className?: string }>]>).map(
           ([key, label, Icon]) => (
             <button
@@ -159,7 +159,7 @@ export default function AdminReports() {
           </div>
         </div>
       )}
-      {tab === 'adoption' && <AdoptionTab />}
+      {tab === 'summary' && <SummaryTab />}
     </div>
   )
 }

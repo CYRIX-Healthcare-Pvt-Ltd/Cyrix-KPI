@@ -1668,7 +1668,7 @@ function ShareTable({ label, rows, showSelf }: {
  * key — no second request, and no way for the two tabs to disagree about
  * the same population.
  */
-export function AdoptionTab() {
+export function SummaryTab() {
   const [sub, setSub] = useState<'managers' | 'function' | 'department'>('managers')
   const [q, setQ] = useState('')
 
@@ -1817,7 +1817,7 @@ export function AdoptionTab() {
         share('By function', 'Function', stats.functions),
         share('By department', 'Department', stats.depts),
       ],
-      'Cyrix-adoption.xlsx',
+      'Cyrix-summary-report.xlsx',
     )
   }
 
@@ -1942,7 +1942,7 @@ export function AdoptionTab() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Cyrix-adoption-${sub}.png`
+      a.download = `Cyrix-summary-${sub}.png`
       a.click()
       URL.revokeObjectURL(url)
     })
@@ -2023,7 +2023,7 @@ const ADMIN_TABS = [
   { id: 'logins', label: 'Logins', short: 'Logins', icon: ShieldAlert, render: () => <LoginsTab /> },
   // Beside Logins because it reads the same rows: one is the list, the
   // other is what the list adds up to.
-  { id: 'adoption', label: 'Adoption', short: 'Usage', icon: BarChart3, render: () => <AdoptionTab /> },
+  { id: 'summary', label: 'Summary Report', short: 'Summary', icon: BarChart3, render: () => <SummaryTab /> },
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
