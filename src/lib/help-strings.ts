@@ -1295,4 +1295,117 @@ export const HELP: Record<string, Phrase> = {
     te: 'రీసెట్ చేయమని SW Admin ను అడగండి. ఇది మీ ఎంప్లాయీ కోడ్‌కు తిరిగి వస్తుంది.',
     ta: 'மீட்டமைக்க SW Admin ஐக் கேளுங்கள். இது உங்கள் ஊழியர் குறியீட்டுக்குத் திரும்பும்.',
   },
+
+  // ---- added with the September changes -------------------------
+  //
+  // Six points, and every one of them is something a person now sees on
+  // screen without being told what it means: a dialog that stops them
+  // changing a scoring rule, a Self column that used to be empty, two
+  // score columns that became one, colours on the approval screen, and
+  // an Adoption tab that did not exist.
+  's1.p6.what': {
+    en: 'Changing how a row is scored asks you first',
+    ml: 'ഒരു വരി എങ്ങനെ സ്കോർ ചെയ്യുന്നു എന്നത് മാറ്റുമ്പോൾ ആദ്യം ചോദിക്കും',
+    hi: 'किसी पंक्ति का स्कोरिंग बदलने पर पहले पूछा जाएगा',
+    te: 'ఒక వరుస ఎలా స్కోర్ అవుతుందో మార్చేటప్పుడు ముందుగా అడుగుతుంది',
+    ta: 'ஒரு வரி எப்படி மதிப்பிடப்படுகிறது என்பதை மாற்றும்போது முதலில் கேட்கும்',
+  },
+  's1.p6.how': {
+    en: 'Each way of scoring has its own colour, and the app says what the new one does before it changes. Green stops at your weightage. Red can take marks off your other rows.',
+    ml: 'ഓരോ സ്കോറിംഗ് രീതിക്കും അതിന്റേതായ നിറമുണ്ട്. മാറ്റുന്നതിന് മുമ്പ് പുതിയത് എന്ത് ചെയ്യുമെന്ന് ആപ്പ് പറയും. പച്ച നിങ്ങളുടെ weightage-ൽ നിർത്തും. ചുവപ്പ് നിങ്ങളുടെ മറ്റ് വരികളിൽ നിന്ന് മാർക്ക് കുറയ്ക്കാം.',
+    hi: 'हर स्कोरिंग तरीके का अपना रंग है, और बदलने से पहले ऐप बताता है कि नया तरीका क्या करेगा। हरा आपके weightage पर रुक जाता है। लाल आपकी दूसरी पंक्तियों से अंक काट सकता है।',
+    te: 'ప్రతి స్కోరింగ్ పద్ధతికి దాని స్వంత రంగు ఉంది, మార్చే ముందు కొత్తది ఏమి చేస్తుందో యాప్ చెబుతుంది. ఆకుపచ్చ మీ weightage వద్ద ఆగుతుంది. ఎరుపు మీ ఇతర వరుసల నుండి మార్కులు తీసివేయగలదు.',
+    ta: 'ஒவ்வொரு மதிப்பீட்டு முறைக்கும் அதன் சொந்த நிறம் உள்ளது, மாற்றுவதற்கு முன் புதியது என்ன செய்யும் என்று ஆப் சொல்லும். பச்சை உங்கள் weightage இல் நிற்கும். சிவப்பு உங்கள் மற்ற வரிகளிலிருந்து மதிப்பெண்களைக் குறைக்கும்.',
+  },
+
+  's2.p7.what': {
+    en: 'Your own score sits beside your manager\'s',
+    ml: 'നിങ്ങളുടെ സ്വന്തം സ്കോർ മാനേജരുടേതിന് അടുത്തായി കാണാം',
+    hi: 'आपका अपना स्कोर आपके manager के स्कोर के साथ दिखता है',
+    te: 'మీ స్వంత స్కోర్ మీ manager స్కోర్ పక్కన కనిపిస్తుంది',
+    ta: 'உங்கள் சொந்த மதிப்பெண் உங்கள் manager மதிப்பெண்ணுக்கு அருகில் தெரியும்',
+  },
+  's2.p7.how': {
+    en: 'The Self column is what you submitted. It covers your job role only, so it is not the same as the Score column, which also has core values in it.',
+    ml: 'Self കോളം നിങ്ങൾ സമർപ്പിച്ചതാണ്. അതിൽ job role മാത്രമേ ഉള്ളൂ. അതുകൊണ്ട് core values കൂടി ഉള്ള Score കോളവുമായി അത് ഒന്നല്ല.',
+    hi: 'Self कॉलम वही है जो आपने जमा किया था। उसमें केवल job role है, इसलिए वह Score कॉलम जैसा नहीं है, जिसमें core values भी हैं।',
+    te: 'Self కాలమ్ మీరు సమర్పించినది. అందులో job role మాత్రమే ఉంటుంది, కాబట్టి core values కూడా ఉన్న Score కాలమ్‌తో అది ఒకటి కాదు.',
+    ta: 'Self நெடுவரிசை நீங்கள் சமர்ப்பித்தது. அதில் job role மட்டுமே உள்ளது, எனவே core values உள்ள Score நெடுவரிசையுடன் அது ஒன்றல்ல.',
+  },
+
+  's2.p8.what': {
+    en: 'One Score column, unless a month was changed',
+    ml: 'ഒരു മാസം മാറ്റിയിട്ടില്ലെങ്കിൽ ഒരു Score കോളം മാത്രം',
+    hi: 'जब तक किसी महीने को बदला न गया हो, एक ही Score कॉलम',
+    te: 'ఒక నెలను మార్చకపోతే ఒకే Score కాలమ్',
+    ta: 'ஒரு மாதம் மாற்றப்படாவிட்டால் ஒரே Score நெடுவரிசை',
+  },
+  's2.p8.how': {
+    en: 'The final score is your manager\'s score. Manager and Final appear as two columns only when somebody has changed a month.',
+    ml: 'അവസാന സ്കോർ നിങ്ങളുടെ മാനേജരുടെ സ്കോർ ആണ്. ആരെങ്കിലും ഒരു മാസം മാറ്റിയാൽ മാത്രമേ Manager, Final എന്നിവ രണ്ട് കോളങ്ങളായി വരൂ.',
+    hi: 'अंतिम स्कोर आपके manager का स्कोर है। Manager और Final दो कॉलम तभी दिखते हैं जब किसी ने कोई महीना बदला हो।',
+    te: 'తుది స్కోర్ మీ manager స్కోరే. ఎవరైనా ఒక నెలను మార్చినప్పుడు మాత్రమే Manager మరియు Final రెండు కాలమ్‌లుగా కనిపిస్తాయి.',
+    ta: 'இறுதி மதிப்பெண் உங்கள் manager மதிப்பெண்ணே. யாராவது ஒரு மாதத்தை மாற்றினால் மட்டுமே Manager மற்றும் Final இரண்டு நெடுவரிசைகளாகத் தெரியும்.',
+  },
+
+  'team.p18.what': {
+    en: 'The scoring rule is colour-coded when you approve',
+    ml: 'അംഗീകരിക്കുമ്പോൾ സ്കോറിംഗ് രീതിക്ക് നിറം ഉണ്ടാകും',
+    hi: 'मंज़ूरी देते समय स्कोरिंग तरीका रंग से दिखता है',
+    te: 'ఆమోదించేటప్పుడు స్కోరింగ్ పద్ధతి రంగుతో కనిపిస్తుంది',
+    ta: 'ஒப்புதல் அளிக்கும்போது மதிப்பீட்டு முறை நிறத்துடன் தெரியும்',
+  },
+  'team.p18.how': {
+    en: 'Green stops at the weightage. Darker green can go past it. Amber can cost the row its own marks. Red can take marks off the rest of the month. Look twice at the red ones.',
+    ml: 'പച്ച weightage-ൽ നിർത്തും. കടും പച്ച അതിനപ്പുറം പോകാം. ആമ്പർ ആ വരിയുടെ സ്വന്തം മാർക്ക് നഷ്ടപ്പെടുത്താം. ചുവപ്പ് ആ മാസത്തിന്റെ ബാക്കി മാർക്കിൽ നിന്നും കുറയ്ക്കാം. ചുവപ്പുള്ളവ രണ്ടു തവണ നോക്കുക.',
+    hi: 'हरा weightage पर रुकता है। गहरा हरा उससे आगे जा सकता है। एम्बर उस पंक्ति के अपने अंक ले सकता है। लाल महीने के बाकी अंकों से भी काट सकता है। लाल वालों को दो बार देखें।',
+    te: 'ఆకుపచ్చ weightage వద్ద ఆగుతుంది. ముదురు ఆకుపచ్చ దాటి వెళ్లగలదు. అంబర్ ఆ వరుస సొంత మార్కులను కోల్పోగలదు. ఎరుపు ఆ నెల మిగతా మార్కుల నుండి కూడా తీసివేయగలదు. ఎరుపు వాటిని రెండుసార్లు చూడండి.',
+    ta: 'பச்சை weightage இல் நிற்கும். அடர் பச்சை அதைத் தாண்டிச் செல்லும். அம்பர் அந்த வரியின் சொந்த மதிப்பெண்களை இழக்கச் செய்யும். சிவப்பு அந்த மாதத்தின் மீதி மதிப்பெண்களிலிருந்தும் குறைக்கும். சிவப்பானவற்றை இரண்டு முறை பாருங்கள்.',
+  },
+
+  'hr.p6.what': {
+    en: 'See who has signed in',
+    ml: 'ആരൊക്കെ സൈൻ ഇൻ ചെയ്തു എന്ന് കാണുക',
+    hi: 'देखें कि किसने sign in किया है',
+    te: 'ఎవరు sign in చేశారో చూడండి',
+    ta: 'யார் sign in செய்துள்ளார்கள் என்று பார்க்கவும்',
+  },
+  'hr.p6.how': {
+    en: 'Reports has an Adoption tab. It counts sign-ins by manager, by function and by department. Filter it, download it as Excel, or save the table as an image to share.',
+    ml: 'Reports-ൽ ഒരു Adoption ടാബ് ഉണ്ട്. manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം അത് കാണിക്കും. ഫിൽട്ടർ ചെയ്യാം, Excel ആയി ഡൗൺലോഡ് ചെയ്യാം, അല്ലെങ്കിൽ പങ്കിടാൻ ചിത്രമായി സേവ് ചെയ്യാം.',
+    hi: 'Reports में एक Adoption टैब है। यह manager, function और department के हिसाब से sign in गिनता है। इसे फ़िल्टर करें, Excel में डाउनलोड करें, या साझा करने के लिए तस्वीर के रूप में सेव करें।',
+    te: 'Reports లో ఒక Adoption ట్యాబ్ ఉంది. manager, function, department వారీగా sign in లెక్కిస్తుంది. ఫిల్టర్ చేయండి, Excel గా డౌన్‌లోడ్ చేయండి, లేదా పంచుకోవడానికి చిత్రంగా సేవ్ చేయండి.',
+    ta: 'Reports இல் ஒரு Adoption தாவல் உள்ளது. manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். வடிகட்டலாம், Excel ஆகப் பதிவிறக்கலாம், அல்லது பகிர படமாகச் சேமிக்கலாம்.',
+  },
+
+  'hr.p7.what': {
+    en: 'A master upload does not switch off the admin logins',
+    ml: 'മാസ്റ്റർ അപ്‌ലോഡ് അഡ്മിൻ ലോഗിനുകൾ ഓഫ് ചെയ്യില്ല',
+    hi: 'master upload एडमिन logins को बंद नहीं करता',
+    te: 'master upload అడ్మిన్ logins ను ఆఫ్ చేయదు',
+    ta: 'master upload நிர்வாக logins ஐ நிறுத்தாது',
+  },
+  'hr.p7.how': {
+    en: 'HR Admin, SW Admin and the test logins are not people on the payroll sheet, so the upload leaves them alone. Everybody else who is missing from the sheet is marked inactive, and their past scores are kept.',
+    ml: 'HR Admin, SW Admin, ടെസ്റ്റ് ലോഗിനുകൾ എന്നിവ പേറോൾ ഷീറ്റിലെ ആളുകളല്ല. അതുകൊണ്ട് അപ്‌ലോഡ് അവയെ തൊടില്ല. ഷീറ്റിൽ ഇല്ലാത്ത മറ്റെല്ലാവരെയും inactive ആക്കും, അവരുടെ പഴയ സ്കോറുകൾ സൂക്ഷിക്കും.',
+    hi: 'HR Admin, SW Admin और test logins payroll शीट के लोग नहीं हैं, इसलिए upload उन्हें नहीं छूता। शीट में जो बाकी लोग नहीं हैं उन्हें inactive किया जाता है, और उनके पुराने स्कोर रखे जाते हैं।',
+    te: 'HR Admin, SW Admin మరియు test logins పేరోల్ షీట్‌లోని వ్యక్తులు కాదు, కాబట్టి upload వాటిని తాకదు. షీట్‌లో లేని మిగతా వారందరినీ inactive చేస్తుంది, వారి పాత స్కోర్‌లు ఉంచుతుంది.',
+    ta: 'HR Admin, SW Admin மற்றும் test logins ஊதியப் பட்டியலில் உள்ளவர்கள் அல்ல, எனவே upload அவற்றைத் தொடாது. பட்டியலில் இல்லாத மற்ற அனைவரும் inactive ஆக்கப்படுவார்கள், அவர்களின் பழைய மதிப்பெண்கள் வைக்கப்படும்.',
+  },
+
+  'sw.p3.what': {
+    en: 'See who has signed in',
+    ml: 'ആരൊക്കെ സൈൻ ഇൻ ചെയ്തു എന്ന് കാണുക',
+    hi: 'देखें कि किसने sign in किया है',
+    te: 'ఎవరు sign in చేశారో చూడండి',
+    ta: 'யார் sign in செய்துள்ளார்கள் என்று பார்க்கவும்',
+  },
+  'sw.p3.how': {
+    en: 'The Adoption tab counts sign-ins by manager, by function and by department. A manager who has never signed in is holding up everybody who reports to them, so that list comes first. Filter it, export it, or save it as an image.',
+    ml: 'Adoption ടാബ് manager, function, department അനുസരിച്ച് സൈൻ ഇൻ എണ്ണം കാണിക്കും. ഒരിക്കലും സൈൻ ഇൻ ചെയ്യാത്ത ഒരു manager തന്റെ കീഴിലുള്ള എല്ലാവരെയും തടയുന്നു. അതുകൊണ്ട് ആ പട്ടിക ആദ്യം വരും. ഫിൽട്ടർ ചെയ്യാം, എക്സ്പോർട്ട് ചെയ്യാം, ചിത്രമായി സേവ് ചെയ്യാം.',
+    hi: 'Adoption टैब manager, function और department के हिसाब से sign in गिनता है। जिस manager ने कभी sign in नहीं किया, वह अपने नीचे के सभी लोगों को रोक रहा है, इसलिए वह सूची पहले आती है। फ़िल्टर करें, export करें, या तस्वीर के रूप में सेव करें।',
+    te: 'Adoption ట్యాబ్ manager, function, department వారీగా sign in లెక్కిస్తుంది. ఎప్పుడూ sign in చేయని manager తన కింద ఉన్న అందరినీ ఆపుతున్నారు, కాబట్టి ఆ జాబితా ముందు వస్తుంది. ఫిల్టర్ చేయండి, export చేయండి, లేదా చిత్రంగా సేవ్ చేయండి.',
+    ta: 'Adoption தாவல் manager, function, department வாரியாக sign in எண்ணிக்கையைக் காட்டும். ஒருபோதும் sign in செய்யாத ஒரு manager தனக்குக் கீழ் உள்ள அனைவரையும் தடுக்கிறார், எனவே அந்தப் பட்டியல் முதலில் வரும். வடிகட்டலாம், export செய்யலாம், அல்லது படமாகச் சேமிக்கலாம்.',
+  },
+
 }

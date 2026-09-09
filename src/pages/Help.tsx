@@ -199,6 +199,7 @@ export default function Help() {
               { what: t('s1.p3.what'), how: t('s1.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
               { what: t('s1.p4.what'), how: t('s1.p4.how') },
               { what: t('s1.p5.what'), how: t('s1.p5.how') },
+              { what: t('s1.p6.what'), how: t('s1.p6.how'), to: '/my-kpi/setup', cta: 'Set up my KPI' },
             ]}
           />
 
@@ -218,6 +219,11 @@ export default function Help() {
                 how: t(closingDay === null ? 's2.p6.how.open' : 's2.p6.how.day',
                        { closingDay: closingDay ?? '' }),
               },
+              // What the columns on that page mean, now that two of them
+              // changed shape: Self stopped being blank, and Manager and
+              // Final stopped being printed twice.
+              { what: t('s2.p7.what'), how: t('s2.p7.how'), to: '/history', cta: 'Open assessments' },
+              { what: t('s2.p8.what'), how: t('s2.p8.how'), to: '/history', cta: 'Open assessments' },
             ]}
           />
 
@@ -296,6 +302,7 @@ export default function Help() {
             { what: t('team.p15.what'), how: t('team.p15.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p16.what'), how: t('team.p16.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p17.what'), how: t('team.p17.how'), to: '/me', cta: 'See my rating' },
+            { what: t('team.p18.what'), how: t('team.p18.how'), to: '/approvals', cta: 'Open approvals' },
           ]}
         />
       )}
@@ -312,6 +319,8 @@ export default function Help() {
             { what: t('hr.p3.what'), how: t('hr.p3.how'), to: '/admin/queries', cta: 'Open queries' },
             { what: t('hr.p4.what'), how: t('hr.p4.how'), to: '/deletions', cta: 'Open records' },
             { what: t('hr.p5.what'), how: t('hr.p5.how'), to: '/admin/requests', cta: 'Open leavers' },
+            { what: t('hr.p6.what'), how: t('hr.p6.how'), to: '/admin/reports', cta: 'Open reports' },
+            { what: t('hr.p7.what'), how: t('hr.p7.how'), to: '/admin/employees', cta: 'Open employees' },
           ]}
         />
       )}
@@ -325,6 +334,7 @@ export default function Help() {
           points={[
             { what: t('sw.p1.what'), how: t('sw.p1.how'), to: '/admin/logins', cta: 'Open logins' },
             { what: t('sw.p2.what'), how: t('sw.p2.how'), to: '/admin/timing', cta: 'Open KPI timing' },
+            { what: t('sw.p3.what'), how: t('sw.p3.how'), to: '/admin/logins', cta: 'Open logins' },
           ]}
         />
       )}
