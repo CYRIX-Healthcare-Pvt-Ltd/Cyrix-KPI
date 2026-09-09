@@ -1,10 +1,19 @@
 import { useState, useMemo } from 'react'
-import { Download, BarChart3 } from 'lucide-react'
+import { Download, BarChart3, Users } from 'lucide-react'
 import { useOrgKpiStatus, currentFy } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportKpiScores } from '@/lib/export'
 import { PageLoader, Alert, Spinner } from '@/components/ui'
 import KpiReport from './KpiReport'
+/*
+  The same panel SW Admin has, not a second copy of it.
+
+  login_status() already answers to is_hr_admin() as well as is_sw_admin(),
+  so this needed no new permission — only somewhere for HR to see it. Two
+  implementations of "how many people have signed in" is two numbers that
+  will disagree in front of somebody eventually.
+*/
+import { AdoptionTab } from './SwAdmin'
 import type { Employee } from '@/types/db'
 
 // Completion by month, completion by manager and turnaround were three
@@ -13,7 +22,7 @@ import type { Employee } from '@/types/db'
 // whose shape is chosen; see KpiReport. The score export stays separate
 // because it is a different artefact — a per-employee workbook, not a
 // summary.
-type Tab = 'report' | 'scores'
+type Tab = 'report' | 'scores' | 'adoption'
 
 export default function AdminReports() {
   const fy = currentFy()
@@ -98,6 +107,7 @@ export default function AdminReports() {
         {([
           ['report', 'KPI report', BarChart3],
           ['scores', 'Score export', Download],
+          ['adoption', 'Adoption', Users],
         ] as Array<[Tab, string, React.ComponentType<{ className?: string }>]>).map(
           ([key, label, Icon]) => (
             <button
@@ -149,6 +159,7 @@ export default function AdminReports() {
           </div>
         </div>
       )}
+      {tab === 'adoption' && <AdoptionTab />}
     </div>
   )
 }

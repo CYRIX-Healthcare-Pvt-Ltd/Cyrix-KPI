@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
-import { exportOrgStatus } from '@/lib/export'
+import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
 import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
 import SpareFields from './SpareFields'
@@ -27,6 +28,10 @@ interface LoginStatusRow {
   full_name: string
   designation: string | null
   department: string | null
+  /* The contract someone works on -- RJBEMP, KLBEMP, TCQAS, Care 360.
+     Added to v_login_status by 0111, because department is 959 SERVICE
+     out of 1,181 and answers almost nothing on its own. */
+  function_name: string | null
   is_active: boolean
   manager_ecode: string | null
   manager_name: string | null
@@ -1587,7 +1592,63 @@ function BemmpTab() {
  * key — no second request, and no way for the two tabs to disagree about
  * the same population.
  */
-function AdoptionTab() {
+/**
+ * A share of a population, as a row per group.
+ *
+ * Three tables were about to be the same table written three times, which
+ * is three places for the colour thresholds to drift apart.
+ */
+function ShareTable({ title, label, rows }: {
+  title: string
+  label: string
+  rows: Array<{ name: string; here: number; total: number; pct: number }>
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
+              <th className="px-4 py-2.5">{label}</th>
+              <th className="px-4 py-2.5 text-right">Signed in</th>
+              <th className="px-4 py-2.5 text-right">People</th>
+              <th className="px-4 py-2.5" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-100">
+            {rows.map(d => (
+              <tr key={d.name} className="hover:bg-ink-50">
+                <td className="px-4 py-2.5 font-medium">{d.name}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(d.pct)}%</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
+                  {d.here} / {d.total}
+                </td>
+                {/* A bar, because a column of percentages is one nobody
+                    reads to the bottom of, and the bottom is the part
+                    worth reading. */}
+                <td className="w-40 px-4 py-2.5">
+                  <span className="block h-1.5 w-full rounded-full bg-ink-100">
+                    <span
+                      className={clsx('block h-full rounded-full',
+                        d.pct >= 80 ? 'bg-emerald-400'
+                          : d.pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500')}
+                      style={{ width: Math.max(d.pct, 2) + '%' }}
+                    />
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export function AdoptionTab() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['login_status'],
     queryFn: async () => {
@@ -1622,16 +1683,44 @@ function AdoptionTab() {
       if (m) reportCount.set(m, (reportCount.get(m) ?? 0) + 1)
     }
 
-    const byDept = new Map<string, { total: number; here: number }>()
+    /* One counter, two groupings. Department is what a manager calls
+       their team; function is the contract the work is billed to, and
+       they answer different questions. */
+    const tally = (key: (r: LoginStatusRow) => string) => {
+      const m = new Map<string, { total: number; here: number }>()
+      for (const r of active) {
+        const k = key(r)
+        const e = m.get(k) ?? { total: 0, here: 0 }
+        e.total += 1
+        if (signedIn(r)) e.here += 1
+        m.set(k, e)
+      }
+      return [...m.entries()]
+        .map(([name, v]) => ({ name, ...v, pct: v.total ? (v.here / v.total) * 100 : 0 }))
+        // Worst first: these lists are read to find who to chase.
+        .sort((x, y) => x.pct - y.pct || y.total - x.total)
+    }
+
+    /*
+      Each manager, and how much of their team has come in.
+
+      Not the same question as whether the manager themselves signed in,
+      and the more useful one: a manager who is in but whose team is not
+      has a nudge to send, and a manager who is out with a team that is in
+      is only holding up the scoring. Both are on the row.
+    */
+    const byManager = new Map<string, { here: number; total: number }>()
     for (const r of active) {
-      const d = r.department?.trim() || 'No department'
-      const e = byDept.get(d) ?? { total: 0, here: 0 }
+      const m = r.manager_ecode?.toUpperCase()
+      if (!m) continue
+      const e = byManager.get(m) ?? { here: 0, total: 0 }
       e.total += 1
       if (signedIn(r)) e.here += 1
-      byDept.set(d, e)
+      byManager.set(m, e)
     }
 
     return {
+      active,
       total: active.length,
       signedIn: active.filter(signedIn).length,
       onDefault: active.filter(r => r.on_issued_default).length,
@@ -1639,10 +1728,23 @@ function AdoptionTab() {
       managersIn: managers.filter(signedIn).length,
       managersOut: managers.filter(r => !signedIn(r)),
       reportCount,
-      // Worst first: this list is read to find who to chase.
-      depts: [...byDept.entries()]
-        .map(([name, v]) => ({ name, ...v, pct: v.total ? (v.here / v.total) * 100 : 0 }))
+      signedIn_: signedIn,
+      mgrRows: managers
+        .map(m => {
+          const t = byManager.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0 }
+          return {
+            ecode: m.ecode,
+            name: m.full_name,
+            department: m.department ?? '',
+            selfIn: signedIn(m),
+            here: t.here,
+            total: t.total,
+            pct: t.total ? (t.here / t.total) * 100 : 0,
+          }
+        })
         .sort((a, b) => a.pct - b.pct || b.total - a.total),
+      depts: tally(r => r.department?.trim() || 'No department'),
+      functions: tally(r => r.function_name?.trim() || 'No function'),
     }
   }, [data])
 
@@ -1652,8 +1754,229 @@ function AdoptionTab() {
 
   const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
 
+  /*
+    Four sheets rather than one.
+
+    "Who has signed in" and "who has not" are the same list with a column
+    flipped, and handing somebody one sheet to filter is handing them a
+    step they will do wrong once. The two summaries travel with them
+    because the people reading this are the people who have to report it,
+    and re-deriving a percentage from a name list is where the number
+    stops matching the screen.
+  */
+  const download = () => {
+    const line = (r: LoginStatusRow) => ({
+      Ecode: r.ecode,
+      Name: r.full_name,
+      Designation: r.designation ?? '',
+      Department: r.department ?? '',
+      Function: r.function_name ?? '',
+      Manager: r.manager_name ?? '',
+      'Manager code': r.manager_ecode ?? '',
+      'Signed in': r.last_sign_in_at ? 'Yes' : 'No',
+      'Last signed in': r.last_sign_in_at ?? '',
+      'Login state': r.login_state,
+    })
+    const headers = Object.keys(line(stats.active[0]))
+    void exportSheets(
+      [
+        {
+          name: 'Signed in',
+          headers,
+          rows: stats.active.filter(stats.signedIn_).map(line),
+        },
+        {
+          name: 'Never signed in',
+          headers,
+          rows: stats.active.filter(r => !stats.signedIn_(r)).map(line),
+        },
+        {
+          name: 'By manager',
+          headers: ['Manager', 'Code', 'Department', 'Signed in themselves',
+            'Team signed in', 'Reports', 'Percent'],
+          rows: stats.mgrRows.map(m => ({
+            Manager: m.name,
+            Code: m.ecode,
+            Department: m.department,
+            'Signed in themselves': m.selfIn ? 'Yes' : 'No',
+            'Team signed in': m.here,
+            Reports: m.total,
+            Percent: Math.round(m.pct),
+          })),
+        },
+        {
+          name: 'By function',
+          headers: ['Function', 'Signed in', 'People', 'Percent'],
+          rows: stats.functions.map(d => ({
+            Function: d.name,
+            'Signed in': d.here,
+            People: d.total,
+            Percent: Math.round(d.pct),
+          })),
+        },
+        {
+          name: 'By department',
+          headers: ['Department', 'Signed in', 'People', 'Percent'],
+          rows: stats.depts.map(d => ({
+            Department: d.name,
+            'Signed in': d.here,
+            People: d.total,
+            Percent: Math.round(d.pct),
+          })),
+        },
+      ],
+      'Cyrix-adoption.xlsx',
+    )
+  }
+
+  /*
+    The same figures as a picture, for pasting into a message.
+
+    Drawn on a canvas rather than captured from the page. Capturing the DOM
+    needs a library that reimplements CSS layout, and it would photograph
+    the screen as it happens to be — mid-scroll, in whichever theme, with
+    whatever the browser did to the fonts. What gets shared here is a
+    figure, not a screenshot, so it is drawn once at a fixed size and
+    always looks the same.
+
+    Fixed light colours on purpose: this leaves the app and lands in a chat
+    window that has its own theme, and a dark card with dark text is how a
+    shared image arrives unreadable.
+  */
+  const saveImage = () => {
+    const W = 900
+    const PAD = 32
+    const top = stats.functions.slice(0, 10)
+    const H = 250 + top.length * 30 + 40
+
+    const canvas = document.createElement('canvas')
+    // Twice the size, scaled back down: a 1x canvas is soft on every
+    // phone screen this will be opened on.
+    const S = 2
+    canvas.width = W * S
+    canvas.height = H * S
+    const g = canvas.getContext('2d')
+    if (!g) return
+    g.scale(S, S)
+
+    const INK = '#0a0a0a'
+    const MUTED = '#6b7280'
+    const font = (px: number, weight = '400') =>
+      `${weight} ${px}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`
+
+    g.fillStyle = '#ffffff'
+    g.fillRect(0, 0, W, H)
+
+    g.fillStyle = INK
+    g.font = font(22, '700')
+    g.fillText('Cyrix KPI — who has signed in', PAD, 46)
+
+    g.fillStyle = MUTED
+    g.font = font(13)
+    g.fillText(
+      new Date().toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      }),
+      PAD, 68,
+    )
+
+    // The four headline figures, evenly across the width.
+    const tiles: Array<[string, string, string]> = [
+      ['Active employees', stats.total.toLocaleString(), ''],
+      ['Have signed in', pct(stats.signedIn, stats.total) + '%',
+        stats.signedIn.toLocaleString() + ' of ' + stats.total.toLocaleString()],
+      ['Managers signed in', pct(stats.managersIn, stats.managers.length) + '%',
+        stats.managersIn + ' of ' + stats.managers.length],
+      ['On issued password', stats.onDefault.toLocaleString(), 'never changed it'],
+    ]
+    const tw = (W - PAD * 2) / tiles.length
+    tiles.forEach(([label, value, sub], i) => {
+      const x = PAD + i * tw
+      g.fillStyle = MUTED
+      g.font = font(11, '600')
+      g.fillText(label.toUpperCase(), x, 104)
+      g.fillStyle = INK
+      g.font = font(26, '700')
+      g.fillText(value, x, 136)
+      if (sub) {
+        g.fillStyle = MUTED
+        g.font = font(11)
+        g.fillText(sub, x, 154)
+      }
+    })
+
+    g.fillStyle = INK
+    g.font = font(14, '700')
+    g.fillText('By function', PAD, 196)
+
+    const barX = 380
+    const barW = W - PAD - barX - 70
+    top.forEach((d, i) => {
+      const y = 224 + i * 30
+      g.fillStyle = INK
+      g.font = font(13)
+      // A long contract name must not run under the bar beside it.
+      let name = d.name
+      while (g.measureText(name).width > barX - PAD - 16 && name.length > 4) {
+        name = name.slice(0, -2)
+      }
+      g.fillText(name === d.name ? name : name + '…', PAD, y + 4)
+
+      g.fillStyle = MUTED
+      g.font = font(12)
+      g.fillText(d.here + ' / ' + d.total, barX - 80, y + 4)
+
+      g.fillStyle = '#e5e7eb'
+      g.beginPath()
+      g.roundRect(barX, y - 6, barW, 10, 5)
+      g.fill()
+
+      g.fillStyle = d.pct >= 80 ? '#34d399' : d.pct >= 50 ? '#fbbf24' : '#e4232a'
+      g.beginPath()
+      g.roundRect(barX, y - 6, Math.max((barW * d.pct) / 100, 4), 10, 5)
+      g.fill()
+
+      g.fillStyle = INK
+      g.font = font(12, '600')
+      g.fillText(Math.round(d.pct) + '%', barX + barW + 12, y + 4)
+    })
+
+    if (stats.functions.length > top.length) {
+      g.fillStyle = MUTED
+      g.font = font(11)
+      g.fillText(
+        `and ${stats.functions.length - top.length} more — the full list is in the export`,
+        PAD, H - 22,
+      )
+    }
+
+    canvas.toBlob(blob => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'Cyrix-adoption.png'
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-500">
+          Who has signed in at least once, and who has not.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={saveImage} className="btn-secondary">
+            <ImageIcon className="h-4 w-4" /> Save image
+          </button>
+          <button onClick={download} className="btn-secondary">
+            <Download className="h-4 w-4" /> Export
+          </button>
+        </div>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Active employees" value={stats.total.toLocaleString()} />
         <StatTile
@@ -1722,37 +2045,54 @@ function AdoptionTab() {
         )}
       </div>
 
+      {/*
+        Every manager, not only the ones who have never come in.
+
+        The list above finds the people to ring; this finds the teams that
+        are not moving, which is a different set — a manager can be signed
+        in themselves and have nobody behind them.
+      */}
       <div className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-ink-900">By department</h3>
+          <h3 className="text-sm font-semibold text-ink-900">By manager</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
+                <th className="px-4 py-2.5">Manager</th>
                 <th className="px-4 py-2.5">Department</th>
-                <th className="px-4 py-2.5 text-right">Signed in</th>
-                <th className="px-4 py-2.5 text-right">People</th>
+                <th className="px-4 py-2.5">Themselves</th>
+                <th className="px-4 py-2.5 text-right">Team signed in</th>
+                <th className="px-4 py-2.5 text-right">Reports</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {stats.depts.map(d => (
-                <tr key={d.name} className="hover:bg-ink-50">
-                  <td className="px-4 py-2.5 font-medium">{d.name}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(d.pct)}%</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
-                    {d.here} / {d.total}
+              {stats.mgrRows.map(m => (
+                <tr key={m.ecode} className="hover:bg-ink-50">
+                  <td className="px-4 py-2.5">
+                    <span className="font-medium">{m.name}</span>
+                    <span className="ml-2 text-xs text-ink-400">{m.ecode}</span>
                   </td>
-                  {/* A bar, because thirty rows of percentages is a column
-                      nobody reads to the bottom of. */}
+                  <td className="px-4 py-2.5 text-ink-500">{m.department || '-'}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={clsx('badge',
+                      m.selfIn ? 'bg-emerald-100 text-emerald-800' : 'bg-cyrixRed-100 text-cyrixRed-800')}>
+                      {m.selfIn ? 'Signed in' : 'Never'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(m.pct)}%</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
+                    {m.here} / {m.total}
+                  </td>
                   <td className="w-40 px-4 py-2.5">
                     <span className="block h-1.5 w-full rounded-full bg-ink-100">
                       <span
                         className={clsx('block h-full rounded-full',
-                          d.pct >= 80 ? 'bg-emerald-400'
-                            : d.pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500')}
-                        style={{ width: Math.max(d.pct, 2) + '%' }}
+                          m.pct >= 80 ? 'bg-emerald-400'
+                            : m.pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500')}
+                        style={{ width: Math.max(m.pct, 2) + '%' }}
                       />
                     </span>
                   </td>
@@ -1762,6 +2102,9 @@ function AdoptionTab() {
           </table>
         </div>
       </div>
+
+      <ShareTable title="By function" label="Function" rows={stats.functions} />
+      <ShareTable title="By department" label="Department" rows={stats.depts} />
     </div>
   )
 }
