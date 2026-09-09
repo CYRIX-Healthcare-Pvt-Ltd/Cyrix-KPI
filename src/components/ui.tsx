@@ -316,8 +316,13 @@ export function BandCell({
           {parts.map(([label, v]) => (
             <span key={label} className="whitespace-nowrap">
               <span className="text-ink-400">{label}</span>{' '}
+              {/* Two places, like the total directly above it and like
+                  every other score on the site. One place here meant the
+                  parts visibly failed to add up to the whole they were
+                  printed under: 74.8 and 17.6 make 92.4, and the total
+                  said 92.35. */}
               <span className="font-semibold tabular-nums text-ink-600">
-                {v === null || v === undefined ? '—' : v.toFixed(1)}
+                {v === null || v === undefined ? '—' : v.toFixed(2)}
               </span>
             </span>
           ))}
