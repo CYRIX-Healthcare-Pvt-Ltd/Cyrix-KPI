@@ -47,10 +47,34 @@ export default function ScoreSubmission() {
   // Null means nothing closes months on its own, so somebody has to.
   const { data: closingDay } = useMonthClose()
   const { data: queryState } = useScoreQueryState(submissionId)
-  // Set when the manager arrived from the Queries screen, so saving can
-  // put them back where they were instead of leaving them on a form with
-  // no way back to the question they came to answer.
-  const fromQuery = (useLocation().state as { fromQuery?: string } | null)?.fromQuery
+  /*
+    Where the manager came from.
+
+    `fromQuery` was already here, set when they arrive from the Queries
+    screen so that saving puts them back beside the question they came
+    to answer rather than leaving them on a form with no way back to it.
+
+    A score is opened from three places though, and the link at the top
+    of the page went to the team list from all three — so a manager
+    working through a queue of queries, or down one person's year, was
+    returned to the team list every time and had to navigate back in.
+    The other two origins now travel the same way, on the same state
+    object, and `back` is the one place that decides where the top link
+    points and what it is called.
+
+    A member's record needs its id to return to, so that origin carries
+    one. Anything with no origin at all — the Team page's own Score
+    buttons, a pasted URL — still goes to the team list.
+  */
+  const nav = useLocation().state as
+    { fromQuery?: string; from?: string; employeeId?: string } | null
+  const fromQuery = nav?.fromQuery
+  const back =
+    fromQuery
+      ? { to: '/queries', label: 'Back to queries' }
+      : nav?.from === 'member' && nav.employeeId
+        ? { to: `/team/${nav.employeeId}`, label: 'Back to the record' }
+        : { to: '/team', label: 'Back to my team' }
   const openQuery = queryState?.existing_status === 'open'
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
@@ -327,7 +351,9 @@ export default function ScoreSubmission() {
         open.
       */
       const who = data?.employee.full_name.split(' ')[0] ?? 'They'
-      navigate(fromQuery ? '/queries' : '/team', {
+      // The same place the top link offers, so submitting and backing
+      // out land in the same page rather than two different ones.
+      navigate(back.to, {
         replace: true,
         state: {
           notice:
@@ -392,8 +418,8 @@ export default function ScoreSubmission() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/team" className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
-          <ArrowLeft className="h-4 w-4" /> Back to my team
+        <Link to={back.to} className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
+          <ArrowLeft className="h-4 w-4" /> {back.label}
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-ink-900">

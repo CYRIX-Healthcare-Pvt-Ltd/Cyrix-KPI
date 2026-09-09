@@ -192,7 +192,11 @@ export default function TeamMember() {
                     />
                     <td className="px-4 py-3 text-right">
                       {s && (
+                        {/* So scoring a month returns to this person's
+                            record rather than to the team list. Reading
+                            down a year means opening several of these. */}
                         <Link to={`/score/${s.id}`}
+                              state={{ from: 'member', employeeId }}
                               className="link-accent text-xs hover:underline">
                           {s.status === 'submitted' ? 'Score' : 'View'}
                         </Link>
