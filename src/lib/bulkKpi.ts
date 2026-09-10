@@ -308,10 +308,29 @@ export async function applyBulkUpload(
  * to restate them is a column they can only get wrong.
  */
 export function downloadBulkTemplate(): void {
+  saveXlsx(templateBytes(), 'kpi_bulk_template.xlsx')
+}
+
+/**
+ * The same template for one person setting up their own KPI.
+ *
+ * The KPI sheet alone -- the Capping dropdown, the percentage formats and
+ * the example rows that total 80% -- with no Ecode sheet, because the
+ * person uploading it is the person it is for. It reads back through the
+ * same parser the "Upload my Excel" card uses, and a test holds it to that.
+ *
+ * Takes no arguments, like downloadBulkTemplate: that one is handed
+ * straight to onClick, which passes the click event in as the first
+ * argument, and an options parameter would quietly receive it.
+ */
+export function downloadKpiTemplate(): void {
+  saveXlsx(templateBytes({ withEcodes: false }), 'kpi_template.xlsx')
+}
+
+function saveXlsx(bytes: Uint8Array, name: string): void {
   // Copied into a plain ArrayBuffer. A Uint8Array view is not a BlobPart
   // the DOM types accept, and fflate's own buffer widens to
   // ArrayBufferLike — so the bytes are copied into one this can name.
-  const bytes = templateBytes()
   const buf = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(buf).set(bytes)
   const blob = new Blob([buf], {
@@ -320,7 +339,7 @@ export function downloadBulkTemplate(): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'kpi_bulk_template.xlsx'
+  a.download = name
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -344,8 +363,8 @@ export function downloadBulkTemplate(): void {
  * the schema's sequence; appending it at the end of the worksheet makes
  * a file Excel refuses to open.
  */
-export function templateBytes(): Uint8Array {
-  const raw = XLSX.write(buildBulkTemplate(), {
+export function templateBytes({ withEcodes = true }: { withEcodes?: boolean } = {}): Uint8Array {
+  const raw = XLSX.write(buildBulkTemplate({ withEcodes }), {
     type: 'array', bookType: 'xlsx',
   }) as ArrayBuffer
 
@@ -380,7 +399,7 @@ export function templateBytes(): Uint8Array {
  * starts from, and a template that does not round-trip is a bug shipped
  * to everybody at once.
  */
-export function buildBulkTemplate(): XLSX.WorkBook {
+export function buildBulkTemplate({ withEcodes = true }: { withEcodes?: boolean } = {}): XLSX.WorkBook {
   const header = [
     'KRA& Weightage',
     'KRA',
@@ -454,7 +473,9 @@ export function buildBulkTemplate(): XLSX.WorkBook {
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Template')
-  XLSX.utils.book_append_sheet(wb, ecodes, 'Ecode')
+  // The self-upload template stops at the KPI sheet: the person uploading
+  // it is the person it is for, so there is nobody to list.
+  if (withEcodes) XLSX.utils.book_append_sheet(wb, ecodes, 'Ecode')
   return wb
 }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
-  Upload, FileSpreadsheet, Plus, ArrowLeft, Send, Save, Lock, X,
+  Upload, Download, FileSpreadsheet, Plus, ArrowLeft, Send, Save, Lock, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -28,6 +28,9 @@ export default function KpiSetup() {
   const navigate = useNavigate()
   const fy = currentFy()
   const fileRef = useRef<HTMLInputElement>(null)
+  // "Upload my Excel" asks before it opens the file picker: the file has to
+  // be the template's shape, and most people will not have one yet.
+  const [askUpload, setAskUpload] = useState(false)
 
   const { data, isLoading } = useMyAssignment(employee?.id, fy)
   const { data: rules } = useScoringRules()
@@ -288,16 +291,56 @@ export default function KpiSetup() {
 
       {working.length === 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="card card-interactive flex flex-col items-center gap-2 p-6 text-center"
-          >
-            <Upload className="h-7 w-7 text-ink-800" />
-            <p className="font-medium text-ink-900">Upload my Excel</p>
-            <p className="text-xs text-ink-500">
-              Reads your KPI sheet, including which rows penalise going over target
-            </p>
-          </button>
+          {askUpload ? (
+            <div className="card flex flex-col items-center gap-2 p-6 text-center">
+              <Upload className="h-7 w-7 text-ink-800" />
+              <p className="font-medium text-ink-900">Upload my Excel</p>
+              <p className="text-xs text-ink-500">
+                Fill in the template, then upload it from your device
+              </p>
+              <div className="mt-1 flex w-full flex-col gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary justify-center"
+                  onClick={() => {
+                    // Loaded on the click, like the parser: the spreadsheet
+                    // code is large and most visits never need it.
+                    void import('@/lib/bulkKpi')
+                      .then(m => m.downloadKpiTemplate())
+                      .catch((e: unknown) =>
+                        setError(e instanceof Error ? e.message : 'Could not build the template'))
+                  }}
+                >
+                  <Download className="h-4 w-4" /> Download template
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary justify-center"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" /> Upload from device
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-ink-500 hover:text-ink-800"
+                  onClick={() => setAskUpload(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAskUpload(true)}
+              className="card card-interactive flex flex-col items-center gap-2 p-6 text-center"
+            >
+              <Upload className="h-7 w-7 text-ink-800" />
+              <p className="font-medium text-ink-900">Upload my Excel</p>
+              <p className="text-xs text-ink-500">
+                Reads your KPI sheet, including which rows penalise going over target
+              </p>
+            </button>
+          )}
 
           {/* Was a dead card for everyone but one job role: it read HR's
               templates alone, and only one has ever existed. It now

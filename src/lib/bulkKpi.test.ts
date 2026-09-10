@@ -151,3 +151,26 @@ describe('the ecode sheet', () => {
     expect(warnings.join(' ')).toContain('duplicate')
   })
 })
+
+describe('the self-upload template', () => {
+  const bytes = () => templateBytes({ withEcodes: false })
+
+  it('is the KPI sheet alone, with no Ecode sheet to fill in', () => {
+    expect(XLSX.read(bytes(), { type: 'array' }).SheetNames).toEqual(['Template'])
+  })
+
+  it('keeps the rule dropdown', () => {
+    const files = unzipSync(bytes())
+    expect(strFromU8(files['xl/worksheets/sheet1.xml'])).toContain('<dataValidations')
+  })
+
+  it('reads back through the parser that Upload my Excel uses', () => {
+    const parsed = parseKpiWorkbook(bytes().buffer as ArrayBuffer)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.jobRoleTotal).toBe(80)
+  })
+
+  it('leaves the bulk template with both of its sheets', () => {
+    expect(XLSX.read(templateBytes(), { type: 'array' }).SheetNames).toEqual(['Template', 'Ecode'])
+  })
+})
