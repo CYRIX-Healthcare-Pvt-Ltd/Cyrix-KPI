@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  Trophy, TrendingDown, AlertTriangle, Users, Download, ArrowUp, ArrowDown,
+  Trophy, TrendingDown, AlertTriangle, Users, Download,
   ArrowLeft,
 } from 'lucide-react'
+import { SortHeader } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyTeam, useTeamSubmissions, useTeamAssignments, useWeakAreas,
@@ -750,37 +751,6 @@ export default function TeamAnalysis() {
         </p>
       </div>
     </div>
-  )
-}
-
-/** A column header you can sort on, with the direction shown. */
-function SortHeader({
-  label, col, align = 'left', sortKey, asc, onSort,
-}: {
-  label: string
-  col: SortKey
-  align?: 'left' | 'right'
-  sortKey: SortKey | null
-  asc: boolean
-  onSort: (key: SortKey) => void
-}) {
-  const active = sortKey === col
-  return (
-    <th className={clsx('px-4 py-2.5 font-medium', align === 'right' && 'text-right')}>
-      <button
-        onClick={() => onSort(col)}
-        className={clsx(
-          'inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink-900',
-          active ? 'text-ink-900' : 'text-ink-500',
-        )}
-        aria-label={`Sort by ${label}`}
-      >
-        {label}
-        {active && (asc
-          ? <ArrowUp className="h-3 w-3" />
-          : <ArrowDown className="h-3 w-3" />)}
-      </button>
-    </th>
   )
 }
 

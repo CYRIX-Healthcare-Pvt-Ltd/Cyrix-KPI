@@ -6,6 +6,7 @@ import {
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3,
   Image as ImageIcon,
 } from 'lucide-react'
+import { SortHeader } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
@@ -1593,9 +1594,36 @@ type Share = {
   total: number
   /** How many of total have an approved KPI for this financial year. */
   kpiSet: number
+  /** kpiSet as a share of total, 0 to 100. */
+  kpiPct: number
   pct: number
   /** Managers only: whether the manager has signed in themselves. */
   selfIn?: boolean
+}
+
+/** What the share table can be sorted by. */
+type ShareSortKey = 'name' | 'self' | 'pct' | 'here' | 'kpiPct' | 'kpiSet'
+
+/**
+ * The share rows in the order the table and the saved image both show.
+ *
+ * Null keeps the report's own order, lowest sign-in rate first. Ties keep
+ * the bigger group first and then the name, so two clicks on the same
+ * heading never shuffle rows that were level.
+ */
+function sortShares(rows: readonly Share[], key: ShareSortKey | null, asc: boolean): readonly Share[] {
+  if (!key) return rows
+  const dir = asc ? 1 : -1
+  const num = (r: Share): number =>
+    key === 'self' ? (r.selfIn ? 1 : 0)
+    : key === 'pct' ? r.pct
+    : key === 'here' ? r.here
+    : key === 'kpiPct' ? r.kpiPct
+    : r.kpiSet
+  return [...rows].sort((a, b) => {
+    const c = key === 'name' ? a.name.localeCompare(b.name) : num(a) - num(b)
+    return c * dir || b.total - a.total || a.name.localeCompare(b.name)
+  })
 }
 
 /** The HR Employees screen's words for an assignment's status, so the two read alike. */
@@ -1610,10 +1638,13 @@ const KPI_LABEL: Record<string, string> = {
 const SHARE_BAR = (pct: number) =>
   pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500'
 
-function ShareTable({ label, rows, showSelf }: {
+function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
   label: string
-  rows: Share[]
+  rows: readonly Share[]
   showSelf?: boolean
+  sortKey: ShareSortKey | null
+  asc: boolean
+  onSort: (key: ShareSortKey) => void
 }) {
   if (rows.length === 0) {
     return <p className="px-4 py-8 text-center text-sm text-ink-500">Nothing matches that search.</p>
@@ -1623,12 +1654,17 @@ function ShareTable({ label, rows, showSelf }: {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-            <th className="px-4 py-2.5">{label}</th>
-            {showSelf && <th className="px-4 py-2.5">Themselves</th>}
-            <th className="px-4 py-2.5 text-right">Signed in</th>
-            <th className="px-4 py-2.5 text-right">People</th>
+            <SortHeader label={label} col="name" sortKey={sortKey} asc={asc} onSort={onSort} />
+            {showSelf && (
+              <SortHeader label="Themselves" col="self" sortKey={sortKey} asc={asc} onSort={onSort} />
+            )}
+            {/* A percentage and the count behind it, twice: once for signing
+                in and once for KPI set-up, each named for what it counts. */}
+            <SortHeader label="Signed in %" col="pct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
+            <SortHeader label="Signed in" col="here" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <th className="px-4 py-2.5" />
-            <th className="px-4 py-2.5 text-right">KPI set up</th>
+            <SortHeader label="KPI set up %" col="kpiPct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
+            <SortHeader label="KPI set up" col="kpiSet" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-100">
@@ -1664,6 +1700,7 @@ function ShareTable({ label, rows, showSelf }: {
               {/* Out of the same people the bar counts, so the two read
                   against each other: who has come in, and who has a KPI to
                   come in to. */}
+              <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(r.kpiPct)}%</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
                 {r.kpiSet} / {r.total}
               </td>
@@ -1693,6 +1730,10 @@ function ShareTable({ label, rows, showSelf }: {
 export function SummaryTab() {
   const [sub, setSub] = useState<'managers' | 'function' | 'department'>('managers')
   const [q, setQ] = useState('')
+  // Up here with the other state: the early returns below come before the
+  // rows exist, and a hook may not sit after them.
+  const [sortKey, setSortKey] = useState<ShareSortKey | null>(null)
+  const [asc, setAsc] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['login_status'],
@@ -1740,6 +1781,7 @@ export function SummaryTab() {
       return [...m.entries()]
         .map(([name, v]) => ({
           key: name, name, ...v, pct: v.total ? (v.here / v.total) * 100 : 0,
+          kpiPct: v.total ? (v.kpiSet / v.total) * 100 : 0,
         }))
         // Worst first: these lists are read to find who to chase.
         .sort((x, y) => x.pct - y.pct || y.total - x.total)
@@ -1761,9 +1803,9 @@ export function SummaryTab() {
       signedIn_: signedIn,
       total: active.length,
       signedIn: active.filter(signedIn).length,
-      onDefault: active.filter(r => r.on_issued_default).length,
       managerCount: managers.length,
       managersIn: managers.filter(signedIn).length,
+      kpiSetUp: active.filter(kpiSetUp).length,
       managerRows: managers
         .map((m): Share => {
           const t = team.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0, kpiSet: 0 }
@@ -1775,6 +1817,7 @@ export function SummaryTab() {
             here: t.here,
             total: t.total,
             kpiSet: t.kpiSet,
+            kpiPct: t.total ? (t.kpiSet / t.total) * 100 : 0,
             pct: t.total ? (t.here / t.total) * 100 : 0,
           }
         })
@@ -1803,6 +1846,17 @@ export function SummaryTab() {
       r.name.toLowerCase().includes(needle) || (r.note ?? '').toLowerCase().includes(needle))
     : current[3]
 
+  // One order for the table and the picture of it, so a saved image is the
+  // view on screen and not the default one.
+  const sorted = sortShares(shown, sortKey, asc)
+  const sortOn = (key: ShareSortKey) => {
+    if (sortKey === key) { setAsc(v => !v); return }
+    setSortKey(key)
+    // Names read A to Z; every count and share reads highest first, the
+    // same as the team analysis.
+    setAsc(key === 'name')
+  }
+
   /*
     Four sheets, not one.
 
@@ -1830,13 +1884,14 @@ export function SummaryTab() {
     const headers = Object.keys(line(stats.active[0]))
     const share = (name: string, label: string, rows: readonly Share[]) => ({
       name,
-      headers: [label, 'Signed in', 'People', 'Percent', 'KPI set up'],
+      headers: [label, 'Signed in', 'People', 'Percent', 'KPI set up', 'KPI set up %'],
       rows: rows.map(r => ({
         [label]: r.note ? `${r.name} (${r.note})` : r.name,
         'Signed in': r.here,
         People: r.total,
         Percent: Math.round(r.pct),
         'KPI set up': r.kpiSet,
+        'KPI set up %': Math.round(r.kpiPct),
       })),
     })
     void exportSheets(
@@ -1868,8 +1923,9 @@ export function SummaryTab() {
     not match the table is worse than no picture.
   */
   const saveImage = () => {
-    // 100 wider than it was, for the KPI column, so the bar keeps its length.
-    const W = 1000
+    // 200 wider than before the KPI columns, one for the count and one for
+    // the percentage, so the bar keeps its length.
+    const W = 1100
     const PAD = 32
     /*
       Every row, however many that is.
@@ -1885,7 +1941,7 @@ export function SummaryTab() {
       scale drops to 1x if doubling would take it past what browsers
       allow. Softer, and still there.
     */
-    const rows = shown
+    const rows = sorted
     // The rows start at 110 and are 28 apart, so the height is where they
     // finish plus a margin — and a little more when there is a line saying
     // how many were left out. Sized to the content: a fixed height left a
@@ -1920,25 +1976,46 @@ export function SummaryTab() {
     g.fillText(
       `${pct(stats.signedIn, stats.total)}% of ${stats.total.toLocaleString()} employees · `
       + `${pct(stats.managersIn, stats.managerCount)}% of ${stats.managerCount} managers · `
+      + `${pct(stats.kpiSetUp, stats.total)}% KPI set up · `
       + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       PAD, 62,
     )
-    if (needle) {
+    // What this picture is of when it is not the default view: the search
+    // that narrowed it and the order it was put in. A shared image that
+    // does not say how it was sorted reads as the default order.
+    const sortedBy = sortKey && ({
+      name: current[2].toLowerCase(), self: 'themselves', pct: 'signed in %',
+      here: 'signed in', kpiPct: 'KPI set up %', kpiSet: 'KPI set up',
+    } as Record<ShareSortKey, string>)[sortKey]
+    const order = sortKey === 'name' ? (asc ? 'A to Z' : 'Z to A')
+      : sortKey === 'self' ? (asc ? 'not signed in first' : 'signed in first')
+      : (asc ? 'lowest first' : 'highest first')
+    const viewNote = [
+      needle ? `filtered: "${q.trim()}"` : '',
+      sortedBy ? `sorted by ${sortedBy}, ${order}` : '',
+    ].filter(Boolean).join(' · ')
+    if (viewNote) {
       g.fillStyle = MUTED
       g.font = font(12, '600')
-      g.fillText(`filtered: "${q.trim()}"`, PAD, 82)
+      g.fillText(viewNote, PAD, 82)
     }
 
     const top = 110
     const barX = 430
-    const barW = W - PAD - barX - 160
+    const barW = W - PAD - barX - 260
+    // Right edges of the two KPI columns: the count against the margin, the
+    // percentage 90px in from it -- measured to clear both neighbours.
+    const kpiCountRight = W - PAD
+    const kpiPctRight = W - PAD - 90
 
     g.fillStyle = MUTED
     g.font = font(11, '600')
     g.fillText(current[2].toUpperCase(), PAD, top - 14)
-    g.fillText('SIGNED IN', barX + barW + 12, top - 14)
+    g.fillText('SIGNED IN', barX - 62, top - 14)
+    g.fillText('SIGNED IN %', barX + barW + 12, top - 14)
     g.textAlign = 'right'
-    g.fillText('KPI SET UP', W - PAD, top - 14)
+    g.fillText('KPI SET UP %', kpiPctRight, top - 14)
+    g.fillText('KPI SET UP', kpiCountRight, top - 14)
     g.textAlign = 'left'
 
     rows.forEach((d, i) => {
@@ -1973,7 +2050,10 @@ export function SummaryTab() {
       g.fillStyle = MUTED
       g.font = font(12)
       g.textAlign = 'right'
-      g.fillText(`${d.kpiSet} / ${d.total}`, W - PAD, y + 4)
+      g.fillText(`${d.kpiSet} / ${d.total}`, kpiCountRight, y + 4)
+      g.fillStyle = INK
+      g.font = font(12, '600')
+      g.fillText(`${Math.round(d.kpiPct)}%`, kpiPctRight, y + 4)
       g.textAlign = 'left'
     })
 
@@ -2002,10 +2082,14 @@ export function SummaryTab() {
           value={pct(stats.managersIn, stats.managerCount) + '%'}
           sub={stats.managersIn + ' of ' + stats.managerCount}
         />
+        {/* Where "still on the issued password" was. That count was nearly
+            everybody, so it told nobody anything; whether people have a KPI
+            to be assessed on is what this rollout is chased on. Approved
+            only, the same rule as the column in the table below. */}
         <StatTile
-          label="Still on the issued password"
-          value={stats.onDefault.toLocaleString()}
-          sub="signed in, never changed it"
+          label="KPI set up"
+          value={pct(stats.kpiSetUp, stats.total) + '%'}
+          sub={stats.kpiSetUp.toLocaleString() + ' of ' + stats.total.toLocaleString() + ' approved'}
         />
       </div>
 
@@ -2019,7 +2103,7 @@ export function SummaryTab() {
               <button
                 key={id}
                 type="button"
-                onClick={() => { setSub(id); setQ('') }}
+                onClick={() => { setSub(id); setQ(''); setSortKey(null) }}
                 className={clsx(
                   'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                   sub === id
@@ -2052,7 +2136,14 @@ export function SummaryTab() {
           </div>
         </div>
 
-        <ShareTable label={current[2]} rows={shown} showSelf={sub === 'managers'} />
+        <ShareTable
+          label={current[2]}
+          rows={sorted}
+          showSelf={sub === 'managers'}
+          sortKey={sortKey}
+          asc={asc}
+          onSort={sortOn}
+        />
       </div>
     </div>
   )

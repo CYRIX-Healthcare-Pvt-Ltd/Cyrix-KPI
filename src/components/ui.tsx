@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { AlertCircle, CheckCircle2, Info, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, Info, Loader2 } from 'lucide-react'
 import { bandFor, attainmentPct } from '@/lib/bands'
 import type { SubmissionStatus, AssignmentStatus } from '@/types/db'
 
@@ -402,5 +402,50 @@ export function SectionHeader({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * A column heading that sorts its table.
+ *
+ * Shared, so a sortable heading looks and behaves the same wherever it
+ * appears -- the team analysis and the Summary Report both use it. The
+ * first click reads names A to Z and scores best-first, the same heading
+ * again reverses it, and the arrow shows on the active column only.
+ *
+ * Generic over the column key, so each table keeps its own set of keys and
+ * a heading cannot name a column its table does not sort by.
+ */
+export function SortHeader<K extends string>({
+  label, col, align = 'left', sortKey, asc, onSort,
+}: {
+  label: string
+  col: K
+  align?: 'left' | 'right'
+  sortKey: K | null
+  asc: boolean
+  onSort: (key: K) => void
+}) {
+  const active = sortKey === col
+  return (
+    <th
+      className={clsx('px-4 py-2.5 font-medium', align === 'right' && 'text-right')}
+      aria-sort={active ? (asc ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        className={clsx(
+          'inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink-900',
+          active ? 'text-ink-900' : 'text-ink-500',
+        )}
+        aria-label={`Sort by ${label}`}
+      >
+        {label}
+        {active && (asc
+          ? <ArrowUp className="h-3 w-3" />
+          : <ArrowDown className="h-3 w-3" />)}
+      </button>
+    </th>
   )
 }
