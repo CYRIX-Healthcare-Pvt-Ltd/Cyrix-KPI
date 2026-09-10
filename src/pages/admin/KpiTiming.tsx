@@ -4,8 +4,15 @@ import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
   currentFy, type TatPolicy,
 } from '@/lib/queries'
-import { fyMonths, monthLabel, isMonthOpen } from '@/lib/fy'
+import { fyMonths, monthLabel, monthStart, isMonthOpen } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, StatTile } from '@/components/ui'
+
+/** '2026-09-01' → '1 Oct': the day that month's clock starts. */
+function firstOfNext(monthIso: string): string {
+  const d = new Date(monthIso + 'T00:00:00')
+  d.setMonth(d.getMonth() + 1)
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
 
 /**
  * When turnaround starts counting, and how much of it is free.
@@ -241,13 +248,24 @@ export default function KpiTiming() {
             onChange={e => setFrom(e.target.value)}
           >
             <option value="">Every month of the year</option>
-            {/* Only months that have finished. Choosing a month nobody
-                could have submitted yet reads as a setting that did
-                nothing. */}
-            {fyMonths(fy).filter(m => isMonthOpen(m)).map(m => (
+            {/* Finished months and the one still running. The running
+                month is the usual answer at go-live: in September 2026,
+                508 of the 543 KPIs then active had been approved that
+                month, so it was the first month most people could have
+                sent in on time. The line below says what choosing it does
+                until it ends. */}
+            {fyMonths(fy).filter(m => m <= monthStart(new Date())).map(m => (
               <option key={m} value={m}>{monthLabel(m)} onwards</option>
             ))}
           </select>
+          {from && !isMonthOpen(from) && (
+            <p className="mt-2 text-xs text-amber-700">
+              {monthLabel(from)} is still running, so nothing is measured until
+              it ends. Until {firstOfNext(from)}, TAT and lateness stay blank on
+              the HR report and on managers' profiles, and the team scoring
+              rank runs on the team average band alone.
+            </p>
+          )}
           <p className="mt-2 text-xs text-ink-500">
             Months before this still count as owed and still count as scored —
             they simply have no clock on them. Completion&nbsp;% is unaffected:
