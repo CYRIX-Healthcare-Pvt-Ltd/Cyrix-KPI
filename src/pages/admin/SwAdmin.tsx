@@ -42,6 +42,10 @@ interface LoginStatusRow {
   last_sign_in_at: string | null
   password_changed_at: string | null
   login_state: string
+  /* This financial year's KPI, in the assignment's own words: 'active' is
+     approved, and 'not_set_up' means there is no assignment for the year.
+     Added to v_login_status by 0115. */
+  kpi_status: string | null
 }
 
 const STATE_STYLE: Record<string, string> = {
@@ -1587,9 +1591,20 @@ type Share = {
   note?: string
   here: number
   total: number
+  /** How many of total have an approved KPI for this financial year. */
+  kpiSet: number
   pct: number
   /** Managers only: whether the manager has signed in themselves. */
   selfIn?: boolean
+}
+
+/** The HR Employees screen's words for an assignment's status, so the two read alike. */
+const KPI_LABEL: Record<string, string> = {
+  active: 'Approved',
+  pending_approval: 'Awaiting approval',
+  draft: 'Draft',
+  rejected: 'Sent back',
+  not_set_up: 'Not set up',
 }
 
 const SHARE_BAR = (pct: number) =>
@@ -1613,6 +1628,7 @@ function ShareTable({ label, rows, showSelf }: {
             <th className="px-4 py-2.5 text-right">Signed in</th>
             <th className="px-4 py-2.5 text-right">People</th>
             <th className="px-4 py-2.5" />
+            <th className="px-4 py-2.5 text-right">KPI set up</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-100">
@@ -1644,6 +1660,12 @@ function ShareTable({ label, rows, showSelf }: {
                     style={{ width: Math.max(r.pct, 2) + '%' }}
                   />
                 </span>
+              </td>
+              {/* Out of the same people the bar counts, so the two read
+                  against each other: who has come in, and who has a KPI to
+                  come in to. */}
+              <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
+                {r.kpiSet} / {r.total}
               </td>
             </tr>
           ))}
@@ -1692,6 +1714,9 @@ export function SummaryTab() {
     if (!data) return null
     const active = data.filter(r => r.is_active)
     const signedIn = (r: LoginStatusRow) => r.last_sign_in_at != null
+    // An approved KPI for this year. A draft, one awaiting approval or one
+    // sent back cannot be assessed against yet, so none of those is set up.
+    const kpiSetUp = (r: LoginStatusRow) => r.kpi_status === 'active'
 
     // Somebody is a manager because people report to them, not because of
     // a title: the reporting line is what the process actually follows.
@@ -1703,12 +1728,13 @@ export function SummaryTab() {
 
     /* One counter, three groupings. */
     const tally = (key: (r: LoginStatusRow) => string): Share[] => {
-      const m = new Map<string, { total: number; here: number }>()
+      const m = new Map<string, { total: number; here: number; kpiSet: number }>()
       for (const r of active) {
         const k = key(r)
-        const e = m.get(k) ?? { total: 0, here: 0 }
+        const e = m.get(k) ?? { total: 0, here: 0, kpiSet: 0 }
         e.total += 1
         if (signedIn(r)) e.here += 1
+        if (kpiSetUp(r)) e.kpiSet += 1
         m.set(k, e)
       }
       return [...m.entries()]
@@ -1719,13 +1745,14 @@ export function SummaryTab() {
         .sort((x, y) => x.pct - y.pct || y.total - x.total)
     }
 
-    const team = new Map<string, { here: number; total: number }>()
+    const team = new Map<string, { here: number; total: number; kpiSet: number }>()
     for (const r of active) {
       const m = r.manager_ecode?.toUpperCase()
       if (!m) continue
-      const e = team.get(m) ?? { here: 0, total: 0 }
+      const e = team.get(m) ?? { here: 0, total: 0, kpiSet: 0 }
       e.total += 1
       if (signedIn(r)) e.here += 1
+      if (kpiSetUp(r)) e.kpiSet += 1
       team.set(m, e)
     }
 
@@ -1739,7 +1766,7 @@ export function SummaryTab() {
       managersIn: managers.filter(signedIn).length,
       managerRows: managers
         .map((m): Share => {
-          const t = team.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0 }
+          const t = team.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0, kpiSet: 0 }
           return {
             key: m.ecode,
             name: m.full_name,
@@ -1747,6 +1774,7 @@ export function SummaryTab() {
             selfIn: signedIn(m),
             here: t.here,
             total: t.total,
+            kpiSet: t.kpiSet,
             pct: t.total ? (t.here / t.total) * 100 : 0,
           }
         })
@@ -1797,16 +1825,18 @@ export function SummaryTab() {
       'Signed in': r.last_sign_in_at ? 'Yes' : 'No',
       'Last signed in': r.last_sign_in_at ?? '',
       'Login state': r.login_state,
+      'KPI status': KPI_LABEL[r.kpi_status ?? 'not_set_up'] ?? r.kpi_status ?? '',
     })
     const headers = Object.keys(line(stats.active[0]))
     const share = (name: string, label: string, rows: readonly Share[]) => ({
       name,
-      headers: [label, 'Signed in', 'People', 'Percent'],
+      headers: [label, 'Signed in', 'People', 'Percent', 'KPI set up'],
       rows: rows.map(r => ({
         [label]: r.note ? `${r.name} (${r.note})` : r.name,
         'Signed in': r.here,
         People: r.total,
         Percent: Math.round(r.pct),
+        'KPI set up': r.kpiSet,
       })),
     })
     void exportSheets(
@@ -1838,7 +1868,8 @@ export function SummaryTab() {
     not match the table is worse than no picture.
   */
   const saveImage = () => {
-    const W = 900
+    // 100 wider than it was, for the KPI column, so the bar keeps its length.
+    const W = 1000
     const PAD = 32
     /*
       Every row, however many that is.
@@ -1900,12 +1931,15 @@ export function SummaryTab() {
 
     const top = 110
     const barX = 430
-    const barW = W - PAD - barX - 60
+    const barW = W - PAD - barX - 160
 
     g.fillStyle = MUTED
     g.font = font(11, '600')
     g.fillText(current[2].toUpperCase(), PAD, top - 14)
     g.fillText('SIGNED IN', barX + barW + 12, top - 14)
+    g.textAlign = 'right'
+    g.fillText('KPI SET UP', W - PAD, top - 14)
+    g.textAlign = 'left'
 
     rows.forEach((d, i) => {
       const y = top + i * 28
@@ -1935,6 +1969,12 @@ export function SummaryTab() {
       g.fillStyle = INK
       g.font = font(12, '600')
       g.fillText(`${Math.round(d.pct)}%`, barX + barW + 12, y + 4)
+
+      g.fillStyle = MUTED
+      g.font = font(12)
+      g.textAlign = 'right'
+      g.fillText(`${d.kpiSet} / ${d.total}`, W - PAD, y + 4)
+      g.textAlign = 'left'
     })
 
     canvas.toBlob(blob => {
