@@ -65,7 +65,7 @@ function ordinal(n: number): string {
  */
 function RankTile({
   label, icon: Icon, rank, of, note, emptyNote = 'No scored month yet',
-  detail, detailLead,
+  detail, weights, weightsNote,
 }: {
   label: string
   icon: React.ComponentType<{ className?: string }>
@@ -75,8 +75,10 @@ function RankTile({
   emptyNote?: string
   /** Rows of working, shown on hover or tap. */
   detail?: Array<[string, string]>
-  /** One sentence above them, saying what the rank is measuring. */
-  detailLead?: string
+  /** What the rank is made of, each part with its share, above the working. */
+  weights?: Array<[string, string]>
+  /** One short line under the shares, for the rule they cannot show. */
+  weightsNote?: string
 }) {
   // Tapped open on touch, where there is no hover at all. The same state
   // also serves the keyboard, via focus-within on the button.
@@ -133,9 +135,32 @@ function RankTile({
           )}
           role="note"
         >
-          {detailLead && (
-            <p className="mb-2 border-b border-ink-100 pb-2 text-[11px] leading-snug text-ink-600">
-              {detailLead}
+          {/* The shares first, as a list rather than a paragraph: "Team
+              average band 70%" reads in a glance, where "seven tenths of
+              it" had to be worked out. */}
+          {weights && (
+            <div className="mb-2 border-b border-ink-100 pb-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                What counts
+              </p>
+              <dl className="space-y-1">
+                {weights.map(([k, v]) => (
+                  <div key={k} className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] leading-tight text-ink-600">{k}</dt>
+                    <dd className="shrink-0 text-[11px] font-semibold leading-tight tabular-nums text-ink-900">
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {weightsNote && (
+                <p className="mt-1.5 text-[10px] leading-snug text-ink-400">{weightsNote}</p>
+              )}
+            </div>
+          )}
+          {weights && (
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Yours
             </p>
           )}
           {/* Stacked on a phone. The tile is 166px there, and a label
@@ -523,24 +548,24 @@ export default function Profile() {
   // as a small team until you know eleven others have not been assessed.
   const teamUnscored = (ranking?.team_size ?? 0) - (ranking?.team_of ?? 0)
 
+  const hasEsms = esmsWeight > 0
+
   /*
-    Why a position is what it is, in the words somebody being ranked
-    would use.
+    Why a position is what it is, as the shares that make it.
 
     Ranking stopped running on the raw percentage in migration 0096.
     Without the 120% ceiling one tripled target could carry a year, so
-    both positions now come off the 1–5 slab, where 190% and 95% are
-    equally a 5. That is a real change in how somebody is placed against
-    their colleagues, and it should be legible from the tile rather than
-    only from a migration nobody outside this repository will read.
+    both positions come off the 1–5 slab, where 190% and 95% are equally
+    a 5. That is a real change in how somebody is placed against their
+    colleagues, so it stays legible from the tile — as two shares and a
+    line, not the paragraph it used to be.
   */
-  const BAND_RANK_RULE =
-    'Ranked on your 1–5 bands rather than the raw percentage, so one '
-    + 'exceptional row cannot carry a year. Your job role band counts for '
-    + 'six tenths and the other 20% for four. Where two people come out '
-    + 'level, the higher job role band goes first.'
-
-  const hasEsms = esmsWeight > 0
+  const bandWeights: Array<[string, string]> = [
+    ['Job role band', '60%'],
+    [hasEsms ? 'Core values + ESMS band' : 'Core values band', '40%'],
+  ]
+  const bandNote =
+    'On 1–5 bands, not the raw %. If two come out level, the higher job role band goes first.'
   const bandRows: Array<[string, string]> = [
     ['Job role band',
       ranking?.job_band != null ? `${ranking.job_band} of 5` : '—'],
@@ -597,7 +622,8 @@ export default function Profile() {
               ? `${ranking?.team_of} of ${ranking?.team_size} scored so far`
               : 'everyone in your team'
           }
-          detailLead={BAND_RANK_RULE}
+          weights={bandWeights}
+          weightsNote={bandNote}
           detail={bandRows}
         />
         <RankTile
@@ -606,7 +632,8 @@ export default function Profile() {
           rank={ranking?.org_rank}
           of={ranking?.org_of}
           note="scored across Cyrix"
-          detailLead={BAND_RANK_RULE}
+          weights={bandWeights}
+          weightsNote={bandNote}
           detail={bandRows}
         />
         {/*
@@ -631,26 +658,18 @@ export default function Profile() {
                 : `${ranking.completion_pct}% done · among managers`
             }
             emptyNote="Nothing owed yet"
-            // Plain words. An earlier draft said "submissions answerable"
-            // and "turned around in time", which is precise and means
-            // nothing to the person being measured by it.
             /*
-              The rule this position was actually computed from.
-
-              It said "ranked on how much of your team's work is scored,
-              then on how long what is left has been waiting", which
-              described the old sort and is simply no longer true. A
-              caption that explains a number by the wrong rule is worse
-              than none: it is checkable, and it fails the check.
+              The shares kpi_ranking actually weighs, which migration 0098
+              set; they have to move with it. The paragraph this replaced
+              still said the figure was scaled by how much of the year had
+              been scored, which 0098 took out — and a caption that explains
+              a number by the wrong rule is worse than none.
             */
-            detailLead={
-              'Mostly your team’s own standing — seven tenths of it. '
-              + 'The rest is turnaround: two tenths how quickly you score '
-              + 'what arrives, one tenth how promptly your team sends it. '
-              + 'The whole figure is then scaled by how much of the year '
-              + 'you have actually scored, so being quick on a little '
-              + 'counts for little.'
-            }
+            weights={[
+              ['Team average band', '70%'],
+              ['Your scoring TAT', '20%'],
+              ['Team submission TAT', '10%'],
+            ]}
             detail={[
               ['Months your team owes',
                 ranking?.due_months != null ? String(ranking.due_months) : '—'],
@@ -662,9 +681,11 @@ export default function Profile() {
               // Their half of the wait. A manager can be quick and still
               // be carrying a team that sends everything in weeks late,
               // and only this line would say so.
-              ['Team submits in',
+              // Named as in the shares above, so each figure can be matched
+              // to the part of the rank it feeds.
+              ['Team submission TAT',
                 tatLine(ranking?.submit_tat, ranking?.submit_delay)],
-              ['Completion TAT',
+              ['Your scoring TAT',
                 tatLine(ranking?.completion_tat, ranking?.completion_delay)],
               ['Pending TAT',
                 tatLine(ranking?.pending_tat, ranking?.pending_delay,

@@ -83,7 +83,11 @@ export interface KpiRanking {
   job_band: number | null
   core_band: number | null
   rank_value: number | null
-  /** A manager's 0–100 mark, already scaled by how much they have scored. */
+  /**
+   * A manager's 0–100 mark: team average band 70, their scoring TAT 20,
+   * their team's submission TAT 10. Not scaled by how much has been scored
+   * any more — migration 0098 took that out.
+   */
   mgr_overall: number | null
   /**
    * Of every month the whole team owes — not only the ones that reached
