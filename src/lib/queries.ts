@@ -6,7 +6,7 @@ import type {
   Employee, KpiAssignment, KpiAssignmentItem, KpiSubmission, KpiSubmissionItem,
   CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
-  OrgKpiStatusRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
+  OrgKpiStatusRow, OrgKpiStatusAllRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
   ManagerMonthStatusRow, KpiReportRow, NotificationRow, KpiRanking,
   ScoreQuery, ScoreQueryPoint, ScoreQueryState, ScoreQueryKind,
@@ -839,6 +839,36 @@ export function useOrgKpiStatus(enabled: boolean, fy: string) {
       for (let from = 0; ; from += 1000) {
         const page = await unwrap<OrgKpiStatusRow[]>(
           supabase.from('v_org_kpi_status').select('*')
+            .order('ecode').range(from, from + 999),
+        )
+        all.push(...page)
+        if (page.length < 1000) break
+      }
+      return all
+    },
+  })
+}
+
+/**
+ * The same rows for everybody, active or not, for HR Employees' "Include
+ * inactive" option.
+ *
+ * A separate view rather than the filter lifted off v_org_kpi_status: the
+ * Overview and Reports pages count active people from that one, and so does
+ * v_manager_completion. Under the same query-key prefix, so everything that
+ * invalidates ['org_kpi_status'] after an edit -- switching somebody back to
+ * Active included -- refreshes this list too.
+ */
+export function useOrgKpiStatusAll(enabled: boolean, fy: string) {
+  return useQuery({
+    enabled,
+    queryKey: ['org_kpi_status', 'all', fy],
+    queryFn: async () => {
+      // Paged and ordered for the same reason as the active list above.
+      const all: OrgKpiStatusAllRow[] = []
+      for (let from = 0; ; from += 1000) {
+        const page = await unwrap<OrgKpiStatusAllRow[]>(
+          supabase.from('v_org_kpi_status_all').select('*')
             .order('ecode').range(from, from + 999),
         )
         all.push(...page)

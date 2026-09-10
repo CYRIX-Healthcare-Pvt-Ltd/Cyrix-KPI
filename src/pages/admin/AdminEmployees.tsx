@@ -5,18 +5,22 @@ import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
 import EditEmployee from '@/components/EditEmployee'
 import { useQueryClient } from '@tanstack/react-query'
-import { useOrgKpiStatus, currentFy } from '@/lib/queries'
+import { useOrgKpiStatusAll, currentFy } from '@/lib/queries'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { Alert, PageLoader, Spinner, ScorePill, StatusBadge } from '@/components/ui'
-import type { OrgKpiStatusRow, AssignmentStatus } from '@/types/db'
+import type { OrgKpiStatusAllRow, AssignmentStatus } from '@/types/db'
 
 export default function AdminEmployees() {
   const fy = currentFy()
   const qc = useQueryClient()
-  const { data: org, isLoading } = useOrgKpiStatus(true, fy)
+  const { data: org, isLoading } = useOrgKpiStatusAll(true, fy)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  // Off by default: the list is the people working here now. On, the people
+  // who have left come back, tagged, so HR can see why somebody is missing
+  // and switch them back on from their record.
+  const [includeInactive, setIncludeInactive] = useState(false)
   const [adding, setAdding] = useState(false)
   const [bulk, setBulk] = useState(false)
   const [recoding, setRecoding] = useState(false)
@@ -27,6 +31,7 @@ export default function AdminEmployees() {
     if (!org) return []
     const q = search.trim().toLowerCase()
     return org.filter(e => {
+      if (!includeInactive && !e.is_active) return false
       if (statusFilter !== 'all' && e.kpi_status !== statusFilter) return false
       if (!q) return true
       return (
@@ -36,7 +41,11 @@ export default function AdminEmployees() {
         (e.manager_name ?? '').toLowerCase().includes(q)
       )
     })
-  }, [org, search, statusFilter])
+  }, [org, search, statusFilter, includeInactive])
+
+  // "X of Y shown" is out of the people in view, so ticking the box grows Y
+  // rather than making every filter look as though it hid somebody.
+  const inScope = (org ?? []).filter(e => includeInactive || e.is_active).length
 
   const download = () =>
     exportOrgStatus(
@@ -52,6 +61,7 @@ export default function AdminEmployees() {
         'Months scored': e.months_scored,
         'Awaiting manager': e.months_awaiting_manager,
         'Average score': e.avg_score ?? '',
+        Active: e.is_active ? 'Yes' : 'No',
       })),
       `Cyrix-employees-${fy}.xlsx`,
     )
@@ -64,7 +74,7 @@ export default function AdminEmployees() {
         <div>
           <h1 className="text-xl font-semibold text-ink-900">Employees</h1>
           <p className="mt-0.5 text-sm text-ink-500">
-            {filtered.length} of {org?.length ?? 0} shown · FY {fy}
+            {filtered.length} of {inScope} shown · FY {fy}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -187,6 +197,15 @@ export default function AdminEmployees() {
           <option value="rejected">Sent back</option>
           <option value="not_set_up">Not set up</option>
         </select>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-ink-300"
+            checked={includeInactive}
+            onChange={e => setIncludeInactive(e.target.checked)}
+          />
+          Include inactive
+        </label>
       </div>
 
       <div className="card overflow-hidden">
@@ -219,13 +238,16 @@ export default function AdminEmployees() {
   )
 }
 
-function Row({ e, onEdit }: { e: OrgKpiStatusRow; onEdit: () => void }) {
+function Row({ e, onEdit }: { e: OrgKpiStatusAllRow; onEdit: () => void }) {
   return (
     // The whole row opens it. A pencil in the last column is a target to
     // aim at on a list of 1,148; the row is the thing being corrected.
     <tr className="cursor-pointer hover:bg-ink-50" onClick={onEdit}>
       <td className="px-4 py-3">
-        <p className="font-medium text-ink-900">{e.full_name}</p>
+        <p className="font-medium text-ink-900">
+          {e.full_name}
+          {!e.is_active && <span className="ml-2 badge bg-ink-100 text-ink-500">Inactive</span>}
+        </p>
         <p className="text-xs text-ink-500">
           {e.ecode}{e.designation && ` · ${e.designation}`}
         </p>

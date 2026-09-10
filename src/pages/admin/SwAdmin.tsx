@@ -63,6 +63,10 @@ function LoginsTab() {
   const setModule = useSetModuleAccess()
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
+  // The same option as HR Employees, off by default for the same reason:
+  // the list is the people here now, and 51 of the 55 who are not were
+  // switched off by one payroll upload.
+  const [includeInactive, setIncludeInactive] = useState(false)
   const [confirming, setConfirming] = useState<LoginStatusRow | null>(null)
   const [wiping, setWiping] = useState<LoginStatusRow | null>(null)
   const [typedCode, setTypedCode] = useState('')
@@ -94,6 +98,7 @@ function LoginsTab() {
     if (!data) return []
     const q = search.trim().toLowerCase()
     return data.filter(r => {
+      if (!includeInactive && !r.is_active) return false
       if (stateFilter !== 'all' && r.login_state !== stateFilter) return false
       if (!q) return true
       return (
@@ -103,13 +108,19 @@ function LoginsTab() {
         (r.manager_name ?? '').toLowerCase().includes(q)
       )
     })
-  }, [data, search, stateFilter])
+  }, [data, search, stateFilter, includeInactive])
 
+  // The tiles count what the list is showing: the people here now, or
+  // everybody once "Include inactive" is ticked.
+  const inScope = useMemo(
+    () => (data ?? []).filter(r => includeInactive || r.is_active),
+    [data, includeInactive],
+  )
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
-    for (const r of data ?? []) c[r.login_state] = (c[r.login_state] ?? 0) + 1
+    for (const r of inScope) c[r.login_state] = (c[r.login_state] ?? 0) + 1
     return c
-  }, [data])
+  }, [inScope])
 
   /**
    * Puts an account back to ecode-as-password. The hash is written inside
@@ -399,7 +410,7 @@ function LoginsTab() {
       )}
 
       <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
-        <StatTile label="Total accounts" value={data?.length ?? 0} />
+        <StatTile label="Total accounts" value={inScope.length} />
         <StatTile
           label="On issued default"
           value={counts['Using the issued default'] ?? 0}
@@ -435,6 +446,15 @@ function LoginsTab() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-ink-300"
+            checked={includeInactive}
+            onChange={e => setIncludeInactive(e.target.checked)}
+          />
+          Include inactive
+        </label>
       </div>
 
       <div className="card overflow-hidden">

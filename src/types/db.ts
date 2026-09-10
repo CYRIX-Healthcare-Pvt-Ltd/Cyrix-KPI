@@ -530,6 +530,14 @@ export interface OrgKpiStatusRow {
   avg_score: number | null
 }
 
+/**
+ * OrgKpiStatusRow for everybody, active or not -- v_org_kpi_status_all,
+ * migration 0116. Only HR Employees reads it, for "Include inactive".
+ */
+export interface OrgKpiStatusAllRow extends OrgKpiStatusRow {
+  is_active: boolean
+}
+
 export interface ManagerCompletionRow {
   manager_id: string
   manager_ecode: string
