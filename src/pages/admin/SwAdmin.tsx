@@ -1658,6 +1658,24 @@ const KPI_LABEL: Record<string, string> = {
 const SHARE_BAR = (pct: number) =>
   pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-cyrixRed-500'
 
+/**
+ * A share as a bar, because a column of percentages is one nobody reads to
+ * the bottom of, and the bottom is the part worth reading.
+ *
+ * One component for signing in and for KPI set-up, so the two bars cannot
+ * come to disagree about what half looks like.
+ */
+function ShareBar({ pct }: { pct: number }) {
+  return (
+    <span className="block h-1.5 w-full rounded-full bg-ink-100">
+      <span
+        className={clsx('block h-full rounded-full', SHARE_BAR(pct))}
+        style={{ width: Math.max(pct, 2) + '%' }}
+      />
+    </span>
+  )
+}
+
 function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
   label: string
   rows: readonly Share[]
@@ -1678,13 +1696,15 @@ function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
             {showSelf && (
               <SortHeader label="Themselves" col="self" sortKey={sortKey} asc={asc} onSort={onSort} />
             )}
-            {/* A percentage and the count behind it, twice: once for signing
-                in and once for KPI set-up, each named for what it counts. */}
+            {/* A percentage, the count behind it and a bar, twice: once for
+                signing in and once for KPI set-up, each named for what it
+                counts. */}
             <SortHeader label="Signed in %" col="pct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <SortHeader label="Signed in" col="here" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <th className="px-4 py-2.5" />
             <SortHeader label="KPI set up %" col="kpiPct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <SortHeader label="KPI set up" col="kpiSet" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
+            <th className="px-4 py-2.5" />
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-100">
@@ -1706,23 +1726,18 @@ function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
               <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
                 {r.here} / {r.total}
               </td>
-              {/* A bar, because a column of percentages is one nobody reads
-                  to the bottom of, and the bottom is the part worth
-                  reading. */}
               <td className="w-40 px-4 py-2.5">
-                <span className="block h-1.5 w-full rounded-full bg-ink-100">
-                  <span
-                    className={clsx('block h-full rounded-full', SHARE_BAR(r.pct))}
-                    style={{ width: Math.max(r.pct, 2) + '%' }}
-                  />
-                </span>
+                <ShareBar pct={r.pct} />
               </td>
-              {/* Out of the same people the bar counts, so the two read
+              {/* Out of the same people as signing in, so the two read
                   against each other: who has come in, and who has a KPI to
                   come in to. */}
               <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(r.kpiPct)}%</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
                 {r.kpiSet} / {r.total}
+              </td>
+              <td className="w-40 px-4 py-2.5">
+                <ShareBar pct={r.kpiPct} />
               </td>
             </tr>
           ))}
@@ -1943,9 +1958,10 @@ export function SummaryTab() {
     not match the table is worse than no picture.
   */
   const saveImage = () => {
-    // 200 wider than before the KPI columns, one for the count and one for
-    // the percentage, so the bar keeps its length.
-    const W = 1100
+    // Room for the table's columns in the table's order -- percentage,
+    // count and bar for signing in, then the same for KPI set-up -- and no
+    // more: a phone shrinks a wider image until its text cannot be read.
+    const W = 1200
     const PAD = 32
     /*
       Every row, however many that is.
@@ -1962,11 +1978,13 @@ export function SummaryTab() {
       allow. Softer, and still there.
     */
     const rows = sorted
-    // The rows start at 110 and are 28 apart, so the height is where they
-    // finish plus a margin — and a little more when there is a line saying
-    // how many were left out. Sized to the content: a fixed height left a
-    // band of white under a short list, which reads as a broken export.
-    const H = 110 + rows.length * 28 + 22
+    // The headings sit at top - 14 and the rows start at top, 28 apart, so
+    // the height is where they finish plus a margin. Sized to the content:
+    // a fixed height left a band of white under a short list, which reads
+    // as a broken export. A line lower when the view is filtered or sorted,
+    // so the line saying so does not sit on the headings.
+    const top = needle || sortKey ? 124 : 110
+    const H = top + rows.length * 28 + 22
 
     const canvas = document.createElement('canvas')
     // Twice the size, scaled back: a 1x canvas is soft on every phone this
@@ -2020,61 +2038,70 @@ export function SummaryTab() {
       g.fillText(viewNote, PAD, 82)
     }
 
-    const top = 110
-    const barX = 430
-    const barW = W - PAD - barX - 260
-    // Right edges of the two KPI columns: the count against the margin, the
-    // percentage 90px in from it -- measured to clear both neighbours.
-    const kpiCountRight = W - PAD
-    const kpiPctRight = W - PAD - 90
+    /*
+      From the right margin back, in the table's order: a percentage and a
+      count, right-aligned under their headings, then a bar -- once for
+      signing in, once for KPI set-up. Each step is the widest text in that
+      column plus a gap: "KPI SET UP %" is 67px in Segoe UI and a four-digit
+      "1188 / 1188" 63px, with room to spare for a wider phone font.
+    */
+    const barW = 200
+    const kpiBarX = W - PAD - barW
+    const kpiCountRight = kpiBarX - 16
+    const kpiPctRight = kpiCountRight - 88
+    const barX = kpiPctRight - 96 - barW
+    const countRight = barX - 16
+    const pctRight = countRight - 88
+    // Names stop short of the widest heading beside them, "SIGNED IN %".
+    const nameMax = pctRight - 96 - PAD
 
     g.fillStyle = MUTED
     g.font = font(11, '600')
     g.fillText(current[2].toUpperCase(), PAD, top - 14)
-    g.fillText('SIGNED IN', barX - 62, top - 14)
-    g.fillText('SIGNED IN %', barX + barW + 12, top - 14)
     g.textAlign = 'right'
+    g.fillText('SIGNED IN %', pctRight, top - 14)
+    g.fillText('SIGNED IN', countRight, top - 14)
     g.fillText('KPI SET UP %', kpiPctRight, top - 14)
     g.fillText('KPI SET UP', kpiCountRight, top - 14)
     g.textAlign = 'left'
+
+    // Both bars drawn the one way, in the table's colours for the same
+    // shares: the track, then the share, never thinner than a stub.
+    const bar = (x: number, y: number, share: number) => {
+      g.fillStyle = '#e5e7eb'
+      g.beginPath()
+      g.roundRect(x, y - 6, barW, 10, 5)
+      g.fill()
+      g.fillStyle = share >= 80 ? '#34d399' : share >= 50 ? '#fbbf24' : '#e4232a'
+      g.beginPath()
+      g.roundRect(x, y - 6, Math.max((barW * share) / 100, 4), 10, 5)
+      g.fill()
+    }
 
     rows.forEach((d, i) => {
       const y = top + i * 28
       g.fillStyle = INK
       g.font = font(13)
       let name = d.note ? `${d.name} · ${d.note}` : d.name
-      // A long name must not run under the bar beside it.
-      while (g.measureText(name).width > barX - PAD - 70 && name.length > 4) {
+      // A long name must not run into the numbers beside it.
+      while (g.measureText(name).width > nameMax && name.length > 4) {
         name = name.slice(0, -2)
       }
       g.fillText(name === (d.note ? `${d.name} · ${d.note}` : d.name) ? name : name + '…', PAD, y + 4)
 
-      g.fillStyle = MUTED
-      g.font = font(12)
-      g.fillText(`${d.here} / ${d.total}`, barX - 62, y + 4)
-
-      g.fillStyle = '#e5e7eb'
-      g.beginPath()
-      g.roundRect(barX, y - 6, barW, 10, 5)
-      g.fill()
-
-      g.fillStyle = d.pct >= 80 ? '#34d399' : d.pct >= 50 ? '#fbbf24' : '#e4232a'
-      g.beginPath()
-      g.roundRect(barX, y - 6, Math.max((barW * d.pct) / 100, 4), 10, 5)
-      g.fill()
-
-      g.fillStyle = INK
-      g.font = font(12, '600')
-      g.fillText(`${Math.round(d.pct)}%`, barX + barW + 12, y + 4)
-
-      g.fillStyle = MUTED
-      g.font = font(12)
       g.textAlign = 'right'
-      g.fillText(`${d.kpiSet} / ${d.total}`, kpiCountRight, y + 4)
       g.fillStyle = INK
       g.font = font(12, '600')
+      g.fillText(`${Math.round(d.pct)}%`, pctRight, y + 4)
       g.fillText(`${Math.round(d.kpiPct)}%`, kpiPctRight, y + 4)
+      g.fillStyle = MUTED
+      g.font = font(12)
+      g.fillText(`${d.here} / ${d.total}`, countRight, y + 4)
+      g.fillText(`${d.kpiSet} / ${d.total}`, kpiCountRight, y + 4)
       g.textAlign = 'left'
+
+      bar(barX, y, d.pct)
+      bar(kpiBarX, y, d.kpiPct)
     })
 
     canvas.toBlob(blob => {
