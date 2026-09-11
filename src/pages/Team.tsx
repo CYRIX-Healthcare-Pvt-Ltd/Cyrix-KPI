@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
-  CalendarDays, FileSpreadsheet,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -11,7 +11,8 @@ import {
   useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar,
   useSettleDueMonths, useOpenQueryMonths, useTeamSubtree, currentFy,
 } from '@/lib/queries'
-import { openFyMonths, monthLabel, currentReportingMonth } from '@/lib/fy'
+import { monthLabel, currentReportingMonth } from '@/lib/fy'
+import { waitingForScore, waitingCaption } from '@/lib/waiting'
 import { exportKpiScores } from '@/lib/export'
 import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
@@ -60,7 +61,17 @@ const STATUS_FILTERS: { key: StatusKey; label: string; activeCls: string }[] = [
 export default function Team() {
   const { employee } = useAuth()
   const fy = currentFy()
-  const [month, setMonth] = useState(currentReportingMonth())
+  /*
+    The month people are reporting on, and no picker to change it.
+
+    The picker only ever changed which month's badges and scores the rows
+    wore. Everything waiting on this manager is named on its own row
+    whatever the month, and with a picker on August the "Waiting for my
+    score" tile read 0 above a first row still waiting on July. Looking
+    back at a month is Team analysis, which filters by month, or the
+    person's own page, which lists every month.
+  */
+  const month = currentReportingMonth()
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
   const [peek, setPeek] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusKey>('all')
@@ -169,12 +180,11 @@ export default function Team() {
   /**
    * Everyone waiting on this manager, in every month of the year.
    *
-   * The banner used to read the selected month only, which meant a
-   * submission sat unseen the moment the picker moved off its month —
-   * and the picker defaults to the current one, so an August assessment
-   * submitted in September was invisible on the screen built to catch
-   * it. The manager's answer to "is anything waiting on me" cannot
-   * depend on which month they happen to be looking at.
+   * The banner used to read one month only, which meant a submission sat
+   * unseen once the screen had moved on from its month — an August
+   * assessment still waiting in October was invisible on the screen
+   * built to catch it. The manager's answer to "is anything waiting on
+   * me" cannot depend on which month the list happens to show.
    *
    * Oldest first: the one that has been waiting longest is the one
    * holding somebody up.
@@ -206,9 +216,9 @@ export default function Team() {
    * Each person's months waiting on this manager, oldest first.
    *
    * Shown on their own row, so somebody with three months outstanding
-   * shows all three rather than only the one the month picker happens to
-   * be on. The amber note that counted "other months" is gone; this is
-   * where that information lives now, beside the name it belongs to.
+   * shows all three rather than only the month the list is showing. The
+   * amber note that counted "other months" is gone; this is where that
+   * information lives now, beside the name it belongs to.
    */
   const pendingById = useMemo(() => {
     const byId = new Map<string, KpiSubmission[]>()
@@ -229,6 +239,12 @@ export default function Team() {
     // pending is oldest month first, so insertion order already is.
     return [...byPerson.values()]
   }, [pending])
+
+  /** The tile's count: people, in any month. See lib/waiting.ts. */
+  const waitingOnMe = useMemo(
+    () => waitingForScore(allSubs ?? [], new Set(ids)),
+    [allSubs, ids],
+  )
 
   /** How many people are below this manager, beyond their own reports. */
   const wholeLine = subtree?.length ?? 0
@@ -329,9 +345,21 @@ export default function Team() {
     return !from || month >= from
   }
 
+  /**
+   * Does this person belong under a filter?
+   *
+   * "Awaiting my score" is anyone with a month waiting, whichever month,
+   * so it finds the same people as the tile and the amber rows. Read off
+   * the month the rows show, it came up empty — and hid its own button —
+   * while a July month sat waiting on the first row. The rest are that
+   * month's own status.
+   */
+  const inFilter = (memberId: string, key: StatusKey) =>
+    key === 'all' ? true
+      : key === 'submitted' ? pendingById.has(memberId)
+      : statusKeyOf(subsById.get(memberId)?.status ?? null) === key
+
   const covered = team.filter(t => inScope(t.id))
-  const waiting = covered.filter(t => subsById.get(t.id)?.status === 'submitted')
-  const awaiting = waiting.length
   const notStarted = covered.filter(t => {
     const s = subsById.get(t.id)
     return !s || s.status === 'draft'
@@ -342,7 +370,10 @@ export default function Team() {
     <div className="space-y-5">
       <ScoreHeader
         title="My team"
-        subtitle={`${team.length} member${team.length === 1 ? '' : 's'} · FY ${fy}`}
+        subtitle={
+          `${team.length} member${team.length === 1 ? '' : 's'} · FY ${fy}` +
+          ` · reporting on ${monthLabel(month)}`
+        }
         score={teamAvg}
         scoreLabel="Team average"
       />
@@ -389,72 +420,37 @@ export default function Team() {
       )}
 
       {/*
-        The line between the year and one month of it.
+        The row a manager reaches for when they are done reading and want
+        to do something. It shared a card with the month picker; with the
+        picker gone a card around three buttons is a box with nothing to
+        hold together, so they stand on their own, at the right edge where
+        a screen's actions are looked for.
 
-        The month picker lived in the hero, above cards it did not
-        change, so it read as a filter on the whole screen — and it is
-        not: the team average in the hero is the whole year and does not
-        move when it does. Sitting here it governs exactly what follows
-        it, and the caption says so rather than leaving somebody to work
-        it out by watching numbers fail to change.
-
-        The two actions ride along because this is the row a manager
-        reaches for when they are done reading and want to do something.
+        Two columns on a phone so they are equal width and neither strands
+        the other on its own line.
       */}
-      <div className="card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
-              <CalendarDays className="h-4 w-4 text-ink-500" />
-            </span>
-            <div className="min-w-0">
-              <label
-                htmlFor="team-month"
-                className="block text-[11px] font-semibold uppercase tracking-label text-ink-400"
-              >
-                Showing
-              </label>
-              <select
-                id="team-month"
-                className="input mt-1 w-auto"
-                value={month}
-                onChange={e => setMonth(e.target.value)}
-              >
-                {/* Completed months only — a month in progress cannot be assessed. */}
-                {openFyMonths(fy).reverse().map(m => (
-                  <option key={m} value={m}>{monthLabel(m)}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Two columns on a phone so they are equal width and neither
-              strands the other on its own line. */}
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            <Link to="/team/analysis" className="btn-analysis">
-              <BarChart3 className="h-4 w-4" /> Team analysis
-            </Link>
-            {/* Quiet, beside two filled buttons, because it is the one
-                thing here nobody does weekly: templates are written once
-                and used every time somebody joins. A third saturated
-                colour would make this row a rainbow and say all three
-                matter equally. */}
-            <Link to="/team/templates" className="btn-secondary whitespace-nowrap">
-              <FileSpreadsheet className="h-4 w-4" /> KPI templates
-            </Link>
-            {/* Only asks when the two answers differ. A manager whose
-                reports manage nobody would be answering a question with
-                one possible answer. */}
-            <button
-              onClick={() => (wholeLine > team.length ? setAskScope(true) : download('direct'))}
-              className="btn-excel col-span-2 sm:col-span-1"
-              disabled={busy}
-            >
-              {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-              Export to Excel
-            </button>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+        <Link to="/team/analysis" className="btn-analysis">
+          <BarChart3 className="h-4 w-4" /> Team analysis
+        </Link>
+        {/* Quiet, beside two filled buttons, because it is the one thing
+            here nobody does weekly: templates are written once and used
+            every time somebody joins. A third saturated colour would make
+            this row a rainbow and say all three matter equally. */}
+        <Link to="/team/templates" className="btn-secondary whitespace-nowrap">
+          <FileSpreadsheet className="h-4 w-4" /> KPI templates
+        </Link>
+        {/* Only asks when the two answers differ. A manager whose reports
+            manage nobody would be answering a question with one possible
+            answer. */}
+        <button
+          onClick={() => (wholeLine > team.length ? setAskScope(true) : download('direct'))}
+          className="btn-excel col-span-2 sm:col-span-1"
+          disabled={busy}
+        >
+          {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+          Export to Excel
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
@@ -476,12 +472,18 @@ export default function Team() {
             ? 'nobody scored yet'
             : `of 5 · ${ratingLabel(Math.round(teamBand) as 1 | 2 | 3 | 4 | 5)}`}
         />
+        {/* People waiting in any month, not the month the rows show —
+            the one tile here that is not about that month, so its line
+            says which months it found. A dash until the year's
+            submissions are in: a 0 that turns into 1 a moment later is
+            the very thing this tile was wrong about. */}
         <StatTile
           label="Waiting for my score"
-          value={awaiting}
-          tone={awaiting > 0 ? 'brand' : 'default'}
+          value={allSubs ? waitingOnMe.people : '—'}
+          sub={allSubs ? waitingCaption(waitingOnMe.months) : undefined}
+          tone={waitingOnMe.people > 0 ? 'brand' : 'default'}
         />
-        <StatTile label="Not submitted yet" value={notStarted} />
+        <StatTile label="Not submitted yet" value={notStarted} sub={monthLabel(month)} />
         {/* Out of the people this month applies to, not out of the whole
             team — otherwise a fully scored month reads as 14 of 16
             because two of them had not joined yet. */}
@@ -489,7 +491,7 @@ export default function Team() {
           label="Scored"
           value={done}
           sub={covered.length === team.length
-            ? `of ${team.length}`
+            ? `of ${team.length} · ${monthLabel(month)}`
             : `of ${covered.length} · ${team.length - covered.length} start later`}
         />
       </div>
@@ -503,7 +505,7 @@ export default function Team() {
       */}
       <div className="flex flex-wrap items-center gap-1.5">
         {STATUS_FILTERS.map(f => {
-          const n = team.filter(m => statusKeyOf(subsById.get(m.id)?.status ?? null) === f.key).length
+          const n = team.filter(m => inFilter(m.id, f.key)).length
           if (f.key !== 'all' && n === 0) return null
           const count = f.key === 'all' ? team.length : n
           return (
@@ -572,9 +574,7 @@ export default function Team() {
       */}
       <div className="card divide-y divide-ink-100 overflow-hidden">
         {[...team]
-          .filter(m =>
-            statusFilter === 'all'
-            || statusKeyOf(subsById.get(m.id)?.status ?? null) === statusFilter)
+          .filter(m => inFilter(m.id, statusFilter))
           .sort((a, b) => {
             // Anyone waiting on a score in any month first, the oldest
             // month at the top; everybody else keeps name order.
@@ -738,10 +738,9 @@ export default function Team() {
                   />
                 </div>
 
-                {/* Score whenever any month is waiting, not only the one on
-                    screen — it used to vanish the moment the picker moved
-                    off the waiting month. One goes straight in; several
-                    ask which, rather than guessing. */}
+                {/* Score whenever any month is waiting, not only the month
+                    the row is showing. One goes straight in; several ask
+                    which, rather than guessing. */}
                 {/* A fixed width from 640px up. "Score 3", "Score" and a
                     chevron are three different widths, and with the name
                     taking whatever is left, each one pushed View team and

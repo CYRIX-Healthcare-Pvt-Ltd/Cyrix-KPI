@@ -6,10 +6,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
-  useSubmissionHistory,
+  useSubmissionHistory, useTeamSubmissions,
   currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
+import { waitingForScore, waitingCaption } from '@/lib/waiting'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { hasSeenHelp, manualOffer } from '@/lib/seenHelp'
 import { READY_LANGS } from '@/lib/i18n'
@@ -55,6 +56,10 @@ export default function Dashboard() {
   const { data: approvals } = usePendingApprovals(
     isManager || isHrAdmin ? employee?.id : undefined, fy,
   )
+  // The whole year, for who is waiting on a score in any month. The same
+  // query My Team makes, so going from here to there costs nothing.
+  const teamIds = useMemo(() => (teamData?.team ?? []).map(t => t.id), [teamData])
+  const { data: teamSubs } = useTeamSubmissions(teamIds.length ? teamIds : undefined, fy)
 
   const startsFrom = assignment?.assignment?.starts_from ?? null
 
@@ -112,7 +117,10 @@ export default function Dashboard() {
     assignment?.assignment?.core_values_weight ?? (REMAINDER_TOTAL - esmsWeight),
   )
 
-  const awaitingMe = (teamData?.submissions ?? []).filter(s => s.status === 'submitted').length
+  // People, in any month — see lib/waiting.ts. Unknown until the year has
+  // loaded, except for somebody with nobody reporting to them.
+  const waitingOnMe = waitingForScore(teamSubs ?? [], new Set(teamIds))
+  const waitingKnown = teamIds.length === 0 ? !!teamData : !!teamSubs
   const notSubmitted = (teamData?.team.length ?? 0) -
     (teamData?.submissions.filter(s => s.status !== 'draft').length ?? 0)
 
@@ -364,10 +372,13 @@ export default function Dashboard() {
           </h2>
           <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
             <StatTile label="Team members" value={teamData?.team.length ?? 0} />
+            {/* Named and counted as on My Team, so the two screens give
+                one answer. It read the reporting month only, and said 0
+                for a manager with a July month still waiting. */}
             <StatTile
-              label="Awaiting my scoring"
-              value={awaitingMe}
-              sub={`for ${monthLabel(month)}`}
+              label="Waiting for my score"
+              value={waitingKnown ? waitingOnMe.people : '—'}
+              sub={waitingKnown ? waitingCaption(waitingOnMe.months) : undefined}
             />
             <StatTile label="KPIs to approve" value={approvals?.length ?? 0} />
           </div>
