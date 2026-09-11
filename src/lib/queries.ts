@@ -281,15 +281,42 @@ export function useSaveAssignmentRows() {
         assignmentId = created[0].id
       }
 
-      // Full replace keeps the saved grid identical to what was reviewed.
-      const del = await supabase.from('kpi_assignment_items')
-        .delete().eq('assignment_id', assignmentId)
-      if (del.error) throw new Error(friendlyError(del.error))
+      /*
+        Full replace, so the saved grid is exactly the one that was
+        reviewed: the new rows go in, and only then do the old ones come
+        out.
 
-      const ins = await supabase.from('kpi_assignment_items').insert(
-        args.rows.map(r => ({ ...r, assignment_id: assignmentId })),
+        Named columns rather than the row as it arrived. A row read back
+        from the database still carries its id, a row added on the form has
+        none, and sent together supabase-js fills the missing id with an
+        explicit null. That insert failed with "null value in column id"
+        after the delete had already run, and emptied a sent-back KPI.
+        Fresh ids throughout: the old rows are removed on every save, so
+        nothing could go on pointing at them anyway.
+      */
+      const fresh = args.rows.length === 0 ? [] : await unwrap<Array<{ id: string }>>(
+        supabase.from('kpi_assignment_items').insert(
+          args.rows.map(r => ({
+            assignment_id: assignmentId,
+            section: r.section,
+            kra: r.kra,
+            kpi_description: r.kpi_description,
+            weightage: r.weightage,
+            target_value: r.target_value,
+            target_unit: r.target_unit,
+            scoring_rule: r.scoring_rule,
+            rule_params: r.rule_params,
+            sort_order: r.sort_order,
+            alternates: r.alternates ?? [],
+          })),
+        ).select('id'),
       )
-      if (ins.error) throw new Error(friendlyError(ins.error))
+
+      let stale = supabase.from('kpi_assignment_items')
+        .delete().eq('assignment_id', assignmentId)
+      if (fresh.length > 0) stale = stale.not('id', 'in', `(${fresh.map(r => r.id).join(',')})`)
+      const del = await stale
+      if (del.error) throw new Error(friendlyError(del.error))
 
       // Core values and ESMS are identical for everyone who has them, so
       // the system owns those rows rather than the team member. Stamped
