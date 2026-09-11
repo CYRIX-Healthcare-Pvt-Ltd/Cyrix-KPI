@@ -55,9 +55,12 @@ export default function SupportDeskQueue({
     }
   }
 
+  // With the time: two requests raised the same day read as the same
+  // moment, and whether somebody has waited an hour or all day is what
+  // decides which one to answer first.
   const when = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, {
-      day: 'numeric', month: 'short', year: 'numeric',
+    new Date(iso).toLocaleString(undefined, {
+      day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
     })
 
   return (

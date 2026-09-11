@@ -225,9 +225,11 @@ function MyTickets({
     )
   }
 
+  // With the time, as the desk sees it, so both sides can name the same
+  // request the same way.
   const when = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, {
-      day: 'numeric', month: 'short', year: 'numeric',
+    new Date(iso).toLocaleString(undefined, {
+      day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
     })
 
   return (
