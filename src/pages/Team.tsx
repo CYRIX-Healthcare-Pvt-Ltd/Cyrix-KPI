@@ -80,6 +80,8 @@ export default function Team() {
   const [notice, setNotice] = useState<string | null>(arrived ?? null)
   /** Whether the list of people waiting for a score is open. */
   const [queueOpen, setQueueOpen] = useState(false)
+  /** Whose waiting months the Score button is asking about, when several. */
+  const [monthPickFor, setMonthPickFor] = useState<Employee | null>(null)
 
   const { data, isLoading } = useTeamMonth(employee?.id, month, fy)
   // Months close on the company closing date rather than by somebody
@@ -576,13 +578,21 @@ export default function Team() {
           .sort((a, b) => {
             // Anyone waiting on a score in any month first, the oldest
             // month at the top; everybody else keeps name order.
-            const oldest = (id: string) => pendingById.get(id)?.[0]?.period_month ?? '~'
-            return oldest(a.id).localeCompare(oldest(b.id))
+            //
+            // Compared as plain strings, not with localeCompare. The first
+            // version gave everyone else a "~" to sort after the dates, and
+            // collation puts punctuation before digits, so the people
+            // waiting sank to the bottom of the list instead of leading it.
+            const x = pendingById.get(a.id)?.[0]?.period_month ?? null
+            const y = pendingById.get(b.id)?.[0]?.period_month ?? null
+            if (x === y) return 0
+            if (x === null) return 1
+            if (y === null) return -1
+            return x < y ? -1 : 1
           })
           .map(member => {
           const sub = subsById.get(member.id)
           const assign = assignById.get(member.id)
-          const needsScoring = sub?.status === 'submitted'
           // Every month this person is waiting on, not only the one on screen.
           const waitingSubs = pendingById.get(member.id) ?? []
           // The month this KPI begins, when that is still ahead of the
@@ -596,7 +606,7 @@ export default function Team() {
             <div
               key={member.id}
               className={clsx(
-                'flex items-center gap-3 p-4',
+                'flex flex-col gap-2.5 p-4 sm:flex-row sm:items-center sm:gap-3',
                 // Tinted and edged where the manager is the one holding
                 // things up, so the row is findable while scrolling rather
                 // than only once it is read.
@@ -609,7 +619,7 @@ export default function Team() {
                   look rather than a page. The chevron beside them still
                   goes to the full record — a peek and a visit are
                   different intentions and deserve different buttons. */}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 sm:flex-1">
                 <button
                   onClick={() => setPeek(member.id)}
                   className="btn-press flex w-full min-w-0 items-center gap-3 text-left"
@@ -673,70 +683,107 @@ export default function Team() {
                 The slot is here on every row now, empty where there is
                 nobody to look at, which is what keeps the columns
                 underneath each other.
+
+                On a phone they are a line of their own, under the name.
+                Side by side, every one of them kept its width and the name
+                was left about thirty pixels: "Sr...", with "KPI not set up"
+                over three lines. From 640px up this wrapper steps aside
+                (display: contents) and the row is one line, as before.
               */}
-              {/* Narrow and icon-only on a phone rather than hidden: a
-                  manager reading this on the road still needs to get into
-                  a report's team, and the count is the part that has to
-                  survive the squeeze. Tinted by how that team is doing —
-                  see ViewTeamButton. */}
-              <div className="w-10 shrink-0 sm:w-[124px]">
-                {(reportsById.get(member.id) ?? 0) > 0 && (
-                  <ViewTeamButton
-                    name={member.full_name}
-                    count={reportsById.get(member.id) ?? 0}
-                    average={teamAvgById.get(member.id) ?? null}
-                    month={month}
-                    onClick={() => setDrill({ id: member.id, name: member.full_name })}
+              <div className="flex items-center justify-end gap-3 sm:contents">
+                {/* Narrow and icon-only on a phone rather than hidden: a
+                    manager reading this on the road still needs to get into
+                    a report's team, and the count is the part that has to
+                    survive the squeeze. Tinted by how that team is doing —
+                    see ViewTeamButton. An empty slot only keeps columns in
+                    line, and a phone has no columns, so there it goes. */}
+                <div className={clsx(
+                  'w-10 shrink-0 sm:w-[124px]',
+                  (reportsById.get(member.id) ?? 0) === 0 && 'hidden sm:block',
+                )}>
+                  {(reportsById.get(member.id) ?? 0) > 0 && (
+                    <ViewTeamButton
+                      name={member.full_name}
+                      count={reportsById.get(member.id) ?? 0}
+                      average={teamAvgById.get(member.id) ?? null}
+                      month={month}
+                      onClick={() => setDrill({ id: member.id, name: member.full_name })}
+                    />
+                  )}
+                </div>
+
+                <div className="hidden w-36 shrink-0 text-right sm:block">
+                  {startsLater ? (
+                    <span className="badge bg-ink-100 text-ink-500">
+                      From {monthLabel(startsLater)}
+                    </span>
+                  ) : (
+                    <StatusBadge
+                      status={sub?.status ?? null}
+                      queried={!!sub && !!queried?.has(sub.id)}
+                    />
+                  )}
+                </div>
+
+                {/* Its own width on a phone, where the line has room: a
+                    fixed 96px broke "Job 22.0 Core 12.0" over two lines. */}
+                <div className="shrink-0 text-right sm:w-32">
+                  {/* Only once scored. The self total is the job role
+                      alone now, so the fallback showed a figure that was
+                      neither their score nor out of the same 100. */}
+                  <ScorePill value={sub?.final_total_score ?? null} size="sm" />
+                  <SectionSplit
+                    sub={sub}
+                    hasEsms={Number(assign?.esms_weight ?? 0) > 0}
                   />
-                )}
-              </div>
+                </div>
 
-              <div className="hidden w-36 shrink-0 text-right sm:block">
-                {startsLater ? (
-                  <span className="badge bg-ink-100 text-ink-500">
-                    From {monthLabel(startsLater)}
-                  </span>
-                ) : (
-                  <StatusBadge
-                    status={sub?.status ?? null}
-                    queried={!!sub && !!queried?.has(sub.id)}
-                  />
-                )}
-              </div>
+                {/* Score whenever any month is waiting, not only the one on
+                    screen — it used to vanish the moment the picker moved
+                    off the waiting month. One goes straight in; several
+                    ask which, rather than guessing. */}
+                {/* A fixed width from 640px up. "Score 3", "Score" and a
+                    chevron are three different widths, and with the name
+                    taking whatever is left, each one pushed View team and
+                    the status a different distance left on every row. */}
+                <div className="flex shrink-0 justify-end sm:w-20">
+                  {waitingSubs.length === 1 ? (
+                    <Link
+                      to={`/score/${waitingSubs[0].id}`}
+                      className="btn-primary shrink-0 !px-3 !py-1.5 text-xs"
+                    >
+                      Score
+                    </Link>
+                  ) : waitingSubs.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setMonthPickFor(member)}
+                      className="btn-primary shrink-0 !px-3 !py-1.5 text-xs"
+                      aria-haspopup="dialog"
+                      aria-label={`Score ${member.full_name}: ${waitingSubs.length} months waiting`}
+                    >
+                      Score <span className="tabular-nums opacity-70">{waitingSubs.length}</span>
+                    </button>
+                  ) : (
+                    <Link
+                      to={`/team/${member.id}`}
+                      className="shrink-0 btn-icon"
+                      aria-label={`View ${member.full_name}`}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  )}
+                </div>
 
-              <div className="w-24 shrink-0 text-right sm:w-32">
-                {/* Only once scored. The self total is the job role
-                    alone now, so the fallback showed a figure that was
-                    neither their score nor out of the same 100. */}
-                <ScorePill value={sub?.final_total_score ?? null} size="sm" />
-                <SectionSplit
-                  sub={sub}
-                  hasEsms={Number(assign?.esms_weight ?? 0) > 0}
-                />
-              </div>
-
-              {needsScoring && sub ? (
-                <Link to={`/score/${sub.id}`} className="btn-primary shrink-0 !px-3 !py-1.5 text-xs">
-                  Score
-                </Link>
-              ) : (
-                <Link
-                  to={`/team/${member.id}`}
-                  className="shrink-0 btn-icon"
-                  aria-label={`View ${member.full_name}`}
+                <button
+                  onClick={() => setRemoving({ id: member.id, name: member.full_name })}
+                  className="shrink-0 rounded-lg p-2 text-ink-300 hover:bg-cyrixRed-50 hover:text-cyrixRed-700"
+                  aria-label={`Request removal of ${member.full_name}`}
+                  title="Request removal (resigned)"
                 >
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              )}
-
-              <button
-                onClick={() => setRemoving({ id: member.id, name: member.full_name })}
-                className="shrink-0 rounded-lg p-2 text-ink-300 hover:bg-cyrixRed-50 hover:text-cyrixRed-700"
-                aria-label={`Request removal of ${member.full_name}`}
-                title="Request removal (resigned)"
-              >
-                <UserMinus className="h-4 w-4" />
-              </button>
+                  <UserMinus className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )
         })}
@@ -753,6 +800,14 @@ export default function Team() {
           button is that team's own average for {monthLabel(month)}.
         </span>
       </p>
+
+      {monthPickFor && (
+        <ScoreMonthPicker
+          person={monthPickFor}
+          subs={pendingById.get(monthPickFor.id) ?? []}
+          onClose={() => setMonthPickFor(null)}
+        />
+      )}
 
       {drill && (
         <TeamDrill
@@ -880,6 +935,70 @@ function ScoringQueue({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Which of somebody's waiting months to score, asked from their Score button.
+ *
+ * A small dialog rather than a menu hung off the button: the list sits in
+ * a card that clips what overflows it, so a menu opened from the last row
+ * would be cut off, and on a phone a dialog is the one shape that always
+ * fits. Oldest month first, each saying how long it has waited.
+ */
+function ScoreMonthPicker({
+  person, subs, onClose,
+}: {
+  person: Employee
+  subs: KpiSubmission[]
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-shade/60 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="score-month-title"
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-ink-200 bg-surface p-5 shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div>
+          <h4 id="score-month-title" className="font-semibold text-ink-900">
+            Score {person.full_name}
+          </h4>
+          <p className="mt-1 text-sm text-ink-600">
+            {subs.length} months are waiting for your score. Which one?
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {subs.map(s => (
+            <Link
+              key={s.id}
+              to={`/score/${s.id}`}
+              className="flex items-center justify-between gap-3 rounded-xl border border-ink-200 px-4 py-3 hover:border-ink-400 hover:bg-ink-50"
+            >
+              <span className="font-medium text-ink-900">{monthLabel(s.period_month)}</span>
+              {s.self_submitted_at && (
+                <span className="text-xs text-ink-500">{waited(s.self_submitted_at)}</span>
+              )}
+            </Link>
+          ))}
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={onClose} className="btn-secondary">
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   )

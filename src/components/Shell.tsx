@@ -426,10 +426,14 @@ export default function Shell() {
         Without this the team average reached the nav, and every tab —
         Records, Approvals, the lot — hovered in the team's colour on the
         team pages.
+
+        Below lg the bottom padding clears the tab bar and the chat button
+        floating above it (bottom-20, 48px tall). At 96px the last line of
+        a page scrolled up underneath that button and could not be read.
       */}
       <main
         style={scopeStyle}
-        className="mx-auto max-w-7xl px-4 py-6 pb-24 lg:pb-6"
+        className="mx-auto max-w-7xl px-4 py-6 pb-36 lg:pb-6"
       >
         <Outlet />
       </main>
