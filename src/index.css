@@ -316,6 +316,32 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
   /*
+    No text selection from a touch.
+
+    On a phone, a finger that rests a moment before it scrolls is a long
+    press, and a long press selects the word under it and puts a Copy bar
+    over the screen — met mid-scroll, constantly, and never on purpose.
+
+    Touch screens only, by their main pointer: on a desktop, dragging to
+    select is always deliberate and somebody copying an ecode into another
+    window still can, and a touchscreen laptop is driven by its trackpad.
+
+    Fields stay selectable, or a phone could not put the cursor in the
+    middle of a remark or select a figure to type over it.
+  */
+  @media (pointer: coarse) {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    input, textarea, [contenteditable='true'] {
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
+    }
+  }
+  /*
     No spinner arrows on number fields.
 
     Every number in this app is typed, never nudged — a weightage, a
