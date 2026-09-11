@@ -21,6 +21,23 @@ function roundTrip(): ArrayBuffer {
   return out as ArrayBuffer
 }
 
+/**
+ * The template as somebody hands it back after changing Capping: each of
+ * the four rules picked once, and a per-unit penalty on the two lower rows
+ * in percent-formatted cells. The template itself no longer shows these,
+ * so the parser's handling of them is held to a file shaped like it.
+ */
+function everyRule(): ArrayBuffer {
+  const wb = buildBulkTemplate()
+  const ws = wb.Sheets.Template
+  CAPPING_OPTIONS.forEach((label, i) => {
+    ws[XLSX.utils.encode_cell({ r: i + 1, c: 5 })] = { t: 's', v: label }
+  })
+  ws.G4 = { t: 'n', v: 0.002, z: '0.0%' }
+  ws.G5 = { t: 'n', v: 0.01, z: '0.0%' }
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true }) as ArrayBuffer
+}
+
 describe('the bulk template', () => {
   it('reads back as a valid, applicable file', () => {
     const parsed = parseKpiWorkbook(roundTrip())
@@ -35,8 +52,18 @@ describe('the bulk template', () => {
     expect(parsed.hasEsms).toBe(false)
   })
 
-  it('keeps the four rules apart', () => {
+  // Uploaded untouched, which is how most are, every row scores Higher is
+  // better (max weightage) and carries no penalty.
+  it('scores every example row Higher is better (max weightage)', () => {
     const parsed = parseKpiWorkbook(roundTrip())
+    expect(parsed.rows.map(r => r.scoring_rule)).toEqual([
+      'higher_capped', 'higher_capped', 'higher_capped', 'higher_capped',
+    ])
+    expect(parsed.rows.every(r => Object.keys(r.rule_params).length === 0)).toBe(true)
+  })
+
+  it('keeps the four rules apart when Capping is changed', () => {
+    const parsed = parseKpiWorkbook(everyRule())
     expect(parsed.rows.map(r => r.scoring_rule)).toEqual([
       'higher_capped', 'higher_uncapped', 'lower_penalty', 'lower_linear',
     ])
@@ -48,7 +75,7 @@ describe('the bulk template', () => {
     out on the first unit over the target.
   */
   it('reads the per-unit penalty as percentage points, not as a fraction', () => {
-    const parsed = parseKpiWorkbook(roundTrip())
+    const parsed = parseKpiWorkbook(everyRule())
     expect(parsed.rows[2].rule_params).toEqual({ penalty_per_unit: 0.2 })
     expect(parsed.rows[3].rule_params).toEqual({ penalty_per_unit: 1 })
   })

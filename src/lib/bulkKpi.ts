@@ -410,6 +410,15 @@ export function buildBulkTemplate({ withEcodes = true }: { withEcodes?: boolean 
     'If lower Capping',
   ]
 
+  /*
+    Every example row says "Higher is better (max weightage)".
+
+    People fill in the KRAs, weightages and targets and upload the file
+    without touching Capping, so whatever an example row said is what
+    their row was scored by. With one of each rule on show, the third line
+    of a demonstration went live as "Lower is better". The dropdown still
+    offers all four to anybody who means to pick another.
+  */
   const rows: (string | number)[][] = [
     header,
     [
@@ -422,19 +431,19 @@ export function buildBulkTemplate({ withEcodes = true }: { withEcodes?: boolean 
       'Job Role - 80%',
       'Breakdown Management',
       'All open breakdown calls closed within 30 days.',
-      0.2, 6729, 'Higher is better (can exceed weightage)', '',
+      0.2, 6729, 'Higher is better (max weightage)', '',
     ],
     [
       'Job Role - 80%',
       'Organic Growth',
       'Asset value addition — 1% of assets under scope added each month.',
-      0.1, 100, 'Lower is better (min 0 %)', 0.002,
+      0.1, 100, 'Higher is better (max weightage)', '',
     ],
     [
       'Job Role - 80%',
       'Team Handling',
       'Team retention.',
-      0.1, 144, 'Lower is better (can go below 0 %)', 0.01,
+      0.1, 144, 'Higher is better (max weightage)', '',
     ],
   ]
 
