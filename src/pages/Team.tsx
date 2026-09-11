@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
-  Sigma, CalendarDays, LineChart as LineChartIcon, FileSpreadsheet,
+  CalendarDays, FileSpreadsheet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -16,12 +16,10 @@ import { exportKpiScores } from '@/lib/export'
 import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
-import { ScoreHeader, ActionRequired, TeamBands } from '@/components/analysis'
-import BellCurve from '@/components/BellCurve'
-import { teamBandShare, teamAverages, attainmentPct } from '@/lib/bands'
+import { ScoreHeader, ActionRequired } from '@/components/analysis'
+import { teamAverages } from '@/lib/bands'
 import { rankScore, ratingLabel } from '@/lib/rating'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import BandTrend from '@/components/BandTrend'
 import Avatar from '@/components/Avatar'
 import TeamDrill, { ViewTeamButton } from '@/components/TeamDrill'
 import { useAmbientScore } from '@/contexts/ScoreThemeContext'
@@ -59,28 +57,6 @@ const STATUS_FILTERS: { key: StatusKey; label: string; activeCls: string }[] = [
   { key: 'scored',      label: 'Scored',          activeCls: 'bg-emerald-200 text-emerald-900' },
 ]
 
-/** Which band the bell curve is plotting. */
-type BellMetric = 'total' | 'job' | 'esms' | 'core'
-
-const METRIC_LABEL: Record<BellMetric, string> = {
-  total: 'Total',
-  job: 'Job role',
-  esms: 'ESMS',
-  core: 'Core values',
-}
-
-/**
- * Where each band's axis starts when nobody is below it.
- *
- * A scored team lives in the top part of its band, so starting every
- * chart at zero spends half the width drawing an empty floor. These are
- * the points below which somebody would be a genuine outlier — and the
- * axis drops past them on its own when there is one.
- */
-const BELL_FLOOR: Record<BellMetric, number> = {
-  total: 40, job: 20, core: 0, esms: 0,
-}
-
 export default function Team() {
   const { employee } = useAuth()
   const fy = currentFy()
@@ -102,9 +78,8 @@ export default function Team() {
   */
   const arrived = (useLocation().state as { notice?: string } | null)?.notice
   const [notice, setNotice] = useState<string | null>(arrived ?? null)
-  const [chartTab, setChartTab] = useState<'trend' | 'bell'>('trend')
-  const [bellMonth, setBellMonth] = useState('')
-  const [bellMetric, setBellMetric] = useState<BellMetric>('total')
+  /** Whether the list of people waiting for a score is open. */
+  const [queueOpen, setQueueOpen] = useState(false)
 
   const { data, isLoading } = useTeamMonth(employee?.id, month, fy)
   // Months close on the company closing date rather than by somebody
@@ -137,27 +112,6 @@ export default function Team() {
     const perPerson = [...byPerson.values()].map(v => v.reduce((a, b) => a + b, 0) / v.length)
     return Math.round((perPerson.reduce((a, b) => a + b, 0) / perPerson.length) * 10) / 10
   }, [allSubs])
-
-  /**
-   * Submitted months this manager owes a score on, other than the one on
-   * screen — newest first, so the most recent backlog leads.
-   *
-   * Read from allSubs, which is the whole year for the whole team and is
-   * already loaded for the charts. The month currently selected is
-   * excluded because the tiles below already count it; repeating it here
-   * would read as a second, different figure for the same thing.
-   */
-  const olderWaiting = useMemo(() => {
-    const byMonth = new Map<string, number>()
-    for (const s of allSubs ?? []) {
-      if (s.status !== 'submitted') continue
-      if (s.period_month === month) continue
-      byMonth.set(s.period_month, (byMonth.get(s.period_month) ?? 0) + 1)
-    }
-    return [...byMonth]
-      .map(([m, count]) => ({ month: m, count }))
-      .sort((a, b) => b.month.localeCompare(a.month))
-  }, [allSubs, month])
 
   /**
    * The team's average band, exactly as the manager ranking computes it.
@@ -211,141 +165,6 @@ export default function Team() {
   }, [allSubs, data])
 
   /**
-   * The same year the hero reports on, split into the bands it is made
-   * of. Weights come from each person's own assignment, because core
-   * values is 20% for most people and 15% for anyone carrying ESMS.
-   */
-  const bandShare = useMemo(() => {
-    const byEmp = new Map<string, KpiSubmission[]>()
-    for (const s of allSubs ?? []) {
-      if (!SCORED.has(s.status)) continue
-      const list = byEmp.get(s.employee_id) ?? []
-      list.push(s)
-      byEmp.set(s.employee_id, list)
-    }
-    return teamBandShare((data?.team ?? []).map(m => {
-      const a = (data?.assignments ?? []).find(x => x.employee_id === m.id)
-      return {
-        weights: {
-          job: Number(a?.job_role_weight ?? JOB_ROLE_TOTAL),
-          esms: Number(a?.esms_weight ?? 0),
-          core: Number(a?.core_values_weight ?? REMAINDER_TOTAL),
-        },
-        months: (byEmp.get(m.id) ?? []).map(s => ({
-          job: s.final_job_role_score,
-          esms: s.final_esms_score,
-          core: s.final_core_score,
-          total: s.final_total_score,
-        })),
-      }
-    }))
-  }, [allSubs, data])
-
-  /**
-   * One figure per person for the bell curve.
-   *
-   * Always a percentage of the band being plotted, never raw points —
-   * core values is 20 for most people and 15 for anyone carrying ESMS,
-   * so a distribution of raw core scores would put two different scales
-   * on one axis and draw a second hump that is an artefact of the
-   * weighting rather than of anybody's performance.
-   */
-  const bell = useMemo(() => {
-    const weightsOf = (id: string) => {
-      const a = (data?.assignments ?? []).find(x => x.employee_id === id)
-      return {
-        total: 100,
-        job: Number(a?.job_role_weight ?? JOB_ROLE_TOTAL),
-        esms: Number(a?.esms_weight ?? 0),
-        core: Number(a?.core_values_weight ?? REMAINDER_TOTAL),
-      }
-    }
-    const pick = (s: KpiSubmission) => ({
-      total: s.final_total_score,
-      job: s.final_job_role_score,
-      esms: s.final_esms_score,
-      core: s.final_core_score,
-    }[bellMetric])
-
-    // Their own average first, so somebody scored on six months is one
-    // person on this chart rather than six.
-    const people: Array<{ weight: number; value: number }> = []
-    for (const member of data?.team ?? []) {
-      const rows = (allSubs ?? []).filter(s =>
-        s.employee_id === member.id
-        && SCORED.has(s.status)
-        && (!bellMonth || s.period_month === bellMonth))
-      const vals = rows.map(pick).filter((v): v is number => v !== null)
-      if (vals.length) {
-        people.push({
-          weight: weightsOf(member.id)[bellMetric],
-          value: vals.reduce((a, b) => a + b, 0) / vals.length,
-        })
-      }
-    }
-
-    /*
-      Points, not shares — core values is out of 20 and that is the
-      number on everybody's screen, so an axis running to 100 was
-      answering a question nobody asked.
-
-      Except when the band is not the same size for the whole team.
-      Core values is 20 for most people and 15 for anyone carrying ESMS,
-      and plotting both as raw points would draw the 15s to the left of
-      the 20s for reasons that have nothing to do with performance. That
-      case falls back to shares, and the caption says so.
-    */
-    const weights = new Set(people.map(p => p.weight).filter(w => w > 0))
-    const mixed = weights.size > 1
-    const outOf = mixed ? 100 : ([...weights][0] ?? 100)
-
-    return {
-      mixed,
-      outOf,
-      floor: mixed ? 40 : BELL_FLOOR[bellMetric],
-      values: people
-        .map(p => (mixed ? attainmentPct(p.value, p.weight) : p.value))
-        .filter((v): v is number => v !== null),
-    }
-  }, [allSubs, data, bellMonth, bellMetric])
-
-  /**
-   * The team average for each finished month.
-   *
-   * Everyone who was scored that month, averaged — so a month where only
-   * two people were scored is two people's average and says so in the
-   * tooltip's month label rather than pretending to be the whole team.
-   */
-  const trend = useMemo(() => {
-    const byMonth = new Map<string, KpiSubmission[]>()
-    for (const s of allSubs ?? []) {
-      if (!SCORED.has(s.status) || s.final_total_score === null) continue
-      const list = byMonth.get(s.period_month) ?? []
-      list.push(s)
-      byMonth.set(s.period_month, list)
-    }
-    // Raw points, not shares. Job role out of 80 and core values out of
-    // 20 keep the lines apart on the plot; converting both to
-    // percentages would stack three lines in the seventies.
-    const avg = (rows: KpiSubmission[], pick: (s: KpiSubmission) => number | null) => {
-      const vals = rows.map(pick).filter((v): v is number => v !== null)
-      return vals.length
-        ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
-        : null
-    }
-    return openFyMonths(fy).map(m => {
-      const rows = byMonth.get(m) ?? []
-      return {
-        month: m,
-        total: avg(rows, s => s.final_total_score),
-        job: avg(rows, s => s.final_job_role_score),
-        esms: avg(rows, s => s.final_esms_score),
-        core: avg(rows, s => s.final_core_score),
-      }
-    })
-  }, [allSubs, fy])
-
-  /**
    * Everyone waiting on this manager, in every month of the year.
    *
    * The banner used to read the selected month only, which meant a
@@ -379,6 +198,34 @@ export default function Team() {
     return months.length === 1
       ? `${monthLabel(months[0])} assessments`
       : `Assessments across ${months.length} months`
+  }, [pending])
+
+  /**
+   * Each person's months waiting on this manager, oldest first.
+   *
+   * Shown on their own row, so somebody with three months outstanding
+   * shows all three rather than only the one the month picker happens to
+   * be on. The amber note that counted "other months" is gone; this is
+   * where that information lives now, beside the name it belongs to.
+   */
+  const pendingById = useMemo(() => {
+    const byId = new Map<string, KpiSubmission[]>()
+    for (const { sub } of pending) {
+      byId.set(sub.employee_id, [...(byId.get(sub.employee_id) ?? []), sub])
+    }
+    return byId
+  }, [pending])
+
+  /** The same, one entry a person, for the list "Start Scoring" opens. */
+  const queue = useMemo(() => {
+    const byPerson = new Map<string, { person: Employee; subs: KpiSubmission[] }>()
+    for (const { sub, person } of pending) {
+      const entry = byPerson.get(person.id) ?? { person, subs: [] }
+      entry.subs.push(sub)
+      byPerson.set(person.id, entry)
+    }
+    // pending is oldest month first, so insertion order already is.
+    return [...byPerson.values()]
   }, [pending])
 
   /** How many people are below this manager, beyond their own reports. */
@@ -502,42 +349,6 @@ export default function Team() {
       {notice && <Alert kind="success">{notice}</Alert>}
 
       {/*
-        Months waiting on this manager that are not the month on screen.
-
-        This screen has always shown exactly one month, so somebody who
-        submitted June while the dropdown said August was invisible: the
-        tile read "waiting for my score: 0" and the only hint was a tab
-        badge counting every month, which is why the badge and the tile
-        disagreed and looked like a bug. It was not a bug in the count —
-        it was the screen having nowhere to say "and there is older work".
-
-        Only when there is some, and it names the months rather than
-        totalling them, because "3 waiting" gives you nothing to click.
-        Each one switches the dropdown, which is the action the sentence
-        is describing.
-      */}
-      {olderWaiting.length > 0 && (
-        <Alert kind="warning" title="Waiting for your score in other months">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <span>
-              {olderWaiting.reduce((a, m) => a + m.count, 0)} submission
-              {olderWaiting.reduce((a, m) => a + m.count, 0) === 1 ? '' : 's'} outside{' '}
-              {monthLabel(month)}:
-            </span>
-            {olderWaiting.map(m => (
-              <button
-                key={m.month}
-                onClick={() => setMonth(m.month)}
-                className="badge cursor-pointer bg-amber-200 text-amber-900 hover:bg-amber-300"
-              >
-                {monthLabel(m.month)} · {m.count}
-              </button>
-            ))}
-          </div>
-        </Alert>
-      )}
-
-      {/*
         Directly under the hero, which is where the dashboard puts the
         same panel for somebody's own overdue month. A manager reads this
         screen the way everybody reads that one — top first — and the
@@ -547,6 +358,11 @@ export default function Team() {
         The month is always named. This counts the whole year while the
         list below shows one month, so a banner about August over a
         September list has to say August or it reads as a bug.
+
+        One waiting goes straight to it. More than one opens a list,
+        because the order is the manager's call — the longest waiting, the
+        quickest to do, the one who has asked twice — and a button that
+        started with whoever sorted first made that call for them.
       */}
       {pending.length > 0 && (
         <ActionRequired
@@ -556,122 +372,29 @@ export default function Team() {
             pending.length === 1
               ? `${pending[0].person.full_name} submitted ${monthLabel(pending[0].sub.period_month)}` +
                 ' and it cannot be finalised until you score it.'
-              : `${pendingMonths} cannot be finalised until you score them. ` +
-                `Starting with ${pending[0].person.full_name}, ` +
-                `${monthLabel(pending[0].sub.period_month)}.`
+              : `${pendingMonths} from ${queue.length} ${queue.length === 1 ? 'person' : 'people'} ` +
+                'cannot be finalised until you score them. Choose whom to start with.'
           }
-          to={`/score/${pending[0].sub.id}`}
-          cta="Start Scoring"
+          {...(pending.length === 1
+            ? { to: `/score/${pending[0].sub.id}` }
+            : { onClick: () => setQueueOpen(v => !v), expanded: queueOpen })}
+          cta={pending.length > 1 && queueOpen ? 'Close list' : 'Start Scoring'}
         />
       )}
 
-      <TeamBands share={bandShare} label={`Team average by band · FY ${fy}`} />
-
-      {/* Two views of the same scores, answering different questions:
-          are we improving, and are we bunched or spread. Tabs rather
-          than two stacked cards — they are alternatives, and a manager
-          reads one at a time. */}
-      <div className="card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div
-            className="flex rounded-lg bg-ink-100 p-0.5"
-            role="tablist"
-            aria-label="Team chart"
-          >
-            {([
-              ['trend', 'Team average', LineChartIcon],
-              ['bell', 'Bell curve', Sigma],
-            ] as const).map(([key, label, Icon]) => (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={chartTab === key}
-                onClick={() => setChartTab(key)}
-                className={clsx(
-                  'btn-press flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                  chartTab === key
-                    ? 'bg-surface text-ink-900 shadow-sm'
-                    : 'text-ink-500 hover:text-ink-800',
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Only the bell curve's own filters, and only when it is the
-              one on screen. Full width on a phone so two selects never
-              end up squeezed into half a row each. */}
-          {chartTab === 'bell' && (
-            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-              <select
-                className="input w-full sm:w-auto"
-                value={bellMonth}
-                onChange={e => setBellMonth(e.target.value)}
-                aria-label="Month"
-              >
-                <option value="">All months · average</option>
-                {openFyMonths(fy).reverse().map(m => (
-                  <option key={m} value={m}>{monthLabel(m)} only</option>
-                ))}
-              </select>
-              <select
-                className="input w-full sm:w-auto"
-                value={bellMetric}
-                onChange={e => setBellMetric(e.target.value as BellMetric)}
-                aria-label="Which band to plot"
-              >
-                <option value="total">Total</option>
-                <option value="job">Job role</option>
-                {bandShare.anyEsms && <option value="esms">ESMS</option>}
-                <option value="core">Core values</option>
-              </select>
-            </div>
-          )}
-        </div>
-
-        <p className="mb-3 mt-3 text-xs text-ink-500">
-          {chartTab === 'trend'
-            ? 'Everyone who was scored that month, averaged, on the band scale.'
-            : `Where the team sits on ${METRIC_LABEL[bellMetric].toLowerCase()}` +
-              `${bell.mixed ? ', as a share of each person\'s own weightage' : ` out of ${bell.outOf}`}, ` +
-              `${bellMonth ? `for ${monthLabel(bellMonth)}` : 'averaged over the year'}. ` +
-              'Each dot on the axis is one person.' +
-              (bell.mixed
-                ? ' Shares rather than points here, because this band is not the same size for everyone on the team.'
-                : '')}
-        </p>
-
-        {chartTab === 'trend' ? (
-          <BandTrend
-            points={trend}
-            hasEsms={bandShare.anyEsms}
-            emptyMessage="No months scored yet — the lines start with your first one."
-          />
-        ) : (
-          <BellCurve
-            values={bell.values}
-            outOf={bell.outOf}
-            floor={bell.floor}
-            emptyMessage={
-              bellMonth
-                ? `Fewer than three people have been scored for ${monthLabel(bellMonth)}, so there is no spread to draw yet.`
-                : 'Fewer than three people have been scored yet, so there is no spread to draw.'
-            }
-          />
-        )}
-      </div>
+      {pending.length > 1 && queueOpen && (
+        <ScoringQueue groups={queue} onClose={() => setQueueOpen(false)} />
+      )}
 
       {/*
         The line between the year and one month of it.
 
-        The month picker lived in the hero, three cards above the only
-        things it changed, so it read as a filter on the whole screen —
-        and it is not: the score, the band split and both charts above
-        are the whole year and do not move when it does. Sitting here it
-        governs exactly what follows it, and the caption says so rather
-        than leaving somebody to work it out by watching numbers fail to
-        change.
+        The month picker lived in the hero, above cards it did not
+        change, so it read as a filter on the whole screen — and it is
+        not: the team average in the hero is the whole year and does not
+        move when it does. Sitting here it governs exactly what follows
+        it, and the caption says so rather than leaving somebody to work
+        it out by watching numbers fail to change.
 
         The two actions ride along because this is the row a manager
         reaches for when they are done reading and want to do something.
@@ -851,13 +574,17 @@ export default function Team() {
             statusFilter === 'all'
             || statusKeyOf(subsById.get(m.id)?.status ?? null) === statusFilter)
           .sort((a, b) => {
-            const rank = (id: string) => (subsById.get(id)?.status === 'submitted' ? 0 : 1)
-            return rank(a.id) - rank(b.id)
+            // Anyone waiting on a score in any month first, the oldest
+            // month at the top; everybody else keeps name order.
+            const oldest = (id: string) => pendingById.get(id)?.[0]?.period_month ?? '~'
+            return oldest(a.id).localeCompare(oldest(b.id))
           })
           .map(member => {
           const sub = subsById.get(member.id)
           const assign = assignById.get(member.id)
           const needsScoring = sub?.status === 'submitted'
+          // Every month this person is waiting on, not only the one on screen.
+          const waitingSubs = pendingById.get(member.id) ?? []
           // The month this KPI begins, when that is still ahead of the
           // month being shown — null the rest of the time, which is most
           // of the time.
@@ -873,7 +600,7 @@ export default function Team() {
                 // Tinted and edged where the manager is the one holding
                 // things up, so the row is findable while scrolling rather
                 // than only once it is read.
-                needsScoring
+                waitingSubs.length > 0
                   ? 'border-l-4 border-amber-500 bg-amber-50/60 pl-3 hover:bg-amber-50'
                   : 'hover:bg-ink-50',
               )}
@@ -882,35 +609,60 @@ export default function Team() {
                   look rather than a page. The chevron beside them still
                   goes to the full record — a peek and a visit are
                   different intentions and deserve different buttons. */}
-              <button
-                onClick={() => setPeek(member.id)}
-                className="btn-press flex min-w-0 flex-1 items-center gap-3 text-left"
-                aria-label={`Quick look at ${member.full_name}`}
-              >
-                <Avatar name={member.full_name} src={member.avatar} size="sm" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate font-medium text-ink-900">
-                      {member.full_name}
+              <div className="min-w-0 flex-1">
+                <button
+                  onClick={() => setPeek(member.id)}
+                  className="btn-press flex w-full min-w-0 items-center gap-3 text-left"
+                  aria-label={`Quick look at ${member.full_name}`}
+                >
+                  <Avatar name={member.full_name} src={member.avatar} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate font-medium text-ink-900">
+                        {member.full_name}
+                      </span>
+                      {waitingSubs.length > 0 && (
+                        <AlertCircle
+                          className="h-4 w-4 shrink-0 text-amber-600"
+                          aria-label="Waiting for your score"
+                        />
+                      )}
                     </span>
-                    {needsScoring && (
-                      <AlertCircle
-                        className="h-4 w-4 shrink-0 text-amber-600"
-                        aria-label="Waiting for your score"
-                      />
+                    <span className="block truncate text-xs text-ink-500">
+                      {member.ecode}
+                      {member.designation && ` · ${member.designation}`}
+                    </span>
+                    {assign?.status !== 'active' && (
+                      <span className="mt-1 block text-xs text-amber-700">
+                        KPI {assign ? assign.status.replace('_', ' ') : 'not set up'}
+                      </span>
                     )}
                   </span>
-                  <span className="block truncate text-xs text-ink-500">
-                    {member.ecode}
-                    {member.designation && ` · ${member.designation}`}
-                  </span>
-                  {assign?.status !== 'active' && (
-                    <span className="mt-1 block text-xs text-amber-700">
-                      KPI {assign ? assign.status.replace('_', ' ') : 'not set up'}
+                </button>
+
+                {/* Which months, by name, each one a way straight into it.
+                    Outside the button above, because a link inside a button
+                    is not a link, and indented to the name so the months
+                    read as part of this person rather than a line of their
+                    own. */}
+                {waitingSubs.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-12">
+                    <span className="text-[11px] font-medium text-amber-800">
+                      Waiting for your score
                     </span>
-                  )}
-                </span>
-              </button>
+                    {waitingSubs.map(s => (
+                      <Link
+                        key={s.id}
+                        to={`/score/${s.id}`}
+                        className="badge bg-amber-200 text-amber-900 transition-colors hover:bg-amber-300"
+                        aria-label={`Score ${member.full_name} for ${monthLabel(s.period_month)}`}
+                      >
+                        {monthLabel(s.period_month)}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/*
                 View team, then status, then the score.
@@ -1061,6 +813,83 @@ export default function Team() {
       )}
     </div>
   )
+}
+
+/**
+ * Everyone waiting on this manager's score, to choose from.
+ *
+ * "Start Scoring" used to open whoever sorted first, which decided the
+ * order for a manager who knows better: who is quick to do, who has
+ * chased twice, who sits at the next desk. One row a person, each of
+ * their months a way straight into it, and how long each has waited so
+ * the choice can be an informed one.
+ */
+function ScoringQueue({
+  groups, onClose,
+}: {
+  groups: Array<{ person: Employee; subs: KpiSubmission[] }>
+  onClose: () => void
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-start justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink-800">Choose whom to score first</h3>
+          <p className="mt-0.5 text-xs text-ink-500">
+            Oldest month at the top. Pick a month to open it.
+          </p>
+        </div>
+        <button onClick={onClose} className="btn-icon" aria-label="Close the list">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="divide-y divide-ink-100">
+        {groups.map(({ person, subs }) => (
+          <div
+            key={person.id}
+            className="flex flex-col gap-2.5 p-4 sm:flex-row sm:items-center sm:gap-4"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Avatar name={person.full_name} src={person.avatar} size="sm" />
+              <div className="min-w-0">
+                <p className="truncate font-medium text-ink-900">{person.full_name}</p>
+                <p className="truncate text-xs text-ink-500">
+                  {person.ecode}
+                  {person.designation && ` · ${person.designation}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pl-12 sm:justify-end sm:pl-0">
+              {subs.map(s => (
+                <Link
+                  key={s.id}
+                  to={`/score/${s.id}`}
+                  className="btn-press inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                  aria-label={`Score ${person.full_name} for ${monthLabel(s.period_month)}`}
+                >
+                  {monthLabel(s.period_month)}
+                  {s.self_submitted_at && (
+                    <span className="font-normal text-amber-800">
+                      {waited(s.self_submitted_at)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** How long a submission has sat waiting, in the words a manager would use. */
+function waited(at: string): string {
+  const days = Math.floor((Date.now() - new Date(at).getTime()) / 86_400_000)
+  if (days <= 0) return 'sent today'
+  return `${days} day${days === 1 ? '' : 's'} waiting`
 }
 
 /**

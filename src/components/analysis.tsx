@@ -262,14 +262,27 @@ export function ActionRequired({
   title,
   body,
   to,
+  onClick,
+  expanded,
   cta,
 }: {
   eyebrow?: string
   title: string
   body?: ReactNode
-  to: string
+  /** Where the button goes. */
+  to?: string
+  /**
+   * Instead of `to`, for a button that opens something on this screen —
+   * My Team's list of people to choose from, when more than one is waiting.
+   */
+  onClick?: () => void
+  /** With onClick: whether what it opens is open, for screen readers. */
+  expanded?: boolean
   cta: string
 }) {
+  const ctaClass =
+    'btn-press shrink-0 rounded-lg bg-surface px-6 py-3 text-center text-[12px] font-bold ' +
+    'uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white'
   return (
     <div className="relative overflow-hidden rounded-xl bg-shade text-white">
       <span className="absolute inset-y-0 left-0 w-1 bg-cyrixRed-600" />
@@ -311,12 +324,15 @@ export function ActionRequired({
         {/* Full width on a phone — a call to action the thumb can hit
             without aiming — and rounded like every other button in the
             app, which this one had never been. */}
-        <Link
-          to={to}
-          className="btn-press shrink-0 rounded-lg bg-surface px-6 py-3 text-center text-[12px] font-bold uppercase tracking-label text-ink-950 hover:bg-cyrixRed-600 hover:text-white"
-        >
-          {cta}
-        </Link>
+        {onClick ? (
+          <button type="button" onClick={onClick} aria-expanded={expanded} className={ctaClass}>
+            {cta}
+          </button>
+        ) : (
+          <Link to={to ?? '/'} className={ctaClass}>
+            {cta}
+          </Link>
+        )}
       </div>
     </div>
   )

@@ -18,6 +18,7 @@ import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, SECTION_SHORT } from '@/lib/sections'
 import { exportOrgStatus } from '@/lib/export'
 import { PageLoader, ScorePill, StatTile, EmptyState, Alert } from '@/components/ui'
 import { ScoreHeader, TrendChip, BandChip, TeamBands } from '@/components/analysis'
+import TeamCharts from '@/components/TeamCharts'
 import type { Employee, WeakAreaRow, Section } from '@/types/db'
 
 const SCORED = new Set(['scored', 'finalized'])
@@ -480,6 +481,17 @@ export default function TeamAnalysis() {
       <TeamBands
         share={analysis.bandShare}
         label={`Team average by band · ${scopeLabel}`}
+      />
+
+      {/* The whole year month by month, and how spread out the team is —
+          moved here from My Team. They keep their own month filter: the
+          one below narrows the table, not the charts. */}
+      <TeamCharts
+        fy={fy}
+        team={team}
+        subs={subs}
+        assignments={assignments}
+        anyEsms={analysis.anyEsms}
       />
 
       <div className="card overflow-hidden">
