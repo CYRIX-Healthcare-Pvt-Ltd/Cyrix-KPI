@@ -9,7 +9,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
   useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
-  useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket, currentFy,
+  useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket,
+  useKpiRanking, currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonthsFrom } from '@/lib/fy'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
@@ -18,6 +19,9 @@ import { CHAT } from '@/lib/chat-strings'
 import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
 import { pickTip } from '@/lib/tips'
+import { pickStanding, type TeamStanding } from '@/lib/standing'
+import { greetingKey } from '@/lib/greeting'
+import { SCORED_STATUSES } from '@/lib/bands'
 import { forecastYear, biggestLever, averageRows, weakestOf } from '@/lib/forecast'
 import { ratingToPoints } from '@/lib/scoring'
 import type { SupportDesk } from '@/types/db'
@@ -113,6 +117,9 @@ const SEEN_KEY = 'cyrix.cyra.seen'
  */
 const TIP_KEY = 'cyrix.cyra.tip'
 const TIP_SESSION = 'cyrix.cyra.tip.session'
+/** The same rotation for the standing line, on its own counter so the
+ *  two do not step over each other. */
+const STAND_KEY = 'cyrix.cyra.stand'
 
 /** English on purpose: they are the names on the tabs the answer comes from. */
 const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
@@ -137,6 +144,9 @@ export default function ChatBot() {
   const { data: history } = useSubmissionHistory(employee?.id, fy)
   const { data: assignment } = useMyAssignment(employee?.id, fy)
   const { data: pending } = usePendingCounts(employee?.id, fy)
+  // Where they stand, for the opening line. The RPC returns a position
+  // and a denominator and never another person's score.
+  const { data: ranking } = useKpiRanking(employee?.id, fy)
   // A manager's questions are mostly about somebody else. Only fetched
   // for a manager, and the server filters it to their own reports.
   const { data: teamNow } = useTeamMonth(
@@ -199,13 +209,18 @@ export default function ChatBot() {
     try { return Number(localStorage.getItem(TIP_KEY) ?? '0') || 0 } catch { return 0 }
   })
 
+  const [standSeen] = useState(() => {
+    try { return Number(localStorage.getItem(STAND_KEY) ?? '0') || 0 } catch { return 0 }
+  })
+
   useEffect(() => {
     try {
       if (sessionStorage.getItem(TIP_SESSION)) return
       sessionStorage.setItem(TIP_SESSION, '1')
       localStorage.setItem(TIP_KEY, String(tipSeen + 1))
+      localStorage.setItem(STAND_KEY, String(standSeen + 1))
     } catch { /* private window, or storage switched off */ }
-  }, [tipSeen])
+  }, [tipSeen, standSeen])
 
   /**
    * What to open with when nothing is waiting.
@@ -260,6 +275,69 @@ export default function ChatBot() {
     }
     return null
   }, [coreValues, coreTrend, kras, history, firstName])
+
+  /**
+   * The manager half of the standing: their team, from what this panel
+   * has already loaded for the answers, plus the two clocks and the
+   * coverage the ranking RPC returns.
+   *
+   * The average is the one the team screen's hero shows — each person's
+   * own average first, then the mean of those — so a manager reading
+   * both sees one number, not two that disagree by a rounding.
+   */
+  const teamStanding = useMemo<TeamStanding | null>(() => {
+    if (!isManager || !teamNow || !teamMonths) return null
+    const named = new Map(teamNow.team.map(t => [t.id, t.full_name]))
+    const byPerson = new Map<string, number[]>()
+    for (const sub of teamMonths) {
+      if (!SCORED_STATUSES.has(sub.status) || sub.final_total_score === null) continue
+      if (!named.has(sub.employee_id)) continue
+      byPerson.set(sub.employee_id, [...(byPerson.get(sub.employee_id) ?? []), Number(sub.final_total_score)])
+    }
+    const each = [...byPerson].map(([id, scores]) => ({
+      id, name: named.get(id)!, score: scores.reduce((a, b) => a + b, 0) / scores.length,
+    }))
+    const average = each.length
+      ? each.reduce((a, e) => a + e.score, 0) / each.length
+      : null
+    const lowest = each.length > 1
+      ? each.reduce((low, e) => (e.score < low.score ? e : low))
+      : null
+    return {
+      rank: ranking?.mgr_rank ?? null,
+      of: ranking?.mgr_of ?? null,
+      scoreLate: ranking?.completion_delay ?? null,
+      scoreAllowance: ranking?.mgr_grace_days ?? 5,
+      submitLate: ranking?.submit_delay ?? null,
+      submitAllowance: ranking?.tm_grace_days ?? 3,
+      due: ranking?.due_months ?? null,
+      scored: ranking?.scored_months ?? null,
+      average,
+      lowest,
+    }
+  }, [isManager, teamNow, teamMonths, ranking])
+
+  /**
+   * The one position Cyra mentions this time.
+   *
+   * Not shown to a system login, and not before the figures have
+   * arrived — a rank of "null of null" is not a fact. See lib/standing.
+   */
+  const standing = useMemo(() => {
+    if (systemAccount || !ranking) return null
+    const lever = biggestLever(averageRows(kras ?? []))
+    const points = (history ?? [])
+      .filter(sub => sub.final_total_score !== null)
+      .map(sub => ({ period_month: sub.period_month, value: Number(sub.final_total_score) }))
+    const f = forecastYear(points, 0)
+    return pickStanding({
+      rank: ranking.org_rank,
+      of: ranking.org_of,
+      lever: lever ? { kra: lever.kra, target: lever.target, gain: lever.gain } : null,
+      climb: f && f.direction === 'up' ? { soFar: f.soFar, recent: f.recent } : null,
+      team: teamStanding,
+    }, standSeen)
+  }, [systemAccount, ranking, kras, history, teamStanding, standSeen])
 
   const tip = useMemo(
     () => (systemAccount ? null : pickTip({
@@ -332,7 +410,7 @@ export default function ChatBot() {
 
     if ((pending?.scoring ?? 0) > 0) {
       list.push({
-        key: 'nudge.score',
+        key: pending!.scoring === 1 ? 'nudge.score1' : 'nudge.score',
         vars: { n: pending!.scoring },
         to: '/team',
         toLabel: 'My Team',
@@ -340,7 +418,7 @@ export default function ChatBot() {
     }
     if ((pending?.approvals ?? 0) > 0) {
       list.push({
-        key: 'nudge.approve',
+        key: pending!.approvals === 1 ? 'nudge.approve1' : 'nudge.approve',
         vars: { n: pending!.approvals },
         to: '/approvals',
         toLabel: 'Approvals',
@@ -379,7 +457,7 @@ export default function ChatBot() {
       const opening: Turn[] = [{
         // Nothing waiting is not nothing to say. See idleOpening.
         say: nudges.length
-          ? { kind: 'chat', key: 'nudge.hi', vars: { name: firstName } }
+          ? { kind: 'chat', key: greetingKey(), vars: { name: firstName } }
           : idleOpening
             ? { kind: 'chat', key: idleOpening.key, vars: idleOpening.vars }
             : { kind: 'chat', key: 'nudge.clear', vars: { name: firstName } },
@@ -389,6 +467,20 @@ export default function ChatBot() {
           say: { kind: 'chat', key: n.key, vars: n.vars },
           to: n.to,
           toLabel: n.toLabel,
+        })
+      }
+      /*
+        Where they stand, after the work and before the tip.
+
+        After the work because a month overdue is more urgent than a
+        position, and before the tip because it is about them rather
+        than about the software. One line, rotating: see lib/standing.
+      */
+      if (standing) {
+        opening.push({
+          say: { kind: 'chat', key: standing.key, vars: standing.vars },
+          to: standing.to,
+          toLabel: standing.toLabel,
         })
       }
       /*

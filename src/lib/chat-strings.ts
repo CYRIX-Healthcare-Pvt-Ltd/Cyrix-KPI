@@ -195,12 +195,40 @@ export const CHAT: Record<string, Phrase> = {
     te: 'మేనేజర్లకు వారి సొంత ర్యాంకింగ్ ఉంటుంది? మీ టీమ్ ఎంత త్వరగా సమర్పిస్తుంది, మీరు ఎంత త్వరగా స్కోర్ చేస్తారు, టీమ్ ఎలా ఉంది అన్నవి.',
     ta: 'மேலாளர்களுக்கு அவர்களுக்கே உரிய தரவரிசை உண்டு? உங்கள் குழு எவ்வளவு விரைவாகச் சமர்ப்பிக்கிறது, நீங்கள் எவ்வளவு விரைவாக மதிப்பெண் அளிக்கிறீர்கள், குழு எப்படிச் செயல்படுகிறது என்பவை.',
   },
-  'nudge.hi': {
-    en: 'Hey {name} — here is where you stand today.',
-    ml: 'ഹായ് {name} — ഇന്ന് നിങ്ങൾ എവിടെ നിൽക്കുന്നു എന്നത് ഇതാ.',
-    hi: 'नमस्ते {name} — आज आप कहाँ हैं, यह रहा।',
-    te: 'హాయ్ {name} — ఈరోజు మీరు ఎక్కడ ఉన్నారో ఇదిగో.',
-    ta: 'ஹாய் {name} — இன்று நீங்கள் எங்கே இருக்கிறீர்கள் என்பது இதோ.',
+  /*
+    The hello, by the reader's own clock. See lib/greeting.ts.
+
+    It replaced "here is where you stand today", which announced the
+    cards below instead of greeting the person reading them. Late at
+    night it is a plain hello: "good night" sends somebody away.
+  */
+  'hi.morning': {
+    en: 'Hey {name} — good morning.',
+    ml: 'ഹായ് {name} — സുപ്രഭാതം.',
+    hi: 'नमस्ते {name} — सुप्रभात।',
+    te: 'హాయ్ {name} — శుభోదయం.',
+    ta: 'ஹாய் {name} — காலை வணக்கம்.',
+  },
+  'hi.afternoon': {
+    en: 'Hey {name} — good afternoon.',
+    ml: 'ഹായ് {name} — ഉച്ചവണക്കം.',
+    hi: 'नमस्ते {name} — शुभ दोपहर।',
+    te: 'హాయ్ {name} — శుభ మధ్యాహ్నం.',
+    ta: 'ஹாய் {name} — மதிய வணக்கம்.',
+  },
+  'hi.evening': {
+    en: 'Hey {name} — good evening.',
+    ml: 'ഹായ് {name} — ശുഭ സായാഹ്നം.',
+    hi: 'नमस्ते {name} — शुभ संध्या।',
+    te: 'హాయ్ {name} — శుభ సాయంత్రం.',
+    ta: 'ஹாய் {name} — மாலை வணக்கம்.',
+  },
+  'hi.late': {
+    en: 'Hey {name} — hello.',
+    ml: 'ഹായ് {name} — ഹലോ.',
+    hi: 'नमस्ते {name} — हैलो।',
+    te: 'హాయ్ {name} — హలో.',
+    ta: 'ஹாய் {name} — வணக்கம்.',
   },
   'nudge.clear': {
     en: 'Hey {name} — you have no pending work right now.',
@@ -274,19 +302,123 @@ export const CHAT: Record<string, Phrase> = {
     te: 'మీ మేనేజర్ కారణంతో మీ KPI ని తిరిగి పంపారు. మార్చి మళ్లీ పంపండి.',
     ta: 'உங்கள் மேலாளர் ஒரு காரணத்துடன் உங்கள் KPI ஐத் திருப்பி அனுப்பியுள்ளார். மாற்றம் செய்து மீண்டும் அனுப்புங்கள்.',
   },
+  /*
+    One reads as one.
+
+    "1 assessment(s) are waiting" is the sort of line that tells somebody
+    a machine wrote it, on the panel whose whole job is to sound like a
+    colleague. Only English needs the pair -- the other four count the
+    same way whatever the number.
+  */
+  'nudge.score1': {
+    en: 'One assessment from your team is waiting for you to score.',
+    ml: 'നിങ്ങളുടെ ടീമിൽ നിന്ന് ഒരു വിലയിരുത്തൽ നിങ്ങൾ സ്കോർ ചെയ്യാൻ കാത്തിരിക്കുന്നു.',
+    hi: 'आपकी टीम का एक आकलन आपके स्कोर देने का इंतज़ार कर रहा है।',
+    te: 'మీ టీమ్ నుండి ఒక అంచనా మీ స్కోరు కోసం ఎదురుచూస్తోంది.',
+    ta: 'உங்கள் குழுவிலிருந்து ஒரு மதிப்பீடு உங்கள் மதிப்பெண்ணுக்காகக் காத்திருக்கிறது.',
+  },
   'nudge.score': {
-    en: '{n} assessment(s) from your team are waiting for you to score.',
+    en: '{n} assessments from your team are waiting for you to score.',
     ml: 'നിങ്ങളുടെ ടീമിൽ നിന്ന് {n} വിലയിരുത്തൽ നിങ്ങൾ സ്കോർ ചെയ്യാൻ കാത്തിരിക്കുന്നു.',
     hi: 'आपकी टीम के {n} आकलन आपके स्कोर देने का इंतज़ार कर रहे हैं।',
     te: 'మీ టీమ్ నుండి {n} అంచనాలు మీ స్కోరు కోసం ఎదురుచూస్తున్నాయి.',
     ta: 'உங்கள் குழுவிலிருந்து {n} மதிப்பீடுகள் உங்கள் மதிப்பெண்ணுக்காகக் காத்திருக்கின்றன.',
   },
+  'nudge.approve1': {
+    en: 'One KPI is waiting for your approval. That person cannot start a month until you approve it.',
+    ml: 'ഒരു KPI നിങ്ങളുടെ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു. നിങ്ങൾ അംഗീകരിക്കുന്നതുവരെ അവർക്ക് ഒരു മാസവും തുടങ്ങാൻ കഴിയില്ല.',
+    hi: 'एक KPI आपकी मंज़ूरी का इंतज़ार कर रहा है। जब तक आप मंज़ूरी नहीं देते, वह व्यक्ति कोई महीना शुरू नहीं कर सकता।',
+    te: 'ఒక KPI మీ ఆమోదం కోసం ఎదురుచూస్తోంది. మీరు ఆమోదించే వరకు ఆ వ్యక్తి ఏ నెలనూ మొదలుపెట్టలేరు.',
+    ta: 'ஒரு KPI உங்கள் ஒப்புதலுக்காகக் காத்திருக்கிறது. நீங்கள் ஒப்புதல் அளிக்கும் வரை அவர் எந்த மாதத்தையும் தொடங்க முடியாது.',
+  },
   'nudge.approve': {
-    en: '{n} KPI(s) are waiting for your approval. Nobody can start a month until you approve theirs.',
+    en: '{n} KPIs are waiting for your approval. Nobody can start a month until you approve theirs.',
     ml: '{n} KPI നിങ്ങളുടെ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു. നിങ്ങൾ അംഗീകരിക്കുന്നതുവരെ അവർക്ക് ഒരു മാസവും തുടങ്ങാൻ കഴിയില്ല.',
     hi: '{n} KPI आपकी मंज़ूरी का इंतज़ार कर रहे हैं। जब तक आप मंज़ूरी नहीं देते, वे कोई महीना शुरू नहीं कर सकते।',
     te: '{n} KPI లు మీ ఆమోదం కోసం ఎదురుచూస్తున్నాయి. మీరు ఆమోదించే వరకు వారు ఏ నెలనూ మొదలుపెట్టలేరు.',
     ta: '{n} KPI உங்கள் ஒப்புதலுக்காகக் காத்திருக்கின்றன. நீங்கள் ஒப்புதல் அளிக்கும் வரை அவர்கள் எந்த மாதத்தையும் தொடங்க முடியாது.',
+  },
+
+  /*
+    Where you stand, and the one thing that moves it. See lib/standing.ts.
+
+    Each of these states a position the reader can already find on a
+    screen, and attaches the lever that belongs to THAT position -- a
+    manager's own KRA does not move the manager table, and saying it did
+    would be advice that cannot work. One per opening, rotating.
+
+    No medals and no taunts. "160th of 177" on its own is an accusation;
+    the same fact with the next move attached is a plan.
+  */
+  'stand.mgrlowest': {
+    en: '{name2} is averaging {score} this year, the lowest in your team. Your team\'s own scores are 70% of your standing — worth a word?',
+    ml: '{name2} ഈ വർഷം ശരാശരി {score} ആണ്, നിങ്ങളുടെ ടീമിലെ ഏറ്റവും കുറവ്. ടീമിന്റെ സ്കോറുകളാണ് നിങ്ങളുടെ റാങ്കിന്റെ 70% — ഒന്ന് സംസാരിച്ചാലോ?',
+    hi: '{name2} इस साल औसतन {score} पर हैं, आपकी टीम में सबसे कम। टीम के स्कोर आपकी रैंकिंग का 70% हैं — एक बार बात कर लें?',
+    te: '{name2} ఈ సంవత్సరం సగటున {score}, మీ టీమ్‌లో అత్యల్పం. టీమ్ స్కోర్లే మీ ర్యాంకింగ్‌లో 70% — ఒకసారి మాట్లాడతారా?',
+    ta: '{name2} இந்த ஆண்டு சராசரியாக {score}, உங்கள் குழுவில் மிகக் குறைவு. குழுவின் மதிப்பெண்களே உங்கள் தரவரிசையில் 70% — ஒருமுறை பேசலாமா?',
+  },
+  'stand.mgrslow': {
+    en: 'You are taking {days} days past the {allow}-day allowance to score what your team sends in. That is 20% of your manager standing.',
+    ml: 'നിങ്ങളുടെ ടീം അയക്കുന്നത് സ്കോർ ചെയ്യാൻ {allow} ദിവസത്തെ അനുവാദത്തിനപ്പുറം {days} ദിവസം എടുക്കുന്നു. അത് നിങ്ങളുടെ മാനേജർ റാങ്കിന്റെ 20% ആണ്.',
+    hi: 'आपकी टीम जो भेजती है उसे स्कोर करने में आप {allow} दिन की छूट से {days} दिन ज़्यादा ले रहे हैं। यह आपकी मैनेजर रैंकिंग का 20% है।',
+    te: 'మీ టీమ్ పంపినదాన్ని స్కోర్ చేయడానికి {allow} రోజుల గడువు దాటి {days} రోజులు తీసుకుంటున్నారు. అది మీ మేనేజర్ ర్యాంకింగ్‌లో 20%.',
+    ta: 'உங்கள் குழு அனுப்புவதற்கு மதிப்பெண் அளிக்க {allow} நாள் சலுகையைத் தாண்டி {days} நாட்கள் எடுக்கிறீர்கள். அது உங்கள் மேலாளர் தரவரிசையில் 20%.',
+  },
+  'stand.mgrlate': {
+    en: 'Your team sends months in {days} days past their {allow}-day allowance. That is 10% of your standing, and a word from you moves it.',
+    ml: 'നിങ്ങളുടെ ടീം {allow} ദിവസത്തെ അനുവാദത്തിനപ്പുറം {days} ദിവസം വൈകിയാണ് മാസങ്ങൾ അയക്കുന്നത്. അത് നിങ്ങളുടെ റാങ്കിന്റെ 10% ആണ്, നിങ്ങളുടെ ഒരു വാക്ക് അത് മാറ്റും.',
+    hi: 'आपकी टीम {allow} दिन की छूट से {days} दिन देर से महीने भेजती है। यह आपकी रैंकिंग का 10% है, और आपकी एक बात इसे बदल देती है।',
+    te: 'మీ టీమ్ {allow} రోజుల గడువు దాటి {days} రోజులు ఆలస్యంగా నెలలు పంపుతోంది. అది మీ ర్యాంకింగ్‌లో 10%, మీ ఒక మాట దాన్ని మారుస్తుంది.',
+    ta: 'உங்கள் குழு {allow} நாள் சலுகையைத் தாண்டி {days} நாட்கள் தாமதமாக மாதங்களை அனுப்புகிறது. அது உங்கள் தரவரிசையில் 10%, உங்கள் ஒரு வார்த்தை அதை மாற்றும்.',
+  },
+  'stand.mgrdone': {
+    en: 'You have scored {done} of the {due} months your team owes this year. That share multiplies your whole standing, so an unscored month costs more than a slow one.',
+    ml: 'ഈ വർഷം ടീം നൽകേണ്ട {due} മാസങ്ങളിൽ {done} എണ്ണം നിങ്ങൾ സ്കോർ ചെയ്തു. ആ അനുപാതം നിങ്ങളുടെ റാങ്കിനെ മുഴുവൻ ഗുണിക്കുന്നു — സ്കോർ ചെയ്യാത്ത മാസം വൈകിയ മാസത്തേക്കാൾ ചെലവേറിയതാണ്.',
+    hi: 'इस साल आपकी टीम के {due} महीनों में से {done} आपने स्कोर किए हैं। यह हिस्सा आपकी पूरी रैंकिंग को गुणा करता है, इसलिए बिना स्कोर वाला महीना देर से स्कोर करने से ज़्यादा महँगा है।',
+    te: 'ఈ సంవత్సరం మీ టీమ్ ఇవ్వాల్సిన {due} నెలల్లో {done} మీరు స్కోర్ చేశారు. ఆ వాటా మీ మొత్తం ర్యాంకింగ్‌ను గుణిస్తుంది, కాబట్టి స్కోర్ చేయని నెల ఆలస్యమైన నెల కంటే ఎక్కువ ఖరీదు.',
+    ta: 'இந்த ஆண்டு உங்கள் குழு தர வேண்டிய {due} மாதங்களில் {done} மதிப்பெண் அளித்துள்ளீர்கள். அந்தப் பங்கு உங்கள் முழு தரவரிசையையும் பெருக்குகிறது, எனவே மதிப்பெண் அளிக்காத மாதம் தாமதமான மாதத்தை விட விலை உயர்ந்தது.',
+  },
+  'stand.mgrrank': {
+    en: 'Among managers you are {rank} of {of}. Your team\'s scores are 70% of that, your scoring 20%, their submitting 10%.',
+    ml: 'മാനേജർമാർക്കിടയിൽ നിങ്ങൾ {of}-ൽ {rank} ആണ്. ടീമിന്റെ സ്കോറുകൾ അതിന്റെ 70%, നിങ്ങളുടെ സ്കോറിംഗ് 20%, അവരുടെ സമർപ്പണം 10%.',
+    hi: 'मैनेजरों में आप {of} में से {rank} पर हैं। टीम के स्कोर उसका 70%, आपका स्कोर करना 20%, उनका जमा करना 10%।',
+    te: 'మేనేజర్లలో మీరు {of}లో {rank}. టీమ్ స్కోర్లు అందులో 70%, మీ స్కోరింగ్ 20%, వారి సమర్పణ 10%.',
+    ta: 'மேலாளர்களில் நீங்கள் {of}-இல் {rank}. குழுவின் மதிப்பெண்கள் அதில் 70%, நீங்கள் மதிப்பெண் அளிப்பது 20%, அவர்கள் சமர்ப்பிப்பது 10%.',
+  },
+  'stand.mgrteam': {
+    en: 'Your team is averaging {avg} out of 100 this year.',
+    ml: 'ഈ വർഷം നിങ്ങളുടെ ടീമിന്റെ ശരാശരി 100-ൽ {avg} ആണ്.',
+    hi: 'इस साल आपकी टीम का औसत 100 में से {avg} है।',
+    te: 'ఈ సంవత్సరం మీ టీమ్ సగటు 100కి {avg}.',
+    ta: 'இந்த ஆண்டு உங்கள் குழுவின் சராசரி 100-இல் {avg}.',
+  },
+  'stand.ranktop': {
+    en: 'You are {rank} of {of} this year. Top ten — hold it there.',
+    ml: 'ഈ വർഷം നിങ്ങൾ {of}-ൽ {rank} ആണ്. ആദ്യ പത്തിൽ — അവിടെ നിലനിർത്തുക.',
+    hi: 'इस साल आप {of} में से {rank} पर हैं। टॉप टेन में — इसे बनाए रखिए।',
+    te: 'ఈ సంవత్సరం మీరు {of}లో {rank}. టాప్ టెన్‌లో — అలాగే నిలబెట్టుకోండి.',
+    ta: 'இந்த ஆண்டு நீங்கள் {of}-இல் {rank}. முதல் பத்தில் — அதைத் தக்கவைத்துக் கொள்ளுங்கள்.',
+  },
+  'stand.ranklever': {
+    en: 'You are {rank} of {of} this year. {kra} is where the next marks are: at {target}% it adds about {gain}.',
+    ml: 'ഈ വർഷം നിങ്ങൾ {of}-ൽ {rank} ആണ്. അടുത്ത മാർക്കുകൾ {kra}-യിലാണ്: {target}% എത്തിയാൽ ഏകദേശം {gain} കൂടും.',
+    hi: 'इस साल आप {of} में से {rank} पर हैं। अगले अंक {kra} में हैं: {target}% पर यह लगभग {gain} बढ़ाता है।',
+    te: 'ఈ సంవత్సరం మీరు {of}లో {rank}. తర్వాతి మార్కులు {kra}లో ఉన్నాయి: {target}% చేరితే సుమారు {gain} పెరుగుతుంది.',
+    ta: 'இந்த ஆண்டு நீங்கள் {of}-இல் {rank}. அடுத்த மதிப்பெண்கள் {kra}-இல் உள்ளன: {target}% அடைந்தால் சுமார் {gain} கூடும்.',
+  },
+  'stand.rank': {
+    en: 'You are {rank} of {of} this year.',
+    ml: 'ഈ വർഷം നിങ്ങൾ {of}-ൽ {rank} ആണ്.',
+    hi: 'इस साल आप {of} में से {rank} पर हैं।',
+    te: 'ఈ సంవత్సరం మీరు {of}లో {rank}.',
+    ta: 'இந்த ஆண்டு நீங்கள் {of}-இல் {rank}.',
+  },
+  'stand.climb': {
+    en: 'Your last few months average {recent}, against {soFar} for the year. Keep that going.',
+    ml: 'കഴിഞ്ഞ കുറച്ച് മാസങ്ങളിൽ ശരാശരി {recent}, വർഷത്തിൽ {soFar}. ഇതുപോലെ തുടരുക.',
+    hi: 'पिछले कुछ महीनों का औसत {recent} है, जबकि साल का {soFar}। ऐसे ही करते रहिए।',
+    te: 'గత కొన్ని నెలల సగటు {recent}, సంవత్సరానికి {soFar}. ఇలాగే కొనసాగించండి.',
+    ta: 'கடந்த சில மாதங்களின் சராசரி {recent}, ஆண்டுக்கு {soFar}. இதேபோல் தொடருங்கள்.',
   },
 
   lost: {
