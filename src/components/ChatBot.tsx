@@ -21,6 +21,7 @@ import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
 import { pickTip } from '@/lib/tips'
 import { pickStanding, type TeamStanding } from '@/lib/standing'
 import { greetingKey } from '@/lib/greeting'
+import { shouldPeek, dayKey } from '@/lib/peek'
 import { SCORED_STATUSES } from '@/lib/bands'
 import { forecastYear, biggestLever, averageRows, weakestOf } from '@/lib/forecast'
 import { ratingToPoints } from '@/lib/scoring'
@@ -120,6 +121,8 @@ const TIP_SESSION = 'cyrix.cyra.tip.session'
 /** The same rotation for the standing line, on its own counter so the
  *  two do not step over each other. */
 const STAND_KEY = 'cyrix.cyra.stand'
+/** The day the bubble last leaned out. One a day, at most. See lib/peek. */
+const PEEK_KEY = 'cyrix.cyra.peek'
 
 /** English on purpose: they are the names on the tabs the answer comes from. */
 const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
@@ -443,6 +446,39 @@ export default function ChatBot() {
   const unread = nudges.length > 0 && seen !== signature
 
   /*
+    Cyra leaning out, once a day, when something is waiting.
+
+    The badge on the button was not enough — a count on an icon is only
+    read by somebody already looking at it, and the whole complaint was
+    that nobody looks. A sentence with their name in it is seen.
+
+    Two seconds after the screen settles rather than on arrival: a
+    bubble that appears while the page is still drawing itself reads as
+    part of the loading and is scrolled past.
+
+    Then it stays until it is answered — opened, or closed with the ×.
+    It timed itself out after twelve seconds first, which is fine for
+    somebody already looking at the screen and useless for everybody
+    else: a phone put down for half a minute came back to nothing, which
+    is the exact failure the bubble exists to fix. The day is marked as
+    soon as it appears, so this is once a day however long it waits.
+  */
+  const [peek, setPeek] = useState(false)
+
+  useEffect(() => {
+    let lastShown: string | null = null
+    try { lastShown = localStorage.getItem(PEEK_KEY) } catch { /* private window */ }
+    if (!shouldPeek({
+      things: nudges.length, lastShown, systemAccount, panelOpen: open,
+    })) return
+    const show = setTimeout(() => {
+      setPeek(true)
+      try { localStorage.setItem(PEEK_KEY, dayKey()) } catch { /* see above */ }
+    }, 2_000)
+    return () => clearTimeout(show)
+  }, [nudges.length, systemAccount, open])
+
+  /*
     Greeted by name and told what is waiting.
 
     Built once, as keys rather than sentences, so a language switch
@@ -675,9 +711,36 @@ export default function ChatBot() {
     <>
       {/* Above the mobile nav bar, out of the thumb's way on the tab it
           would otherwise cover. */}
+      {!open && peek && (
+        /*
+          Above the button and scaled out of its corner, so it reads as
+          having come from there rather than having arrived from
+          nowhere. The panel's own dark chrome, because it is the panel
+          speaking.
+        */
+        <div className="animate-pop-in fixed bottom-[8.5rem] right-4 z-40 flex max-w-[16rem] origin-bottom-right items-start gap-1.5 rounded-2xl bg-shade py-2.5 pl-3.5 pr-2 text-sm text-white shadow-xl lg:bottom-[5.25rem]">
+          <button
+            onClick={() => { setPeek(false); setOpen(true) }}
+            className="btn-press text-left leading-snug"
+          >
+            {c(nudges.length === 1 ? 'peek.one' : 'peek.many',
+               { name: firstName, n: nudges.length })}
+          </button>
+          {/* Its own button, and small: dismissing must not be the
+              easiest thing to hit on a bubble whose job is to be opened. */}
+          <button
+            onClick={() => setPeek(false)}
+            aria-label="Not now"
+            className="-mt-0.5 shrink-0 rounded-lg p-1 text-white/50 hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {!open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => { setPeek(false); setOpen(true) }}
           aria-label={
             nudges.length
               ? `Cyra has ${nudges.length} thing${nudges.length === 1 ? '' : 's'} waiting for you`

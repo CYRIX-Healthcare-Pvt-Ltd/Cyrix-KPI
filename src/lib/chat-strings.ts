@@ -196,6 +196,28 @@ export const CHAT: Record<string, Phrase> = {
     ta: 'மேலாளர்களுக்கு அவர்களுக்கே உரிய தரவரிசை உண்டு? உங்கள் குழு எவ்வளவு விரைவாகச் சமர்ப்பிக்கிறது, நீங்கள் எவ்வளவு விரைவாக மதிப்பெண் அளிக்கிறீர்கள், குழு எப்படிச் செயல்படுகிறது என்பவை.',
   },
   /*
+    The bubble that leans out of the button. See lib/peek.ts.
+
+    Cyra's own voice, first person, because it comes from her rather
+    than from the app: the point of it is that somebody who has never
+    noticed the button learns there is somebody in it. Once a day, and
+    only when something is actually waiting.
+  */
+  'peek.one': {
+    en: 'Hey {name} — I have something for you.',
+    ml: 'ഹായ് {name} — നിങ്ങൾക്കായി എനിക്ക് ഒരു കാര്യമുണ്ട്.',
+    hi: 'नमस्ते {name} — आपके लिए मेरे पास एक बात है।',
+    te: 'హాయ్ {name} — మీ కోసం నా దగ్గర ఒక విషయం ఉంది.',
+    ta: 'ஹாய் {name} — உங்களுக்காக என்னிடம் ஒரு விஷயம் இருக்கிறது.',
+  },
+  'peek.many': {
+    en: 'Hey {name} — I have {n} things for you.',
+    ml: 'ഹായ് {name} — നിങ്ങൾക്കായി എനിക്ക് {n} കാര്യങ്ങളുണ്ട്.',
+    hi: 'नमस्ते {name} — आपके लिए मेरे पास {n} बातें हैं।',
+    te: 'హాయ్ {name} — మీ కోసం నా దగ్గర {n} విషయాలు ఉన్నాయి.',
+    ta: 'ஹாய் {name} — உங்களுக்காக என்னிடம் {n} விஷயங்கள் இருக்கின்றன.',
+  },
+  /*
     The hello, by the reader's own clock. See lib/greeting.ts.
 
     It replaced "here is where you stand today", which announced the
