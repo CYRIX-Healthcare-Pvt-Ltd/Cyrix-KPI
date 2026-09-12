@@ -174,7 +174,17 @@ function RankTile({
                 className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
               >
                 <dt className="text-[11px] leading-tight text-ink-500">{k}</dt>
-                <dd className="text-[11px] font-medium leading-tight tabular-nums text-ink-900 sm:shrink-0">
+                {/*
+                  Wraps rather than pushes.
+
+                  It was shrink-0 from 640px up, so a long value — "12 days
+                  to submit · 15 to score" against a tile 200px wide — made
+                  the row wider than the panel it sits in and hung out of
+                  the right-hand edge. Right-aligned and allowed to take a
+                  second line instead; the figures still read as a column
+                  because they end on the same edge.
+                */}
+                <dd className="text-[11px] font-medium leading-tight tabular-nums text-ink-900 sm:min-w-0 sm:text-right">
                   {v}
                 </dd>
               </div>
@@ -693,9 +703,12 @@ export default function Profile() {
               // The rule those "late" figures were measured against. A
               // number that says someone is late without saying late
               // against what is an accusation, not a metric.
+              // Abbreviated because it shares a 200px tile with its label:
+              // "12d to submit · 15d to score" says the same thing on one
+              // line where the long form took two.
               ['Allowance',
-                `${ranking?.tm_grace_days ?? 3} days to submit · ` +
-                `${ranking?.mgr_grace_days ?? 5} to score`],
+                `${ranking?.tm_grace_days ?? 3}d to submit · ` +
+                `${ranking?.mgr_grace_days ?? 5}d to score`],
               ...(ranking?.tat_starts_from
                 ? [['Counted from',
                     monthLabel(ranking.tat_starts_from)] as [string, string]]
