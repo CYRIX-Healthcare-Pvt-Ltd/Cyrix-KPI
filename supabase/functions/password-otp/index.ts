@@ -87,6 +87,52 @@ const MIN_PASSWORD = 8
  * everybody the same guess — "probably not verified yet" — which sends
  * half the people who see it to the wrong place.
  */
+/**
+ * Said to SW Admin, who is the only caller of the test and the only
+ * person who can act on it.
+ *
+ * Microsoft answers a misconfiguration with a code and nothing else, and
+ * every one of those codes has exactly one fix. "Something went wrong
+ * sending that" is true and useless: the whole point of the button is to
+ * find out which of the four setup steps has not been done.
+ *
+ * The codes are matched, never echoed. A provider body can carry an
+ * address or an internal id, so what comes back is this file's sentence
+ * and the status number.
+ */
+function whyTestFailed(status: number | null, detail: string): string {
+  // A fallback rescue arrives as "graph refused 403: ..." — the inner
+  // status is the one that explains anything.
+  const inner = detail.match(/graph refused (d{3})/)
+  const code = inner ? Number(inner[1]) : status
+  const rescued = inner
+    ? ' Resend carried the message instead, so somebody did receive it.'
+    : ''
+
+  if (/AADSTS7000215/.test(detail)) {
+    return 'Microsoft rejected the client secret. MS_CLIENT_SECRET must be '
+      + "the secret's Value from Azure, not its Secret ID, and it expires."
+      + rescued
+  }
+  if (/AADSTS700016|AADSTS90002/.test(detail)) {
+    return 'Microsoft does not recognise the app. Check MS_CLIENT_ID and '
+      + 'MS_TENANT_ID against the app registration overview.' + rescued
+  }
+  if (code === 403) {
+    return 'Microsoft accepted the app but will not let it send as that '
+      + 'mailbox. Two things do that: Mail.Send needs admin consent as an '
+      + 'application permission, and the app has to be scoped to the '
+      + 'mailbox in Exchange.' + rescued
+  }
+  if (code === 404) {
+    return 'Microsoft has no mailbox at the MAIL_FROM address.' + rescued
+  }
+  if (code === 401) {
+    return 'Microsoft would not issue a token for the app registration.' + rescued
+  }
+  return `The mail provider refused the send${code ? ` (${code})` : ''}.` + rescued
+}
+
 /** Said to the person, from the status. Never the provider's own body. */
 function whyMailFailed(err: unknown): string {
   if (!(err instanceof MailRefused)) {
@@ -289,11 +335,21 @@ Deno.serve(async req => {
         return json({ error: said[who.reason ?? ''] ?? 'Could not send a test.' }, 403)
       }
 
-      await sendTest(db, who.email!, (who.name ?? '').split(' ')[0] || 'there')
+      try {
+        await sendTest(db, who.email!, (who.name ?? '').split(' ')[0] || 'there')
+      } catch (sendErr) {
+        console.error('password-otp test send failed', sendErr)
+        return json({
+          error: whyTestFailed(
+            sendErr instanceof MailRefused ? sendErr.status : null,
+            sendErr instanceof MailRefused ? sendErr.detail : String(sendErr)),
+          provider_status: sendErr instanceof MailRefused ? sendErr.status : null,
+        }, 502)
+      }
       return json({
         ok: true,
         message: `Test sent to ${who.name} at ${who.email}. If it does not arrive, ` +
-                 `the sender address is not verified with the mail provider.`,
+                 `check the mailbox it was sent from — the message is in its Sent Items.`,
       })
     }
 
