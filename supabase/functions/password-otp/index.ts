@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { sendMail, MailRefused } from '../_shared/mail.ts'
 
 /**
  * The only thing in this system that may email a one-time code, and the
@@ -24,7 +25,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
  *           is not the address we have for you" is the whole point.
  *
  * Deploy:  supabase functions deploy password-otp
- * Secrets: supabase secrets set RESEND_API_KEY=...
+ * Secrets: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MAIL_FROM —
+ *          the mail goes out as notifications@cyrix.in through Graph.
+ *          RESEND_API_KEY is the fallback while that settles.
  *          (OTP_FROM is only a fallback — the live value is the otp_from
  *           row in app_settings, which SW Admin owns. See migration 0052.)
  *          (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY
@@ -84,12 +87,6 @@ const MIN_PASSWORD = 8
  * everybody the same guess — "probably not verified yet" — which sends
  * half the people who see it to the wrong place.
  */
-class MailRefused extends Error {
-  constructor(readonly status: number, readonly detail: string) {
-    super(`mail provider refused: ${status}`)
-  }
-}
-
 /** Said to the person, from the status. Never the provider's own body. */
 function whyMailFailed(err: unknown): string {
   if (!(err instanceof MailRefused)) {
@@ -158,26 +155,6 @@ async function signedInEcode(req: Request): Promise<string | null> {
 }
 
 /**
- * Who the code appears to come from.
- *
- * The setting first, the secret second. Changing an edge-function secret
- * needs the CLI, a login and a redeploy, and the moment this needs
- * changing is the moment somebody is locked out — so SW Admin owns it
- * from the admin screen and the secret is only the fallback for a
- * deployment nobody has told anything.
- */
-async function senderAddress(db: ReturnType<typeof admin>): Promise<string> {
-  try {
-    const { data } = await db.rpc('otp_sender')
-    if (typeof data === 'string' && data.includes('@')) return data
-  } catch { /* fall through to the secret */ }
-  // The last-resort default, for a deployment nobody has told anything.
-  // send.cyrix.in was verified with a Resend account that has since been
-  // deleted, so falling back to it is falling back to a guaranteed 403.
-  return Deno.env.get('OTP_FROM') ?? 'Cyrix <no-reply@updates.cyrix.in>'
-}
-
-/**
  * Sends, and returns the provider's own id for the message.
  *
  * That id is the only handle on a specific send. Without it "he says he
@@ -188,48 +165,33 @@ async function sendCode(
   db: ReturnType<typeof admin>,
   to: string, name: string, code: string, purpose: string,
 ): Promise<string | null> {
-  const key = Deno.env.get('RESEND_API_KEY')
-  if (!key) throw new Error('RESEND_API_KEY is not set')
-  const from = await senderAddress(db)
-
   const what = purpose === 'reset' ? 'reset your password' : 'change your password'
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      // Not "Cyrix KPI". Recovery moved to the portal and serves all four
-      // modules, so a code that says KPI while the From line says Cyrix
-      // is an email disagreeing with itself — and the one thing a
-      // one-time code must never look like is a phish.
-      subject: `${code} is your Cyrix code`,
-      // Plain text as well as HTML: a code is exactly the kind of mail
-      // somebody reads on a locked-down phone client that strips styling.
-      text:
-        `Hello ${name},\n\n${code}\n\n` +
-        `Use this code to ${what}. It expires in 10 minutes.\n\n` +
-        `If you did not ask for this, you can ignore this email — ` +
-        `nothing has changed on your account. Tell HR if it keeps happening.\n`,
-      html:
-        `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
-        `<p style="color:#39424e">Hello ${name},</p>` +
-        `<p style="font-size:34px;font-weight:700;letter-spacing:.18em;margin:24px 0;color:#0b0d10">${code}</p>` +
-        `<p style="color:#39424e">Use this code to ${what}. It expires in 10 minutes.</p>` +
-        `<p style="color:#8792a2;font-size:13px">If you did not ask for this you can ignore this email — ` +
-        `nothing has changed on your account. Tell HR if it keeps happening.</p></div>`,
-    }),
+  const sent = await sendMail(db, {
+    to: [to],
+    // Not "Cyrix KPI". Recovery moved to the portal and serves all four
+    // modules, so a code that says KPI while the From line says Cyrix
+    // is an email disagreeing with itself — and the one thing a
+    // one-time code must never look like is a phish.
+    subject: `${code} is your Cyrix code`,
+    // Plain text as well as HTML: a code is exactly the kind of mail
+    // somebody reads on a locked-down phone client that strips styling.
+    text:
+      `Hello ${name},\n\n${code}\n\n` +
+      `Use this code to ${what}. It expires in 10 minutes.\n\n` +
+      `If you did not ask for this, you can ignore this email — ` +
+      `nothing has changed on your account. Tell HR if it keeps happening.\n`,
+    html:
+      `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
+      `<p style="color:#39424e">Hello ${name},</p>` +
+      `<p style="font-size:34px;font-weight:700;letter-spacing:.18em;margin:24px 0;color:#0b0d10">${code}</p>` +
+      `<p style="color:#39424e">Use this code to ${what}. It expires in 10 minutes.</p>` +
+      `<p style="color:#8792a2;font-size:13px">If you did not ask for this you can ignore this email — ` +
+      `nothing has changed on your account. Tell HR if it keeps happening.</p></div>`,
   })
-
-  if (!res.ok) throw new MailRefused(res.status, await res.text())
-
-  // Their id, if they gave one. Never worth failing a send over.
-  try {
-    const accepted = await res.json()
-    return typeof accepted?.id === 'string' ? accepted.id : null
-  } catch {
-    return null
-  }
+  if (sent.note) console.error(sent.note)
+  // Null through Graph, which accepts a message without naming it. The
+  // caller stores whatever comes back and asks nothing of it.
+  return sent.id
 }
 
 /**
@@ -243,35 +205,29 @@ async function sendCode(
  * check a DNS record.
  */
 async function sendTest(db: ReturnType<typeof admin>, to: string, name: string) {
-  const key = Deno.env.get('RESEND_API_KEY')
-  if (!key) throw new Error('RESEND_API_KEY is not set')
-  const from = await senderAddress(db)
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: 'Test message from Cyrix — no action needed',
-      text:
-        `Hello ${name},\n\n` +
-        `This is a test. Somebody in IT is checking that Cyrix can reach ` +
-        `your email address, so that password codes work when you need one.\n\n` +
-        `Nothing has changed on your account and there is nothing to do. ` +
-        `You can delete this.\n`,
-      html:
-        `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
-        `<p style="color:#39424e">Hello ${name},</p>` +
-        `<p style="color:#39424e"><strong>This is a test.</strong> Somebody in IT is checking ` +
-        `that Cyrix can reach your email address, so that password codes work when ` +
-        `you need one.</p>` +
-        `<p style="color:#8792a2;font-size:13px">Nothing has changed on your account and ` +
-        `there is nothing to do. You can delete this.</p></div>`,
-    }),
+  const sent = await sendMail(db, {
+    to: [to],
+    subject: 'Test message from Cyrix — no action needed',
+    text:
+      `Hello ${name},\n\n` +
+      `This is a test. Somebody in IT is checking that Cyrix can reach ` +
+      `your email address, so that password codes work when you need one.\n\n` +
+      `Nothing has changed on your account and there is nothing to do. ` +
+      `You can delete this.\n`,
+    html:
+      `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:420px">` +
+      `<p style="color:#39424e">Hello ${name},</p>` +
+      `<p style="color:#39424e"><strong>This is a test.</strong> Somebody in IT is checking ` +
+      `that Cyrix can reach your email address, so that password codes work when ` +
+      `you need one.</p>` +
+      `<p style="color:#8792a2;font-size:13px">Nothing has changed on your account and ` +
+      `there is nothing to do. You can delete this.</p></div>`,
   })
-
-  if (!res.ok) throw new MailRefused(res.status, await res.text())
+  // Which route carried it, on the one send somebody is watching for.
+  // The test exists to prove the sending address works; saying "sent"
+  // when Graph refused and Resend rescued it would prove the opposite
+  // of what was asked.
+  if (sent.note) throw new MailRefused(502, sent.note)
 }
 
 Deno.serve(async req => {

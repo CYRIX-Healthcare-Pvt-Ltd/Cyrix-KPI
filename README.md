@@ -408,17 +408,40 @@ Postgres, and never stored, logged or returned.
 supabase functions deploy password-otp
 ```
 
-Then set the two secrets it needs. **These are function secrets, not
+Then set the secrets it needs. **These are function secrets, not
 `VITE_` variables** — they must never reach the hosting provider, where
-everything is compiled into the JavaScript the browser downloads:
+everything is compiled into the JavaScript the browser downloads.
+
+Mail goes out through Microsoft 365 as `notifications@cyrix.in`, from an
+Entra app registration whose `Mail.Send` is scoped in Exchange to that
+one mailbox:
+
+```bash
+supabase secrets set MS_TENANT_ID=... MS_CLIENT_ID=... MS_CLIENT_SECRET=...   MAIL_FROM='Cyrix <notifications@cyrix.in>'
+```
+
+`MS_CLIENT_SECRET` is the secret's **Value**, which Azure shows once, not
+its Secret ID. The three steps on the Microsoft side, in order: register
+the app and grant `Mail.Send` as an **application** permission with admin
+consent; scope it to the one mailbox in Exchange Online PowerShell
+(`New-ApplicationAccessPolicy`, or RBAC for Applications on tenants that
+have moved); then set the secrets above. Without the scoping step the
+registration can send as anybody in the tenant.
+
+Resend stays behind it while the switch settles, and `_shared/mail.ts`
+falls back to it only if Graph refuses:
 
 ```bash
 supabase secrets set RESEND_API_KEY=re_xxx OTP_FROM='Cyrix KPI <no-reply@cyrix.in>'
 ```
 
+Delete `RESEND_API_KEY` once the new address has carried the mail for a
+while — and with it goes the `OTP_FROM` setting on the SW Admin screen,
+which only feeds that fallback. Graph can send only as `MAIL_FROM`, so a
+sender typed into a text box would be a 403.
+
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are
-injected by the platform. Resend needs `cyrix.in` verified first, which is
-one DNS record on their dashboard.
+injected by the platform.
 
 Nobody can use any of this until employee records carry an address.
 `work_email` exists on the table and the **bulk employee import already

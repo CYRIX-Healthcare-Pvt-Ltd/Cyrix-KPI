@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { sendMail, graphConfigured } from '../_shared/mail.ts'
 
 /**
  * Tells HR that something is waiting, and where it is waiting.
@@ -27,7 +28,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
  * HR's inbox.
  *
  * Deploy:  supabase functions deploy notify-hr
- * Secrets: RESEND_API_KEY (shared with password-otp)
+ * Secrets: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MAIL_FROM —
+ *          see _shared/mail.ts. RESEND_API_KEY is the fallback while the
+ *          switch to Graph settles.
  *          APP_BASE_URL, optional — defaults to the live portal.
  */
 
@@ -201,14 +204,6 @@ async function recipients(
   return { to: to ? [to] : [], cc: cc.filter(a => a !== to) }
 }
 
-async function senderAddress(db: ReturnType<typeof admin>): Promise<string> {
-  try {
-    const { data } = await db.rpc('otp_sender')
-    if (typeof data === 'string' && data.includes('@')) return data
-  } catch { /* fall through */ }
-  return Deno.env.get('OTP_FROM') ?? 'Cyrix <no-reply@updates.cyrix.in>'
-}
-
 const escape = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -266,10 +261,11 @@ Deno.serve(async req => {
 
   const where = WHERE[kind]
   const link = `${BASE}${where.path}`
-  const key = Deno.env.get('RESEND_API_KEY')
-  if (!key) {
+  // Nothing configured at all: said once, on the row, rather than
+  // thrown — the caller's action succeeded and this is not their problem.
+  if (!graphConfigured() && !Deno.env.get('RESEND_API_KEY')) {
     await db.from('admin_notifications')
-      .update({ error: 'RESEND_API_KEY is not set' }).eq('id', claim.id)
+      .update({ error: 'no mail provider is configured' }).eq('id', claim.id)
     return json({ ok: true, sent: false, reason: 'not configured' })
   }
 
@@ -291,23 +287,13 @@ Deno.serve(async req => {
     `<p style="color:#8792a2;font-size:13px">An automatic note from Cyrix. Nobody needs to reply to it.</p></div>`
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: await senderAddress(db),
-        to,
-        ...(cc.length ? { cc } : {}),
-        subject: summary.headline,
-        text,
-        html,
-      }),
+    const sent = await sendMail(db, {
+      to, cc, subject: summary.headline, text, html,
     })
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
     await db.from('admin_notifications')
       .update({ sent_at: new Date().toISOString(), recipients: [...to, ...cc] })
       .eq('id', claim.id)
-    return json({ ok: true, sent: true })
+    return json({ ok: true, sent: true, via: sent.via })
   } catch (err) {
     await db.from('admin_notifications')
       .update({ error: String(err).slice(0, 500) }).eq('id', claim.id)
