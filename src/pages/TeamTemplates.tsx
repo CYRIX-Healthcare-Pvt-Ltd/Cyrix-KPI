@@ -392,11 +392,17 @@ export default function TeamTemplates() {
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
-                onAssign={setAssigning}
+                onAssign={t => { setConfirmDelete(null); setAssigning(t) }}
                 assigningId={assigning?.id ?? null}
                 fy={fy}
                 onCloseAssign={() => setAssigning(null)}
-                onDelete={setConfirmDelete}
+                // Opening one closes the other: a row asking two questions
+                // at once is a row nobody can answer.
+                onDelete={t => { setAssigning(null); setConfirmDelete(t) }}
+                deleting={confirmDelete}
+                deleteBusy={remove.isPending}
+                onConfirmDelete={onDelete}
+                onCancelDelete={() => setConfirmDelete(null)}
               />
 
               <TemplateGroup
@@ -434,37 +440,6 @@ export default function TeamTemplates() {
         </>
       )}
 
-      {confirmDelete && (
-        <div className="card space-y-3 border-cyrixRed-200 p-4">
-          <div>
-            <p className="font-medium text-ink-900">
-              Remove “{confirmDelete.name}”?
-            </p>
-            {/* "Offered to your team" was wrong twice over: archiving
-                takes it out of every list including the owner's own, and
-                the people who could see it were never "your team" — they
-                are everybody under your own manager. */}
-            <p className="mt-0.5 text-sm text-ink-500">
-              It disappears from every list, yours included.
-              {Number(confirmDelete.in_use) > 0
-                ? ` The ${confirmDelete.in_use} ${Number(confirmDelete.in_use) === 1
-                    ? 'person on it keeps their KPI' : 'people on it keep their KPIs'}`
-                  + ' exactly as they are — a template is copied onto somebody when'
-                  + ' it is applied, and taking it away does not take that back.'
-                : ' Nobody is on it.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={onDelete} disabled={remove.isPending} className="btn-danger">
-              {remove.isPending && <Spinner className="h-4 w-4" />}
-              Remove it
-            </button>
-            <button onClick={() => setConfirmDelete(null)} className="btn-secondary">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -472,6 +447,7 @@ export default function TeamTemplates() {
 function TemplateGroup({
   title, hint, icon: Icon, templates, items, preview, onPreview, onEdit,
   onAssign, onDelete, assigningId, fy, onCloseAssign,
+  deleting, deleteBusy, onConfirmDelete, onCancelDelete,
 }: {
   title: string
   hint: string
@@ -487,6 +463,11 @@ function TemplateGroup({
   assigningId?: string | null
   fy?: string
   onCloseAssign?: () => void
+  /** Which row is being asked "remove this?", for the same reason. */
+  deleting?: VisibleTemplate | null
+  deleteBusy?: boolean
+  onConfirmDelete?: () => void
+  onCancelDelete?: () => void
 }) {
   if (templates.length === 0) return null
 
@@ -586,6 +567,17 @@ function TemplateGroup({
                 </div>
               )}
 
+              {deleting?.id === t.id && onConfirmDelete && onCancelDelete && (
+                <div className="border-t border-cyrixRed-200 bg-cyrixRed-50/40 p-4">
+                  <DeleteConfirm
+                    template={t}
+                    busy={!!deleteBusy}
+                    onConfirm={onConfirmDelete}
+                    onCancel={onCancelDelete}
+                  />
+                </div>
+              )}
+
               {open && (
                 <div className="overflow-x-auto border-t border-ink-100">
                   <table className="w-full text-sm">
@@ -623,6 +615,53 @@ function TemplateGroup({
         })}
       </div>
     </section>
+  )
+}
+
+/**
+ * "Remove this template?" — asked inside the row that was clicked.
+ *
+ * It used to open at the foot of the page, below every group, exactly
+ * as Assign to did before it was moved: press the bin on the first
+ * template and the question appears three cards away, so the first
+ * thing anybody does is scroll to check which one they are about to
+ * remove. A question about one thing belongs next to that thing.
+ */
+function DeleteConfirm({
+  template, busy, onConfirm, onCancel,
+}: {
+  template: VisibleTemplate
+  busy: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const people = Number(template.in_use)
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="font-medium text-ink-900">
+          Remove “{displayTemplateName(template.name)}”?
+        </p>
+        <p className="mt-0.5 text-sm text-ink-500">
+          It disappears from every list, yours included.
+          {people > 0
+            ? ` The ${people} ${people === 1
+                ? 'person on it keeps their KPI' : 'people on it keep their KPIs'}`
+              + ' exactly as they are — a template is copied onto somebody when'
+              + ' it is applied, and taking it away does not take that back.'
+            : ' Nobody is on it.'}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onConfirm} disabled={busy} className="btn-danger">
+          {busy && <Spinner className="h-4 w-4" />}
+          Remove it
+        </button>
+        <button onClick={onCancel} disabled={busy} className="btn-secondary">
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }
 
