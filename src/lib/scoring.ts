@@ -248,8 +248,17 @@ export function ruleTraits(
     detail: `Beating the target earns nothing extra — this row stops at ${pct(wt)} — and it cannot go below zero.`,
   }
 
-  // Same reading as the engine: 0% off per unit is no penalty at all.
-  const penalty = rule === 'lower_linear'
+  /*
+    Same reading as the engine: 0% off per unit is no penalty at all.
+
+    Both lower rules take a rate, and only one of them said so. A row on
+    "Lower is better (min 0 %)" carrying −0.25% per unit showed a single
+    grey "Max 20%" chip, so the figure somebody had typed into the sheet
+    was invisible on every screen that met the row afterwards — and an
+    upload that changed it looked like an upload that had not saved.
+  */
+  const takesRate = rule === 'lower_linear' || rule === 'lower_penalty'
+  const penalty = takesRate
     && params.penalty_per_unit != null
     && params.penalty_per_unit > 0
       ? params.penalty_per_unit
@@ -257,12 +266,25 @@ export function ruleTraits(
 
   // The one thing a row carrying no weightage can still do.
   if (penalty !== null) {
+    // Where the two rules part: this one stops at zero, the other keeps
+    // going down and takes the rest of the score with it.
+    const floors = rule === 'lower_penalty'
     return [
-      ...(wt > 0 ? [capped] : []),
+      ...(wt > 0
+        ? [floors
+            ? {
+                tone: 'capped' as const,
+                label: `Max ${pct(wt)}`,
+                detail: `At or under the target earns the full ${pct(wt)}, and this row never goes below zero.`,
+              }
+            : capped]
+        : []),
       {
         tone: 'penalty',
         label: `−${pct(penalty)} per unit over`,
-        detail: `Every unit over the target takes ${pct(penalty)} off the total score, and keeps taking it — this row can pull the total down.`,
+        detail: floors
+          ? `Every unit over the target takes ${pct(penalty)} off this row, as far as zero and no further.`
+          : `Every unit over the target takes ${pct(penalty)} off the total score, and keeps taking it — this row can pull the total down.`,
       },
     ]
   }

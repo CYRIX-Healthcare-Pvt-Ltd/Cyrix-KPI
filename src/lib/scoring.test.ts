@@ -502,3 +502,35 @@ describe('full submission roll-up', () => {
     expect(t.final?.total).toBe(100)
   })
 })
+
+/**
+ * The rate on "Lower is better (min 0 %)".
+ *
+ * Reported as "the if-lower % is not updated": a bulk upload wrote
+ * penalty_per_unit 0.25 onto the KPI and every screen still showed one
+ * grey "Max 20%" chip, because only lower_linear said its rate out loud.
+ * The figure was saved and invisible, which is indistinguishable from
+ * not saved.
+ */
+describe('what a lower-is-better row says about its penalty', () => {
+  it('names the rate, and says it stops at zero', () => {
+    const traits = ruleTraits('lower_penalty', 20, { penalty_per_unit: 0.25 })
+    expect(traits.map(t => t.label)).toEqual(['Max 20%', '−0.25% per unit over'])
+    expect(traits[1].tone).toBe('penalty')
+    expect(traits[1].detail).toContain('as far as zero and no further')
+  })
+
+  it('still says only Max when no rate is set', () => {
+    // Without a rate the engine falls back to the proportional curve,
+    // which has no per-unit figure to state.
+    expect(ruleTraits('lower_penalty', 20, {}).map(t => t.label)).toEqual(['Max 20%'])
+    expect(ruleTraits('lower_penalty', 20, { penalty_per_unit: 0 }).map(t => t.label))
+      .toEqual(['Max 20%'])
+  })
+
+  it('keeps the other lower rule saying it can go below zero', () => {
+    const traits = ruleTraits('lower_linear', 10, { penalty_per_unit: 2 })
+    expect(traits.map(t => t.label)).toEqual(['Max 10%', '−2% per unit over'])
+    expect(traits[1].detail).toContain('can pull the total down')
+  })
+})
