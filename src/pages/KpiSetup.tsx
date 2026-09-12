@@ -12,6 +12,7 @@ import {
 import { defaultStartMonth, fyMonths } from '@/lib/fy'
 import { StartMonthSelect, StartMonthNote } from '@/components/StartMonth'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
+import { displayTemplateName } from '@/lib/templates'
 import type { ParseResult } from '@/lib/excel'
 import type { VisibleTemplate } from '@/types/db'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
@@ -39,7 +40,9 @@ export default function KpiSetup() {
   // Everything this person's own reporting line has agreed, plus HR's for
   // their job role. Until migration 0093 the card below could only ever
   // offer the second, which for all but one job role was nothing at all.
-  const { data: templates } = useVisibleTemplates(fy)
+  // With the direct manager's: the templates a new joiner is most likely
+  // to be meant to start from are the ones their own manager wrote.
+  const { data: templates } = useVisibleTemplates(fy, true, true)
   const templateIds = useMemo(() => (templates ?? []).map(t => t.id), [templates])
   const { data: templateItems } = useTemplateItems(templateIds)
   const saveRows = useSaveAssignmentRows()
@@ -59,15 +62,13 @@ export default function KpiSetup() {
   /** True while the list of templates is open. */
   const [picking, setPicking] = useState(false)
   const [hunt, setHunt] = useState('')
-  /* Name or keeper, case-insensitive, trimmed — one box for both. */
+  /* The template's name, case-insensitive, trimmed. Not its owner: who
+     wrote a template is not shown anywhere, so it cannot be searched on. */
   const shown = useMemo(() => {
     const q = hunt.trim().toLowerCase()
     const all = templates ?? []
     if (!q) return all
-    return all.filter(t =>
-      t.name.toLowerCase().includes(q)
-      || (t.owner_name ?? '').toLowerCase().includes(q)
-      || (t.owner_ecode ?? '').toLowerCase().includes(q))
+    return all.filter(t => t.name.toLowerCase().includes(q))
   }, [templates, hunt])
 
   const assignment = data?.assignment ?? null
@@ -199,7 +200,7 @@ export default function KpiSetup() {
     })))
     const alts = jobRows.reduce((a, i) => a + (i.alternates ?? []).length, 0)
     setNotice(
-      `Loaded “${tpl.name}”${tpl.is_company ? '' : ` — ${tpl.owner_name}'s template`}. ` +
+      `Loaded “${displayTemplateName(tpl.name)}”. ` +
       (alts > 0
         ? `${alts} alternative${alts === 1 ? '' : 's'} came along too — rows that measure ` +
           'something else in some months. '
@@ -439,12 +440,12 @@ export default function KpiSetup() {
             >
               <FileSpreadsheet className="h-4 w-4 shrink-0 text-violet-600" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-ink-900">{t.name}</span>
+                <span className="block truncate font-medium text-ink-900">
+                  {displayTemplateName(t.name)}
+                </span>
                 <span className="mt-0.5 block truncate text-xs text-ink-500">
                   {t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
-                  {t.is_company
-                    ? ' · company standard for your job role'
-                    : ` · kept by ${t.owner_name ?? 'a manager'}${t.owner_ecode ? ` (${t.owner_ecode})` : ''}`}
+                  {t.is_company && ' · company standard for your job role'}
                 </span>
               </span>
               <span className="shrink-0 text-xs font-medium text-ink-900">Use this</span>

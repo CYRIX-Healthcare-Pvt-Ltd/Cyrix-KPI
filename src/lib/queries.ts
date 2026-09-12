@@ -109,12 +109,22 @@ export function useTemplatesForRole(jobRoleId: string | null | undefined, fy: st
  * visible_kpi_templates (migration 0093) walks up from the caller and
  * answers exactly that.
  */
-export function useVisibleTemplates(fy: string, enabled = true) {
+/**
+ * @param withManager  Also the templates the caller's DIRECT manager keeps
+ *   — migration 0132. Only the person's own KPI setup screen asks for it:
+ *   it is the one place a new joiner starts from what their manager
+ *   wrote. The Team templates screen leaves it off.
+ */
+export function useVisibleTemplates(fy: string, enabled = true, withManager = false) {
   return useQuery({
     enabled,
-    queryKey: ['visible_templates', fy],
+    // Its own cache entry, or the setup screen and the templates screen
+    // would hand each other a list built for the other one.
+    queryKey: ['visible_templates', fy, withManager],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('visible_kpi_templates', { p_fy: fy })
+      const { data, error } = await supabase.rpc('visible_kpi_templates', {
+        p_fy: fy, p_with_manager: withManager,
+      })
       if (error) throw new Error(friendlyError(error))
       return (data ?? []) as VisibleTemplate[]
     },
