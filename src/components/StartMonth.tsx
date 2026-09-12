@@ -106,6 +106,18 @@ export function StartMonthBanner({
                 `${name} ${isSelf ? 'are' : 'is'} measured on ` +
                 `${months.length - skipped} months this year.`}
         </p>
+        {/* What moving it later does to the months before it. Asked
+            after a manager set May and watched April disappear from
+            somebody's list — the rule is fine, being surprised by it is
+            not. Only where the control is, because it is the answer to
+            "what happens if I change this". */}
+        {editable && (
+          <p className="mt-1.5 text-xs text-ink-400">
+            Moving this later clears earlier months that are still drafts.
+            A month already filed stays, and has to be deleted before the
+            start can pass it.
+          </p>
+        )}
       </div>
 
       {editable && onChange && (
