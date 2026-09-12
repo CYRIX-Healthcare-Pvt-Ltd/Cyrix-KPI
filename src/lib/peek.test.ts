@@ -30,3 +30,31 @@ describe('Cyra leaning out', () => {
     expect(dayKey(new Date(2026, 0, 5, 0, 1))).toBe('2026-01-05')
   })
 })
+
+/**
+ * The reported gap: somebody with every month filed, managing nobody,
+ * never saw the bubble at all — and they are exactly the person who
+ * never found the panel. Cyra still has their position and a fact for
+ * them, so that counts as something to say.
+ */
+describe('leaning out when there is no work, only news', () => {
+  it('shows for news alone', () => {
+    expect(shouldPeek({ things: 0, news: true, lastShown: null })).toBe(true)
+  })
+
+  it('still says nothing when there is neither', () => {
+    expect(shouldPeek({ things: 0, news: false, lastShown: null })).toBe(false)
+    expect(shouldPeek({ things: 0, lastShown: null })).toBe(false)
+  })
+
+  it('is still once a day, whichever it was', () => {
+    const today = dayKey()
+    expect(shouldPeek({ things: 0, news: true, lastShown: today })).toBe(false)
+    expect(shouldPeek({ things: 3, news: true, lastShown: today })).toBe(false)
+  })
+
+  it('never interrupts an open panel, or a shared login', () => {
+    expect(shouldPeek({ things: 0, news: true, lastShown: null, panelOpen: true })).toBe(false)
+    expect(shouldPeek({ things: 0, news: true, lastShown: null, systemAccount: true })).toBe(false)
+  })
+})

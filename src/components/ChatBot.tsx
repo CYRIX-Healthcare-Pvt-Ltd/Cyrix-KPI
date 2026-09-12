@@ -121,6 +121,21 @@ const TIP_SESSION = 'cyrix.cyra.tip.session'
 /** The same rotation for the standing line, on its own counter so the
  *  two do not step over each other. */
 const STAND_KEY = 'cyrix.cyra.stand'
+/** The day the panel was last opened, so a day's news can be counted
+ *  once and then stop being news. */
+const READ_KEY = 'cyrix.cyra.read'
+
+/**
+ * Which standing line the idle opening has already used up.
+ *
+ * The two are built from the same figures on purpose — the best KRA to
+ * work on, the year that is climbing — so when the opening has said one,
+ * the line below has to say something else or the panel repeats itself.
+ */
+const SAID_BY_IDLE: Record<string, string[]> = {
+  'nudge.planlever': ['stand.ranklever'],
+  'nudge.planclimb': ['stand.climb'],
+}
 /** The day the bubble last leaned out. One a day, at most. See lib/peek. */
 const PEEK_KEY = 'cyrix.cyra.peek'
 
@@ -320,27 +335,6 @@ export default function ChatBot() {
     }
   }, [isManager, teamNow, teamMonths, ranking])
 
-  /**
-   * The one position Cyra mentions this time.
-   *
-   * Not shown to a system login, and not before the figures have
-   * arrived — a rank of "null of null" is not a fact. See lib/standing.
-   */
-  const standing = useMemo(() => {
-    if (systemAccount || !ranking) return null
-    const lever = biggestLever(averageRows(kras ?? []))
-    const points = (history ?? [])
-      .filter(sub => sub.final_total_score !== null)
-      .map(sub => ({ period_month: sub.period_month, value: Number(sub.final_total_score) }))
-    const f = forecastYear(points, 0)
-    return pickStanding({
-      rank: ranking.org_rank,
-      of: ranking.org_of,
-      lever: lever ? { kra: lever.kra, target: lever.target, gain: lever.gain } : null,
-      climb: f && f.direction === 'up' ? { soFar: f.soFar, recent: f.recent } : null,
-      team: teamStanding,
-    }, standSeen)
-  }, [systemAccount, ranking, kras, history, teamStanding, standSeen])
 
   const tip = useMemo(
     () => (systemAccount ? null : pickTip({
@@ -430,6 +424,33 @@ export default function ChatBot() {
     return list
   }, [assignment, history, pending, month, systemAccount])
 
+  /**
+   * The one position Cyra mentions this time.
+   *
+   * Not shown to a system login, and not before the figures have
+   * arrived — a rank of "null of null" is not a fact. See lib/standing.
+   */
+  const standing = useMemo(() => {
+    if (systemAccount || !ranking) return null
+    const lever = biggestLever(averageRows(kras ?? []))
+    const points = (history ?? [])
+      .filter(sub => sub.final_total_score !== null)
+      .map(sub => ({ period_month: sub.period_month, value: Number(sub.final_total_score) }))
+    const f = forecastYear(points, 0)
+    return pickStanding({
+      rank: ranking.org_rank,
+      of: ranking.org_of,
+      lever: lever ? { kra: lever.kra, target: lever.target, gain: lever.gain } : null,
+      climb: f && f.direction === 'up' ? { soFar: f.soFar, recent: f.recent } : null,
+      team: teamStanding,
+      // What the opening line has already said. With nothing waiting,
+      // Cyra leads with the best KRA to work on, and this used to repeat
+      // it word for word two lines below.
+    }, standSeen, nudges.length === 0 && idleOpening
+      ? SAID_BY_IDLE[idleOpening.key] ?? []
+      : [])
+  }, [systemAccount, ranking, kras, history, teamStanding, standSeen, nudges.length, idleOpening])
+
   /*
     The unread mark.
 
@@ -438,12 +459,48 @@ export default function ChatBot() {
     yesterday's. A mark tied to a count would sit there permanently for
     anybody with a standing job, and a badge that is always on is a badge
     nobody looks at.
+
+    The facts Cyra would open with count too, not only the work: a
+    position that has moved is news to the person it moved for, and
+    somebody with nothing outstanding was getting no mark at all.
+
+    Facts, though — not the rotation. The tip and the standing line
+    change with every sitting by design, and marking that as unread
+    would light the button permanently, which is the one thing this is
+    written to avoid.
   */
-  const signature = JSON.stringify(nudges.map(n => [n.key, n.vars]))
+  const signature = JSON.stringify([
+    nudges.map(n => [n.key, n.vars]),
+    ranking?.org_rank ?? null,
+    ranking?.mgr_rank ?? null,
+    teamStanding?.lowest?.id ?? null,
+  ])
   const [seen, setSeen] = useState<string>(() => {
     try { return localStorage.getItem(SEEN_KEY) ?? '' } catch { return '' }
   })
-  const unread = nudges.length > 0 && seen !== signature
+
+  /*
+    The number on the button: the work, plus whatever else Cyra has to
+    say that they have not seen today.
+
+    Work alone left the button blank for everybody who files on time and
+    manages nobody -- and Cyra still had their position for them, and one
+    thing about the app nobody finds by pressing at random. Two messages
+    is "2", the same way everything else in this app counts.
+
+    Read once a day, not once ever. The standing line and the tip both
+    rotate, so tomorrow's are genuinely different; counting them once a
+    day is what keeps the button from being permanently lit, which is the
+    fastest way to teach people to ignore it.
+  */
+  const [readDay, setReadDay] = useState<string>(() => {
+    try { return localStorage.getItem(READ_KEY) ?? '' } catch { return '' }
+  })
+  const newsCount = readDay === dayKey()
+    ? 0
+    : (standing ? 1 : 0) + (tip ? 1 : 0)
+  const waiting = nudges.length + newsCount
+  const unread = seen !== signature || newsCount > 0
 
   /*
     Cyra leaning out, once a day, when something is waiting.
@@ -469,14 +526,18 @@ export default function ChatBot() {
     let lastShown: string | null = null
     try { lastShown = localStorage.getItem(PEEK_KEY) } catch { /* private window */ }
     if (!shouldPeek({
-      things: nudges.length, lastShown, systemAccount, panelOpen: open,
+      things: nudges.length,
+      // Nothing waiting is not nothing to say: a position, or a part of
+      // the app they have never found. See lib/peek.ts.
+      news: !!standing || !!tip,
+      lastShown, systemAccount, panelOpen: open,
     })) return
     const show = setTimeout(() => {
       setPeek(true)
       try { localStorage.setItem(PEEK_KEY, dayKey()) } catch { /* see above */ }
     }, 2_000)
     return () => clearTimeout(show)
-  }, [nudges.length, systemAccount, open])
+  }, [nudges.length, standing, tip, systemAccount, open])
 
   /*
     Greeted by name and told what is waiting.
@@ -536,8 +597,12 @@ export default function ChatBot() {
       }
       return opening
     })
-    try { localStorage.setItem(SEEN_KEY, signature) } catch { /* private window */ }
+    try {
+      localStorage.setItem(SEEN_KEY, signature)
+      localStorage.setItem(READ_KEY, dayKey())
+    } catch { /* private window */ }
     setSeen(signature)
+    setReadDay(dayKey())
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // `lang` is deliberately not a dependency any more. It was here to
     // rebuild the opening in the new language; the opening is keys now,
@@ -723,8 +788,8 @@ export default function ChatBot() {
             onClick={() => { setPeek(false); setOpen(true) }}
             className="btn-press text-left leading-snug"
           >
-            {c(nudges.length === 1 ? 'peek.one' : 'peek.many',
-               { name: firstName, n: nudges.length })}
+            {c(waiting === 1 ? 'peek.one' : 'peek.many',
+               { name: firstName, n: waiting })}
           </button>
           {/* Its own button, and small: dismissing must not be the
               easiest thing to hit on a bubble whose job is to be opened. */}
@@ -742,8 +807,8 @@ export default function ChatBot() {
         <button
           onClick={() => { setPeek(false); setOpen(true) }}
           aria-label={
-            nudges.length
-              ? `Cyra has ${nudges.length} thing${nudges.length === 1 ? '' : 's'} waiting for you`
+            waiting
+              ? `Cyra has ${waiting} thing${waiting === 1 ? '' : 's'} for you`
               : 'Ask Cyra about your KPI'
           }
           className="btn-press fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-shade text-white shadow-lg hover:bg-cyrixRed-600 hover:text-white lg:bottom-6"
@@ -759,17 +824,18 @@ export default function ChatBot() {
             Cyra on Monday and had no reminder of it for the rest of the
             week, which is the one person the badge exists for.
 
-            So the two are split. The number is the work, and it clears
-            when the work is done. The ring is the news, and it clears
-            when they have looked.
+            So the two are split. The number is the work and today's
+            news: the work part clears when the work is done, the news
+            part when they have opened the panel today. The ring is
+            whether any of it is unread, and clears when they look.
           */}
-          {nudges.length > 0 && (
+          {waiting > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center">
               {unread && (
                 <span className="animate-alert-ping absolute inline-flex h-full w-full rounded-full bg-cyrixRed-600" />
               )}
               <span className="relative flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-canvas bg-cyrixRed-600 px-1 text-[10px] font-bold leading-none text-white">
-                {nudges.length}
+                {waiting}
               </span>
             </span>
           )}

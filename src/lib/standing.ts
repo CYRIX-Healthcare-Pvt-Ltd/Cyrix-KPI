@@ -172,9 +172,30 @@ export function standingLines(ctx: StandingContext): StandingLine[] {
  * different things rather than the same sentence fourteen times. Same
  * counter idea as the tips, and a separate counter so the two do not
  * step over each other.
+ *
+ * `already` is what the opening line has said this time. With nothing
+ * outstanding, Cyra opens by offering the best KRA to work on — and the
+ * standing line offered the same KRA and the same figure directly
+ * underneath it. Two of the three sentences in the panel were one
+ * sentence.
+ *
+ * The fact is taken away rather than the line: without the lever, the
+ * rank line states the position on its own, which is still worth saying
+ * and is no longer a repeat. Dropping the line outright would have cost
+ * somebody with nothing waiting their position altogether — and they are
+ * the reader with the least else to see.
  */
-export function pickStanding(ctx: StandingContext, seen: number): StandingLine | null {
-  const list = standingLines(ctx)
+export function pickStanding(
+  ctx: StandingContext,
+  seen: number,
+  already: readonly string[] = [],
+): StandingLine | null {
+  const spent: StandingContext = {
+    ...ctx,
+    lever: already.includes('stand.ranklever') ? null : ctx.lever,
+    climb: already.includes('stand.climb') ? null : ctx.climb,
+  }
+  const list = standingLines(spent).filter(line => !already.includes(line.key))
   if (list.length === 0) return null
   return list[Math.max(0, Math.floor(seen)) % list.length]
 }

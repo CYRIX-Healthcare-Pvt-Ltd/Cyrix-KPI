@@ -142,3 +142,23 @@ describe('what Cyra says about where you stand', () => {
       .toBeNull()
   })
 })
+
+describe('not saying the same thing twice', () => {
+  it('keeps the position but drops the lever the opening already used', () => {
+    // Nothing waiting: Cyra opens with the best KRA to work on, so the
+    // standing line must not offer the same KRA and figure again — but
+    // the position itself is still worth saying.
+    expect(pickStanding(member, 0)?.key).toBe('stand.ranklever')
+    const line = pickStanding(member, 0, ['stand.ranklever'])
+    expect(line?.key).toBe('stand.rank')
+    expect(line?.vars).toEqual({ rank: 42, of: 177 })
+  })
+
+  it('says nothing rather than repeating, when that was the only line', () => {
+    const climber: StandingContext = {
+      rank: null, of: null, lever: null, climb: { soFar: 68, recent: 80 }, team: null,
+    }
+    expect(pickStanding(climber, 0)?.key).toBe('stand.climb')
+    expect(pickStanding(climber, 0, ['stand.climb'])).toBeNull()
+  })
+})
