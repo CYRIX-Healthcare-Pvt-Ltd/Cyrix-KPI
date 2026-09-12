@@ -136,8 +136,21 @@ const SAID_BY_IDLE: Record<string, string[]> = {
   'nudge.planlever': ['stand.ranklever'],
   'nudge.planclimb': ['stand.climb'],
 }
-/** The day the bubble last leaned out. One a day, at most. See lib/peek. */
+/** The day the bubble was last put away with the ×. See lib/peek. */
 const PEEK_KEY = 'cyrix.cyra.peek'
+
+/**
+ * Per person, not per device.
+ *
+ * A service floor shares phones, and a manager signs into their own
+ * account on somebody else's handset. With one key per browser, the
+ * first person to read Cyra marked her read for everybody who used that
+ * phone afterwards — the bubble never leaned out for them and their
+ * count cleared itself. lib/seenHelp keys by employee for exactly this
+ * reason; these had not caught up.
+ */
+const mine = (base: string, employeeId: string | undefined) =>
+  employeeId ? `${base}.${employeeId}` : base
 
 /** English on purpose: they are the names on the tabs the answer comes from. */
 const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
@@ -224,21 +237,21 @@ export default function ChatBot() {
     and skip a tip every time in development.
   */
   const [tipSeen] = useState(() => {
-    try { return Number(localStorage.getItem(TIP_KEY) ?? '0') || 0 } catch { return 0 }
+    try { return Number(localStorage.getItem(mine(TIP_KEY, employee?.id)) ?? '0') || 0 } catch { return 0 }
   })
 
   const [standSeen] = useState(() => {
-    try { return Number(localStorage.getItem(STAND_KEY) ?? '0') || 0 } catch { return 0 }
+    try { return Number(localStorage.getItem(mine(STAND_KEY, employee?.id)) ?? '0') || 0 } catch { return 0 }
   })
 
   useEffect(() => {
     try {
-      if (sessionStorage.getItem(TIP_SESSION)) return
-      sessionStorage.setItem(TIP_SESSION, '1')
-      localStorage.setItem(TIP_KEY, String(tipSeen + 1))
-      localStorage.setItem(STAND_KEY, String(standSeen + 1))
+      if (sessionStorage.getItem(mine(TIP_SESSION, employee?.id))) return
+      sessionStorage.setItem(mine(TIP_SESSION, employee?.id), '1')
+      localStorage.setItem(mine(TIP_KEY, employee?.id), String(tipSeen + 1))
+      localStorage.setItem(mine(STAND_KEY, employee?.id), String(standSeen + 1))
     } catch { /* private window, or storage switched off */ }
-  }, [tipSeen, standSeen])
+  }, [tipSeen, standSeen, employee?.id])
 
   /**
    * What to open with when nothing is waiting.
@@ -476,7 +489,7 @@ export default function ChatBot() {
     teamStanding?.lowest?.id ?? null,
   ])
   const [seen, setSeen] = useState<string>(() => {
-    try { return localStorage.getItem(SEEN_KEY) ?? '' } catch { return '' }
+    try { return localStorage.getItem(mine(SEEN_KEY, employee?.id)) ?? '' } catch { return '' }
   })
 
   /*
@@ -494,7 +507,7 @@ export default function ChatBot() {
     fastest way to teach people to ignore it.
   */
   const [readDay, setReadDay] = useState<string>(() => {
-    try { return localStorage.getItem(READ_KEY) ?? '' } catch { return '' }
+    try { return localStorage.getItem(mine(READ_KEY, employee?.id)) ?? '' } catch { return '' }
   })
   const newsCount = readDay === dayKey()
     ? 0
@@ -517,27 +530,31 @@ export default function ChatBot() {
     It timed itself out after twelve seconds first, which is fine for
     somebody already looking at the screen and useless for everybody
     else: a phone put down for half a minute came back to nothing, which
-    is the exact failure the bubble exists to fix. The day is marked as
-    soon as it appears, so this is once a day however long it waits.
+    is the exact failure the bubble exists to fix.
+
+    It follows what is unread rather than the calendar, so it is still
+    there on the next screen if they have not looked — and gone the
+    moment they have. See lib/peek.ts.
   */
+  useEffect(() => {
+    try {
+      setSeen(localStorage.getItem(mine(SEEN_KEY, employee?.id)) ?? '')
+      setReadDay(localStorage.getItem(mine(READ_KEY, employee?.id)) ?? '')
+    } catch { /* private window */ }
+  }, [employee?.id])
+
   const [peek, setPeek] = useState(false)
 
   useEffect(() => {
-    let lastShown: string | null = null
-    try { lastShown = localStorage.getItem(PEEK_KEY) } catch { /* private window */ }
-    if (!shouldPeek({
-      things: nudges.length,
-      // Nothing waiting is not nothing to say: a position, or a part of
-      // the app they have never found. See lib/peek.ts.
-      news: !!standing || !!tip,
-      lastShown, systemAccount, panelOpen: open,
-    })) return
-    const show = setTimeout(() => {
-      setPeek(true)
-      try { localStorage.setItem(PEEK_KEY, dayKey()) } catch { /* see above */ }
-    }, 2_000)
+    let dismissed: string | null = null
+    try { dismissed = localStorage.getItem(mine(PEEK_KEY, employee?.id)) } catch { /* private window */ }
+    if (!shouldPeek({ waiting, unread, dismissed, systemAccount, panelOpen: open })) {
+      setPeek(false)
+      return
+    }
+    const show = setTimeout(() => setPeek(true), 2_000)
     return () => clearTimeout(show)
-  }, [nudges.length, standing, tip, systemAccount, open])
+  }, [waiting, unread, systemAccount, open, employee?.id])
 
   /*
     Greeted by name and told what is waiting.
@@ -598,8 +615,8 @@ export default function ChatBot() {
       return opening
     })
     try {
-      localStorage.setItem(SEEN_KEY, signature)
-      localStorage.setItem(READ_KEY, dayKey())
+      localStorage.setItem(mine(SEEN_KEY, employee?.id), signature)
+      localStorage.setItem(mine(READ_KEY, employee?.id), dayKey())
     } catch { /* private window */ }
     setSeen(signature)
     setReadDay(dayKey())
@@ -794,7 +811,12 @@ export default function ChatBot() {
           {/* Its own button, and small: dismissing must not be the
               easiest thing to hit on a bubble whose job is to be opened. */}
           <button
-            onClick={() => setPeek(false)}
+            onClick={() => {
+              setPeek(false)
+              try {
+                localStorage.setItem(mine(PEEK_KEY, employee?.id), dayKey())
+              } catch { /* private window */ }
+            }}
             aria-label="Not now"
             className="-mt-0.5 shrink-0 rounded-lg p-1 text-white/50 hover:bg-white/10 hover:text-white"
           >

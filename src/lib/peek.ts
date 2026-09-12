@@ -7,17 +7,26 @@
  * when something is genuinely waiting, the panel puts a sentence on the
  * screen instead — the one thing a badge cannot do.
  *
- * Once a day is the whole design. A bubble on every page view is an
- * advert, and people learn to close adverts without reading them; a
- * bubble that appears when there is nothing to say is a lie. So it needs
- * both: something to say, and not already said today.
+ * Unread is the rule, not the calendar.
  *
- * "Something to say" is not only outstanding work. Somebody who has
- * filed every month and manages nobody has nothing waiting and never saw
- * the bubble at all -- which is exactly the person who never discovered
- * the panel, and Cyra still has their position and a thing they did not
- * know about to show them. Work makes it urgent; news makes it worth
- * opening. Both get a bubble, and the wording says which it is.
+ * It was once a day first, and once a day is wrong in both directions: a
+ * person who never opens the panel gets nothing further that day however
+ * much arrives, and two people sharing a phone share the day between
+ * them -- the second one to sign in was told nothing at all, because the
+ * first one's bubble had used the day up.
+ *
+ * So it leans out while there is something unread, and stops the moment
+ * the panel is opened, because opening it is reading it. That cannot
+ * nag: the only way to keep seeing it is to keep not looking.
+ *
+ * The × is the other limit. Somebody who has decided against it should
+ * not be asked again on the next screen, so a dismissal stands for the
+ * rest of that day, on that person's own key.
+ *
+ * "Something" is not only outstanding work. Somebody who files every
+ * month and manages nobody has nothing waiting and saw no bubble at all
+ * -- which is exactly the person who never found the panel, and Cyra
+ * still has their position and something they did not know to show them.
  */
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -33,12 +42,12 @@ export const dayKey = (now: Date = new Date()): string =>
   `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 
 export interface PeekInput {
-  /** How many things are waiting on this person. */
-  things: number
-  /** Cyra has a position or a fact for them, even with nothing waiting. */
-  news?: boolean
-  /** The day it last leaned out, as stored. Null when never. */
-  lastShown: string | null
+  /** Everything Cyra has for them: the work, and today's news. */
+  waiting: number
+  /** Any of it new since they last opened the panel. */
+  unread: boolean
+  /** The day they last put the bubble away, as stored. Null when never. */
+  dismissed: string | null
   /** Shared logins have nobody to greet. */
   systemAccount?: boolean
   /** Nothing to announce while the panel is already open. */
@@ -48,6 +57,6 @@ export interface PeekInput {
 
 export function shouldPeek(opts: PeekInput): boolean {
   if (opts.systemAccount || opts.panelOpen) return false
-  if (opts.things <= 0 && !opts.news) return false
-  return opts.lastShown !== dayKey(opts.now ?? new Date())
+  if (opts.waiting <= 0 || !opts.unread) return false
+  return opts.dismissed !== dayKey(opts.now ?? new Date())
 }
