@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   bandFor, attainmentPct, BANDS, BAND_SCALE, bandScaleGradient, teamBandShare,
-  teamAverages,
+  teamAverages, bandOfRating,
 } from './bands'
+import { ratingToPoints } from './scoring'
 
 /**
  * A score below the total is out of its own weightage, and the band has
@@ -340,5 +341,29 @@ describe("a team's average, per manager, from one reporting line", () => {
 
   it('ignores rows at the top of the line, which report to nobody', () => {
     expect(teamAverages([row(null, 'scored', 90)]).size).toBe(0)
+  })
+})
+
+describe('bandOfRating — a rating label wears its own band', () => {
+  it('matches every rating on the scale', () => {
+    expect(bandOfRating('Excellent')?.key).toBe('excellent')
+    expect(bandOfRating('Very Good')?.key).toBe('veryGood')
+    expect(bandOfRating('Good')?.key).toBe('good')
+    expect(bandOfRating('Satisfactory')?.key).toBe('satisfactory')
+    expect(bandOfRating('Poor')?.key).toBe('poor')
+  })
+
+  it('does not go through the points, which would demote two of them', () => {
+    // Very Good is 80 and the slab is "above 80", so the numbers make it
+    // a Good; Satisfactory is 40 and would come back Poor. The label is
+    // what the manager chose, so the label is what is matched.
+    expect(bandOfRating('Very Good')?.label).toBe('Very Good')
+    expect(bandFor(ratingToPoints('Very Good'))?.key).not.toBe('veryGood')
+  })
+
+  it('has nothing to say about an unrated row', () => {
+    expect(bandOfRating(null)).toBeNull()
+    expect(bandOfRating(undefined)).toBeNull()
+    expect(bandOfRating('Outstanding')).toBeNull()
   })
 })

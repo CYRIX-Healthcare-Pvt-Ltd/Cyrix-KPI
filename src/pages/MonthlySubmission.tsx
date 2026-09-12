@@ -22,6 +22,7 @@ import {
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
+import { bandOfRating } from '@/lib/bands'
 import type { KpiSubmissionItem, ScoreQueryState, Alternate } from '@/types/db'
 
 export default function MonthlySubmission() {
@@ -586,9 +587,20 @@ export default function MonthlySubmission() {
         <div className="divide-y divide-ink-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
+            /*
+              Changed from WHAT, though.
+
+              Nobody rates their own core values any more — 0095 made the
+              manager's figure the score and the dropdown came off — so
+              self_rating is null on 3,505 of the 3,970 rated rows in the
+              year, and every one of them was being marked "changed"
+              against a rating that was never given. Genuinely changed,
+              across the whole company and all five months: 53.
+            */
             const differs =
               isScored &&
               rating.manager_rating !== null &&
+              rating.self_rating !== null &&
               rating.manager_rating !== rating.self_rating
 
             return (
@@ -625,21 +637,34 @@ export default function MonthlySubmission() {
                   </div>
                 )}
 
-                {/* The manager's verdict. Highlighted when it differs from
-                    the self rating, since that is the useful signal. */}
+                {/*
+                  The manager's verdict, in the colour that verdict has
+                  everywhere else on the site.
+
+                  It used to be red whenever it differed from the self
+                  rating, which meant a Very Good — four of five, a good
+                  month — was shown to the person in the same red the app
+                  uses for Poor. Difference is not badness, and the app
+                  already has one language for how good a thing is: the
+                  band. So the chip carries the band and the word carries
+                  the difference, which is the pair of facts the row is
+                  actually reporting.
+                */}
                 {isScored && (
                   <div className="mt-2 sm:mt-0 sm:w-40">
                     <p className="mb-1 text-xs text-ink-400 sm:hidden">Manager's rating</p>
                     <div
-                      className={`rounded-lg px-3 py-2 text-sm ${
-                        differs
-                          ? 'bg-cyrixRed-50 font-medium text-cyrixRed-800 ring-1 ring-cyrixRed-200'
-                          : 'bg-ink-50 text-ink-700'
-                      }`}
+                      className={clsx(
+                        'rounded-lg px-3 py-2 text-sm font-medium',
+                        bandOfRating(rating.manager_rating)?.chip
+                          ?? 'bg-ink-50 font-normal text-ink-500',
+                      )}
                     >
                       {rating.manager_rating ?? 'Not rated'}
                       {differs && (
-                        <span className="ml-1.5 text-xs font-normal">changed</span>
+                        <span className="ml-1.5 text-xs font-normal opacity-75">
+                          changed
+                        </span>
                       )}
                     </div>
                   </div>

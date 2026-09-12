@@ -199,6 +199,18 @@ const BAND_OF_RATING: Record<Rating, BandKey> = {
   5: 'excellent', 4: 'veryGood', 3: 'good', 2: 'satisfactory', 1: 'poor',
 }
 
+/**
+ * The band a core-value rating names.
+ *
+ * The two vocabularies are the same five words on purpose — RATING_SCALE
+ * in scoring.ts and BANDS here — so a rating is matched by its label
+ * rather than by running its points back through the slab. Excellent is
+ * 100 and Very Good is 80, and 80 is not above 80: through the numbers,
+ * a rating a manager chose as "Very Good" would come back Good.
+ */
+export const bandOfRating = (label: string | null | undefined): Band | null =>
+  BANDS.find(b => b.label === label) ?? null
+
 export function bandFor(pct: number | null | undefined): Band | null {
   const rating = ratingFor(pct)
   if (rating === null) return null
