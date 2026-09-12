@@ -4,11 +4,13 @@ import clsx from 'clsx'
 import {
   ArrowLeft, Plus, Upload, Trash2, Pencil, Save, X, FileSpreadsheet,
   Copy, Users, Building2, Info, UserPlus, Check, AlertTriangle, Search,
+  Sparkles,
 } from 'lucide-react'
 import {
   useVisibleTemplates, useTemplateItems, useSaveTemplate,
-  useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate, currentFy,
-  type AssignOutcome, type TemplateReach,
+  useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate,
+  useSharedKpiGroups, useNameSharedKpi, currentFy,
+  type AssignOutcome, type TemplateReach, type SharedKpiGroup,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
 import { findDuplicate, type ComparableRow } from '@/lib/templates'
@@ -79,6 +81,9 @@ export default function TeamTemplates() {
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  /* Not while the editor is open: the list behind it is not on screen. */
+  const { data: shared } = useSharedKpiGroups(fy, !editing)
 
   /*
     Name or keeper, one box for both.
@@ -351,6 +356,40 @@ export default function TeamTemplates() {
                 />
               ))}
 
+              {/*
+                The KPIs your people already share, waiting for a name.
+
+                This is the first thing to do on this screen and the
+                reason it exists: 719 of the company's 773 active KPIs
+                are one of thirty-one shapes, and five of them are
+                linked to a template. Naming one changes nobody's rows —
+                it writes the link that was never there, and after that
+                one edit reaches all of them.
+              */}
+              {(shared ?? []).length > 0 && (
+                <section className="space-y-2">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
+                      <Sparkles className="h-4 w-4 text-violet-600" />
+                      Already shared, not named
+                      <span className="badge bg-violet-100 text-violet-800">
+                        {(shared ?? []).length}
+                      </span>
+                    </h2>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      These people are already on the same KPI — same KRAs,
+                      weightages and scoring. Name it and one edit reaches all
+                      of them. Nobody's rows change.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(shared ?? []).map(g => (
+                      <SharedGroupCard key={g.shape} group={g} fy={fy} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <TemplateGroup
                 title="Mine"
                 hint="Templates you wrote. Yours to change, rename and hand out."
@@ -570,6 +609,82 @@ function TemplateGroup({
         })}
       </div>
     </section>
+  )
+}
+
+/**
+ * One shape several people are already on, and the box to name it.
+ *
+ * The name is pre-filled from what those people are mostly called,
+ * because "Jr.Biomedical Engineer" is right forty-five times out of
+ * forty-five and typing it is the only work left. Editable, since the
+ * one case it gets wrong is a group of eleven engineers and one
+ * district in-charge.
+ */
+function SharedGroupCard({ group, fy }: { group: SharedKpiGroup; fy: string }) {
+  const name = useNameSharedKpi()
+  const [value, setValue] = useState(group.suggested_name)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<number | null>(null)
+
+  const run = async () => {
+    setError(null)
+    try {
+      const out = await name.mutateAsync({ shape: group.shape, name: value.trim(), fy })
+      setDone(out.people)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not name that one.')
+    }
+  }
+
+  if (done !== null) {
+    return (
+      <div className="card flex items-center gap-2.5 border-emerald-200 bg-emerald-50/40 p-4">
+        <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+        <p className="text-sm text-ink-700">
+          <span className="font-medium text-ink-900">“{value.trim()}”</span> now covers{' '}
+          {done} {done === 1 ? 'person' : 'people'}. It is in Mine, below.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <p className="font-medium text-ink-900">
+          {group.people} people on the same {group.row_count}-row KPI
+        </p>
+        {group.designations && (
+          <p className="text-xs text-ink-500">{group.designations}</p>
+        )}
+      </div>
+      {group.examples && (
+        <p className="text-xs text-ink-400">e.g. {group.examples}</p>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <label htmlFor={`name-${group.shape}`} className="label">
+            Call it
+          </label>
+          <input
+            id={`name-${group.shape}`}
+            className="input max-w-sm"
+            value={value}
+            onChange={e => setValue(e.target.value.slice(0, 60))}
+          />
+        </div>
+        <button
+          onClick={run}
+          disabled={!value.trim() || name.isPending}
+          className="btn-primary"
+        >
+          {name.isPending ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+          Name it
+        </button>
+      </div>
+      {error && <Alert kind="error">{error}</Alert>}
+    </div>
   )
 }
 

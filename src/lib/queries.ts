@@ -504,6 +504,55 @@ export function usePushTemplate() {
   })
 }
 
+export interface SharedKpiGroup {
+  shape: string
+  people: number
+  row_count: number
+  suggested_name: string
+  designations: string | null
+  examples: string | null
+}
+
+/**
+ * KPI shapes several of your people already share and nobody has named.
+ *
+ * The company works in templates and has not written any down: 719 of
+ * 773 active KPIs are one of thirty-one shapes. This is the list of them
+ * for one manager's team.
+ */
+export function useSharedKpiGroups(fy: string, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['shared_kpi_groups', fy],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('shared_kpi_groups', { p_fy: fy })
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as SharedKpiGroup[]
+    },
+  })
+}
+
+/** Names one, and links everybody on it. Changes nobody's rows. */
+export function useNameSharedKpi() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { shape: string; name: string; fy: string }) => {
+      const { data, error } = await supabase.rpc('template_from_shared', {
+        p_shape: args.shape,
+        p_name: args.name,
+        p_fy: args.fy,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as { template_id: string; template: string; people: number }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['shared_kpi_groups'] })
+      qc.invalidateQueries({ queryKey: ['template_items'] })
+    },
+  })
+}
+
 /** Removes a template from the list, leaving everybody's KPI alone. */
 export function useArchiveTemplate() {
   const qc = useQueryClient()
