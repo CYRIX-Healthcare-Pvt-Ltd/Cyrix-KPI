@@ -205,6 +205,13 @@ export interface VisibleTemplate {
    * people's year.
    */
   in_use: number
+  /**
+   * How many of MY OWN people are on it — migration 0130. The reason a
+   * template owned two levels up appears in a manager's list at all,
+   * and the difference between "250 people carry this" and "132 of them
+   * are yours".
+   */
+  on_my_team: number
 }
 
 /** Shared shape of a KPI row across templates, assignments and submissions. */

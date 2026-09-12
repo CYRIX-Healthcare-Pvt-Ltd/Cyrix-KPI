@@ -528,7 +528,12 @@ function TemplateGroup({
                   {Number(t.in_use) > 0 && (
                     <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-ink-600">
                       <Users className="h-3 w-3 text-ink-400" />
-                      {t.in_use} {Number(t.in_use) === 1 ? 'person' : 'people'} on this
+                      {/* Two numbers when they differ, because they mean
+                          different things: an edit reaches all 250, and
+                          132 of them are this manager's problem. */}
+                      {Number(t.on_my_team) > 0 && Number(t.on_my_team) < Number(t.in_use)
+                        ? `${t.on_my_team} of your team · ${t.in_use} in all`
+                        : `${t.in_use} ${Number(t.in_use) === 1 ? 'person' : 'people'} on this`}
                     </p>
                   )}
                 </button>
