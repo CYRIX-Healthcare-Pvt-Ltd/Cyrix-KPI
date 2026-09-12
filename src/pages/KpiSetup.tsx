@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   Upload, Download, FileSpreadsheet, Plus, ArrowLeft, Send, Save, Lock, X,
+  Search,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -57,6 +58,17 @@ export default function KpiSetup() {
   const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null)
   /** True while the list of templates is open. */
   const [picking, setPicking] = useState(false)
+  const [hunt, setHunt] = useState('')
+  /* Name or keeper, case-insensitive, trimmed — one box for both. */
+  const shown = useMemo(() => {
+    const q = hunt.trim().toLowerCase()
+    const all = templates ?? []
+    if (!q) return all
+    return all.filter(t =>
+      t.name.toLowerCase().includes(q)
+      || (t.owner_name ?? '').toLowerCase().includes(q)
+      || (t.owner_ecode ?? '').toLowerCase().includes(q))
+  }, [templates, hunt])
 
   const assignment = data?.assignment ?? null
   const locked = assignment?.status === 'pending_approval' || assignment?.status === 'active'
@@ -392,7 +404,34 @@ export default function KpiSetup() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          {(templates ?? []).map(t => (
+          {/*
+            A search box once there are more than a handful.
+
+            The list is every template at or below the person's manager,
+            which for a new joiner in a big division is not a list you
+            scroll — and the thing they are looking for is usually the
+            one whose name matches their designation. Matches the keeper
+            too: "Engineer" under three managers is normal, and which
+            manager keeps it is how you tell them apart.
+          */}
+          {(templates ?? []).length > 5 && (
+            <div className="relative px-4 py-2.5">
+              <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+              <input
+                className="input pl-9"
+                value={hunt}
+                onChange={e => setHunt(e.target.value)}
+                placeholder="Search by name or who keeps it"
+                aria-label="Search templates"
+              />
+            </div>
+          )}
+          {shown.length === 0 && (
+            <p className="px-4 py-6 text-center text-sm text-ink-500">
+              No template matches “{hunt.trim()}”.
+            </p>
+          )}
+          {shown.map(t => (
             <button
               key={t.id}
               onClick={() => loadTemplate(t)}

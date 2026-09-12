@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, Plus, Upload, Trash2, Pencil, Save, X, FileSpreadsheet,
-  Copy, Users, Building2, Info,
+  Copy, Users, Building2, Info, UserPlus, Check, AlertTriangle, Search,
 } from 'lucide-react'
 import {
   useVisibleTemplates, useTemplateItems, useSaveTemplate, useDeleteTemplate,
-  useScoringRules, currentFy,
+  useScoringRules, useApplyTemplate, currentFy,
+  type AssignOutcome,
 } from '@/lib/queries'
+import { parseEcodes } from '@/lib/ecodes'
 import { findDuplicate, type ComparableRow } from '@/lib/templates'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
@@ -62,13 +64,54 @@ export default function TeamTemplates() {
     { id: string | null; name: string; rows: Draft[] } | null
   >(null)
   const [confirmDelete, setConfirmDelete] = useState<VisibleTemplate | null>(null)
+  const [assigning, setAssigning] = useState<VisibleTemplate | null>(null)
+  const [hunt, setHunt] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const mine = (templates ?? []).filter(t => t.is_mine)
-  const inherited = (templates ?? []).filter(t => !t.is_mine && !t.is_company)
-  const company = (templates ?? []).filter(t => t.is_company)
+  /*
+    Name or keeper, one box for both.
+
+    The list is everything under this person's own manager, which for a
+    division head is dozens: "Engineer" kept by four different managers,
+    and the one you want is the one whose name you already know.
+  */
+  const shown = useMemo(() => {
+    const q = hunt.trim().toLowerCase()
+    const all = templates ?? []
+    if (!q) return all
+    return all.filter(t =>
+      t.name.toLowerCase().includes(q)
+      || (t.owner_name ?? '').toLowerCase().includes(q)
+      || (t.owner_ecode ?? '').toLowerCase().includes(q))
+  }, [templates, hunt])
+
+  const mine = shown.filter(t => t.is_mine)
+  const company = shown.filter(t => t.is_company)
+
+  /*
+    Everybody else's, grouped under the manager who keeps them.
+
+    One flat list said "kept by" on every row and left the reader to do
+    the grouping in their head — and the question being asked of this
+    screen is "what does Adrian give his engineers", which is a question
+    about a person.
+  */
+  const keepers = useMemo(() => {
+    const groups = new Map<
+      string, { name: string; ecode: string | null; list: VisibleTemplate[] }
+    >()
+    for (const t of shown) {
+      if (t.is_mine || t.is_company) continue
+      const key = t.owner_id ?? 'unknown'
+      const g = groups.get(key)
+        ?? { name: t.owner_name ?? 'A manager', ecode: t.owner_ecode, list: [] }
+      g.list.push(t)
+      groups.set(key, g)
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [shown])
 
   /** Every template's rows, in the shape the duplicate check compares. */
   const existing = useMemo(
@@ -214,11 +257,15 @@ export default function TeamTemplates() {
             <div className="text-ink-600">
               <p className="font-medium text-ink-900">Who sees these</p>
               <p className="mt-1">
-                Everybody below you in the reporting line, not only your direct
-                reports — so a template you write here reaches the people who
-                report to <em>them</em> as well. They pick it on their own
-                setup screen, adjust their targets, and send it to their
-                manager as usual.
+                Everything kept by anyone under your own manager — yours, your
+                colleagues' at the same level, and everything below them. Not
+                your own manager's, which is written for their job rather than
+                for the people you look after.
+              </p>
+              <p className="mt-1.5">
+                Yours are yours to change. Everybody else's are here to use:
+                open one to keep your own copy, or hand it straight to people
+                with <span className="font-medium text-ink-800">Assign to</span>.
               </p>
               <p className="mt-1.5">
                 Targets come along as a starting point. Everything else — the
@@ -235,27 +282,61 @@ export default function TeamTemplates() {
             </EmptyState>
           ) : (
             <div className="space-y-5">
+              {/* Worth a box only once the list is long enough to scroll. */}
+              {(templates ?? []).length > 6 && (
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                  <input
+                    className="input pl-9"
+                    value={hunt}
+                    onChange={e => setHunt(e.target.value)}
+                    placeholder="Search by name or who keeps it"
+                    aria-label="Search templates"
+                  />
+                </div>
+              )}
+              {hunt.trim() && shown.length === 0 && (
+                <EmptyState icon={Search} title="Nothing matches that">
+                  No template's name or keeper contains “{hunt.trim()}”.
+                </EmptyState>
+              )}
+
+              {/* One section per manager, rather than one list with
+                  "kept by" repeated down the side of it. */}
+              {keepers.map(g => (
+                <TemplateGroup
+                  key={g.ecode ?? g.name}
+                  title={g.name}
+                  hint={`${g.ecode ? `${g.ecode} · ` : ''}theirs to change, yours to use`}
+                  icon={Copy}
+                  templates={g.list}
+                  items={itemsByTemplate}
+                  preview={preview}
+                  onPreview={id => setPreview(preview === id ? null : id)}
+                  onEdit={startFrom}
+                  onAssign={setAssigning}
+                  assigningId={assigning?.id ?? null}
+                  fy={fy}
+                  onCloseAssign={() => setAssigning(null)}
+                />
+              ))}
+
               <TemplateGroup
                 title="Mine"
-                hint="Yours to change. Everybody below you can use them."
+                hint="Templates you wrote. Yours to change, rename and hand out."
                 icon={Users}
                 templates={mine}
                 items={itemsByTemplate}
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
+                onAssign={setAssigning}
+                assigningId={assigning?.id ?? null}
+                fy={fy}
+                onCloseAssign={() => setAssigning(null)}
                 onDelete={setConfirmDelete}
               />
-              <TemplateGroup
-                title="From my managers"
-                hint="Written above you in the line. Open one to keep your own version of it."
-                icon={Copy}
-                templates={inherited}
-                items={itemsByTemplate}
-                preview={preview}
-                onPreview={id => setPreview(preview === id ? null : id)}
-                onEdit={startFrom}
-              />
+
               <TemplateGroup
                 title="Company"
                 hint="HR's, for your job role."
@@ -265,7 +346,12 @@ export default function TeamTemplates() {
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
+                onAssign={setAssigning}
+                assigningId={assigning?.id ?? null}
+                fy={fy}
+                onCloseAssign={() => setAssigning(null)}
               />
+
             </div>
           )}
         </>
@@ -299,7 +385,8 @@ export default function TeamTemplates() {
 }
 
 function TemplateGroup({
-  title, hint, icon: Icon, templates, items, preview, onPreview, onEdit, onDelete,
+  title, hint, icon: Icon, templates, items, preview, onPreview, onEdit,
+  onAssign, onDelete, assigningId, fy, onCloseAssign,
 }: {
   title: string
   hint: string
@@ -309,7 +396,12 @@ function TemplateGroup({
   preview: string | null
   onPreview: (id: string) => void
   onEdit: (t: VisibleTemplate) => void
+  onAssign?: (t: VisibleTemplate) => void
   onDelete?: (t: VisibleTemplate) => void
+  /** Which row has the paste box open, so it opens where it was asked for. */
+  assigningId?: string | null
+  fy?: string
+  onCloseAssign?: () => void
 }) {
   if (templates.length === 0) return null
 
@@ -350,9 +442,29 @@ function TemplateGroup({
                         : ` · kept by ${t.owner_name ?? 'a manager'}${t.owner_ecode ? ` (${t.owner_ecode})` : ''}`}
                     {total !== JOB_ROLE_TOTAL && ` · totals ${total}%`}
                   </p>
+                  {/*
+                    How many people are on it, which is the fact that
+                    turns an edit from a correction into an event. Said
+                    plainly and only when it is not nought: "0 people" on
+                    a template written five minutes ago is noise.
+                  */}
+                  {Number(t.in_use) > 0 && (
+                    <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-ink-600">
+                      <Users className="h-3 w-3 text-ink-400" />
+                      {t.in_use} {Number(t.in_use) === 1 ? 'person' : 'people'} on this
+                    </p>
+                  )}
                 </button>
 
                 <div className="flex shrink-0 gap-1.5">
+                  {onAssign && (
+                    <button
+                      onClick={() => onAssign(t)}
+                      className="btn-primary !px-2.5 !py-1.5 text-xs"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" /> Assign to
+                    </button>
+                  )}
                   <button
                     onClick={() => onEdit(t)}
                     className="btn-secondary !px-2.5 !py-1.5 text-xs"
@@ -372,6 +484,16 @@ function TemplateGroup({
                   )}
                 </div>
               </div>
+
+              {/* Under the row it belongs to, not at the foot of the
+                  page: the panel opened three templates away from the
+                  button that opened it, and the first thing anybody did
+                  was scroll back up to check which one they had hit. */}
+              {assigningId === t.id && fy && onCloseAssign && (
+                <div className="border-t border-violet-200 bg-violet-50/40 p-3">
+                  <AssignPanel template={t} fy={fy} onClose={onCloseAssign} />
+                </div>
+              )}
 
               {open && (
                 <div className="overflow-x-auto border-t border-ink-100">
@@ -410,6 +532,165 @@ function TemplateGroup({
         })}
       </div>
     </section>
+  )
+}
+
+/**
+ * Handing a template to a list of people.
+ *
+ * A paste box rather than a picker of checkboxes, because the list
+ * already exists somewhere else: in a WhatsApp message, a column of an
+ * Excel sheet, an email from HR. Twelve codes pasted in one go is the
+ * whole job; twelve checkboxes hunted down a list of two hundred is
+ * somebody's afternoon.
+ *
+ * Separators are not the person's problem — commas, spaces, newlines,
+ * tabs, semicolons, any mixture — and the prefix is kept because E, CT
+ * and FTC are all real codes.
+ *
+ * What comes back is per code, never a single failure. A list of twenty
+ * with one typo in it assigns nineteen and says which one was wrong,
+ * because the alternative is somebody re-pasting the whole list to find
+ * out.
+ */
+function AssignPanel({
+  template, fy, onClose,
+}: {
+  template: VisibleTemplate
+  fy: string
+  onClose: () => void
+}) {
+  const apply = useApplyTemplate()
+  const [pasted, setPasted] = useState('')
+  const [out, setOut] = useState<AssignOutcome | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const codes = useMemo(() => parseEcodes(pasted), [pasted])
+
+  const run = async () => {
+    setError(null)
+    try {
+      setOut(await apply.mutateAsync({ templateId: template.id, codes, fy }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign that.')
+    }
+  }
+
+  const kept = (out?.results ?? []).filter(r => r.status !== 'skipped')
+  const missed = (out?.results ?? []).filter(r => r.status === 'skipped')
+  const filed = kept.reduce((a, r) => a + (r.filed_months ?? 0), 0)
+
+  return (
+    <div className="card space-y-3 border-violet-200 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-ink-900">
+            Assign “{template.name}” to your team
+          </p>
+          <p className="mt-0.5 text-sm text-ink-500">
+            Paste their employee codes — commas, spaces or one per line, it
+            does not matter. Anyone in your team at any depth; HR's own
+            reach is wider.
+          </p>
+        </div>
+        <button onClick={onClose} className="btn-icon shrink-0" aria-label="Close">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {!out && (
+        <>
+          <textarea
+            className="input min-h-24 font-mono text-sm"
+            value={pasted}
+            onChange={e => setPasted(e.target.value)}
+            placeholder={'E1234, CT616\nFTC23'}
+            aria-label="Employee codes"
+            autoFocus
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={run}
+              disabled={codes.length === 0 || apply.isPending}
+              className="btn-primary"
+            >
+              {apply.isPending ? <Spinner className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+              {codes.length === 0
+                ? 'Paste some codes'
+                : `Assign to ${codes.length} ${codes.length === 1 ? 'person' : 'people'}`}
+            </button>
+            <button onClick={onClose} className="btn-secondary">Cancel</button>
+            {codes.length > 0 && (
+              <span className="text-xs text-ink-400">
+                {codes.slice(0, 6).join(', ')}{codes.length > 6 && ` +${codes.length - 6} more`}
+              </span>
+            )}
+          </div>
+          {/* Said before pressing, not after: this is live the moment it
+              runs, and a manager assigning to their own team is the
+              person who would have approved it anyway. */}
+          <p className="text-xs text-ink-400">
+            Their KPI goes live straight away — no second approval, since it
+            would be yours to give. Months already filed keep the KPI they
+            were assessed on.
+          </p>
+        </>
+      )}
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      {out && (
+        <div className="space-y-3">
+          <p className="text-sm text-ink-700">
+            <span className="font-medium text-ink-900">{out.assigned}</span>
+            {out.assigned === 1 ? ' person is' : ' people are'} on “{out.template}”
+            {out.skipped > 0 && `, ${out.skipped} skipped`}.
+            {filed > 0 && ` ${filed} month${filed === 1 ? '' : 's'} already filed kept what ${
+              kept.length === 1 ? 'it' : 'they'} were assessed on.`}
+          </p>
+
+          {kept.length > 0 && (
+            <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200">
+              {kept.map(r => (
+                <li key={r.code} className="flex items-center gap-2 px-3 py-2 text-sm">
+                  {r.status === 'assigned'
+                    ? <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                    : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />}
+                  <span className="min-w-0 flex-1 truncate text-ink-800">
+                    {r.name ?? r.code}
+                    <span className="ml-1.5 text-xs text-ink-400">{r.code}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-ink-500">
+                    {r.detail ?? `from ${r.starts_from}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {missed.length > 0 && (
+            <ul className="divide-y divide-cyrixRed-100 rounded-lg border border-cyrixRed-200 bg-cyrixRed-50/40">
+              {missed.map(r => (
+                <li key={r.code} className="flex items-center gap-2 px-3 py-2 text-sm">
+                  <X className="h-4 w-4 shrink-0 text-cyrixRed-600" />
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-800">
+                    {r.code}
+                  </span>
+                  <span className="shrink-0 text-xs text-cyrixRed-700">{r.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => { setOut(null); setPasted('') }} className="btn-secondary">
+              Assign to more
+            </button>
+            <button onClick={onClose} className="btn-primary">Done</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

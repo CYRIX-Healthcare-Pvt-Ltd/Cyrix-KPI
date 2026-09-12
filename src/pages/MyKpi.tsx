@@ -44,7 +44,24 @@ export default function MyKpi() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink-900">My KPI</h1>
+          {/*
+            The template this KPI came from, said quietly.
+
+            Deliberately the lightest thing on the line: it is not what
+            the page is about, it is how somebody answers "which one am
+            I on" without opening anything — and the answer is what makes
+            "put the new joiner on the same one" a sentence a manager can
+            act on. Absent for a KPI written by hand, which is most of
+            them, so it never becomes a slot with a dash in it.
+          */}
+          <h1 className="text-xl font-semibold text-ink-900">
+            My KPI
+            {data?.templateName && (
+              <span className="ml-2 text-base font-normal text-ink-300">
+                {data.templateName}
+              </span>
+            )}
+          </h1>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-sm text-ink-500">FY {fy}</span>
             <StatusBadge status={assignment.status} kind="assignment" />
