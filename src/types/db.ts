@@ -198,6 +198,13 @@ export interface VisibleTemplate {
   /** Mine to rename and delete, rather than somebody else's to use. */
   is_mine: boolean
   item_count: number
+  /**
+   * How many people are on this template's KPI this year — migration
+   * 0125. The number that decides whether an edit is a correction or an
+   * event: changing a row on a template 23 people carry changes 23
+   * people's year.
+   */
+  in_use: number
 }
 
 /** Shared shape of a KPI row across templates, assignments and submissions. */

@@ -227,12 +227,28 @@ export function useMyAssignment(employeeId: string | undefined, fy: string) {
           .order('created_at', { ascending: false }).limit(1),
       )
       const assignment = rows[0] ?? null
-      if (!assignment) return { assignment: null, items: [] as KpiAssignmentItem[] }
+      if (!assignment) {
+        return { assignment: null, items: [] as KpiAssignmentItem[], templateName: null }
+      }
       const items = await unwrap<KpiAssignmentItem[]>(
         supabase.from('kpi_assignment_items').select('*')
           .eq('assignment_id', assignment.id).order('sort_order'),
       )
-      return { assignment, items }
+      /*
+        Which template this KPI came from, if it came from one.
+
+        A second small query rather than an embed: source_template_id can
+        point at a template that has since been archived, and an inner
+        join would then hide the whole assignment. The name is a caption,
+        so its absence must cost nothing.
+      */
+      let templateName: string | null = null
+      if (assignment.source_template_id) {
+        const { data } = await supabase.from('kpi_templates')
+          .select('name').eq('id', assignment.source_template_id).maybeSingle()
+        templateName = (data as { name: string } | null)?.name ?? null
+      }
+      return { assignment, items, templateName }
     },
   })
 }
@@ -405,6 +421,60 @@ export function useUseAlternate() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['submission'] })
       qc.invalidateQueries({ queryKey: ['submission_by_id'] })
+    },
+  })
+}
+
+export interface AssignResult {
+  code: string
+  name?: string
+  status: 'assigned' | 'assigned_with_warning' | 'skipped'
+  detail?: string | null
+  starts_from?: string
+  filed_months?: number
+}
+
+export interface AssignOutcome {
+  financial_year: string
+  template: string
+  assigned: number
+  skipped: number
+  results: AssignResult[]
+}
+
+/**
+ * Gives a template to everybody in a list of codes.
+ *
+ * One round trip for the lot: the function reports per code rather than
+ * failing on the first bad one, because a list of twenty pasted codes
+ * with one typo in it should assign nineteen and tell you about the one.
+ */
+export function useApplyTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      templateId: string
+      codes: string[]
+      fy: string
+      startsFrom?: string | null
+    }) => {
+      const { data, error } = await supabase.rpc('apply_template_to', {
+        p_template_id: args.templateId,
+        p_codes: args.codes,
+        p_fy: args.fy,
+        p_starts_from: args.startsFrom ?? null,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as AssignOutcome
+    },
+    onSuccess: () => {
+      // The counts on the templates screen, and every screen that shows
+      // somebody's KPI or their team's months.
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['assignment'] })
+      qc.invalidateQueries({ queryKey: ['team'] })
+      qc.invalidateQueries({ queryKey: ['manager_month_status'] })
+      qc.invalidateQueries({ queryKey: ['pending_approvals'] })
     },
   })
 }
