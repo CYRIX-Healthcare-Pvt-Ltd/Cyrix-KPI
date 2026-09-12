@@ -113,7 +113,7 @@ export default function Shell() {
   )
   const { data: removals } = useRemovalRequests('pending')
   const { data: recordRequests } = usePendingRecordRequests(isManager || isHrAdmin)
-  const { data: openQueries } = useOpenScoreQueries(isManager && !isHrAdmin)
+  const { data: openQueries } = useOpenScoreQueries(isManager && !isHrAdmin, employee?.id)
   const { data: hrTickets } = useOpenTicketCount('hr', isHrAdmin)
 
   // Set here rather than on the dashboard so the tint survives navigation —

@@ -1320,16 +1320,21 @@ export function useScoreQueries(enabled: boolean) {
  * The nav badge. Counted in SQL, and scoped by RLS rather than by this
  * query — a manager's own policy is what limits it to their team.
  */
-export function useOpenScoreQueries(enabled: boolean) {
+export function useOpenScoreQueries(enabled: boolean, employeeId?: string) {
   return useQuery({
     enabled,
-    queryKey: ['open_score_queries'],
+    queryKey: ['open_score_queries', employeeId ?? null],
     refetchInterval: 60_000,
     queryFn: async () => {
-      const { count, error } = await supabase
+      let q = supabase
         .from('kpi_score_queries')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'open')
+      // Their own question, which they can read and cannot answer, was
+      // counted here and on the tab — a manager who queried their own
+      // score carried a badge that nothing they could do would clear.
+      if (employeeId) q = q.neq('employee_id', employeeId)
+      const { count, error } = await q
       if (error) throw new Error(friendlyError(error))
       return count ?? 0
     },

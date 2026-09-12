@@ -9,6 +9,7 @@ import {
   type ScoreQueryRow,
 } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
+import { useAuth } from '@/contexts/AuthContext'
 import { PageLoader, Alert, Spinner, EmptyState, StatTile, ScorePill } from '@/components/ui'
 import type { ScoreQueryPoint, KpiSubmissionItem } from '@/types/db'
 
@@ -26,6 +27,7 @@ import type { ScoreQueryPoint, KpiSubmissionItem } from '@/types/db'
  * the manager is the thing HR exists to be able to look at.
  */
 export default function ScoreQueries({ readOnly = false }: { readOnly?: boolean }) {
+  const { employee } = useAuth()
   const { data, isLoading, error } = useScoreQueries(true)
   const [purged, setPurged] = useState(0)
 
@@ -42,7 +44,20 @@ export default function ScoreQueries({ readOnly = false }: { readOnly?: boolean 
   if (isLoading) return <PageLoader label="Loading queries…" />
   if (error) return <Alert kind="error">{(error as Error).message}</Alert>
 
-  const rows = data ?? []
+  /*
+    Their team's, not their own.
+
+    A manager who queries a score their own manager gave them can read
+    that query — they have to, to see the reply — and this screen listed
+    everything it could read, so their own question came back to them
+    under "Queries from my team", with a reply box under it. The reply
+    box was never live: answer_score_query only accepts the reporting
+    manager or HR, and nobody is their own manager. It was a screen
+    asking somebody to do something the server would refuse.
+
+    HR's copy of this screen is the whole company and keeps everything.
+  */
+  const rows = (data ?? []).filter(r => readOnly || r.query.employee_id !== employee?.id)
   const open = rows.filter(r => r.query.status === 'open')
   const answered = rows.filter(r => r.query.status === 'answered')
 
