@@ -135,6 +135,13 @@ export function calcKpiScore(
       //
       // Unset falls through to the proportional curve, which is what
       // every row written before today relies on.
+      //
+      // calc_kpi_score took this branch in migration 0121, five days
+      // after this one shipped without it. Until then the screen showed
+      // 5.60 on a row the database scored 0.00 — and on a target of 0,
+      // which is what "no pending documentation" rows carry, the curve
+      // below is 0/achieved, so every one of them scored nothing however
+      // well it went. 425 stored figures across 101 people.
       const perUnit = params.penalty_per_unit
       if (perUnit != null && perUnit > 0) result = wt - (achieved - target) * perUnit
       else if (achieved === 0) result = 0
