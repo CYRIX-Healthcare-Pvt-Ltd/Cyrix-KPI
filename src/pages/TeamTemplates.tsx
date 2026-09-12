@@ -113,12 +113,26 @@ export default function TeamTemplates() {
     screen is "what does Adrian give his engineers", which is a question
     about a person.
   */
+  /*
+    Templates somebody else owns that my own people are already on.
+
+    These are in the list because of who is ON them, not because of who
+    wrote them — so grouping them under the owner's name put "MOHANDAS
+    N" as a heading on his subordinate's screen, which reads as exactly
+    the thing the rule forbids: seeing your manager's templates. The
+    owner is provenance, not the reason, and the row still says whose it
+    is.
+  */
+  const onMyTeam = shown.filter(
+    t => !t.is_mine && !t.is_company && Number(t.on_my_team) > 0)
+
   const keepers = useMemo(() => {
     const groups = new Map<
       string, { name: string; ecode: string | null; list: VisibleTemplate[] }
     >()
     for (const t of shown) {
       if (t.is_mine || t.is_company) continue
+      if (Number(t.on_my_team) > 0) continue
       const key = t.owner_id ?? 'unknown'
       const g = groups.get(key)
         ?? { name: t.owner_name ?? 'A manager', ecode: t.owner_ecode, list: [] }
@@ -336,6 +350,21 @@ export default function TeamTemplates() {
                 </EmptyState>
               )}
 
+              <TemplateGroup
+                title="Your team is already on these"
+                hint="Written elsewhere and already on your people. Hand them to a new joiner; changing them belongs to whoever keeps them."
+                icon={Users}
+                templates={onMyTeam}
+                items={itemsByTemplate}
+                preview={preview}
+                onPreview={id => setPreview(preview === id ? null : id)}
+                onEdit={startFrom}
+                onAssign={setAssigning}
+                assigningId={assigning?.id ?? null}
+                fy={fy}
+                onCloseAssign={() => setAssigning(null)}
+              />
+
               {/* One section per manager, rather than one list with
                   "kept by" repeated down the side of it. */}
               {keepers.map(g => (
@@ -506,7 +535,10 @@ function TemplateGroup({
                   className="min-w-0 flex-1 text-left"
                   aria-expanded={open}
                 >
-                  <p className="truncate font-medium text-ink-900">{t.name}</p>
+                  {/* Wraps rather than truncates: with two buttons beside
+                      it on a narrow screen, "Biomedical Engineer" was
+                      being shown as "Biomedical En…". */}
+                  <p className="font-medium text-ink-900">{t.name}</p>
                   <p className="mt-0.5 truncate text-xs text-ink-500">
                     {t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
                     {/* Whose it is, always. Two managers in one division
