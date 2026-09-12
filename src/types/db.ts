@@ -98,6 +98,25 @@ export interface KpiRanking {
    */
   mgr_overall: number | null
   /**
+   * What the 70 was read off: the team's average on the 1–5 slab, and
+   * how many scored reportees went into it — migration 0118. A band of
+   * 5.00 drawn from one person out of twelve is a different claim from
+   * the same 5.00 drawn from all twelve, and the mark cannot tell them
+   * apart.
+   *
+   * Six decimals (0120), because a screen showing both the band and the
+   * points it earned has to work them out from the number the ranking
+   * used. Show two.
+   */
+  mgr_team_band: number | null
+  mgr_team_scored: number | null
+  /**
+   * How many managers have a mark at all — migration 0119. mgr_of is the
+   * roll; this is the field the position was actually taken in, the way
+   * team_of is the scored count beside team_size.
+   */
+  mgr_measured: number | null
+  /**
    * Of every month the whole team owes — not only the ones that reached
    * the manager. The same figure as scored_pct on their row in HR's
    * report.

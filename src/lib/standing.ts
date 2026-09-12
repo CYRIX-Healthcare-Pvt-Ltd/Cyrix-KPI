@@ -106,9 +106,10 @@ export function standingLines(ctx: StandingContext): StandingLine[] {
         toLabel: 'My Team',
       })
     }
-    // Coverage multiplies the whole standing rather than joining the
-    // weighted sum — see managerRank — so an unscored month costs more
-    // than a slow one, and that is worth saying in those words.
+    // Nothing about how much is done enters the mark — 0098 took the
+    // coverage multiplier off. What is true, and is what the line now
+    // says, is that an unscored month is not measured at all: it is in
+    // neither the team band nor either clock, so it counts for nobody.
     if (team.due !== null && team.scored !== null && team.due > 0 && team.scored < team.due) {
       out.push({
         key: 'stand.mgrdone',

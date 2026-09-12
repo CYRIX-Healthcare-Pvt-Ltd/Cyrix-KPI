@@ -137,7 +137,9 @@ describe('tatScore — fewer days is a higher mark', () => {
   })
 })
 
-describe('managerRank — 10 submission, 20 completion, 70 team, times coverage', () => {
+describe('managerRank — 70 team band, 20 their scoring, 10 the team submitting', () => {
+  const ALLOW = { submitAllowance: 5, completeAllowance: 7 }
+
   it('uses the weights management gave', () => {
     // The two turnarounds cap at 30 together; the team carries 70.
     expect(MANAGER_WEIGHTS).toEqual({
@@ -147,23 +149,17 @@ describe('managerRank — 10 submission, 20 completion, 70 team, times coverage'
   })
 
   it('gives a perfect manager 100', () => {
-    const r = managerRank({
-      submitDays: 0, completeDays: 0, teamRatings: [5, 5, 5],
-      submitAllowance: 5, completeAllowance: 7, coverage: 1,
-    })
+    const r = managerRank({ submitDays: 0, completeDays: 0, teamBand: 5, ...ALLOW })
     expect(r.overall).toBe(100)
   })
 
   it('gives the worst measurable manager 0', () => {
-    const r = managerRank({
-      submitDays: 99, completeDays: 99, teamRatings: [1, 1],
-      submitAllowance: 5, completeAllowance: 7, coverage: 1,
-    })
+    const r = managerRank({ submitDays: 99, completeDays: 99, teamBand: 1, ...ALLOW })
     expect(r.overall).toBe(0)
   })
 
   it('weights the manager own turnaround twice as heavily as the team chasing', () => {
-    const base = { teamRatings: [3], submitAllowance: 5, completeAllowance: 5, coverage: 1 }
+    const base = { teamBand: 3, submitAllowance: 5, completeAllowance: 5 }
     // Perfect on the 20% component, worst on the 10% one.
     const goodAtScoring = managerRank({ ...base, submitDays: 99, completeDays: 0 })
     // The other way round.
@@ -172,82 +168,85 @@ describe('managerRank — 10 submission, 20 completion, 70 team, times coverage'
   })
 
   it('puts the team band on the same 0-1 scale as the TAT marks', () => {
-    // A team of all 5s is full marks on that component; all 1s is none.
-    const top = managerRank({
-      submitDays: null, completeDays: null, teamRatings: [5],
-      submitAllowance: 5, completeAllowance: 5, coverage: 1,
-    })
-    const bottom = managerRank({
-      submitDays: null, completeDays: null, teamRatings: [1],
-      submitAllowance: 5, completeAllowance: 5, coverage: 1,
-    })
+    // A team averaging 5 is full marks on that component; 1 is none.
+    const top = managerRank({ submitDays: null, completeDays: null, teamBand: 5, ...ALLOW })
+    const bottom = managerRank({ submitDays: null, completeDays: null, teamBand: 1, ...ALLOW })
     expect(top.overall).toBe(100)
     expect(bottom.overall).toBe(0)
   })
 
   it('reweights around what cannot be measured rather than scoring it zero', () => {
-    // A manager whose team has submitted nothing has no completion TAT.
+    // A manager whose team has submitted nothing has no scoring TAT.
     // Counting that as nought would rank them below somebody who scored
     // everything late, which is an absence of evidence read as failure.
-    const r = managerRank({
-      submitDays: null, completeDays: null, teamRatings: [5, 5],
-      submitAllowance: 5, completeAllowance: 7, coverage: 1,
-    })
-    expect(r.submission).toBeNull()
-    expect(r.completion).toBeNull()
+    const r = managerRank({ submitDays: null, completeDays: null, teamBand: 5, ...ALLOW })
+    expect(r.submission.mark).toBeNull()
+    expect(r.completion.mark).toBeNull()
     expect(r.overall).toBe(100)
+  })
+
+  it('hands the dropped weight to the parts that are left', () => {
+    // The state every manager is in today: neither clock has anything to
+    // measure, so the band is not 70 of the mark, it is all of it. A
+    // tile that still says 70 is describing somebody else.
+    const r = managerRank({ submitDays: null, completeDays: null, teamBand: 3, ...ALLOW })
+    expect(r.team.outOf).toBe(100)
+    expect(r.team.points).toBe(50)
+    expect(r.reweighted).toBe(true)
+    expect(r.overall).toBe(50)
+  })
+
+  it('leaves the shares alone when all three can be measured', () => {
+    const r = managerRank({ submitDays: 0, completeDays: 0, teamBand: 5, ...ALLOW })
+    expect(r.team.outOf).toBe(70)
+    expect(r.completion.outOf).toBe(20)
+    expect(r.submission.outOf).toBe(10)
+    expect(r.reweighted).toBe(false)
   })
 
   it('has nothing to say about a manager with nothing measurable', () => {
     const r = managerRank({
-      submitDays: null, completeDays: null, teamRatings: [],
-      submitAllowance: 5, completeAllowance: 7, coverage: 1,
+      submitDays: null, completeDays: null, teamBand: null, ...ALLOW,
     })
     expect(r.overall).toBeNull()
+    expect(r.team.points).toBeNull()
+    expect(r.team.outOf).toBe(0)
   })
 
   it('works the example through end to end', () => {
     // Team submits in 2 of an allowed 5, manager scores in 3 of an
-    // allowed 7, team averages a band of 4, everything scored.
-    //   submission 1 - 2/10  = 0.8   x 0.1 = 0.08
-    //   completion 1 - 3/14  = 0.786 x 0.2 = 0.157
+    // allowed 7, team averages a band of 4.
     //   team       (4-1)/4   = 0.75  x 0.7 = 0.525
+    //   completion 1 - 3/14  = 0.786 x 0.2 = 0.157
+    //   submission 1 - 2/10  = 0.8   x 0.1 = 0.08
     //                                       = 0.762 -> 76.2
-    const r = managerRank({
-      submitDays: 2, completeDays: 3, teamRatings: [4, 4],
-      submitAllowance: 5, completeAllowance: 7, coverage: 1,
-    })
+    const r = managerRank({ submitDays: 2, completeDays: 3, teamBand: 4, ...ALLOW })
     expect(r.overall).toBeCloseTo(76.2, 1)
+    // And the parts add up to the figure they were ranked on, which is
+    // the whole reason a tile can show them.
+    const sum = r.team.points! + r.completion.points! + r.submission.points!
+    expect(sum).toBeCloseTo(r.overall!, 1)
   })
 
-  it('scales the whole figure by coverage rather than adding it in', () => {
-    // The case that broke the additive version on real data: a manager
-    // perfect on every measurable component, on 1.2% of the work. Under
-    // any weighting they came first; multiplied by coverage they cannot.
-    const perfect = {
-      submitDays: 0, completeDays: 0, teamRatings: [5],
-      submitAllowance: 5, completeAllowance: 7,
-    }
-    expect(managerRank({ ...perfect, coverage: 1 }).overall).toBe(100)
-    expect(managerRank({ ...perfect, coverage: 0.012 }).overall).toBeCloseTo(1.2, 1)
-
-    // And the comparison that matters: 80% of the work done adequately
-    // beats 1.2% done perfectly.
-    const thorough = managerRank({
-      submitDays: 6, completeDays: 8, teamRatings: [3, 3],
-      submitAllowance: 5, completeAllowance: 7, coverage: 0.8,
+  it('does not scale the mark by how much of the year is done', () => {
+    // 0097 multiplied by coverage and 0098 took it off, management's
+    // call: every manager will finish the year, so completion is not
+    // what separates them. The consequence is this — a manager measured
+    // on a single scored reportee sits top, and the ranking cannot see
+    // the difference. It is the live rule, and the tile has to be able
+    // to say so.
+    const onOnePerson = managerRank({
+      submitDays: null, completeDays: null, teamBand: 5, ...ALLOW,
     })
-    expect(thorough.overall!).toBeGreaterThan(
-      managerRank({ ...perfect, coverage: 0.012 }).overall!)
+    const onTheWholeTeam = managerRank({
+      submitDays: null, completeDays: null, teamBand: 4.6, ...ALLOW,
+    })
+    expect(onOnePerson.overall).toBe(100)
+    expect(onOnePerson.overall!).toBeGreaterThan(onTheWholeTeam.overall!)
   })
 
-  it('treats coverage it cannot measure as none, not as full', () => {
-    // Defaulting an unknown to 1 would hand an unmeasured manager
-    // everybody else's marks.
-    const r = managerRank({
-      submitDays: 0, completeDays: 0, teamRatings: [5],
-      submitAllowance: 5, completeAllowance: 7, coverage: null,
-    })
-    expect(r.overall).toBe(0)
+  it('keeps a band outside the slab from leaving the scale', () => {
+    expect(managerRank({ submitDays: null, completeDays: null, teamBand: 6, ...ALLOW }).overall).toBe(100)
+    expect(managerRank({ submitDays: null, completeDays: null, teamBand: 0, ...ALLOW }).overall).toBe(0)
   })
 })

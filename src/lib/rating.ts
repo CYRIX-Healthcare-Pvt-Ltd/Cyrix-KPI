@@ -166,76 +166,107 @@ export interface ManagerRankInput {
   submitDays: number | null
   /** Mean days this manager took to score once a month arrived. */
   completeDays: number | null
-  /** Each scored reportee's combined 1–5, already computed. */
-  teamRatings: number[]
   /**
-   * The share of the team's owed months actually scored, 0–1.
-   *
-   * This multiplies the whole figure rather than joining the weighted
-   * sum, and that is the load-bearing decision in the whole ranking.
-   * Adding it as a fourth weight was tried against real data and failed:
-   * a manager who had scored ONE of eighty-one months came first,
-   * because every other component — both turnarounds and the team band —
-   * was computed from that single month, and scored full marks on it. No
-   * set of weights fixes that, because the problem is not how much
-   * completion counts; it is that the other three numbers mean nothing
-   * without it. A fast turnaround on 1% of your team is not a prompt
-   * manager, it is an unmeasured one.
+   * The team's average on the 1–5 slab: mgr_team_band from kpi_ranking,
+   * which averages each scored reportee's own combined figure. Null when
+   * nobody in the team has been scored yet.
    */
-  coverage: number | null
+  teamBand: number | null
   /** From the live TAT policy, so the marks move when the policy does. */
   submitAllowance: number
   completeAllowance: number
 }
 
+/** One of the three parts, and what it put into the mark. */
+export interface ManagerPart {
+  /** 0–1, what this part earned. Null when there is nothing to measure. */
+  mark: number | null
+  /**
+   * Its share of the 100 after the parts with nothing to measure have
+   * been dropped: 70 while all three are there, and the whole 100 when
+   * it is the only one left.
+   */
+  outOf: number
+  /** mark × outOf — the points this part contributed. */
+  points: number | null
+}
+
 export interface ManagerRank {
-  submission: number | null
-  completion: number | null
-  team: number | null
-  /** 0–100. Null when nothing at all can be measured yet. */
+  team: ManagerPart
+  completion: ManagerPart
+  submission: ManagerPart
+  /**
+   * 0–100, the figure managers are ranked on. Null when nothing at all
+   * can be measured yet — an unmeasured manager is not a bad one, and a
+   * zero here would say they were.
+   */
   overall: number | null
+  /** True while a part had nothing to measure and the rest carried it. */
+  reweighted: boolean
 }
 
 /**
- * A manager's standing, out of 100.
+ * A manager's standing, out of 100, and the parts it is made of.
  *
- * Components that cannot be measured are dropped and the rest are
- * reweighted among themselves, rather than counted as zero. A manager
- * whose team has submitted nothing has no completion TAT — that is an
- * absence of evidence, and scoring it as nought would rank them below a
- * manager who scored everything late.
+ * Mirrors kpi_ranking's mgr_scored CTE — the database computes the
+ * ranking, this computes the same arithmetic so a screen can show its
+ * working without a second round trip. If they ever disagree the
+ * database is right and this is the bug.
+ *
+ * Two rules, both load-bearing:
+ *
+ * 1. A part with nothing to measure is dropped and the rest are
+ *    reweighted among themselves, rather than counted as zero. A manager
+ *    whose team has submitted nothing has no scoring turnaround; scoring
+ *    that absence as nought would rank them below someone who scored
+ *    everything late. It also means the 70/20/10 on the tile is rarely
+ *    what a given manager is actually being measured on, which is why
+ *    `outOf` is returned rather than the constant.
+ *
+ * 2. There is no coverage multiplier. 0097 scaled the whole mark by the
+ *    share of the team's year actually scored, and 0098 took it off:
+ *    management's position is that every manager will finish the year,
+ *    so completion is not what separates them. The consequence is worth
+ *    knowing when reading a rank — a manager measured on one scored
+ *    reportee out of twelve can top the list, and does.
  */
 export function managerRank(input: ManagerRankInput): ManagerRank {
   const submission = tatScore(input.submitDays, input.submitAllowance)
   const completion = tatScore(input.completeDays, input.completeAllowance)
-  const rated = input.teamRatings.filter(r => Number.isFinite(r))
-  const team = rated.length
-    // Onto 0–1 from the 1–5 slab, so it sits beside the two TAT marks.
-    ? (rated.reduce((a, b) => a + b, 0) / rated.length - 1) / 4
-    : null
+  // The 1–5 slab onto 0–1, so it sits beside the two turnaround marks.
+  const team =
+    input.teamBand === null || !Number.isFinite(input.teamBand)
+      ? null
+      : Math.max(0, Math.min(1, (input.teamBand - 1) / 4))
 
-  const parts: Array<[number | null, number]> = [
-    [submission, MANAGER_WEIGHTS.submissionTat],
-    [completion, MANAGER_WEIGHTS.completionTat],
-    [team, MANAGER_WEIGHTS.teamBand],
-  ]
-  const present = parts.filter(([v]) => v !== null) as Array<[number, number]>
-  const weight = present.reduce((a, [, w]) => a + w, 0)
-  const quality = weight === 0
-    ? null
-    : present.reduce((a, [v, w]) => a + v * w, 0) / weight
+  const counted =
+    (team === null ? 0 : MANAGER_WEIGHTS.teamBand)
+    + (completion === null ? 0 : MANAGER_WEIGHTS.completionTat)
+    + (submission === null ? 0 : MANAGER_WEIGHTS.submissionTat)
 
-  // Coverage scales the lot. Missing coverage is treated as none rather
-  // than as full: a manager we cannot measure has not demonstrated
-  // anything, and defaulting to 1 would hand them everybody else's marks.
-  const cover = input.coverage === null || !Number.isFinite(input.coverage)
-    ? 0
-    : Math.max(0, Math.min(1, input.coverage))
+  // Three tenths and seven tenths do not add to one in binary, and the
+  // share they produce comes out 20.000000000000004. Rounded here rather
+  // than at each screen, so "of 20" is 20 and the reweighted case still
+  // has the decimal it needs: dropping the 10 leaves 77.778 and 22.222.
+  const round3 = (n: number) => Math.round(n * 1000) / 1000
+  const part = (mark: number | null, weight: number): ManagerPart => {
+    if (mark === null || counted === 0) return { mark, outOf: 0, points: null }
+    const outOf = round3((weight / counted) * 100)
+    return { mark, outOf, points: mark * outOf }
+  }
+
+  const earned =
+    (team === null ? 0 : team * MANAGER_WEIGHTS.teamBand)
+    + (completion === null ? 0 : completion * MANAGER_WEIGHTS.completionTat)
+    + (submission === null ? 0 : submission * MANAGER_WEIGHTS.submissionTat)
 
   return {
-    submission,
-    completion,
-    team,
-    overall: quality === null ? null : Math.round(quality * cover * 1000) / 10,
+    team: part(team, MANAGER_WEIGHTS.teamBand),
+    completion: part(completion, MANAGER_WEIGHTS.completionTat),
+    submission: part(submission, MANAGER_WEIGHTS.submissionTat),
+    // One decimal, exactly as the function rounds it, so a tile showing
+    // this beside mgr_overall cannot disagree over the last digit.
+    overall: counted === 0 ? null : Math.round((earned / counted) * 1000) / 10,
+    reweighted: counted > 0 && round3(counted) < 1,
   }
 }

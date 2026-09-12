@@ -20,7 +20,8 @@ import {
 } from '@/lib/avatar'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import { JOB_RATIO, CORE_RATIO } from '@/lib/rating'
+import { JOB_RATIO, CORE_RATIO, managerRank } from '@/lib/rating'
+import type { ManagerPart } from '@/lib/rating'
 import type { Employee } from '@/types/db'
 
 /**
@@ -39,6 +40,13 @@ import type { Employee } from '@/types/db'
  * taken off. Nothing is said about lateness where the counting has not
  * started, rather than claiming zero.
  */
+/** A numeric column, whatever shape it arrived in, or null. */
+function num(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 function tatLine(
   days: number | null | undefined,
   late: number | null | undefined,
@@ -608,6 +616,40 @@ export default function Profile() {
     v == null ? '—'
       : `${((Number(v) * outOf) / 100).toFixed(1)} of ${outOf} · ${Number(v).toFixed(2)}%`
 
+  /*
+    The manager mark, taken apart the way the two band tiles now are.
+
+    The panel listed 70 / 20 / 10 and then five figures in days, and
+    never the mark itself — a manager could read every line of it and
+    still not know where the position came from. Worse, the shares were
+    describing somebody else: neither turnaround has anything to measure
+    yet, so the team band is not 70 of the mark, it is the whole of it,
+    and every manager in the company was reading a rule that did not
+    apply to them.
+
+    managerRank mirrors the function's own arithmetic (see 0098), so the
+    parts below add up to mgr_overall, which is the figure the ranking
+    sorted on and the one shown as "Ranked on".
+  */
+  const mgr = managerRank({
+    submitDays: num(ranking?.submit_tat),
+    completeDays: num(ranking?.completion_tat),
+    teamBand: num(ranking?.mgr_team_band),
+    submitAllowance: ranking?.tm_grace_days ?? 3,
+    completeAllowance: ranking?.mgr_grace_days ?? 5,
+  })
+  // 70, 20, 10 — and 77.8 once one of them drops out, which is why this
+  // is not just String(outOf).
+  const outOf = (n: number) => n.toFixed(1).replace(/.0$/, '')
+  const partRow = (
+    label: string, part: ManagerPart, measured: string, absent: string,
+  ): [string, string] => [
+    label,
+    part.points === null
+      ? absent
+      : `${measured} → ${part.points.toFixed(1)} of ${outOf(part.outOf)}`,
+  ]
+
   const bandRows: Array<[string, string]> = [
     ['Job role band', share(ranking?.job_band, JOB_RATIO)],
     ['Job role achieved', achieved(ranking?.job_pct, jobWeight)],
@@ -694,14 +736,27 @@ export default function Profile() {
           <RankTile
             label="Team scoring rank"
             icon={Timer}
-            rank={ranking?.mgr_rank}
-            of={ranking?.mgr_of}
+            /*
+              Ranked among the managers who HAVE a mark, not the whole
+              roll of them. 128 of the 172 have no scored reportee at
+              all, rank() ties every one of them on 45th, and "36th of
+              172" then reads as the top quarter when it is 36th of 44.
+              A manager who cannot be measured is shown as unmeasured
+              rather than given a position they were never in.
+            */
+            rank={ranking?.mgr_overall == null ? null : ranking?.mgr_rank}
+            of={ranking?.mgr_measured ?? ranking?.mgr_of}
             note={
-              ranking?.completion_pct == null
-                ? 'among managers'
-                : `${ranking.completion_pct}% done · among managers`
+              ranking?.mgr_measured != null && ranking?.mgr_of != null
+                && ranking.mgr_measured < ranking.mgr_of
+                ? `${ranking.mgr_measured} of ${ranking.mgr_of} managers measured`
+                : 'among managers'
             }
-            emptyNote="Nothing owed yet"
+            emptyNote={
+              (ranking?.due_months ?? 0) > 0
+                ? 'Nobody in your team scored yet'
+                : 'Nothing owed yet'
+            }
             /*
               The shares kpi_ranking actually weighs, which migration 0098
               set; they have to move with it. The paragraph this replaced
@@ -714,27 +769,58 @@ export default function Profile() {
               ['Your scoring TAT', '20%'],
               ['Team submission TAT', '10%'],
             ]}
+            weightsNote={
+              'A part with nothing to measure yet is left out and the rest '
+              + 'carry its share. How much of the year is done is not part '
+              + 'of the mark.'
+            }
             detail={[
-              ['Months your team owes',
-                ranking?.due_months != null ? String(ranking.due_months) : '—'],
-              ['You have scored',
-                ranking?.scored_months != null ? String(ranking.scored_months) : '—'],
+              // Each part with what it earned and what that put into the
+              // mark, in weight order, so the three lines visibly add up
+              // to the figure underneath them.
+              partRow('Team average band', mgr.team,
+                num(ranking?.mgr_team_band) == null ? ''
+                  : `${num(ranking?.mgr_team_band)!.toFixed(2)} of 5`,
+                'nobody scored yet'),
+              // The caveat the mark cannot carry: an average of 5.00 off
+              // one person out of twelve is the same 5.00 to the ranking,
+              // and it is not the same claim.
+              ['Band read from',
+                ranking?.mgr_team_scored == null ? '—'
+                  : ranking.mgr_team_scored === 1 ? '1 scored person'
+                  : `${ranking.mgr_team_scored} scored people`],
               // Two clocks, kept apart. Blended into one they produced
               // 49.3 days for a manager who actually scores in under
               // three — true, and unreadable as either fact.
-              // Their half of the wait. A manager can be quick and still
-              // be carrying a team that sends everything in weeks late,
-              // and only this line would say so.
-              // Named as in the shares above, so each figure can be matched
-              // to the part of the rank it feeds.
-              ['Team submission TAT',
-                tatLine(ranking?.submit_tat, ranking?.submit_delay)],
-              ['Your scoring TAT',
-                tatLine(ranking?.completion_tat, ranking?.completion_delay)],
+              //
+              // "none counted yet" rather than "nothing scored": months
+              // before the date on the last line are not counted, so a
+              // manager can have scored one and still have no clock.
+              partRow('Your scoring TAT', mgr.completion,
+                num(ranking?.completion_tat) == null ? ''
+                  : `${num(ranking?.completion_tat)!.toFixed(1)} days`,
+                'none counted yet'),
+              // Their team's half of the wait. A manager can be quick and
+              // still be carrying a team that sends everything in weeks
+              // late, and only this line would say so.
+              partRow('Team submission TAT', mgr.submission,
+                num(ranking?.submit_tat) == null ? ''
+                  : `${num(ranking?.submit_tat)!.toFixed(1)} days`,
+                'none counted yet'),
+              // The figure the ranking actually sorted on. Read from the
+              // database rather than from the sum above, so the tile
+              // cannot quietly disagree with the position it is
+              // explaining.
+              ['Ranked on',
+                num(ranking?.mgr_overall) == null ? 'nothing measurable yet'
+                  : `${num(ranking?.mgr_overall)!.toFixed(1)} of 100`],
+              ['Team months scored',
+                ranking?.due_months == null ? '—'
+                  : `${ranking.scored_months ?? 0} of ${ranking.due_months}`],
               ['Pending TAT',
                 tatLine(ranking?.pending_tat, ranking?.pending_delay,
                         'nothing waiting')],
-              // The rule those "late" figures were measured against. A
+              // The rule those day figures were measured against. A
               // number that says someone is late without saying late
               // against what is an accusation, not a metric.
               // Abbreviated because it shares a 200px tile with its label:
