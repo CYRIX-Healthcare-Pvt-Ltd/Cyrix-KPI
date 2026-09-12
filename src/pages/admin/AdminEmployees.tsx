@@ -538,10 +538,21 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       // compares them, so a lower-case sheet does not read as a company
       // that has all resigned.
       const inFile = new Set(parsed.map(r => r.ecode.toUpperCase()))
-      const { data: activeRows, error: activeErr } = await supabase
-        .from('employees').select('ecode, full_name').eq('is_active', true)
-      if (activeErr) throw new Error(friendlyError(activeErr))
-      const active = (activeRows ?? []) as Array<{ ecode: string; full_name: string }>
+      /*
+        Every active employee, not the first thousand of them.
+
+        This asked for them in one unbounded select, and PostgREST answers
+        that with a single page of 1,000 against 1,182 active people. The
+        banner said "39 of 1000" over a file of 1,160 rows, which is how it
+        was noticed — but the count was the symptom. The 182 rows that never
+        arrived could not be compared against the file, so anybody among
+        them who had left would have stayed active, silently, with no line
+        in the warning to say so. Same trap as `everyEmployee` below, which
+        is why it now does the same thing.
+      */
+      const active = (await everyEmployee<
+        { ecode: string; full_name: string; is_active: boolean }
+      >('ecode, full_name, is_active')).filter(e => e.is_active)
 
       setActiveNow(active.length)
       setLeaving(
@@ -569,8 +580,12 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     const PAGE = 1000
     const out: T[] = []
     for (let from = 0; ; from += PAGE) {
+      // Ordered, because each page is its own query: without an ORDER BY
+      // the planner may return rows in a different order each time, and a
+      // row can then land in both pages or in neither. That exact fault
+      // once had one employee counted twice on the HR overview.
       const { data, error } = await supabase
-        .from('employees').select(columns).range(from, from + PAGE - 1)
+        .from('employees').select(columns).order('ecode').range(from, from + PAGE - 1)
       if (error) throw new Error(friendlyError(error))
       const page = (data ?? []) as T[]
       out.push(...page)
