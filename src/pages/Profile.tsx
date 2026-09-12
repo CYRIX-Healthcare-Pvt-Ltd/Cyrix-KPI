@@ -20,6 +20,7 @@ import {
 } from '@/lib/avatar'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
+import { JOB_RATIO, CORE_RATIO } from '@/lib/rating'
 import type { Employee } from '@/types/db'
 
 /**
@@ -558,6 +559,7 @@ export default function Profile() {
   // as a small team until you know eleven others have not been assessed.
   const teamUnscored = (ranking?.team_size ?? 0) - (ranking?.team_of ?? 0)
 
+  const jobWeight = Number(assignment?.assignment?.job_role_weight ?? JOB_ROLE_TOTAL)
   const hasEsms = esmsWeight > 0
 
   /*
@@ -576,16 +578,48 @@ export default function Profile() {
   ]
   const bandNote =
     'On 1–5 bands, not the raw %. If two come out level, the higher job role band goes first.'
+  /*
+    What each half contributed, not only which band it landed in.
+
+    The question that produced this: somebody averaging 93.0 sat below
+    somebody averaging 89.4, and the tile could not answer it. It can
+    now — 5 of 5 gives 3.00 either way, and the difference is entirely
+    in the other half, 4 of 5 giving 1.60 against 3 of 5 giving 1.20.
+
+    The attainment is there too, because the band is the half nobody
+    argues with and the percentage is the half they do: 71.24% is a 3
+    because the slab closes at 80, and seeing the figure is what makes
+    that checkable rather than something to take on trust.
+  */
+  const share = (band: number | null | undefined, ratio: number) =>
+    band == null ? '—' : `${band} of 5 → ${(band * ratio).toFixed(2)}`
+  /*
+    The marks before the percentage, because the percentage alone is read
+    as marks.
+
+    "Core values achieved 68.00%" was asked about within a minute of
+    being shown: core values is 20 marks, so is 68 of them? It is not —
+    it is 68% OF the 20, which is 13.6. Each half is a share of its own
+    weightage, which is the only way an 80-mark block and a 20-mark block
+    can sit on the same 1-5 slab; measured against 100 core values could
+    never pass 20% and would be a 1 for everybody, for ever.
+  */
+  const achieved = (v: number | null | undefined, outOf: number) =>
+    v == null ? '—'
+      : `${((Number(v) * outOf) / 100).toFixed(1)} of ${outOf} · ${Number(v).toFixed(2)}%`
+
   const bandRows: Array<[string, string]> = [
-    ['Job role band',
-      ranking?.job_band != null ? `${ranking.job_band} of 5` : '—'],
+    ['Job role band', share(ranking?.job_band, JOB_RATIO)],
+    ['Job role achieved', achieved(ranking?.job_pct, jobWeight)],
     // Named for the block rather than for core values alone: ESMS is
     // five of the same twenty and counts here too, so labelling this
     // "Core values band" would understate what it is measuring for the
     // people who carry ESMS.
     [hasEsms ? 'Core values + ESMS band' : 'Core values band',
-      ranking?.core_band != null ? `${ranking.core_band} of 5` : '—'],
-    // The figure actually sorted on, so the two lines above visibly add
+      share(ranking?.core_band, CORE_RATIO)],
+    [hasEsms ? 'Core values + ESMS achieved' : 'Core values achieved',
+      achieved(ranking?.core_pct, coreWeight + esmsWeight)],
+    // The figure actually sorted on, so the two shares above visibly add
     // up to it and the rule is checkable rather than merely stated.
     ['Ranked on',
       ranking?.rank_value != null ? Number(ranking.rank_value).toFixed(2) : '—'],

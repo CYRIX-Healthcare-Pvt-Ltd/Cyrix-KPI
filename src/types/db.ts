@@ -84,6 +84,14 @@ export interface KpiRanking {
   core_band: number | null
   rank_value: number | null
   /**
+   * The two attainments the bands were read off, to two decimals —
+   * migration 0117. The band is decided on the full-precision average;
+   * these are what a screen shows so a position can be explained rather
+   * than only asserted.
+   */
+  job_pct: number | null
+  core_pct: number | null
+  /**
    * A manager's 0–100 mark: team average band 70, their scoring TAT 20,
    * their team's submission TAT 10. Not scaled by how much has been scored
    * any more — migration 0098 took that out.
