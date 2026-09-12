@@ -80,12 +80,24 @@ describe('the bulk template', () => {
     expect(parsed.rows[3].rule_params).toEqual({ penalty_per_unit: 1 })
   })
 
-  it('lists who to assign to, and when each of them starts', () => {
+  /**
+   * The example rows are stars, and reading them back finds nobody.
+   *
+   * They used to be E390 and E772, two real people. A sheet was filled in
+   * from the third row down with the examples left in place, and the
+   * upload replaced both of their KPIs — one with eight rows and five
+   * months already filed. A demonstration row must not be a live
+   * instruction.
+   */
+  it('shows how the Ecode sheet is filled in without naming anybody real', () => {
     const wb = XLSX.read(roundTrip(), { type: 'array', cellDates: true })
-    expect(readEcodeSheet(wb).targets).toEqual([
-      { ecode: 'E390', startsFrom: '2026-09-01' },
-      { ecode: 'E772', startsFrom: '2026-09-01' },
-    ])
+    const sheet = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets.Ecode, { header: 1, raw: false })
+    expect(sheet[1]?.[0]).toBe('E***')
+    expect(sheet[2]?.[0]).toBe('CT***')
+    // April, because the year starts there; Sep-26 read as a suggestion.
+    expect(String(sheet[1]?.[1])).toMatch(/Apr/)
+    // And left in place they assign nothing at all.
+    expect(readEcodeSheet(wb).targets).toEqual([])
   })
 })
 
@@ -157,6 +169,18 @@ describe('the ecode sheet', () => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Ecode')
     return wb
   }
+
+  /* The template's own example rows, left in place by whoever filled it
+     in. They match nobody, so they are skipped rather than reported. */
+  it('ignores a starred code wherever it appears', () => {
+    const { targets } = readEcodeSheet(sheetOf([
+      ['Ecode to upload', 'KPI starts from'],
+      ['E***', 'Apr-26'],
+      ['E1234', 'Apr-26'],
+      ['CT***', 'Apr-26'],
+    ]))
+    expect(targets).toEqual([{ ecode: 'E1234', startsFrom: '2026-04-01' }])
+  })
 
   it('leaves the record alone when no month is given', () => {
     const { targets, warnings } = readEcodeSheet(sheetOf([['Ecode to upload'], ['E390']]))

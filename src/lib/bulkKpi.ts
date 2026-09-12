@@ -140,6 +140,10 @@ export function readEcodeSheet(wb: XLSX.WorkBook): {
     if (!cell) continue
     // A heading, not a code: "Ecode to upload", "Employee code".
     if (/^(ecode|employee|staff|code)\b/i.test(cell) || cell.includes(' ')) continue
+    // The template's own example rows — E***, CT*** — left in place. They
+    // match nobody, and reporting them as "no employee with that code"
+    // would be a warning on every upload that nobody needs to act on.
+    if (cell.includes('*')) continue
     const key = cell.toUpperCase()
     if (seen.has(key)) { dupes++; continue }
     seen.add(key)
@@ -473,10 +477,23 @@ export function buildBulkTemplate({ withEcodes = true }: { withEcodes?: boolean 
     assessing somebody for the months before they arrived is the mistake
     it used to make. Left blank, the record keeps whatever it already has.
   */
+  /*
+    Placeholders, not real codes.
+
+    The examples here were E390 and E772 — two people who exist. Somebody
+    filled the sheet in from the third row down, left the examples where
+    they were, and the upload replaced both of their KPIs: one of them had
+    eight rows and five months already filed. A demonstration row must not
+    be a live instruction, so the codes are stars, which match nobody, and
+    the reader skips them outright.
+
+    Apr-26 as the month, because the year starts in April and a joiner's
+    real month is the exception; Sep-26 read as a suggestion.
+  */
   const ecodes = XLSX.utils.aoa_to_sheet([
     ['Ecode to upload', 'KPI starts from'],
-    ['E390', 'Sep-26'],
-    ['E772', 'Sep-26'],
+    ['E***', 'Apr-26'],
+    ['CT***', 'Apr-26'],
   ])
   ecodes['!cols'] = [{ wch: 18 }, { wch: 18 }]
 
