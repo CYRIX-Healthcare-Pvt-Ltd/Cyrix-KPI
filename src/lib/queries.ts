@@ -504,51 +504,36 @@ export function usePushTemplate() {
   })
 }
 
-export interface SharedKpiGroup {
-  shape: string
-  people: number
-  row_count: number
-  suggested_name: string
-  designations: string | null
-  examples: string | null
+export interface TeamMemberTemplate {
+  employee_id: string
+  ecode: string
+  full_name: string
+  designation: string | null
+  template_id: string | null
+  template_name: string | null
 }
 
 /**
- * KPI shapes several of your people already share and nobody has named.
+ * Which template a person is on, by code or name — migration 0131.
  *
- * The company works in templates and has not written any down: 719 of
- * 773 active KPIs are one of thirty-one shapes. This is the list of them
- * for one manager's team.
+ * People below the caller only. Somebody in a peer's team comes back as
+ * nothing at all, not as "no template": that they exist, and what their
+ * KPI is, is not this manager's to know.
  */
-export function useSharedKpiGroups(fy: string, enabled: boolean) {
+export function useTeamMemberTemplates(query: string, fy: string) {
+  const q = query.trim()
   return useQuery({
-    enabled,
-    queryKey: ['shared_kpi_groups', fy],
+    enabled: q.length >= 2,
+    queryKey: ['team_member_templates', q.toUpperCase(), fy],
+    // A search box fires on every keystroke; the same answer for the same
+    // letters does not need asking twice within a minute.
+    staleTime: 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('shared_kpi_groups', { p_fy: fy })
-      if (error) throw new Error(friendlyError(error))
-      return (data ?? []) as SharedKpiGroup[]
-    },
-  })
-}
-
-/** Names one, and links everybody on it. Changes nobody's rows. */
-export function useNameSharedKpi() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (args: { shape: string; name: string; fy: string }) => {
-      const { data, error } = await supabase.rpc('template_from_shared', {
-        p_shape: args.shape,
-        p_name: args.name,
-        p_fy: args.fy,
+      const { data, error } = await supabase.rpc('find_team_member_template', {
+        p_query: q, p_fy: fy,
       })
       if (error) throw new Error(friendlyError(error))
-      return data as { template_id: string; template: string; people: number }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['visible_templates'] })
-      qc.invalidateQueries({ queryKey: ['shared_kpi_groups'] })
-      qc.invalidateQueries({ queryKey: ['template_items'] })
+      return (data ?? []) as TeamMemberTemplate[]
     },
   })
 }

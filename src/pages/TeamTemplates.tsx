@@ -3,17 +3,16 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, Plus, Upload, Trash2, Pencil, Save, X, FileSpreadsheet,
-  Copy, Users, Building2, Info, UserPlus, Check, AlertTriangle, Search,
-  Sparkles,
+  Users, Building2, Info, UserPlus, Check, AlertTriangle, Search,
 } from 'lucide-react'
 import {
   useVisibleTemplates, useTemplateItems, useSaveTemplate,
   useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate,
-  useSharedKpiGroups, useNameSharedKpi, currentFy,
-  type AssignOutcome, type TemplateReach, type SharedKpiGroup,
+  useTeamMemberTemplates, currentFy,
+  type AssignOutcome, type TemplateReach,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
-import { findDuplicate, type ComparableRow } from '@/lib/templates'
+import { findDuplicate, displayTemplateName, type ComparableRow } from '@/lib/templates'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
@@ -82,8 +81,7 @@ export default function TeamTemplates() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  /* Not while the editor is open: the list behind it is not on screen. */
-  const { data: shared } = useSharedKpiGroups(fy, !editing)
+  const { data: people, isFetching: lookingUp } = useTeamMemberTemplates(hunt, fy)
 
   /*
     Name or keeper, one box for both.
@@ -96,51 +94,17 @@ export default function TeamTemplates() {
     const q = hunt.trim().toLowerCase()
     const all = templates ?? []
     if (!q) return all
-    return all.filter(t =>
-      t.name.toLowerCase().includes(q)
-      || (t.owner_name ?? '').toLowerCase().includes(q)
-      || (t.owner_ecode ?? '').toLowerCase().includes(q))
+    // The template's name only. An employee code in this box means a
+    // person — that is answered by the lookup below the box — and
+    // matching owners here showed templates for no visible reason.
+    return all.filter(t => t.name.toLowerCase().includes(q))
   }, [templates, hunt])
 
   const mine = shown.filter(t => t.is_mine)
   const company = shown.filter(t => t.is_company)
 
-  /*
-    Everybody else's, grouped under the manager who keeps them.
-
-    One flat list said "kept by" on every row and left the reader to do
-    the grouping in their head — and the question being asked of this
-    screen is "what does Adrian give his engineers", which is a question
-    about a person.
-  */
-  /*
-    Templates somebody else owns that my own people are already on.
-
-    These are in the list because of who is ON them, not because of who
-    wrote them — so grouping them under the owner's name put "MOHANDAS
-    N" as a heading on his subordinate's screen, which reads as exactly
-    the thing the rule forbids: seeing your manager's templates. The
-    owner is provenance, not the reason, and the row still says whose it
-    is.
-  */
-  const onMyTeam = shown.filter(
-    t => !t.is_mine && !t.is_company && Number(t.on_my_team) > 0)
-
-  const keepers = useMemo(() => {
-    const groups = new Map<
-      string, { name: string; ecode: string | null; list: VisibleTemplate[] }
-    >()
-    for (const t of shown) {
-      if (t.is_mine || t.is_company) continue
-      if (Number(t.on_my_team) > 0) continue
-      const key = t.owner_id ?? 'unknown'
-      const g = groups.get(key)
-        ?? { name: t.owner_name ?? 'A manager', ecode: t.owner_ecode, list: [] }
-      g.list.push(t)
-      groups.set(key, g)
-    }
-    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [shown])
+  /** Everything that is not mine and not HR's: one group, one format. */
+  const team = shown.filter(t => !t.is_mine && !t.is_company)
 
   /** Every template's rows, in the shape the duplicate check compares. */
   const existing = useMemo(
@@ -157,20 +121,27 @@ export default function TeamTemplates() {
     setEditing({ id: null, name: '', rows: [blankRow(1)] })
   }
 
+  /** Editing one of your own. Copying anybody's is Start from, on New. */
   const startFrom = (t: VisibleTemplate) => {
     setError(null); setNotice(null)
     setEditing({
-      // Somebody else's template opens as a NEW one of your own. Copying
-      // your manager's rows and adjusting them is the common case, and
-      // saving that over theirs would change it for their whole line.
-      id: t.is_mine ? t.id : null,
-      name: t.is_mine ? t.name : `${t.name} (my version)`,
+      id: t.id,
+      name: t.name,
       rows: (itemsByTemplate?.get(t.id) ?? []).map(fromItem),
-      // Only yours can be pushed; somebody else's opens as a new one of
-      // your own, which nobody is on yet.
-      inUse: t.is_mine ? Number(t.in_use ?? 0) : 0,
+      inUse: Number(t.in_use ?? 0),
     })
   }
+
+  /** What New template can start from: everything this person can see. */
+  const sources = useMemo(
+    () => (templates ?? []).map(t => ({
+      id: t.id,
+      name: t.name,
+      keeper: t.is_company ? 'HR' : t.is_mine ? 'yours' : (t.owner_name ?? null),
+      items: itemsByTemplate?.get(t.id) ?? [],
+    })),
+    [templates, itemsByTemplate],
+  )
 
   const onFile = async (file: File) => {
     setError(null); setNotice(null)
@@ -282,6 +253,7 @@ export default function TeamTemplates() {
           fy={fy}
           initial={editing}
           existing={existing}
+          sources={sources}
           onCancel={() => setEditing(null)}
           onSaved={name => {
             setEditing(null)
@@ -306,15 +278,14 @@ export default function TeamTemplates() {
             <div className="text-ink-600">
               <p className="font-medium text-ink-900">Who sees these</p>
               <p className="mt-1">
-                Everything kept by anyone under your own manager — yours, your
-                colleagues' at the same level, and everything below them. Not
-                your own manager's, which is written for their job rather than
-                for the people you look after.
+                Your own templates, the ones written by the people below you,
+                and any your people are already on. Nothing from beside you or
+                above you.
               </p>
               <p className="mt-1.5">
-                Yours are yours to change. Everybody else's are here to use:
-                open one to keep your own copy, or hand it straight to people
-                with <span className="font-medium text-ink-800">Assign to</span>.
+                Yours are yours to change. All of them can be handed to people
+                with <span className="font-medium text-ink-800">Assign to</span>,
+                and a new template can start from any of them.
               </p>
               <p className="mt-1.5">
                 Targets come along as a starting point. Everything else — the
@@ -331,98 +302,91 @@ export default function TeamTemplates() {
             </EmptyState>
           ) : (
             <div className="space-y-5">
-              {/* Worth a box only once the list is long enough to scroll. */}
-              {(templates ?? []).length > 6 && (
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-                  <input
-                    className="input pl-9"
-                    value={hunt}
-                    onChange={e => setHunt(e.target.value)}
-                    placeholder="Search by name or who keeps it"
-                    aria-label="Search templates"
-                  />
-                </div>
-              )}
-              {hunt.trim() && shown.length === 0 && (
-                <EmptyState icon={Search} title="Nothing matches that">
-                  No template's name or keeper contains “{hunt.trim()}”.
-                </EmptyState>
-              )}
-
-              <TemplateGroup
-                title="Your team is already on these"
-                hint="Written elsewhere and already on your people. Hand them to a new joiner; changing them belongs to whoever keeps them."
-                icon={Users}
-                templates={onMyTeam}
-                items={itemsByTemplate}
-                preview={preview}
-                onPreview={id => setPreview(preview === id ? null : id)}
-                onEdit={startFrom}
-                onAssign={setAssigning}
-                assigningId={assigning?.id ?? null}
-                fy={fy}
-                onCloseAssign={() => setAssigning(null)}
-              />
-
-              {/* One section per manager, rather than one list with
-                  "kept by" repeated down the side of it. */}
-              {keepers.map(g => (
-                <TemplateGroup
-                  key={g.ecode ?? g.name}
-                  title={g.name}
-                  hint={`${g.ecode ? `${g.ecode} · ` : ''}theirs to change, yours to use`}
-                  icon={Copy}
-                  templates={g.list}
-                  items={itemsByTemplate}
-                  preview={preview}
-                  onPreview={id => setPreview(preview === id ? null : id)}
-                  onEdit={startFrom}
-                  onAssign={setAssigning}
-                  assigningId={assigning?.id ?? null}
-                  fy={fy}
-                  onCloseAssign={() => setAssigning(null)}
-                />
-              ))}
-
               {/*
-                The KPIs your people already share, waiting for a name.
-
-                This is the first thing to do on this screen and the
-                reason it exists: 719 of the company's 773 active KPIs
-                are one of thirty-one shapes, and five of them are
-                linked to a template. Naming one changes nobody's rows —
-                it writes the link that was never there, and after that
-                one edit reaches all of them.
+                Always there, however short the list — because it is not
+                only a filter on the list. Type an employee code and it
+                answers the other question this screen gets asked: which
+                template is that person on? Only for people below you;
+                somebody in a colleague's team simply does not come back.
               */}
-              {(shared ?? []).length > 0 && (
-                <section className="space-y-2">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
-                      <Sparkles className="h-4 w-4 text-violet-600" />
-                      Already shared, not named
-                      <span className="badge bg-violet-100 text-violet-800">
-                        {(shared ?? []).length}
-                      </span>
-                    </h2>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      These people are already on the same KPI — same KRAs,
-                      weightages and scoring. Name it and one edit reaches all
-                      of them. Nobody's rows change.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    {(shared ?? []).map(g => (
-                      <SharedGroupCard key={g.shape} group={g} fy={fy} />
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <input
+                  className="input pl-9"
+                  value={hunt}
+                  onChange={e => setHunt(e.target.value)}
+                  placeholder="Search a template, or an employee code"
+                  aria-label="Search templates or people"
+                />
+                {hunt && (
+                  <button
+                    onClick={() => setHunt('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-ink-400 hover:text-ink-700"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {(people ?? []).length > 0 && (
+                <section className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                    People
+                  </p>
+                  <ul className="divide-y divide-ink-100 overflow-hidden rounded-lg border border-ink-200">
+                    {(people ?? []).map(p => (
+                      <li key={p.employee_id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium text-ink-900">{p.full_name}</span>
+                          <span className="ml-1.5 text-xs text-ink-400">{p.ecode}</span>
+                          {p.designation && (
+                            <span className="block truncate text-xs text-ink-500">{p.designation}</span>
+                          )}
+                        </span>
+                        {p.template_name ? (
+                          // Straight to it: the next thing anybody does
+                          // after "which one is he on" is look at it.
+                          <button
+                            onClick={() => setHunt(p.template_name ?? '')}
+                            className="badge shrink-0 bg-violet-100 text-violet-800 hover:bg-violet-200"
+                          >
+                            {p.template_name}
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-xs text-ink-400">no template</span>
+                        )}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </section>
               )}
 
+              {hunt.trim() && shown.length === 0 && (people ?? []).length === 0
+                && !lookingUp && (
+                <EmptyState icon={Search} title="Nothing matches that">
+                  No template, and nobody in your team, matches “{hunt.trim()}”.
+                </EmptyState>
+              )}
+
+              {/*
+                Three groups and one format.
+
+                The list used to be organised by who OWNS each template:
+                a heading per manager, "theirs to change, yours to use",
+                "kept by" on every row — and a separate group for ones
+                owned above you that your people are on. The same kind of
+                card came out looking two different ways depending on
+                where it was written, and the SW admin's question on
+                seeing them side by side was why. Ownership is not what a
+                manager is choosing by. What matters on this screen is
+                whether you can change it, and how many people it
+                reaches, and both are on the card.
+              */}
               <TemplateGroup
                 title="Mine"
                 hint="Templates you wrote. Yours to change, rename and hand out."
-                icon={Users}
+                icon={Pencil}
                 templates={mine}
                 items={itemsByTemplate}
                 preview={preview}
@@ -433,6 +397,21 @@ export default function TeamTemplates() {
                 fy={fy}
                 onCloseAssign={() => setAssigning(null)}
                 onDelete={setConfirmDelete}
+              />
+
+              <TemplateGroup
+                title="Your team"
+                hint="Written by the people below you, or already on your people. Hand any of them to a new joiner."
+                icon={Users}
+                templates={team}
+                items={itemsByTemplate}
+                preview={preview}
+                onPreview={id => setPreview(preview === id ? null : id)}
+                onEdit={startFrom}
+                onAssign={setAssigning}
+                assigningId={assigning?.id ?? null}
+                fy={fy}
+                onCloseAssign={() => setAssigning(null)}
               />
 
               <TemplateGroup
@@ -538,17 +517,12 @@ function TemplateGroup({
                   {/* Wraps rather than truncates: with two buttons beside
                       it on a narrow screen, "Biomedical Engineer" was
                       being shown as "Biomedical En…". */}
-                  <p className="font-medium text-ink-900">{t.name}</p>
+                  <p className="font-medium text-ink-900">{displayTemplateName(t.name)}</p>
                   <p className="mt-0.5 truncate text-xs text-ink-500">
                     {t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
-                    {/* Whose it is, always. Two managers in one division
-                        both keeping an "Engineer" is the normal case, and
-                        the name alone cannot tell them apart. */}
-                    {t.is_company
-                      ? ' · company standard'
-                      : t.is_mine
-                        ? ' · yours'
-                        : ` · kept by ${t.owner_name ?? 'a manager'}${t.owner_ecode ? ` (${t.owner_ecode})` : ''}`}
+                    {/* No owner. The group already says whether it is
+                        yours; who else wrote it is not something anybody
+                        choosing a template acts on. */}
                     {total !== JOB_ROLE_TOTAL && ` · totals ${total}%`}
                   </p>
                   {/*
@@ -579,18 +553,17 @@ function TemplateGroup({
                       <UserPlus className="h-3.5 w-3.5" /> Assign to
                     </button>
                   )}
-                  <button
-                    onClick={() => onEdit(t)}
-                    className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                  >
-                    {/* "Keep my own" was a label nobody could act on —
-                        the first question asked of it was what it meant.
-                        It copies somebody else's rows into a new
-                        template of your own, so that is what it says. */}
-                    {t.is_mine
-                      ? <><Pencil className="h-3.5 w-3.5" /> Edit</>
-                      : <><Copy className="h-3.5 w-3.5" /> Copy to mine</>}
-                  </button>
+                  {/* Only your own. Copying somebody else's lives on New
+                      template now, as "Start from", which is the one
+                      moment anybody wants it. */}
+                  {t.is_mine && (
+                    <button
+                      onClick={() => onEdit(t)}
+                      className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
+                  )}
                   {onDelete && (
                     <button
                       onClick={() => onDelete(t)}
@@ -650,80 +623,6 @@ function TemplateGroup({
         })}
       </div>
     </section>
-  )
-}
-
-/**
- * One shape several people are already on, and the box to name it.
- *
- * The name is pre-filled from what those people are mostly called,
- * because "Jr.Biomedical Engineer" is right forty-five times out of
- * forty-five and typing it is the only work left. Editable, since the
- * one case it gets wrong is a group of eleven engineers and one
- * district in-charge.
- */
-function SharedGroupCard({ group, fy }: { group: SharedKpiGroup; fy: string }) {
-  const name = useNameSharedKpi()
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<number | null>(null)
-
-  /*
-    No box to type the name in.
-
-    It already has one, taken from the job those people do, and it is
-    right nearly every time — offering an empty-looking text field asks
-    somebody to reconsider a decision that has already been made well.
-    Renaming lives where renaming lives: Edit, on the template itself,
-    afterwards.
-  */
-  const value = group.suggested_name
-
-  const run = async () => {
-    setError(null)
-    try {
-      const out = await name.mutateAsync({ shape: group.shape, name: value, fy })
-      setDone(out.people)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not name that one.')
-    }
-  }
-
-  if (done !== null) {
-    return (
-      <div className="card flex items-center gap-2.5 border-emerald-200 bg-emerald-50/40 p-4">
-        <Check className="h-4 w-4 shrink-0 text-emerald-600" />
-        <p className="text-sm text-ink-700">
-          <span className="font-medium text-ink-900">“{value}”</span> now covers{' '}
-          {done} {done === 1 ? 'person' : 'people'}. It is in Mine, below.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="card space-y-3 p-4">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <p className="font-medium text-ink-900">
-          {group.people} people on the same {group.row_count}-row KPI
-        </p>
-        {group.designations && (
-          <p className="text-xs text-ink-500">{group.designations}</p>
-        )}
-      </div>
-      {group.examples && (
-        <p className="text-xs text-ink-400">e.g. {group.examples}</p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={run} disabled={name.isPending} className="btn-primary">
-          {name.isPending ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-          Call it “{value}”
-        </button>
-        <span className="text-xs text-ink-400">
-          Rename it later with Edit. Nobody's rows change.
-        </span>
-      </div>
-      {error && <Alert kind="error">{error}</Alert>}
-    </div>
   )
 }
 
@@ -983,14 +882,17 @@ function AssignPanel({
  * year starts from.
  */
 function TemplateEditor({
-  fy, initial, existing, onCancel, onSaved,
+  fy, initial, existing, sources, onCancel, onSaved,
 }: {
   fy: string
   initial: { id: string | null; name: string; rows: Draft[]; inUse?: number }
   existing: Array<{ id: string; name: string; rows: ComparableRow[] }>
+  /** Templates a NEW one may start from. Ignored when editing. */
+  sources: Array<{ id: string; name: string; keeper: string | null; items: KpiTemplateItem[] }>
   onCancel: () => void
   onSaved: (name: string) => void
 }) {
+  const [startedFrom, setStartedFrom] = useState('')
   const save = useSaveTemplate()
   const push = usePushTemplate()
   const { data: rules } = useScoringRules()
@@ -1074,6 +976,47 @@ function TemplateEditor({
   return (
     <div className="space-y-4">
       <div className="card space-y-3 p-4">
+        {/*
+          Start from another template — on a new one only.
+
+          This replaced "Copy to mine" on every row of the list, which
+          put a copy button beside templates nobody wanted a copy of. The
+          one moment somebody wants somebody else's rows is when they sit
+          down to write a new template, so that is where it is: pick one,
+          its rows arrive below, change what differs and add what is
+          missing.
+        */}
+        {initial.id === null && sources.length > 0 && (
+          <div>
+            <label htmlFor="tpl-source" className="label">Start from</label>
+            <select
+              id="tpl-source"
+              className="input max-w-sm"
+              value={startedFrom}
+              onChange={e => {
+                const id = e.target.value
+                setStartedFrom(id)
+                const src = sources.find(x => x.id === id)
+                setRows(src && src.items.length > 0
+                  ? src.items.map(fromItem)
+                  : [blankRow(1)])
+                setDupAccepted(false)
+              }}
+            >
+              <option value="">A blank template</option>
+              {sources.map(src => (
+                <option key={src.id} value={src.id}>
+                  {displayTemplateName(src.name)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-ink-500">
+              Its rows replace the ones below. Change what differs, add what is
+              missing, and give it its own name.
+            </p>
+          </div>
+        )}
+
         <div>
           <label htmlFor="tpl-name" className="label">Template name</label>
           <input

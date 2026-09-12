@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { templateShape, findDuplicate, freeName } from './templates'
+import { templateShape, findDuplicate, freeName, displayTemplateName } from './templates'
 
 const row = (
   kra: string,
@@ -110,5 +110,32 @@ describe('freeName', () => {
 
   it('falls back rather than returning an empty name', () => {
     expect(freeName('   ', [])).toBe('Team template')
+  })
+})
+
+describe('displayTemplateName — one list, one case', () => {
+  it('softens a name typed with caps lock on', () => {
+    expect(displayTemplateName('DIVISIONAL MANAGER')).toBe('Divisional Manager')
+    expect(displayTemplateName('CALIBRATION ENGINEERS')).toBe('Calibration Engineers')
+  })
+
+  it('keeps the short words that are acronyms', () => {
+    expect(displayTemplateName('QA ENGINEERS')).toBe('QA Engineers')
+    expect(displayTemplateName('HR EXECUTIVE')).toBe('HR Executive')
+  })
+
+  it('leaves a name that is only an acronym or a code', () => {
+    expect(displayTemplateName('MIS')).toBe('MIS')
+    expect(displayTemplateName('KPI-26')).toBe('KPI-26')
+  })
+
+  it('keeps digits where they were', () => {
+    expect(displayTemplateName('ZONAL MANAGER1')).toBe('Zonal Manager1')
+  })
+
+  it('does not touch anything typed in mixed case on purpose', () => {
+    expect(displayTemplateName('Biomedical Engineer')).toBe('Biomedical Engineer')
+    expect(displayTemplateName('office coordinator-DnD')).toBe('office coordinator-DnD')
+    expect(displayTemplateName('Engineer Temp')).toBe('Engineer Temp')
   })
 })

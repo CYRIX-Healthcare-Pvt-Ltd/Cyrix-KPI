@@ -115,3 +115,27 @@ export interface TemplateRowInput {
   rule_params: RuleParams
   alternates: Alternate[]
 }
+
+/**
+ * A template's name, as it should read on screen.
+ *
+ * Names are typed by whoever made the template, and some were typed with
+ * caps lock on: "DIVISIONAL MANAGER" beside "Biomedical Engineer" in one
+ * list reads as two different kinds of thing, and was asked about as
+ * exactly that. A name written entirely in capitals is shown in title
+ * case. Words of three letters or fewer stay as they are, because those
+ * are the acronyms — QA, MIS, HR, KPI — that are meant to be capitals.
+ * Anything with a lower-case letter in it was typed that way on purpose
+ * and is left alone.
+ *
+ * Display only. The stored name is never changed, and the person who
+ * keeps the template renames it with Edit.
+ */
+export function displayTemplateName(name: string): string {
+  const letters = name.replace(/[^A-Za-z]/g, '')
+  if (!letters || letters !== letters.toUpperCase()) return name
+  // Nothing longer than an acronym: it is an acronym, or a code.
+  if (!/[A-Z]{4,}/.test(name)) return name
+  return name.replace(/[A-Z]+/g, w =>
+    w.length <= 3 ? w : w[0] + w.slice(1).toLowerCase())
+}
