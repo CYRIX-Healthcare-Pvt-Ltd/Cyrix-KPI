@@ -54,7 +54,6 @@ export default function AdminEmployees() {
         Name: e.full_name,
         Designation: e.designation ?? '',
         Department: e.department ?? '',
-        Location: e.location ?? '',
         Manager: e.manager_name ?? '',
         'Manager Ecode': e.manager_ecode ?? '',
         'KPI status': e.kpi_status,
@@ -280,7 +279,7 @@ function Row({ e, onEdit }: { e: OrgKpiStatusAllRow; onEdit: () => void }) {
 function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
     ecode: '', full_name: '', designation: '', department: '',
-    location: '', manager_ecode: '', work_email: '',
+    function_name: '', manager_ecode: '', work_email: '',
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -312,7 +311,7 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         full_name: form.full_name.trim(),
         designation: form.designation.trim() || null,
         department: form.department.trim() || null,
-        location: form.location.trim() || null,
+        function_name: form.function_name.trim() || null,
         work_email: form.work_email.trim() || null,
         reporting_manager_id: manager_id,
         is_active: true,
@@ -377,7 +376,11 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <Field label="Full name *" value={form.full_name} onChange={set('full_name')} />
           <Field label="Designation" value={form.designation} onChange={set('designation')} />
           <Field label="Department" value={form.department} onChange={set('department')} />
-          <Field label="Location" value={form.location} onChange={set('location')} />
+          {/* Function, not Location: this is the business unit the KPI
+              report groups by. Location is still on the record and is not
+              asked for here — nothing reports on it. */}
+          <Field label="Function" value={form.function_name} onChange={set('function_name')}
+                 placeholder="KLBEMP" />
           <Field label="Reporting manager code" value={form.manager_ecode}
                  onChange={set('manager_ecode')} placeholder="E551" uppercase />
           <Field label="Work email" value={form.work_email} onChange={set('work_email')}
@@ -506,7 +509,20 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         full_name: pick(r, 'employee_name', 'name', 'full name'),
         designation: pick(r, 'designation', 'title'),
         department: pick(r, 'department', 'dept'),
-        location: pick(r, 'location', 'branch'),
+        /*
+          Function — the business unit — where the sheet used to carry
+          Location.
+
+          The two are not the same field and were being confused in the
+          files: KLBEMP, Care 360 and TCQAS were arriving in a Location
+          column whose 1,179 live values are cities. Function is what the
+          KPI report groups by and what a profile shows, and until now
+          nothing on any screen could set it — it came from a script run
+          off a laptop. Location is no longer read from the sheet at all,
+          so a file with that column can no longer overwrite somebody's
+          city with a business unit.
+        */
+        function_name: pick(r, 'function', 'function_name', 'business unit', 'businessunit'),
         manager_ecode: pick(r, 'reportingmanager_code', 'reporting manager code', 'manager ecode', 'manager code'),
         work_email: pick(r, 'email', 'work email'),
       })).filter(r => r.ecode && r.full_name)
@@ -588,7 +604,7 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         full_name: r.full_name,
         designation: r.designation || null,
         department: r.department || null,
-        location: r.location || null,
+        function_name: r.function_name || null,
         work_email: r.work_email || null,
         // In the file means on the payroll, which also brings a returner
         // back with the record and the scored months they already had.
@@ -759,12 +775,12 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                 {
                   name: 'New team members',
                   headers: ['Employee_Code', 'Employee_Name', 'Designation',
-                            'Department', 'Location', 'ReportingManager_Code', 'Email',
+                            'Department', 'Function', 'ReportingManager_Code', 'Email',
                             'Sign_in_with', 'First_password'],
                   rows: result.joined.map(j => ({
                     Employee_Code: j.ecode, Employee_Name: j.full_name,
                     Designation: j.designation, Department: j.department,
-                    Location: j.location, ReportingManager_Code: j.manager_ecode,
+                    Function: j.function_name, ReportingManager_Code: j.manager_ecode,
                     Email: j.work_email,
                     // What to actually tell the person on their first day.
                     // HR was reading this off a script's console output.
@@ -891,7 +907,7 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           <p className="text-sm text-ink-600">
             Start from the template, or upload your own Excel or CSV. Column headers are
             matched loosely — recognised names include Employee_Code, Employee_Name,
-            Designation, Department, Location, ReportingManager_Code and Email.
+            Designation, Department, Function, ReportingManager_Code and Email.
           </p>
           <div className="flex flex-wrap gap-2">
             {/*
@@ -908,16 +924,16 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
               onClick={() => downloadTemplate(
                 'cyrix-employees-template.xlsx',
                 ['Employee_Code', 'Employee_Name', 'Designation', 'Department',
-                 'Location', 'ReportingManager_Code', 'Email'],
+                 'Function', 'ReportingManager_Code', 'Email'],
                 [
                   {
                     Employee_Code: 'E8888', Employee_Name: 'Kevin - Test',
-                    Designation: 'MIS', Department: 'AI', Location: 'HO',
+                    Designation: 'MIS', Department: 'AI', Function: 'Care 360',
                     ReportingManager_Code: 'E9999', Email: 'kevin.test@cyrix.in',
                   },
                   {
                     Employee_Code: 'E9999', Employee_Name: 'Saranya - Test',
-                    Designation: 'Manager', Department: 'AI', Location: 'HO',
+                    Designation: 'Manager', Department: 'AI', Function: 'Care 360',
                     ReportingManager_Code: 'E2', Email: 'saranya.test@cyrix.in',
                   },
                 ],

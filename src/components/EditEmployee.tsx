@@ -21,7 +21,7 @@ interface Row {
   full_name: string
   designation: string | null
   department: string | null
-  location: string | null
+  function_name: string | null
   is_active: boolean
   auth_user_id: string | null
   reporting_manager_id: string | null
@@ -53,7 +53,7 @@ export default function EditEmployee({
     ;(async () => {
       const { data, error: err } = await supabase
         .from('employees')
-        .select('ecode, full_name, designation, department, location, is_active, auth_user_id, reporting_manager_id')
+        .select('ecode, full_name, designation, department, function_name, is_active, auth_user_id, reporting_manager_id')
         .eq('ecode', ecode).maybeSingle()
       if (!alive) return
       if (err) { setError(friendlyError(err)); return }
@@ -94,7 +94,7 @@ export default function EditEmployee({
         full_name: row.full_name.trim(),
         designation: row.designation?.trim() || null,
         department: row.department?.trim() || null,
-        location: row.location?.trim() || null,
+        function_name: row.function_name?.trim() || null,
         is_active: row.is_active,
         reporting_manager_id: managerId,
       }).eq('ecode', row.ecode)
@@ -185,7 +185,9 @@ export default function EditEmployee({
                 <Field label="Department" value={row.department ?? ''} onChange={set('department')} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Location" value={row.location ?? ''} onChange={set('location')} />
+                {/* The business unit — RJBEMP, Care 360, TCQAS. What the
+                    KPI report groups by. */}
+                <Field label="Function" value={row.function_name ?? ''} onChange={set('function_name')} />
                 <Field
                   label="Manager's employee code"
                   value={managerCode}
