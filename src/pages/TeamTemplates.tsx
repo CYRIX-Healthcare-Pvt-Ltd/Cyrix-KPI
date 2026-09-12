@@ -546,9 +546,13 @@ function TemplateGroup({
                     onClick={() => onEdit(t)}
                     className="btn-secondary !px-2.5 !py-1.5 text-xs"
                   >
+                    {/* "Keep my own" was a label nobody could act on —
+                        the first question asked of it was what it meant.
+                        It copies somebody else's rows into a new
+                        template of your own, so that is what it says. */}
                     {t.is_mine
                       ? <><Pencil className="h-3.5 w-3.5" /> Edit</>
-                      : <><Copy className="h-3.5 w-3.5" /> Keep my own</>}
+                      : <><Copy className="h-3.5 w-3.5" /> Copy to mine</>}
                   </button>
                   {onDelete && (
                     <button
@@ -623,14 +627,24 @@ function TemplateGroup({
  */
 function SharedGroupCard({ group, fy }: { group: SharedKpiGroup; fy: string }) {
   const name = useNameSharedKpi()
-  const [value, setValue] = useState(group.suggested_name)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<number | null>(null)
+
+  /*
+    No box to type the name in.
+
+    It already has one, taken from the job those people do, and it is
+    right nearly every time — offering an empty-looking text field asks
+    somebody to reconsider a decision that has already been made well.
+    Renaming lives where renaming lives: Edit, on the template itself,
+    afterwards.
+  */
+  const value = group.suggested_name
 
   const run = async () => {
     setError(null)
     try {
-      const out = await name.mutateAsync({ shape: group.shape, name: value.trim(), fy })
+      const out = await name.mutateAsync({ shape: group.shape, name: value, fy })
       setDone(out.people)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not name that one.')
@@ -642,7 +656,7 @@ function SharedGroupCard({ group, fy }: { group: SharedKpiGroup; fy: string }) {
       <div className="card flex items-center gap-2.5 border-emerald-200 bg-emerald-50/40 p-4">
         <Check className="h-4 w-4 shrink-0 text-emerald-600" />
         <p className="text-sm text-ink-700">
-          <span className="font-medium text-ink-900">“{value.trim()}”</span> now covers{' '}
+          <span className="font-medium text-ink-900">“{value}”</span> now covers{' '}
           {done} {done === 1 ? 'person' : 'people'}. It is in Mine, below.
         </p>
       </div>
@@ -662,26 +676,14 @@ function SharedGroupCard({ group, fy }: { group: SharedKpiGroup; fy: string }) {
       {group.examples && (
         <p className="text-xs text-ink-400">e.g. {group.examples}</p>
       )}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <label htmlFor={`name-${group.shape}`} className="label">
-            Call it
-          </label>
-          <input
-            id={`name-${group.shape}`}
-            className="input max-w-sm"
-            value={value}
-            onChange={e => setValue(e.target.value.slice(0, 60))}
-          />
-        </div>
-        <button
-          onClick={run}
-          disabled={!value.trim() || name.isPending}
-          className="btn-primary"
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={run} disabled={name.isPending} className="btn-primary">
           {name.isPending ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-          Name it
+          Call it “{value}”
         </button>
+        <span className="text-xs text-ink-400">
+          Rename it later with Edit. Nobody's rows change.
+        </span>
       </div>
       {error && <Alert kind="error">{error}</Alert>}
     </div>
