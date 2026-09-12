@@ -97,17 +97,31 @@ function LoginsTab() {
   const filtered = useMemo(() => {
     if (!data) return []
     const q = search.trim().toLowerCase()
-    return data.filter(r => {
+    /** Matched on their own record rather than on their manager's name. */
+    const isSelf = (r: LoginStatusRow) =>
+      r.ecode.toLowerCase().includes(q) ||
+      r.full_name.toLowerCase().includes(q) ||
+      (r.login_email ?? '').toLowerCase().includes(q)
+    const rows = data.filter(r => {
       if (!includeInactive && !r.is_active) return false
       if (stateFilter !== 'all' && r.login_state !== stateFilter) return false
       if (!q) return true
-      return (
-        r.ecode.toLowerCase().includes(q) ||
-        r.full_name.toLowerCase().includes(q) ||
-        (r.login_email ?? '').toLowerCase().includes(q) ||
-        (r.manager_name ?? '').toLowerCase().includes(q)
-      )
+      return isSelf(r) || (r.manager_name ?? '').toLowerCase().includes(q)
     })
+    /*
+      The person searched for, then their team.
+
+      A manager's name is searchable, which is what puts a whole team on
+      screen at once — and left the manager themselves wherever their code
+      happened to fall, which for a big team is past the 200 rows this
+      list stops at. Somebody typing a name is asking about that person
+      first.
+
+      Sorted rather than filtered, because both kinds of match are wanted,
+      and the sort is stable: inside each group the ecode order the query
+      returned is untouched.
+    */
+    return q ? [...rows].sort((a, b) => Number(isSelf(b)) - Number(isSelf(a))) : rows
   }, [data, search, stateFilter, includeInactive])
 
   // The tiles count what the list is showing: the people here now, or
