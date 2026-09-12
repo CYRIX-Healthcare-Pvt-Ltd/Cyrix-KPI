@@ -425,21 +425,98 @@ export function useUseAlternate() {
   })
 }
 
+/**
+ * How far back a change reaches — migration 0126, one vocabulary for
+ * assigning and for pushing an edit.
+ *
+ *   forward  open months take the new rows; filed months keep what they
+ *            were assessed on
+ *   keep     every month takes them, and what was typed survives
+ *            wherever the KRA survives
+ *   clean    every month takes them with nothing filled in
+ */
+export type TemplateReach = 'forward' | 'keep' | 'clean'
+
 export interface AssignResult {
   code: string
   name?: string
   status: 'assigned' | 'assigned_with_warning' | 'skipped'
   detail?: string | null
+  /** Whether they had a KPI before this. A mixed list is the normal case. */
+  was?: 'new' | 'replaced'
+  /** The template they were on, when it was a different one. */
+  replaced?: string | null
   starts_from?: string
   filed_months?: number
+  /** Filed months left holding rows this KPI no longer carries. */
+  kept_own_rows?: number
 }
 
 export interface AssignOutcome {
   financial_year: string
   template: string
+  mode: TemplateReach
   assigned: number
   skipped: number
   results: AssignResult[]
+}
+
+export interface PushOutcome {
+  template: string
+  mode: TemplateReach | 'template_only'
+  /** How many people it reached. Nought when only the template moved. */
+  people: number
+  months: number
+}
+
+/**
+ * Saves a template and pushes it to the people already on it.
+ *
+ * The mode is the whole question: changing a weightage on a template
+ * twenty-three people carry changes twenty-three people's year, and
+ * "template_only" is there for the case where it should not.
+ */
+export function usePushTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      templateId: string
+      name: string
+      rows: unknown[]
+      reach: TemplateReach | 'template_only'
+    }) => {
+      const { data, error } = await supabase.rpc('push_template_change', {
+        p_template_id: args.templateId,
+        p_name: args.name,
+        p_rows: args.rows,
+        p_mode: args.reach,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as PushOutcome
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visible_templates'] })
+      qc.invalidateQueries({ queryKey: ['template_items'] })
+      qc.invalidateQueries({ queryKey: ['assignment'] })
+      qc.invalidateQueries({ queryKey: ['team'] })
+      invalidateSubmissionViews(qc)
+    },
+  })
+}
+
+/** Removes a template from the list, leaving everybody's KPI alone. */
+export function useArchiveTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      const { data, error } = await supabase.rpc('archive_template', {
+        p_template_id: templateId,
+      })
+      if (error) throw new Error(friendlyError(error))
+      return data as { template: string; people_keeping_it: number }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['visible_templates'] }),
+  })
 }
 
 /**
@@ -457,12 +534,14 @@ export function useApplyTemplate() {
       codes: string[]
       fy: string
       startsFrom?: string | null
+      reach?: TemplateReach
     }) => {
       const { data, error } = await supabase.rpc('apply_template_to', {
         p_template_id: args.templateId,
         p_codes: args.codes,
         p_fy: args.fy,
         p_starts_from: args.startsFrom ?? null,
+        p_mode: args.reach ?? 'forward',
       })
       if (error) throw new Error(friendlyError(error))
       return data as AssignOutcome

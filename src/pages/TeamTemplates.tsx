@@ -6,9 +6,9 @@ import {
   Copy, Users, Building2, Info, UserPlus, Check, AlertTriangle, Search,
 } from 'lucide-react'
 import {
-  useVisibleTemplates, useTemplateItems, useSaveTemplate, useDeleteTemplate,
-  useScoringRules, useApplyTemplate, currentFy,
-  type AssignOutcome,
+  useVisibleTemplates, useTemplateItems, useSaveTemplate,
+  useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate, currentFy,
+  type AssignOutcome, type TemplateReach,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
 import { findDuplicate, type ComparableRow } from '@/lib/templates'
@@ -57,11 +57,21 @@ export default function TeamTemplates() {
   const { data: templates, isLoading } = useVisibleTemplates(fy)
   const ids = useMemo(() => (templates ?? []).map(t => t.id), [templates])
   const { data: itemsByTemplate } = useTemplateItems(ids)
-  const remove = useDeleteTemplate()
+  /*
+    Archived, not deleted.
+
+    A hard delete took the template row with kpi_template_items on the
+    cascade — and kpi_assignments.source_template_id is ON DELETE SET
+    NULL, so removing a template quietly severed every KPI that came
+    from it. That is the link "23 people on this" is counted from, and
+    the one the audit trail needs to say where somebody's rows came
+    from. Archiving takes it out of every list and leaves both standing.
+  */
+  const remove = useArchiveTemplate()
 
   /** null when nothing is being edited; a draft when something is. */
   const [editing, setEditing] = useState<
-    { id: string | null; name: string; rows: Draft[] } | null
+    { id: string | null; name: string; rows: Draft[]; inUse?: number } | null
   >(null)
   const [confirmDelete, setConfirmDelete] = useState<VisibleTemplate | null>(null)
   const [assigning, setAssigning] = useState<VisibleTemplate | null>(null)
@@ -137,6 +147,9 @@ export default function TeamTemplates() {
       id: t.is_mine ? t.id : null,
       name: t.is_mine ? t.name : `${t.name} (my version)`,
       rows: (itemsByTemplate?.get(t.id) ?? []).map(fromItem),
+      // Only yours can be pushed; somebody else's opens as a new one of
+      // your own, which nobody is on yet.
+      inUse: t.is_mine ? Number(t.in_use ?? 0) : 0,
     })
   }
 
@@ -188,8 +201,14 @@ export default function TeamTemplates() {
     if (!confirmDelete) return
     setError(null)
     try {
-      await remove.mutateAsync(confirmDelete.id)
-      setNotice(`Removed “${confirmDelete.name}”. Anyone already using it keeps their own copy.`)
+      const out = await remove.mutateAsync(confirmDelete.id)
+      setNotice(
+        `Removed “${out.template}”. `
+        + (out.people_keeping_it > 0
+          ? `${out.people_keeping_it} ${out.people_keeping_it === 1 ? 'person keeps' : 'people keep'} `
+            + 'the KPI it gave them, exactly as it is.'
+          : 'Nobody was on it.'),
+      )
       setConfirmDelete(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not remove that template.')
@@ -247,7 +266,18 @@ export default function TeamTemplates() {
           onCancel={() => setEditing(null)}
           onSaved={name => {
             setEditing(null)
-            setNotice(`Saved “${name}”. Everybody below you can start from it now.`)
+            /*
+              Not "everybody below you" — that is exactly backwards
+              under the rule in 0125. Your own reportees see what is
+              under YOU; your template is visible to the people beside
+              you and the levels above. The way it reaches your own team
+              is that you assign it to them.
+            */
+            setNotice(
+              `Saved “${name}”. Hand it to your own team with Assign to — `
+              + 'your colleagues at the same level, and the managers above you, '
+              + 'can also start from it.',
+            )
           }}
         />
       ) : (
@@ -277,8 +307,8 @@ export default function TeamTemplates() {
 
           {(templates ?? []).length === 0 ? (
             <EmptyState icon={FileSpreadsheet} title="No templates yet">
-              Write the KPI you agree with most of your team once, and everybody
-              below you can start from it instead of from an empty grid.
+              Write the KPI you agree with most of your team once, then hand it
+              to them with Assign to instead of everybody typing it out.
             </EmptyState>
           ) : (
             <div className="space-y-5">
@@ -363,10 +393,18 @@ export default function TeamTemplates() {
             <p className="font-medium text-ink-900">
               Remove “{confirmDelete.name}”?
             </p>
+            {/* "Offered to your team" was wrong twice over: archiving
+                takes it out of every list including the owner's own, and
+                the people who could see it were never "your team" — they
+                are everybody under your own manager. */}
             <p className="mt-0.5 text-sm text-ink-500">
-              It stops being offered to your team. Nobody's KPI changes —
-              a template is copied onto a person when they use it, so
-              everybody who already has one keeps it exactly as it is.
+              It disappears from every list, yours included.
+              {Number(confirmDelete.in_use) > 0
+                ? ` The ${confirmDelete.in_use} ${Number(confirmDelete.in_use) === 1
+                    ? 'person on it keeps their KPI' : 'people on it keep their KPIs'}`
+                  + ' exactly as they are — a template is copied onto somebody when'
+                  + ' it is applied, and taking it away does not take that back.'
+                : ' Nobody is on it.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -536,6 +574,78 @@ function TemplateGroup({
 }
 
 /**
+ * How far back a change reaches.
+ *
+ * The same three choices wherever a template meets a month, because it
+ * is the same question: assigning one to somebody who already has a KPI
+ * and editing one twenty-three people carry differ only in how many
+ * people are on the other end.
+ *
+ * Radio buttons rather than a dropdown. Two of the three rewrite a month
+ * somebody has already been scored on, and a choice with that in it
+ * should be read rather than opened.
+ */
+const REACH: Array<{ key: TemplateReach; label: string; what: string }> = [
+  {
+    key: 'forward',
+    label: 'From now on',
+    what: 'Months not filed in yet take the new rows. Anything submitted, '
+      + 'scored or finalised keeps exactly what it was assessed on.',
+  },
+  {
+    key: 'keep',
+    label: 'All months, keep the figures',
+    what: 'Every month takes the new rows. What people typed stays wherever '
+      + 'the KRA is still there, and the scores are worked out again.',
+  },
+  {
+    key: 'clean',
+    label: 'All months, start clean',
+    what: 'Every month takes the new rows with nothing filled in. Use this '
+      + 'when the KPI was wrong from April and the figures against it were '
+      + 'measuring the wrong thing.',
+  },
+]
+
+function ReachChoice({
+  value, onChange, name,
+}: {
+  value: TemplateReach
+  onChange: (v: TemplateReach) => void
+  /** Unique per instance, or two panels share one radio group. */
+  name: string
+}) {
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="label !mb-1">How far back</legend>
+      {REACH.map(r => (
+        <label
+          key={r.key}
+          className={clsx(
+            'flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5',
+            value === r.key
+              ? 'border-violet-300 bg-violet-50/60'
+              : 'border-ink-200 hover:bg-ink-50',
+          )}
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === r.key}
+            onChange={() => onChange(r.key)}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-ink-900">{r.label}</span>
+            <span className="mt-0.5 block text-xs leading-snug text-ink-500">{r.what}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+/**
  * Handing a template to a list of people.
  *
  * A paste box rather than a picker of checkboxes, because the list
@@ -562,6 +672,7 @@ function AssignPanel({
 }) {
   const apply = useApplyTemplate()
   const [pasted, setPasted] = useState('')
+  const [reach, setReach] = useState<TemplateReach>('forward')
   const [out, setOut] = useState<AssignOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -570,7 +681,7 @@ function AssignPanel({
   const run = async () => {
     setError(null)
     try {
-      setOut(await apply.mutateAsync({ templateId: template.id, codes, fy }))
+      setOut(await apply.mutateAsync({ templateId: template.id, codes, fy, reach }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not assign that.')
     }
@@ -589,8 +700,7 @@ function AssignPanel({
           </p>
           <p className="mt-0.5 text-sm text-ink-500">
             Paste their employee codes — commas, spaces or one per line, it
-            does not matter. Anyone in your team at any depth; HR's own
-            reach is wider.
+            does not matter.
           </p>
         </div>
         <button onClick={onClose} className="btn-icon shrink-0" aria-label="Close">
@@ -608,6 +718,10 @@ function AssignPanel({
             aria-label="Employee codes"
             autoFocus
           />
+          {/* Only matters for the ones who already have a KPI — a new
+              joiner has no month to reach back into — and a mixed list
+              is the normal case, so it is always asked. */}
+          <ReachChoice value={reach} onChange={setReach} name={`reach-${template.id}`} />
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={run}
@@ -660,8 +774,20 @@ function AssignPanel({
                     {r.name ?? r.code}
                     <span className="ml-1.5 text-xs text-ink-400">{r.code}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-ink-500">
-                    {r.detail ?? `from ${r.starts_from}`}
+                  <span className="shrink-0 text-right text-xs text-ink-500">
+                    {r.detail ?? (
+                      <>
+                        {r.was === 'new' ? 'new KPI' : 'replaced'}
+                        {r.replaced && ` “${r.replaced}”`}
+                        {' · from '}{r.starts_from}
+                        {Number(r.kept_own_rows) > 0 && (
+                          <span className="block text-amber-700">
+                            {r.kept_own_rows} filed month
+                            {Number(r.kept_own_rows) === 1 ? '' : 's'} kept its own rows
+                          </span>
+                        )}
+                      </>
+                    )}
                   </span>
                 </li>
               ))}
@@ -706,16 +832,28 @@ function TemplateEditor({
   fy, initial, existing, onCancel, onSaved,
 }: {
   fy: string
-  initial: { id: string | null; name: string; rows: Draft[] }
+  initial: { id: string | null; name: string; rows: Draft[]; inUse?: number }
   existing: Array<{ id: string; name: string; rows: ComparableRow[] }>
   onCancel: () => void
   onSaved: (name: string) => void
 }) {
   const save = useSaveTemplate()
+  const push = usePushTemplate()
   const { data: rules } = useScoringRules()
   const [name, setName] = useState(initial.name)
   const [rows, setRows] = useState<Draft[]>(initial.rows)
   const [error, setError] = useState<string | null>(null)
+  /*
+    Editing something people are already carrying is a different act
+    from writing a new one, and it asks a question first.
+
+    Nought here covers both the new template and the one nobody has
+    taken yet, and neither needs asking: there is no month on the other
+    end of it.
+  */
+  const inUse = Number(initial.inUse ?? 0)
+  const [reach, setReach] = useState<TemplateReach>('forward')
+  const [asking, setAsking] = useState(false)
   /** Set once the manager has been shown the duplicate and pressed on. */
   const [dupAccepted, setDupAccepted] = useState(false)
 
@@ -730,25 +868,48 @@ function TemplateEditor({
   const update = (key: string, patch: Partial<Draft>) =>
     setRows(rows.map(r => (r._key === key ? { ...r, ...patch } : r)))
 
+  /** The rows, in the shape both the save and the push RPCs take. */
+  const payload = () =>
+    named.map(({ _key, _inferred, section, sort_order, ...r }) => {
+      void _key; void _inferred; void section; void sort_order
+      return {
+        ...r,
+        kpi_description: r.kpi_description?.trim() || null,
+        alternates: r.alternates.filter(a => a.kra.trim() !== ''),
+      }
+    })
+
   const onSave = async () => {
     setError(null)
     if (duplicate && !dupAccepted) { setDupAccepted(true); return }
+
+    // People on it: ask how far the change goes before it goes anywhere.
+    if (inUse > 0 && initial.id && !asking) { setAsking(true); return }
+
+    if (inUse > 0 && initial.id) {
+      try {
+        const out = await push.mutateAsync({
+          templateId: initial.id, name, rows: payload(), reach,
+        })
+        onSaved(
+          `${name.trim()}” — ${out.people} ${out.people === 1 ? 'person' : 'people'}, `
+          + `${out.months} month${out.months === 1 ? '' : 's'} updated. Your manager has been told.“`,
+        )
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not push that change.')
+      }
+      return
+    }
+
     try {
       await save.mutateAsync({
         name,
         fy,
         templateId: initial.id,
-        rows: named.map(({ _key, _inferred, section, sort_order, ...r }) => {
-          void _key; void _inferred; void section; void sort_order
-          return {
-            ...r,
-            kpi_description: r.kpi_description?.trim() || null,
-            // Blank ones are dropped rather than saved: an alternative
-            // with no KRA is a row nobody can pick in a month, and it
-            // would come back as a choice on every KPI made from this.
-            alternates: r.alternates.filter(a => a.kra.trim() !== ''),
-          }
-        }),
+        // Blank alternatives are dropped rather than saved: one with no
+        // KRA is a row nobody can pick in a month, and it would come
+        // back as a choice on every KPI made from this.
+        rows: payload(),
       })
       onSaved(name.trim())
     } catch (err) {
@@ -776,6 +937,31 @@ function TemplateEditor({
           </p>
         </div>
       </div>
+
+      {asking && (
+        <div className="card space-y-3 border-violet-300 p-4">
+          <div>
+            <p className="font-medium text-ink-900">
+              {inUse} {inUse === 1 ? 'person is' : 'people are'} on this template
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Changing a weightage here changes {inUse === 1 ? 'their' : 'their'} year.
+              Your manager is told either way — they see the change and how many
+              people it moved.
+            </p>
+          </div>
+          <ReachChoice value={reach} onChange={setReach} name="reach-edit" />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onSave} disabled={push.isPending} className="btn-primary">
+              {push.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+              Save and apply
+            </button>
+            <button onClick={() => setAsking(false)} className="btn-secondary">
+              Back to the rows
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <Alert kind="error">{error}</Alert>}
 

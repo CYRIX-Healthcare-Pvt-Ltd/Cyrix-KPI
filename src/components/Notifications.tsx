@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import {
   Bell, CalendarCheck, CheckCircle2, CheckSquare, ClipboardList,
   LifeBuoy, MessageSquare, Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -127,6 +128,23 @@ const CATALOGUE: Record<NotificationKind, Entry> = {
     title: n => `${plural(n, 'request')} answered`,
     body: 'HR or Software has replied to what you asked.',
     href: '/support',
+  },
+  /*
+    A manager below you changed a KPI template and pushed it onto the
+    people carrying it — migration 0126.
+
+    News, not work: nobody is being asked to approve it, because the
+    manager who did it is the person who would have been asked. It is
+    here because a weightage can move on twenty-three KPIs in one press,
+    and the level above should not have to hear about that from the
+    person whose score changed.
+  */
+  template_pushed: {
+    icon: FileSpreadsheet, priority: 12, action: false,
+    title: n => `${plural(n, 'KPI template')} changed below you`,
+    body: 'A manager in your line changed a template and applied it to the '
+      + 'people on it. The templates screen shows who keeps what.',
+    href: '/team/templates',
   },
 }
 

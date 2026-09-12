@@ -463,6 +463,8 @@ export type NotificationKind =
   | 'records_hr' | 'leavers'
   | 'score_query' | 'score_query_answered'
   | 'support_answered'
+  /** A template kept below you was changed and applied — 0126. */
+  | 'template_pushed'
 
 export interface NotificationRow {
   kind: NotificationKind
