@@ -584,7 +584,7 @@ function KeepAsTemplate({
         <button onClick={() => setOpen(false)} className="btn-secondary">Cancel</button>
       </div>
       <p className="text-xs text-ink-500">
-        Everybody below you can then start their own KPI from it. Core values
+        Your direct reports can then start their own KPI from it, and you can hand it to anyone in your team with Assign to. Core values
         and ESMS are not included — those are the same for everyone and are
         added to every KPI automatically.
       </p>
