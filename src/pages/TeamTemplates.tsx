@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
@@ -949,6 +949,15 @@ function TemplateEditor({
   const inUse = Number(initial.inUse ?? 0)
   const [reach, setReach] = useState<TemplateReach>('forward')
   const [asking, setAsking] = useState(false)
+  const askRef = useRef<HTMLDivElement>(null)
+  // The question is taller than the button row it replaces, so the part
+  // with the choices in it can open below the fold. Brought into view —
+  // "nearest", so a screen that already shows it does not jump.
+  useEffect(() => {
+    if (!asking) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    askRef.current?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' })
+  }, [asking])
   /** Set once the manager has been shown the duplicate and pressed on. */
   const [dupAccepted, setDupAccepted] = useState(false)
 
@@ -1074,32 +1083,6 @@ function TemplateEditor({
         </div>
       </div>
 
-      {asking && (
-        <div className="card space-y-3 border-violet-300 p-4">
-          <div>
-            <p className="font-medium text-ink-900">
-              {inUse} {inUse === 1 ? 'person is' : 'people are'} on this template
-            </p>
-            <p className="mt-0.5 text-sm text-ink-500">
-              Changing a weightage here changes {inUse === 1 ? 'their' : 'their'} year.
-              Your manager is told either way — they see the change and how many
-              people it moved.
-            </p>
-          </div>
-          <ReachChoice value={reach} onChange={setReach} name="reach-edit" />
-          <div className="flex flex-wrap gap-2">
-            <button onClick={onSave} disabled={push.isPending} className="btn-primary">
-              {push.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-              Save and apply
-            </button>
-            <button onClick={() => setAsking(false)} className="btn-secondary">
-              Back to the rows
-            </button>
-          </div>
-        </div>
-      )}
-
-      {error && <Alert kind="error">{error}</Alert>}
 
       {/* Shown while it is still avoidable, and it does not block: two
           teams genuinely running the same KPI under different names is a
@@ -1111,11 +1094,6 @@ function TemplateEditor({
           exists — only the targets differ, and those are set per person
           anyway. Use “{duplicate.name}” instead unless this really is a
           separate one.
-          {dupAccepted && (
-            <span className="mt-1.5 block font-medium">
-              Press Save again to keep it anyway.
-            </span>
-          )}
         </Alert>
       )}
 
@@ -1170,22 +1148,68 @@ function TemplateEditor({
         </Alert>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={onSave}
-          disabled={!name.trim() || named.length === 0 || save.isPending}
-          className="btn-primary"
-        >
-          {save.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {initial.id ? 'Save changes' : 'Save template'}
-        </button>
-        <button onClick={onCancel} className="btn-secondary">
-          <X className="h-4 w-4" /> Cancel
-        </button>
-        {!name.trim() && (
-          <span className="self-center text-xs text-ink-400">Give it a name first.</span>
-        )}
-      </div>
+      {/*
+        Everything the save button says back, said where the save button is.
+
+        The "how far back" question, the error and the "press Save again"
+        note all used to open at the top of the editor — above rows that
+        run to several screens — so pressing Save at the bottom appeared
+        to do nothing until you scrolled back up to find out what it had
+        asked. They are answers to this button, so they live beside it.
+      */}
+      {error && <Alert kind="error">{error}</Alert>}
+
+      {asking ? (
+        // In place of the Save and Cancel row, not as well as it: one save
+        // button on screen at a time, and this one says what it will do.
+        <div ref={askRef} className="card space-y-3 border-violet-300 p-4">
+          <div>
+            <p className="font-medium text-ink-900">
+              {inUse} {inUse === 1 ? 'person is' : 'people are'} on this template
+            </p>
+            <p className="mt-0.5 text-sm text-ink-500">
+              Changing a weightage here changes their year. Your manager is told
+              either way — they see the change and how many people it moved.
+            </p>
+          </div>
+          <ReachChoice value={reach} onChange={setReach} name="reach-edit" />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onSave} disabled={push.isPending} className="btn-primary">
+              {push.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+              Save and apply
+            </button>
+            <button
+              onClick={() => setAsking(false)}
+              disabled={push.isPending}
+              className="btn-secondary"
+            >
+              Back to the rows
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onSave}
+            disabled={!name.trim() || named.length === 0 || save.isPending}
+            className="btn-primary"
+          >
+            {save.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+            {initial.id ? 'Save changes' : 'Save template'}
+          </button>
+          <button onClick={onCancel} className="btn-secondary">
+            <X className="h-4 w-4" /> Cancel
+          </button>
+          {!name.trim() && (
+            <span className="text-xs text-ink-400">Give it a name first.</span>
+          )}
+          {duplicate && dupAccepted && (
+            <span className="text-xs font-medium text-amber-700">
+              Same rows as “{displayTemplateName(duplicate.name)}” — press Save again to keep it anyway.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
