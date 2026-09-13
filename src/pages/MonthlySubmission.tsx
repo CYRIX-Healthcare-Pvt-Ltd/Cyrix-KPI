@@ -532,8 +532,40 @@ export default function MonthlySubmission() {
                 {(submission.status === 'scored' || submission.status === 'finalized') && (
                   <div>
                     <label className="label text-xs">Manager</label>
-                    <div className="py-1.5">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
                       <ScorePill value={item.manager_score} outOf={item.weightage} />
+                      {/*
+                        Said, not left to be spotted. A manager's score that
+                        differs from yours sat in its own pill with nothing
+                        beside it, and 8.00 against 4.00 two columns apart is
+                        easy to read past — the change is the thing the
+                        person most needs to know about the month, and the
+                        figure the manager used is why.
+                      */}
+                      {(() => {
+                        const mine = liveScore(item)
+                        const theirs = item.manager_score
+                        if (mine == null || theirs == null) return null
+                        const diff = Math.round((Number(theirs) - Number(mine)) * 100) / 100
+                        if (diff === 0) return null
+                        const down = diff < 0
+                        const figureChanged = item.manager_achieved != null
+                          && item.self_achieved != null
+                          && Number(item.manager_achieved) !== Number(item.self_achieved)
+                        return (
+                          <span className={clsx(
+                            'text-xs font-medium',
+                            down ? 'text-cyrixRed-700' : 'text-emerald-700',
+                          )}>
+                            {down ? '▼ Reduced' : '▲ Raised'} by {Math.abs(diff).toFixed(2)}
+                            {figureChanged && (
+                              <span className="font-normal text-ink-500">
+                                {' '}· Manager entered {Number(item.manager_achieved)}
+                              </span>
+                            )}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </div>
                 )}
