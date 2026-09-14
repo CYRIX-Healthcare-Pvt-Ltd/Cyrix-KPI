@@ -320,7 +320,9 @@ function AlternateRow({
           onChange={e => commit({ scoring_rule: e.target.value as Alternate['scoring_rule'] })}
           aria-label={`How ${draft.kra || 'this row'} is scored`}
         >
-          {(rules ?? []).map(r => (
+          {/* The four capping rules only, as on every other editor — plus
+              whatever this row already carries, so it still shows. */}
+          {(rules ?? []).filter(r => r.is_selectable || r.code === draft.scoring_rule).map(r => (
             <option key={r.code} value={r.code}>{r.label}</option>
           ))}
         </select>
@@ -466,7 +468,9 @@ function EditableRow({
             })
           }}
         >
-          {(rules ?? []).map(r => (
+          {/* The four capping rules only, as on every other editor — plus
+              whatever this row already carries, so it still shows. */}
+          {(rules ?? []).filter(r => r.is_selectable || r.code === draft.scoring_rule).map(r => (
             <option key={r.code} value={r.code}>{r.label}</option>
           ))}
         </select>
