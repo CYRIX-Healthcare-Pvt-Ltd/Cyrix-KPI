@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { X, KeyRound, Trash2, Save, UserCheck, UserX } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, Spinner } from '@/components/ui'
+import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
+import { useAuth } from '@/contexts/AuthContext'
 
 /**
  * Correcting or removing one employee record.
@@ -22,6 +24,11 @@ interface Row {
   designation: string | null
   department: string | null
   function_name: string | null
+  /* Where the company writes to them: the password code on a forgotten
+     password, and every notification the app sends. Somebody whose
+     address is wrong on the record is somebody who cannot get back in,
+     and until now the only person who could fix it was them. */
+  work_email: string | null
   is_active: boolean
   auth_user_id: string | null
   reporting_manager_id: string | null
@@ -34,6 +41,10 @@ export default function EditEmployee({
   onClose: () => void
   onSaved: () => void
 }) {
+  // Deleting a record is HR's alone — hr_delete_employee refuses anybody
+  // else, and a button that always errors is worse than no button. SW
+  // admin corrects records and issues logins; HR owns who exists.
+  const { isHrAdmin } = useAuth()
   const [row, setRow] = useState<Row | null>(null)
   const [managerCode, setManagerCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,7 +64,7 @@ export default function EditEmployee({
     ;(async () => {
       const { data, error: err } = await supabase
         .from('employees')
-        .select('ecode, full_name, designation, department, function_name, is_active, auth_user_id, reporting_manager_id')
+        .select('ecode, full_name, designation, department, function_name, work_email, is_active, auth_user_id, reporting_manager_id')
         .eq('ecode', ecode).maybeSingle()
       if (!alive) return
       if (err) { setError(friendlyError(err)); return }
@@ -95,6 +106,7 @@ export default function EditEmployee({
         designation: row.designation?.trim() || null,
         department: row.department?.trim() || null,
         function_name: row.function_name?.trim() || null,
+        work_email: row.work_email?.trim().toLowerCase() || null,
         is_active: row.is_active,
         reporting_manager_id: managerId,
       }).eq('ecode', row.ecode)
@@ -184,6 +196,23 @@ export default function EditEmployee({
                 <Field label="Designation" value={row.designation ?? ''} onChange={set('designation')} />
                 <Field label="Department" value={row.department ?? ''} onChange={set('department')} />
               </div>
+              {/* Checked as it is typed, and never refused: the warning
+                  is about whether mail will reach them, which is a thing
+                  to know rather than a thing to be stopped by. */}
+              <div>
+                <Field
+                  label="Work email"
+                  value={row.work_email ?? ''}
+                  onChange={v => set('work_email')(v)}
+                  placeholder={`name@${OFFICIAL_DOMAIN}`}
+                />
+                {emailFeedback(row.work_email ?? '', false) && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {emailFeedback(row.work_email ?? '', false)}
+                  </p>
+                )}
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 {/* The business unit — RJBEMP, Care 360, TCQAS. What the
                     KPI report groups by. */}
@@ -252,13 +281,15 @@ export default function EditEmployee({
               {/* Deliberately last and apart. The function refuses anybody
                   with a KPI, a submission or reports, and says which —
                   those are deactivated, not deleted. */}
-              <button
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-                className="btn-secondary ml-auto !text-cyrixRed-700"
-              >
-                <Trash2 className="h-4 w-4" /> Delete
-              </button>
+              {isHrAdmin && (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={busy}
+                  className="btn-secondary ml-auto !text-cyrixRed-700"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </button>
+              )}
             </div>
 
             {confirmDelete && (

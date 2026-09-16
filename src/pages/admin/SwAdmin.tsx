@@ -20,6 +20,7 @@ import {
 } from '@/lib/queries'
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
+import EditEmployee from '@/components/EditEmployee'
 import KpiTiming from './KpiTiming'
 import BulkKpi from './BulkKpi'
 
@@ -72,6 +73,8 @@ function LoginsTab() {
   // the list is the people here now, and 51 of the 55 who are not were
   // switched off by one payroll upload.
   const [includeInactive, setIncludeInactive] = useState(false)
+  /** Whose record is open for correcting, by employee code. */
+  const [picked, setPicked] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<LoginStatusRow | null>(null)
   const [wiping, setWiping] = useState<LoginStatusRow | null>(null)
   const [typedCode, setTypedCode] = useState('')
@@ -209,6 +212,20 @@ function LoginsTab() {
 
   return (
     <div className="space-y-5">
+      {/* The same dialog HR uses, so a correction made here and one made
+          there are the same correction. Deleting a record stays HR's:
+          the dialog only offers it to them. */}
+      {picked && (
+        <EditEmployee
+          ecode={picked}
+          onClose={() => setPicked(null)}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['login_status'] })
+            setNotice('Record updated.')
+          }}
+        />
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           {/* h2, not h1: the tab shell above owns the page heading now. */}
@@ -497,16 +514,26 @@ function LoginsTab() {
             <tbody className="divide-y divide-ink-100">
               {filtered.slice(0, 200).map(r => (
                 <tr key={r.employee_id} className="hover:bg-ink-50">
+                  {/* The name opens the record, the same click as HR's
+                      Employees screen. A wrong name, a wrong manager or a
+                      wrong email was something SW admin could see here and
+                      had to ask HR to correct. */}
                   <td className="px-4 py-3">
-                    <p className="font-medium text-ink-900">
-                      {r.full_name}
-                      {!r.is_active && (
-                        <span className="ml-2 badge bg-ink-100 text-ink-500">Inactive</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-ink-500">
-                      {r.ecode}{r.designation && ` · ${r.designation}`}
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPicked(r.ecode)}
+                      className="text-left"
+                    >
+                      <p className="font-medium text-ink-900 hover:underline">
+                        {r.full_name}
+                        {!r.is_active && (
+                          <span className="ml-2 badge bg-ink-100 text-ink-500">Inactive</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-ink-500">
+                        {r.ecode}{r.designation && ` · ${r.designation}`}
+                      </p>
+                    </button>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-ink-600">
                     {r.login_email ?? '—'}
@@ -2178,7 +2205,10 @@ export function SummaryTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Five across on a wide screen, so the rollout reads as one row:
+          who is here, who has signed in, which managers, who has a KPI,
+          and who has been assessed on it. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile label="Active employees" value={stats.total.toLocaleString()} />
         <StatTile
           label="Have signed in"
