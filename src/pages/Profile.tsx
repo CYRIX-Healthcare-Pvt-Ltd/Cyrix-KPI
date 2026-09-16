@@ -6,7 +6,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment,
-  useSetMyAvatar, useSetMyWorkEmail, useHrNotifyCc, useSaveHrNotifyCc, currentFy,
+  useSetMyAvatar, useSetMyWorkEmail, useSetMyOfficialPhone, useHrNotifyCc, useSaveHrNotifyCc, currentFy,
 } from '@/lib/queries'
 import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 
@@ -363,6 +363,78 @@ function NotifyCcCard() {
   )
 }
 
+/**
+ * The one line of My details a person edits themselves.
+ *
+ * Revive Lab's route card starts its contact number from it, so it is worth
+ * keeping current — and a row that reads as a value until you press Edit,
+ * rather than a form sitting open in the middle of a list of facts.
+ */
+function OfficialNumberRow({ current }: { current: string | null | undefined }) {
+  const { refresh } = useAuth()
+  const save = useSetMyOfficialPhone()
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(current ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      await save.mutateAsync(value)
+      await refresh()
+      setEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that number.')
+    }
+  }
+
+  return (
+    <Row label="Official number">
+      {editing ? (
+        <form onSubmit={submit} className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="input !py-1.5 w-48"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder="+91 98470 12345"
+              autoFocus
+            />
+            <button type="submit" className="btn-primary !py-1.5" disabled={save.isPending}>
+              {save.isPending && <Spinner className="h-4 w-4" />} Save
+            </button>
+            <button
+              type="button"
+              className="btn-secondary !py-1.5"
+              onClick={() => { setEditing(false); setValue(current ?? ''); setError(null) }}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && <p className="text-xs text-cyrixRed-700">{error}</p>}
+        </form>
+      ) : (
+        <span className="inline-flex flex-wrap items-center gap-3">
+          {current
+            ? <span className="tabular-nums">{current}</span>
+            : <span className="text-ink-400">Not added yet</span>}
+          <button
+            type="button"
+            className="text-xs font-medium text-ink-500 underline-offset-2 hover:text-ink-900 hover:underline"
+            onClick={() => { setValue(current ?? ''); setEditing(true) }}
+          >
+            {current ? 'Edit' : 'Add'}
+          </button>
+        </span>
+      )}
+    </Row>
+  )
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 px-4 py-3">
@@ -444,6 +516,10 @@ export default function Profile() {
         </div>
         <div className="divide-y divide-ink-100">
           <Row label="Employee code">{employee.ecode}</Row>
+          {/* Set by HR and SW admin, not here: it is where password codes
+              are sent. Shown so everybody can see which address that is. */}
+          <Row label="Mail ID">{employee.work_email}</Row>
+          <OfficialNumberRow current={employee.official_phone} />
           <Row label="Designation">{employee.designation}</Row>
           <Row label="Function">{employee.function_name}</Row>
           <Row label="Department">{employee.department}</Row>

@@ -1343,6 +1343,28 @@ export function useSetMyAvatar() {
  * the address is what turns on the emailed code when either of them
  * changes a password.
  */
+/**
+ * Saves the signed-in person's official number (0141).
+ *
+ * Their own row only — the function has no argument for whose. Revive Lab's
+ * route card starts its contact number from this, so an engineer sending a
+ * spare in never types it twice.
+ */
+export function useSetMyOfficialPhone() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (phone: string) => {
+      const { data, error } = await supabase.rpc('set_my_official_phone', { p_phone: phone })
+      if (error) throw new Error(friendlyError(error))
+      return data as string | null
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['me'] })
+      qc.invalidateQueries({ queryKey: ['employees'] })
+    },
+  })
+}
+
 export function useSetMyWorkEmail() {
   const qc = useQueryClient()
   return useMutation({

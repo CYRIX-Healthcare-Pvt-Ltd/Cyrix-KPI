@@ -20,6 +20,8 @@ export interface Employee {
   ecode: string
   full_name: string
   work_email: string | null
+  /** Digits with an optional leading +. Kept up to date by the person themselves (0141). */
+  official_phone: string | null
   designation: string | null
   department: string | null
   function_name: string | null
