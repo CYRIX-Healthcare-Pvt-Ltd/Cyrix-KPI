@@ -139,3 +139,50 @@ export function displayTemplateName(name: string): string {
   return name.replace(/[A-Z]+/g, w =>
     w.length <= 3 ? w : w[0] + w.slice(1).toLowerCase())
 }
+
+/** What a list needs to know to name a template that shares its name. */
+export interface NameableTemplate {
+  id: string
+  name: string
+  /** Yours to change. Yours is the one that keeps the plain name. */
+  is_mine?: boolean
+  /** HR's, which has no owner and is named for HR. */
+  is_company?: boolean
+  owner_name?: string | null
+  owner_ecode?: string | null
+}
+
+/**
+ * Names for a list in which two templates may be called the same thing.
+ *
+ * A manager below you can take their own version of a template your
+ * people are on (0138), and it keeps the name — that is the point of it,
+ * it is the same role. On your screen that is two "Specialist Engineer",
+ * and which is which is the only thing anybody needs to know about them.
+ *
+ * So a name that clashes carries whoever keeps it: "Specialist Engineer
+ * — Manish P (E1234)". Yours stays plain, because the list already
+ * groups it under yours and tagging both sides says nothing the group
+ * heading has not. A name nothing clashes with is never tagged at all,
+ * which is what makes a merge visible: the two become one and the tag
+ * goes away on its own.
+ */
+export function templateLabels(list: NameableTemplate[]): Map<string, string> {
+  const seen = new Map<string, number>()
+  for (const t of list) {
+    const k = tidy(displayTemplateName(t.name))
+    seen.set(k, (seen.get(k) ?? 0) + 1)
+  }
+  const out = new Map<string, string>()
+  for (const t of list) {
+    const shown = displayTemplateName(t.name)
+    const clashes = (seen.get(tidy(shown)) ?? 0) > 1
+    if (!clashes || t.is_mine) { out.set(t.id, shown); continue }
+    const keeper = t.is_company
+      ? 'HR'
+      : [t.owner_name, t.owner_ecode ? `(${t.owner_ecode.toUpperCase()})` : null]
+        .filter(Boolean).join(' ')
+    out.set(t.id, keeper ? `${shown} — ${keeper}` : shown)
+  }
+  return out
+}

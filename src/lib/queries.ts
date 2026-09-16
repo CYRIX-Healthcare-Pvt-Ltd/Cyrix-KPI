@@ -477,6 +477,19 @@ export interface PushOutcome {
   /** How many people it reached. Nought when only the template moved. */
   people: number
   months: number
+  /**
+   * True when the template was somebody else's, so this saved your own
+   * version of it rather than changing theirs (0138).
+   */
+  forked?: boolean
+  /** People of yours who moved from their template onto your version. */
+  moved?: number
+  /**
+   * Set when your rows came out identical to the template they came
+   * from, so the two were merged back into one and yours is gone.
+   */
+  merged?: boolean
+  merged_into?: string | null
 }
 
 /**
@@ -495,7 +508,13 @@ export function usePushTemplate() {
       rows: unknown[]
       reach: TemplateReach | 'template_only'
     }) => {
-      const { data, error } = await supabase.rpc('push_template_change', {
+      /*
+        One door for both cases (0138). Your own template is changed the
+        way it always was; somebody else's that you can see gives you your
+        own version of it, with your own people on it, and theirs is left
+        exactly as it is.
+      */
+      const { data, error } = await supabase.rpc('edit_visible_template', {
         p_template_id: args.templateId,
         p_name: args.name,
         p_rows: args.rows,

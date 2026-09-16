@@ -12,7 +12,9 @@ import {
   type AssignOutcome, type TemplateReach,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
-import { findDuplicate, displayTemplateName, type ComparableRow } from '@/lib/templates'
+import {
+  findDuplicate, displayTemplateName, templateLabels, type ComparableRow,
+} from '@/lib/templates'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
@@ -72,7 +74,19 @@ export default function TeamTemplates() {
 
   /** null when nothing is being edited; a draft when something is. */
   const [editing, setEditing] = useState<
-    { id: string | null; name: string; rows: Draft[]; inUse?: number } | null
+    {
+      id: string | null
+      name: string
+      rows: Draft[]
+      inUse?: number
+      /**
+       * Who keeps it, when it is not yours: saving then takes your own
+       * version rather than changing theirs (0138). Null for your own.
+       */
+      keeper?: string | null
+      /** How many of your people are on it, and would move with you. */
+      onMyTeam?: number
+    } | null
   >(null)
   const [confirmDelete, setConfirmDelete] = useState<VisibleTemplate | null>(null)
   const [assigning, setAssigning] = useState<VisibleTemplate | null>(null)
@@ -100,6 +114,15 @@ export default function TeamTemplates() {
     return all.filter(t => t.name.toLowerCase().includes(q))
   }, [templates, hunt])
 
+  /*
+    Two templates can now carry one name: a manager below you takes their
+    own version of the one your people are on, and it keeps the name
+    because it is the same role. The tag says whose. Computed over
+    everything visible rather than per group, so the answer does not
+    change depending on which heading you are reading under.
+  */
+  const labels = useMemo(() => templateLabels(templates ?? []), [templates])
+
   const mine = shown.filter(t => t.is_mine)
   const company = shown.filter(t => t.is_company)
 
@@ -121,7 +144,13 @@ export default function TeamTemplates() {
     setEditing({ id: null, name: '', rows: [blankRow(1)] })
   }
 
-  /** Editing one of your own. Copying anybody's is Start from, on New. */
+  /**
+   * Editing anything you can see.
+   *
+   * Your own changes in place. Somebody else's gives you your own version
+   * of it when you save — theirs is not touched, and your own people move
+   * onto yours (0138).
+   */
   const startFrom = (t: VisibleTemplate) => {
     setError(null); setNotice(null)
     setEditing({
@@ -129,6 +158,8 @@ export default function TeamTemplates() {
       name: t.name,
       rows: (itemsByTemplate?.get(t.id) ?? []).map(fromItem),
       inUse: Number(t.in_use ?? 0),
+      keeper: t.is_mine ? null : t.is_company ? 'HR' : (t.owner_name ?? 'another manager'),
+      onMyTeam: Number(t.on_my_team ?? 0),
     })
   }
 
@@ -255,21 +286,13 @@ export default function TeamTemplates() {
           existing={existing}
           sources={sources}
           onCancel={() => setEditing(null)}
-          onSaved={name => {
-            setEditing(null)
-            /*
-              Not "everybody below you" — that is exactly backwards
-              under the rule in 0125. Your own reportees see what is
-              under YOU; your template is visible to the people beside
-              you and the levels above. The way it reaches your own team
-              is that you assign it to them.
-            */
-            setNotice(
-              `Saved “${name}”. Hand it to your own team with Assign to — `
-              + 'your colleagues at the same level, and the managers above you, '
-              + 'can also start from it.',
-            )
-          }}
+          /*
+            The whole sentence, not the name: saving your own template,
+            pushing one people carry, taking your own version of somebody
+            else's and having it merge back into theirs are four different
+            outcomes, and each says its own.
+          */
+          onSaved={message => { setEditing(null); setNotice(message) }}
         />
       ) : (
         <>
@@ -389,6 +412,7 @@ export default function TeamTemplates() {
                 icon={Pencil}
                 templates={mine}
                 items={itemsByTemplate}
+                labels={labels}
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
@@ -407,10 +431,11 @@ export default function TeamTemplates() {
 
               <TemplateGroup
                 title="Your team"
-                hint="Written by the people below you, or already on your people. Hand any of them to a new joiner."
+                hint="Written by the people below you, or already on your people. Editing one takes your own version of it — theirs does not change."
                 icon={Users}
                 templates={team}
                 items={itemsByTemplate}
+                labels={labels}
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
@@ -422,10 +447,11 @@ export default function TeamTemplates() {
 
               <TemplateGroup
                 title="Company"
-                hint="HR's, for your job role."
+                hint="HR's, for your job role. Editing one takes your own version of it."
                 icon={Building2}
                 templates={company}
                 items={itemsByTemplate}
+                labels={labels}
                 preview={preview}
                 onPreview={id => setPreview(preview === id ? null : id)}
                 onEdit={startFrom}
@@ -445,7 +471,7 @@ export default function TeamTemplates() {
 }
 
 function TemplateGroup({
-  title, hint, icon: Icon, templates, items, preview, onPreview, onEdit,
+  title, hint, icon: Icon, templates, items, labels, preview, onPreview, onEdit,
   onAssign, onDelete, assigningId, fy, onCloseAssign,
   deleting, deleteBusy, onConfirmDelete, onCancelDelete,
 }: {
@@ -454,6 +480,8 @@ function TemplateGroup({
   icon: React.ComponentType<{ className?: string }>
   templates: VisibleTemplate[]
   items: Map<string, KpiTemplateItem[]> | undefined
+  /** Names as they read in this list, which says whose when two clash. */
+  labels: Map<string, string>
   preview: string | null
   onPreview: (id: string) => void
   onEdit: (t: VisibleTemplate) => void
@@ -498,7 +526,9 @@ function TemplateGroup({
                   {/* Wraps rather than truncates: with two buttons beside
                       it on a narrow screen, "Biomedical Engineer" was
                       being shown as "Biomedical En…". */}
-                  <p className="font-medium text-ink-900">{displayTemplateName(t.name)}</p>
+                  <p className="font-medium text-ink-900">
+                    {labels.get(t.id) ?? displayTemplateName(t.name)}
+                  </p>
                   <p className="mt-0.5 truncate text-xs text-ink-500">
                     {t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
                     {/* No owner. The group already says whether it is
@@ -534,17 +564,21 @@ function TemplateGroup({
                       <UserPlus className="h-3.5 w-3.5" /> Assign to
                     </button>
                   )}
-                  {/* Only your own. Copying somebody else's lives on New
-                      template now, as "Start from", which is the one
-                      moment anybody wants it. */}
-                  {t.is_mine && (
-                    <button
-                      onClick={() => onEdit(t)}
-                      className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                    >
-                      <Pencil className="h-3.5 w-3.5" /> Edit
-                    </button>
-                  )}
+                  {/*
+                      On every template you can see, not only your own.
+
+                      Editing somebody else's does not change theirs: it
+                      gives you your own version of it, with your own
+                      people on it, and the editor says so before you save
+                      (0138).
+                  */}
+                  <button
+                    onClick={() => onEdit(t)}
+                    className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    {t.is_mine ? 'Edit' : 'Edit for my team'}
+                  </button>
                   {onDelete && (
                     <button
                       onClick={() => onDelete(t)}
@@ -924,12 +958,21 @@ function TemplateEditor({
   fy, initial, existing, sources, onCancel, onSaved,
 }: {
   fy: string
-  initial: { id: string | null; name: string; rows: Draft[]; inUse?: number }
+  initial: {
+    id: string | null
+    name: string
+    rows: Draft[]
+    inUse?: number
+    /** Who keeps it, when it is somebody else's. Null for your own. */
+    keeper?: string | null
+    onMyTeam?: number
+  }
   existing: Array<{ id: string; name: string; rows: ComparableRow[] }>
   /** Templates a NEW one may start from. Ignored when editing. */
   sources: Array<{ id: string; name: string; keeper: string | null; items: KpiTemplateItem[] }>
   onCancel: () => void
-  onSaved: (name: string) => void
+  /** The whole sentence to show, which depends on what saving did. */
+  onSaved: (message: string) => void
 }) {
   const [startedFrom, setStartedFrom] = useState('')
   const save = useSaveTemplate()
@@ -947,6 +990,14 @@ function TemplateEditor({
     end of it.
   */
   const inUse = Number(initial.inUse ?? 0)
+  /*
+    Somebody else's, which you can change for your own team without
+    changing theirs (0138). Saving it goes through the same door as a
+    push whether or not anybody is on it, because the door is what knows
+    to take your own version of it.
+  */
+  const keeper = initial.keeper ?? null
+  const onMyTeam = Number(initial.onMyTeam ?? 0)
   const [reach, setReach] = useState<TemplateReach>('forward')
   const [asking, setAsking] = useState(false)
   const askRef = useRef<HTMLDivElement>(null)
@@ -990,17 +1041,32 @@ function TemplateEditor({
     // People on it: ask how far the change goes before it goes anywhere.
     if (inUse > 0 && initial.id && !asking) { setAsking(true); return }
 
-    if (inUse > 0 && initial.id) {
+    if (initial.id && (inUse > 0 || keeper)) {
       try {
         const out = await push.mutateAsync({
           templateId: initial.id, name, rows: payload(), reach,
         })
+        const shown = name.trim()
+        const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
         onSaved(
-          `${name.trim()}” — ${out.people} ${out.people === 1 ? 'person' : 'people'}, `
-          + `${out.months} month${out.months === 1 ? '' : 's'} updated. Your manager has been told.“`,
+          out.merged
+            // Nothing to explain about rows here: they are identical, which
+            // is the only way this happens at all.
+            ? `Your rows came out exactly the same as ${keeper ?? 'the original'}'s `
+              + `“${shown}”, so the two are one template again — your people `
+              + 'are on theirs, and nobody’s KPI changed.'
+            : out.forked
+              ? `Saved your own “${shown}”. `
+                + (Number(out.moved ?? 0) > 0
+                  ? `${people(Number(out.moved))} of your team moved onto it, and `
+                  : '')
+                + `${keeper ?? 'the manager who keeps it'}'s copy has not changed.`
+              : `Saved “${shown}” — ${people(out.people)}, `
+                + `${out.months} month${out.months === 1 ? '' : 's'} updated. `
+                + 'Your manager has been told.',
         )
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not push that change.')
+        setError(err instanceof Error ? err.message : 'Could not save that change.')
       }
       return
     }
@@ -1015,7 +1081,17 @@ function TemplateEditor({
         // back as a choice on every KPI made from this.
         rows: payload(),
       })
-      onSaved(name.trim())
+      /*
+        Not "everybody below you" — that is exactly backwards under the
+        rule in 0125. Your own reportees see what is under YOU; your
+        template is visible to the people beside you and the levels
+        above. The way it reaches your own team is that you assign it.
+      */
+      onSaved(
+        `Saved “${name.trim()}”. Hand it to your own team with Assign to — `
+        + 'your colleagues at the same level, and the managers above you, '
+        + 'can also start from it.',
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save that template.')
     }
@@ -1023,6 +1099,33 @@ function TemplateEditor({
 
   return (
     <div className="space-y-4">
+      {/*
+        Said before anything is typed, not after it is saved: what happens
+        to a template that is not yours is the one thing somebody editing
+        it needs to know first.
+      */}
+      {keeper && (
+        <div className="flex gap-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+          <div className="text-ink-600">
+            <p className="font-medium text-ink-900">
+              This one is kept by {keeper}
+            </p>
+            <p className="mt-1">
+              Saving takes your own version of it, with the same name.{' '}
+              {keeper}’s is not changed, and neither is anybody on it
+              {onMyTeam > 0
+                ? ` apart from the ${onMyTeam} of your own team, who move onto yours.`
+                : '.'}
+            </p>
+            <p className="mt-1.5">
+              Save it again with the same rows as theirs and the two merge
+              back into one — the name stops saying whose.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card space-y-3 p-4">
         {/*
           Start from another template — on a new one only.

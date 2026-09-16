@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { templateShape, findDuplicate, freeName, displayTemplateName } from './templates'
+import {
+  templateShape, findDuplicate, freeName, displayTemplateName, templateLabels,
+} from './templates'
 
 const row = (
   kra: string,
@@ -137,5 +139,47 @@ describe('displayTemplateName — one list, one case', () => {
     expect(displayTemplateName('Biomedical Engineer')).toBe('Biomedical Engineer')
     expect(displayTemplateName('office coordinator-DnD')).toBe('office coordinator-DnD')
     expect(displayTemplateName('Engineer Temp')).toBe('Engineer Temp')
+  })
+})
+
+describe('templateLabels — which Specialist Engineer is which', () => {
+  const afsal = { id: 'a', name: 'Specialist Engineer', is_mine: true }
+  const manish = {
+    id: 'm', name: 'Specialist Engineer',
+    owner_name: 'Manish P', owner_ecode: 'e1234',
+  }
+
+  it('leaves a name nothing clashes with alone', () => {
+    const out = templateLabels([afsal, { id: 'c', name: 'Coordinator' }])
+    expect(out.get('a')).toBe('Specialist Engineer')
+    expect(out.get('c')).toBe('Coordinator')
+  })
+
+  it('names the keeper when two carry the same name', () => {
+    const out = templateLabels([afsal, manish])
+    expect(out.get('a')).toBe('Specialist Engineer')
+    expect(out.get('m')).toBe('Specialist Engineer — Manish P (E1234)')
+  })
+
+  it('drops the tag again once the two have merged', () => {
+    // What a merge leaves behind: one template, plain name, no ecode.
+    const out = templateLabels([afsal])
+    expect(out.get('a')).toBe('Specialist Engineer')
+  })
+
+  it('names HR as the keeper of a company template', () => {
+    const out = templateLabels([manish, { id: 'h', name: 'Specialist Engineer', is_company: true }])
+    expect(out.get('h')).toBe('Specialist Engineer — HR')
+  })
+
+  it('tags on what is shown, not on what was typed', () => {
+    // "SPECIALIST ENGINEER" reads as "Specialist Engineer", so it clashes.
+    const out = templateLabels([afsal, { ...manish, name: 'SPECIALIST ENGINEER' }])
+    expect(out.get('m')).toBe('Specialist Engineer — Manish P (E1234)')
+  })
+
+  it('falls back to the plain name when nobody is named', () => {
+    const out = templateLabels([afsal, { id: 'x', name: 'Specialist Engineer' }])
+    expect(out.get('x')).toBe('Specialist Engineer')
   })
 })
