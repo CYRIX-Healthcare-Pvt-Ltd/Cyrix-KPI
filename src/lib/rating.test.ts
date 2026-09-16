@@ -61,10 +61,10 @@ describe('ratingFor — the slab management wrote down', () => {
   })
 })
 
-describe('rankScore — 60 job, 40 core', () => {
-  it('uses the ratio management chose', () => {
-    expect(JOB_RATIO).toBe(0.6)
-    expect(CORE_RATIO).toBe(0.4)
+describe('rankScore — 80 job, 20 core, as the KPI is marked', () => {
+  it('uses the company split', () => {
+    expect(JOB_RATIO).toBe(0.8)
+    expect(CORE_RATIO).toBe(0.2)
   })
 
   it('settles the example management gave', () => {
@@ -78,14 +78,16 @@ describe('rankScore — 60 job, 40 core', () => {
     expect(compareRank(a, b)).toBeGreaterThan(0)
   })
 
-  it('lets core values overturn a job-role gap, which is what 60/40 means', () => {
-    // The trade-off accepted when the ratio was chosen: this is exactly
-    // the case job-role-first would have ordered the other way.
-    const ravi = rankScore({ jobPct: 85, corePct: 95 })  // job 4, core 5 -> 4.4
-    const anu = rankScore({ jobPct: 95, corePct: 20 })   // job 5, core 1 -> 3.4
-    expect(ravi.combined).toBe(4.4)
-    expect(anu.combined).toBe(3.4)
-    expect(compareRank(ravi, anu)).toBeLessThan(0)
+  it('never lets core values overturn a job-role band, which is what 80/20 means', () => {
+    // One job band is 0.8 and the whole core range is 4 x 0.2 = 0.8, so
+    // the best core values can do against a higher job band is draw —
+    // and the draw is broken by the job band. At 60/40 this pair ordered
+    // the other way, which is the change 0136 made.
+    const ravi = rankScore({ jobPct: 85, corePct: 95 })  // job 4, core 5
+    const anu = rankScore({ jobPct: 95, corePct: 20 })   // job 5, core 1
+    expect(ravi.combined).toBe(4.2)
+    expect(anu.combined).toBe(4.2)
+    expect(compareRank(ravi, anu)).toBeGreaterThan(0)
   })
 
   it('breaks a tie on the job band', () => {

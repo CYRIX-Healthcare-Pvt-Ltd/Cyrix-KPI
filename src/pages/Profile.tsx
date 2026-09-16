@@ -1,18 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import clsx from 'clsx'
 import {
-  ArrowLeft, BookOpen, Camera, Info, KeyRound, LifeBuoy, Medal, Plus, Timer, Trophy, UserRound, X,
+  ArrowLeft, BookOpen, Camera, KeyRound, LifeBuoy, Medal, Plus, UserRound, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useKpiRanking, useMyManager, useMyAssignment,
   useSetMyAvatar, useSetMyWorkEmail, useHrNotifyCc, useSaveHrNotifyCc, currentFy,
 } from '@/lib/queries'
-import { bandFor } from '@/lib/bands'
 import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
-import { monthLabel } from '@/lib/fy'
-import { PageLoader, StatTile, Alert, Spinner } from '@/components/ui'
+
+import { PageLoader, Alert, Spinner } from '@/components/ui'
 import Avatar from '@/components/Avatar'
 import InstallButton from '@/components/InstallButton'
 import {
@@ -20,8 +18,6 @@ import {
 } from '@/lib/avatar'
 import { ScoreHeader } from '@/components/analysis'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
-import { JOB_RATIO, CORE_RATIO, managerRank } from '@/lib/rating'
-import type { ManagerPart } from '@/lib/rating'
 import type { Employee } from '@/types/db'
 
 /**
@@ -32,177 +28,11 @@ import type { Employee } from '@/types/db'
  * compares, which is the next question everybody asks.
  */
 
-/**
- * "18.1 days · 15.1 late" — how long it took, then what that cost.
- *
- * The two are one line rather than two rows because they are one fact
- * read twice: the second number is the first with the cool-off period
- * taken off. Nothing is said about lateness where the counting has not
- * started, rather than claiming zero.
- */
-/** A numeric column, whatever shape it arrived in, or null. */
-function num(v: number | string | null | undefined): number | null {
-  if (v === null || v === undefined || v === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
-function tatLine(
-  days: number | null | undefined,
-  late: number | null | undefined,
-  empty = '—',
-): string {
-  if (days === null || days === undefined) return empty
-  const base = `${days.toFixed(1)} days`
-  if (late === null || late === undefined) return base
-  return late > 0 ? `${base} · ${late.toFixed(1)} late` : `${base} · on time`
-}
-
 /** 1 → 1st, 2 → 2nd, 23 → 23rd. */
 function ordinal(n: number): string {
   const rem100 = n % 100
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
-}
-
-/**
- * A rank, sized so the number reads before the caption does.
- *
- * Deliberately not a percentile or a medal for the top three: this is an
- * appraisal, and turning it into a game changes what people optimise
- * for. It states a position and the field it was measured against.
- */
-function RankTile({
-  label, icon: Icon, rank, of, note, emptyNote = 'No scored month yet',
-  detail, weights, weightsNote,
-}: {
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-  rank: number | null | undefined
-  of: number | null | undefined
-  note?: string
-  emptyNote?: string
-  /** Rows of working, shown on hover or tap. */
-  detail?: Array<[string, string]>
-  /** What the rank is made of, each part with its share, above the working. */
-  weights?: Array<[string, string]>
-  /** One short line under the shares, for the rule they cannot show. */
-  weightsNote?: string
-}) {
-  // Tapped open on touch, where there is no hover at all. The same state
-  // also serves the keyboard, via focus-within on the button.
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div
-      className={clsx('card group relative flex flex-col p-4', detail && 'cursor-help')}
-      onClick={detail ? () => setOpen(v => !v) : undefined}
-    >
-      <p className="label !mb-0 flex items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5 text-ink-400" />
-        {label}
-        {detail && (
-          <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-300" aria-hidden />
-        )}
-      </p>
-      {rank == null || of == null ? (
-        <>
-          <p className="mt-2 text-2xl font-semibold text-ink-300">—</p>
-          <p className="mt-0.5 min-h-4 text-xs text-ink-400">{emptyNote}</p>
-        </>
-      ) : (
-        <>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-ink-900">
-            {ordinal(rank)}
-            <span className="ml-1.5 text-base font-normal text-ink-400">
-              of {of}
-            </span>
-          </p>
-          <p className="mt-0.5 min-h-4 text-xs text-ink-400">{note}</p>
-        </>
-      )}
-
-      {/*
-        The working, on hover — and on tap, because a phone has no hover
-        and a hover-only explanation is one that does not exist there.
-
-        Hung below the tile and pinned to its own width, so it lands where
-        the eye already is instead of drifting across the row. Ignores the
-        pointer entirely: it is something to read, not to aim at, and a
-        panel that swallows clicks over the tile that opened it is a panel
-        you cannot close.
-      */}
-      {detail && (
-        <div
-          className={clsx(
-            'pointer-events-none absolute left-0 right-0 top-full z-20 mt-1.5',
-            'origin-top rounded-lg border border-ink-200 bg-surface p-3 shadow-lg',
-            'transition-opacity duration-150 ease-out',
-            open
-              ? 'opacity-100'
-              : 'opacity-0 [@media(hover:hover)]:group-hover:opacity-100',
-          )}
-          role="note"
-        >
-          {/* The shares first, as a list rather than a paragraph: "Team
-              average band 70%" reads in a glance, where "seven tenths of
-              it" had to be worked out. */}
-          {weights && (
-            <div className="mb-2 border-b border-ink-100 pb-2">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                What counts
-              </p>
-              <dl className="space-y-1">
-                {weights.map(([k, v]) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] leading-tight text-ink-600">{k}</dt>
-                    <dd className="shrink-0 text-[11px] font-semibold leading-tight tabular-nums text-ink-900">
-                      {v}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {weightsNote && (
-                <p className="mt-1.5 text-[10px] leading-snug text-ink-400">{weightsNote}</p>
-              )}
-            </div>
-          )}
-          {weights && (
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-              Yours
-            </p>
-          )}
-          {/* Stacked on a phone. The tile is 166px there, and a label
-              opposite its value in that width breaks "7 days from their
-              submission" across three lines with the label wrapping into
-              it. Label above value costs a line and reads. */}
-          <dl className="space-y-2 sm:space-y-1.5">
-            {detail.map(([k, v]) => (
-              <div
-                key={k}
-                className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
-              >
-                <dt className="text-[11px] leading-tight text-ink-500">{k}</dt>
-                {/*
-                  Wraps rather than pushes.
-
-                  It was shrink-0 from 640px up, so a long value — "12 days
-                  to submit · 15 to score" against a tile 200px wide — made
-                  the row wider than the panel it sits in and hung out of
-                  the right-hand edge. Right-aligned and allowed to take a
-                  second line instead; the figures still read as a column
-                  because they end on the same edge.
-                */}
-                <dd className="text-[11px] font-medium leading-tight tabular-nums text-ink-900 sm:min-w-0 sm:text-right">
-                  {v}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-    </div>
-  )
 }
 
 /**
@@ -561,112 +391,6 @@ export default function Profile() {
   const coreWeight = Number(
     assignment?.assignment?.core_values_weight ?? (REMAINDER_TOTAL - esmsWeight),
   )
-  const band = bandFor(annual?.avg_total_score)
-
-  // Unscored peers are worth naming rather than hiding: "3rd of 4" reads
-  // as a small team until you know eleven others have not been assessed.
-  const teamUnscored = (ranking?.team_size ?? 0) - (ranking?.team_of ?? 0)
-
-  const jobWeight = Number(assignment?.assignment?.job_role_weight ?? JOB_ROLE_TOTAL)
-  const hasEsms = esmsWeight > 0
-
-  /*
-    Why a position is what it is, as the shares that make it.
-
-    Ranking stopped running on the raw percentage in migration 0096.
-    Without the 120% ceiling one tripled target could carry a year, so
-    both positions come off the 1–5 slab, where 190% and 95% are equally
-    a 5. That is a real change in how somebody is placed against their
-    colleagues, so it stays legible from the tile — as two shares and a
-    line, not the paragraph it used to be.
-  */
-  const bandWeights: Array<[string, string]> = [
-    ['Job role band', '60%'],
-    [hasEsms ? 'Core values + ESMS band' : 'Core values band', '40%'],
-  ]
-  const bandNote =
-    'On 1–5 bands, not the raw %. If two come out level, the higher job role band goes first.'
-  /*
-    What each half contributed, not only which band it landed in.
-
-    The question that produced this: somebody averaging 93.0 sat below
-    somebody averaging 89.4, and the tile could not answer it. It can
-    now — 5 of 5 gives 3.00 either way, and the difference is entirely
-    in the other half, 4 of 5 giving 1.60 against 3 of 5 giving 1.20.
-
-    The attainment is there too, because the band is the half nobody
-    argues with and the percentage is the half they do: 71.24% is a 3
-    because the slab closes at 80, and seeing the figure is what makes
-    that checkable rather than something to take on trust.
-  */
-  const share = (band: number | null | undefined, ratio: number) =>
-    band == null ? '—' : `${band} of 5 → ${(band * ratio).toFixed(2)}`
-  /*
-    The marks before the percentage, because the percentage alone is read
-    as marks.
-
-    "Core values achieved 68.00%" was asked about within a minute of
-    being shown: core values is 20 marks, so is 68 of them? It is not —
-    it is 68% OF the 20, which is 13.6. Each half is a share of its own
-    weightage, which is the only way an 80-mark block and a 20-mark block
-    can sit on the same 1-5 slab; measured against 100 core values could
-    never pass 20% and would be a 1 for everybody, for ever.
-  */
-  const achieved = (v: number | null | undefined, outOf: number) =>
-    v == null ? '—'
-      : `${((Number(v) * outOf) / 100).toFixed(1)} of ${outOf} · ${Number(v).toFixed(2)}%`
-
-  /*
-    The manager mark, taken apart the way the two band tiles now are.
-
-    The panel listed 70 / 20 / 10 and then five figures in days, and
-    never the mark itself — a manager could read every line of it and
-    still not know where the position came from. Worse, the shares were
-    describing somebody else: neither turnaround has anything to measure
-    yet, so the team band is not 70 of the mark, it is the whole of it,
-    and every manager in the company was reading a rule that did not
-    apply to them.
-
-    managerRank mirrors the function's own arithmetic (see 0098), so the
-    parts below add up to mgr_overall, which is the figure the ranking
-    sorted on and the one shown as "Ranked on".
-  */
-  const mgr = managerRank({
-    submitDays: num(ranking?.submit_tat),
-    completeDays: num(ranking?.completion_tat),
-    teamBand: num(ranking?.mgr_team_band),
-    submitAllowance: ranking?.tm_grace_days ?? 3,
-    completeAllowance: ranking?.mgr_grace_days ?? 5,
-  })
-  // 70, 20, 10 — and 77.8 once one of them drops out, which is why this
-  // is not just String(outOf).
-  const outOf = (n: number) => n.toFixed(1).replace(/.0$/, '')
-  const partRow = (
-    label: string, part: ManagerPart, measured: string, absent: string,
-  ): [string, string] => [
-    label,
-    part.points === null
-      ? absent
-      : `${measured} → ${part.points.toFixed(1)} of ${outOf(part.outOf)}`,
-  ]
-
-  const bandRows: Array<[string, string]> = [
-    ['Job role band', share(ranking?.job_band, JOB_RATIO)],
-    ['Job role achieved', achieved(ranking?.job_pct, jobWeight)],
-    // Named for the block rather than for core values alone: ESMS is
-    // five of the same twenty and counts here too, so labelling this
-    // "Core values band" would understate what it is measuring for the
-    // people who carry ESMS.
-    [hasEsms ? 'Core values + ESMS band' : 'Core values band',
-      share(ranking?.core_band, CORE_RATIO)],
-    [hasEsms ? 'Core values + ESMS achieved' : 'Core values achieved',
-      achieved(ranking?.core_pct, coreWeight + esmsWeight)],
-    // The figure actually sorted on, so the two shares above visibly add
-    // up to it and the rule is checkable rather than merely stated.
-    ['Ranked on',
-      ranking?.rank_value != null ? Number(ranking.rank_value).toFixed(2) : '—'],
-  ]
-
   return (
     <div className="space-y-5">
       <div>
@@ -678,6 +402,14 @@ export default function Profile() {
         </Link>
       </div>
 
+      {/*
+        The rank sits with the name, not in a tile below it.
+
+        One position, next to the score it comes from, counted against
+        the whole team rather than the part of it scored so far: "2nd of
+        17" is the team, and 15 of them having been scored is a fact
+        about the month, not about where somebody stands.
+      */}
       <ScoreHeader
         title={employee.full_name}
         subtitle={`${employee.ecode}${
@@ -685,172 +417,24 @@ export default function Profile() {
         } · FY ${fy}`}
         score={annual?.avg_total_score}
         scoreLabel="Year average"
-      />
-
-      {/* Two across even on the narrowest phone. Stacked, these tiles
-          pushed the details card most of a screen down, and the ranks are
-          a set — reading one without the others beside it loses half the
-          point. */}
-      <div className={clsx(
-        'grid-fill grid grid-cols-2 gap-3',
-        isManager ? 'lg:grid-cols-5' : 'lg:grid-cols-4',
-      )}>
-        <RankTile
-          label="Team rank"
-          icon={Medal}
-          rank={ranking?.team_rank}
-          of={ranking?.team_of}
-          // Says where the denominator came from. "2nd of 8" on a team of
-          // sixteen invites the wrong conclusion unless the other eight
-          // are accounted for.
-          note={
-            teamUnscored > 0
-              ? `${ranking?.team_of} of ${ranking?.team_size} scored so far`
-              : 'everyone in your team'
-          }
-          weights={bandWeights}
-          weightsNote={bandNote}
-          detail={bandRows}
-        />
-        <RankTile
-          label="Cyrix rank"
-          icon={Trophy}
-          rank={ranking?.org_rank}
-          of={ranking?.org_of}
-          note="scored across Cyrix"
-          weights={bandWeights}
-          weightsNote={bandNote}
-          detail={bandRows}
-        />
-        {/*
-          Managers only. Everyone is ranked on their own score; only a
-          manager is also holding other people's months open, and this is
-          the number that says by how long.
-
-          "Team TAT" rather than plain "Turnaround", and the caption
-          names the field: the tile appears for managers and nobody else,
-          which the manager seeing it has no way to know. Saying "among
-          managers" is what turns "1st of 1" from a puzzle into a fact.
-        */}
-        {isManager && (
-          <RankTile
-            label="Team scoring rank"
-            icon={Timer}
-            /*
-              Ranked among the managers who HAVE a mark, not the whole
-              roll of them. 128 of the 172 have no scored reportee at
-              all, rank() ties every one of them on 45th, and "36th of
-              172" then reads as the top quarter when it is 36th of 44.
-              A manager who cannot be measured is shown as unmeasured
-              rather than given a position they were never in.
-            */
-            rank={ranking?.mgr_overall == null ? null : ranking?.mgr_rank}
-            of={ranking?.mgr_measured ?? ranking?.mgr_of}
-            note={
-              ranking?.mgr_measured != null && ranking?.mgr_of != null
-                && ranking.mgr_measured < ranking.mgr_of
-                ? `${ranking.mgr_measured} of ${ranking.mgr_of} managers measured`
-                : 'among managers'
-            }
-            emptyNote={
-              (ranking?.due_months ?? 0) > 0
-                ? 'Nobody in your team scored yet'
-                : 'Nothing owed yet'
-            }
-            /*
-              The shares kpi_ranking actually weighs, which migration 0098
-              set; they have to move with it. The paragraph this replaced
-              still said the figure was scaled by how much of the year had
-              been scored, which 0098 took out — and a caption that explains
-              a number by the wrong rule is worse than none.
-            */
-            weights={[
-              ['Team average band', '70%'],
-              ['Your scoring TAT', '20%'],
-              ['Team submission TAT', '10%'],
-            ]}
-            weightsNote={
-              'A part with nothing to measure yet is left out and the rest '
-              + 'carry its share. How much of the year is done is not part '
-              + 'of the mark.'
-            }
-            detail={[
-              // Each part with what it earned and what that put into the
-              // mark, in weight order, so the three lines visibly add up
-              // to the figure underneath them.
-              partRow('Team average band', mgr.team,
-                num(ranking?.mgr_team_band) == null ? ''
-                  : `${num(ranking?.mgr_team_band)!.toFixed(2)} of 5`,
-                'nobody scored yet'),
-              // The caveat the mark cannot carry: an average of 5.00 off
-              // one person out of twelve is the same 5.00 to the ranking,
-              // and it is not the same claim.
-              ['Band read from',
-                ranking?.mgr_team_scored == null ? '—'
-                  : ranking.mgr_team_scored === 1 ? '1 scored person'
-                  : `${ranking.mgr_team_scored} scored people`],
-              // Two clocks, kept apart. Blended into one they produced
-              // 49.3 days for a manager who actually scores in under
-              // three — true, and unreadable as either fact.
-              //
-              // "none counted yet" rather than "nothing scored": months
-              // before the date on the last line are not counted, so a
-              // manager can have scored one and still have no clock.
-              partRow('Your scoring TAT', mgr.completion,
-                num(ranking?.completion_tat) == null ? ''
-                  : `${num(ranking?.completion_tat)!.toFixed(1)} days`,
-                'none counted yet'),
-              // Their team's half of the wait. A manager can be quick and
-              // still be carrying a team that sends everything in weeks
-              // late, and only this line would say so.
-              partRow('Team submission TAT', mgr.submission,
-                num(ranking?.submit_tat) == null ? ''
-                  : `${num(ranking?.submit_tat)!.toFixed(1)} days`,
-                'none counted yet'),
-              // The figure the ranking actually sorted on. Read from the
-              // database rather than from the sum above, so the tile
-              // cannot quietly disagree with the position it is
-              // explaining.
-              ['Ranked on',
-                num(ranking?.mgr_overall) == null ? 'nothing measurable yet'
-                  : `${num(ranking?.mgr_overall)!.toFixed(1)} of 100`],
-              ['Team months scored',
-                ranking?.due_months == null ? '—'
-                  : `${ranking.scored_months ?? 0} of ${ranking.due_months}`],
-              ['Pending TAT',
-                tatLine(ranking?.pending_tat, ranking?.pending_delay,
-                        'nothing waiting')],
-              // The rule those day figures were measured against. A
-              // number that says someone is late without saying late
-              // against what is an accusation, not a metric.
-              // Abbreviated because it shares a 200px tile with its label:
-              // "12d to submit · 15d to score" says the same thing on one
-              // line where the long form took two.
-              ['Allowance',
-                `${ranking?.tm_grace_days ?? 3}d to submit · ` +
-                `${ranking?.mgr_grace_days ?? 5}d to score`],
-              ...(ranking?.tat_starts_from
-                ? [['Counted from',
-                    monthLabel(ranking.tat_starts_from)] as [string, string]]
-                : []),
-            ]}
-          />
+      >
+        {ranking?.team_rank != null && ranking?.team_size ? (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <Medal className="h-4 w-4 self-center text-white/40" />
+            <span className="text-[11px] font-semibold uppercase tracking-label text-white/40">
+              Team rank
+            </span>
+            <span className="text-lg font-semibold text-white">
+              {ordinal(ranking.team_rank)}
+            </span>
+            <span className="text-sm text-white/50">of {ranking.team_size}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-white/50">
+            No scored month yet, so there is no team rank.
+          </p>
         )}
-        <StatTile
-          label="Months scored"
-          value={annual?.months_scored ?? 0}
-          sub="of 12"
-        />
-        <StatTile
-          label="Performance"
-          value={
-            band
-              ? <span className={clsx('text-xl', band.accent)}>{band.label}</span>
-              : <span className="text-ink-300">—</span>
-          }
-          sub={band ? 'on the year average' : 'not scored yet'}
-        />
-      </div>
+      </ScoreHeader>
 
       <div className="card overflow-hidden">
         <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
@@ -876,6 +460,10 @@ export default function Profile() {
                 <span className="ml-2 text-xs text-ink-500">{manager.ecode}</span>
               </>
             ) : null}
+          </Row>
+          <Row label="Months scored">
+            {annual?.months_scored ?? 0}
+            <span className="ml-2 text-xs text-ink-500">of 12</span>
           </Row>
           {isManager && (
             <Row label="My team">

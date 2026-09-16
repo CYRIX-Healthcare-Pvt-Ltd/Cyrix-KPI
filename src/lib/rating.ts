@@ -71,8 +71,18 @@ export const ratingLabel = (r: Rating | null): string =>
  * The job band still breaks ties, so two people on the same combined
  * figure are separated the way the ratio intends rather than by name.
  */
-export const JOB_RATIO = 0.6
-export const CORE_RATIO = 0.4
+/*
+  The company's own split — 80 marks of job role, 20 of core values —
+  because being ranked on a different one from the one everybody is
+  scored on is a question nobody could answer well (0136).
+
+  What it means: one job-role band is 0.8, and the whole core range from
+  1 to 5 is 4 x 0.2 = 0.8. A higher job band can be equalled by core
+  values but never beaten, and the tie-break is the job band. Job role
+  decides the order; core values separate people inside it.
+*/
+export const JOB_RATIO = 0.8
+export const CORE_RATIO = 0.2
 
 export interface RankInput {
   /** Job role attainment, as a percentage of the job-role weightage. */
