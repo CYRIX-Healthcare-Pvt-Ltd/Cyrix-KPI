@@ -423,7 +423,6 @@ export default function Help() {
             { what: t('ask.p7.what'), how: t('ask.p7.how') },
           ] : []),
           { what: t('ask.p8.what'), how: t('ask.p8.how') },
-          { what: t('ask.p9.what'), how: t('ask.p9.how') },
           { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },
           { what: t('ask.p11.what'), how: t('ask.p11.how') },
           { what: t('ask.p12.what'), how: t('ask.p12.how'), to: '/change-password', cta: 'Change my password' },
