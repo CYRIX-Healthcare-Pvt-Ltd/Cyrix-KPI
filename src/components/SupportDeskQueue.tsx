@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, Send, Inbox } from 'lucide-react'
 import { useDeskTickets, useAnswerTicket } from '@/lib/queries'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
 import Avatar from '@/components/Avatar'
+import { waitingLabel, turnaroundLabel, daysWaiting } from '@/lib/tat'
 import type { SupportDesk } from '@/types/db'
 
 /**
@@ -35,6 +36,7 @@ export default function SupportDeskQueue({
 
   const rows = tickets ?? []
   const open = rows.filter(t => t.status === 'open')
+  const overdue = open.filter(t => daysWaiting(t.raised_at) >= 1).length
 
   if (rows.length === 0) {
     return (
@@ -70,11 +72,19 @@ export default function SupportDeskQueue({
       <p className="text-sm text-ink-500">
         {open.length === 0
           ? `All ${rows.length} answered.`
-          : `${open.length} waiting, oldest first.`}
+          : `${open.length} waiting, oldest first`}
+        {/* The figure the reminder mail is sent on, said where the work
+            is: anything over a day is chased by email tonight. */}
+        {overdue > 0 && (
+          <span className="font-medium text-cyrixRed-700">
+            {' '}· {overdue} over a day
+          </span>
+        )}
       </p>
 
       {rows.map(t => {
         const answered = t.status === 'answered'
+        const waited = waitingLabel(t.raised_at)
         const who = t.employee
         return (
           <div
@@ -98,16 +108,31 @@ export default function SupportDeskQueue({
                   </p>
                 </div>
               </div>
-              <span
-                className={clsx(
-                  'badge',
-                  answered ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900',
-                )}
-              >
-                {answered
-                  ? <><CheckCircle2 className="mr-1 h-3 w-3" /> Answered</>
-                  : <><Clock className="mr-1 h-3 w-3" /> Waiting</>}
-              </span>
+              {/*
+                How long, not only that it is waiting.
+
+                "Waiting" said the same thing on an hour-old question and
+                a five-day-old one, and the five-day-old one is the whole
+                reason anybody opens this screen. A day is the line the
+                reminder mail chases on, so it is the line the badge
+                changes colour on — screen and email agree.
+              */}
+              {answered ? (
+                <span className="badge bg-emerald-100 text-emerald-900">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  {turnaroundLabel(t.raised_at, t.answered_at) || 'Answered'}
+                </span>
+              ) : (
+                <span
+                  className={clsx('badge', {
+                    'bg-amber-100 text-amber-900': waited.tone === 'ok',
+                    'bg-orange-100 text-orange-900': waited.tone === 'warn',
+                    'bg-cyrixRed-100 text-cyrixRed-900': waited.tone === 'late',
+                  })}
+                >
+                  <Clock className="mr-1 h-3 w-3" /> {waited.text}
+                </span>
+              )}
             </div>
 
             <div className="space-y-3 p-4">

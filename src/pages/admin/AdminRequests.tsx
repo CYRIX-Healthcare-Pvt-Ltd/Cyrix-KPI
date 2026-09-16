@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import clsx from 'clsx'
 import { UserMinus, Check, X, Inbox } from 'lucide-react'
 import { useRemovalRequests, useRemovalAction } from '@/lib/queries'
 import { PageLoader, Alert, Spinner, EmptyState } from '@/components/ui'
+import { waitingLabel, daysWaiting } from '@/lib/tat'
 
 /**
  * Managers flag leavers; HR actions them. Approving deactivates the
@@ -19,6 +21,7 @@ export default function AdminRequests() {
 
   const pending = (data ?? []).filter(r => r.request.status === 'pending')
   const history = (data ?? []).filter(r => r.request.status !== 'pending')
+  const overdue = pending.filter(r => daysWaiting(r.request.created_at) >= 1).length
 
   const run = async (requestId: string, approve: boolean) => {
     setError(null)
@@ -37,6 +40,11 @@ export default function AdminRequests() {
         <h1 className="text-xl font-semibold text-ink-900">Removal requests</h1>
         <p className="mt-0.5 text-sm text-ink-500">
           {pending.length} awaiting your decision
+          {overdue > 0 && (
+            <span className="font-medium text-cyrixRed-700">
+              {' '}· {overdue} over a day
+            </span>
+          )}
         </p>
       </div>
 
@@ -71,6 +79,7 @@ export default function AdminRequests() {
               sentence under it.
             */
             const gone = !!employee && !employee.is_active
+            const waited = waitingLabel(request.created_at)
             return (
             <div key={request.id} className="card p-4">
               <div className="flex flex-wrap items-start gap-3">
@@ -90,6 +99,21 @@ export default function AdminRequests() {
                         Already deactivated
                       </span>
                     )}
+                    {/* How long this one has sat here. A date says when
+                        it arrived; only the count says it is late, and
+                        a day is the line the reminder mail chases on. */}
+                    <span
+                      className={clsx(
+                        'ml-2 rounded-full px-2 py-0.5 text-xs font-medium',
+                        {
+                          'bg-ink-100 text-ink-600': waited.tone === 'ok',
+                          'bg-orange-100 text-orange-900': waited.tone === 'warn',
+                          'bg-cyrixRed-100 text-cyrixRed-800': waited.tone === 'late',
+                        },
+                      )}
+                    >
+                      {waited.text}
+                    </span>
                   </p>
                   <p className="mt-0.5 text-xs text-ink-500">
                     Requested by {requester?.full_name ?? '—'} ({requester?.ecode}) on{' '}

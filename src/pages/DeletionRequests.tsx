@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRecordRequests, useRequestAction } from '@/lib/queries'
 import { monthLabel } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, EmptyState } from '@/components/ui'
+import { waitingLabel } from '@/lib/tat'
 import type { RecordRequest } from '@/types/db'
 
 const STAGE_LABEL: Record<string, string> = {
@@ -116,6 +117,7 @@ export default function DeletionRequests() {
             const kind = KIND[request.kind]
             const Icon = kind.icon
             const isFinal = request.status === 'pending_hr'
+            const waited = waitingLabel(request.created_at)
             return (
               <div key={request.id} className="card p-4">
                 <div className="flex flex-wrap items-start gap-3">
@@ -130,6 +132,19 @@ export default function DeletionRequests() {
                       </p>
                       <span className={`badge ${STAGE_STYLE[request.status]}`}>
                         {STAGE_LABEL[request.status]}
+                      </span>
+                      {/* And how long it has been at that stage. The
+                          stage says whose it is; this says whether they
+                          are late with it, on the same one-day line the
+                          reminder mail uses. */}
+                      <span
+                        className={`badge ${
+                          waited.tone === 'late' ? 'bg-cyrixRed-100 text-cyrixRed-800'
+                          : waited.tone === 'warn' ? 'bg-orange-100 text-orange-900'
+                          : 'bg-ink-100 text-ink-600'
+                        }`}
+                      >
+                        {waited.text}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-ink-500">

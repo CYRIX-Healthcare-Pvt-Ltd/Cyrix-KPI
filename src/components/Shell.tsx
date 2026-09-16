@@ -7,6 +7,7 @@ import {
   ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { nudgeAdmins } from '@/lib/notifyHr'
 import {
   usePendingCounts, useRemovalRequests, useAnnualSummary,
   usePendingRecordRequests, useOpenScoreQueries, useOpenTicketCount, currentFy,
@@ -65,6 +66,16 @@ interface NavItem {
 
 export default function Shell() {
   const { employee, isManager, isHrAdmin, isSwAdmin, signOut } = useAuth()
+
+  /*
+    Once a day, from whoever is here.
+
+    A desk that has left something waiting more than a day is sent a
+    round-up of it, and the only clock this project has is somebody
+    opening the app — there is no pg_cron on it. So every signed-in
+    browser asks once a day and the server sends one; see nudgeAdmins.
+  */
+  useEffect(() => { nudgeAdmins() }, [])
 
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
