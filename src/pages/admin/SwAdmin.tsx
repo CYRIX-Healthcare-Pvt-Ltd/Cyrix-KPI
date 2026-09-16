@@ -3,10 +3,11 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench,
   Image as ImageIcon,
 } from 'lucide-react'
 import { SortHeader } from '@/components/ui'
+import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
@@ -2307,6 +2308,9 @@ const ADMIN_TABS = [
   { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTab /> },
   { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
   { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
+  // Who works in Revive Lab, in which TRCs, doing what — the same table
+  // the module's own admins edit from inside it.
+  { id: 'revive', label: 'Revive Lab', short: 'Revive', icon: Wrench, render: () => <ReviveLabAccess /> },
   // Last, because it is the only tab that is somebody else's work
   // rather than a setting. Everything to its left is configuration;
   // this is a queue with people waiting in it.
