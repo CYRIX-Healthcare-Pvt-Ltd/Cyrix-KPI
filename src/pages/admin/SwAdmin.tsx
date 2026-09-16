@@ -47,6 +47,11 @@ interface LoginStatusRow {
      approved, and 'not_set_up' means there is no assignment for the year.
      Added to v_login_status by 0115. */
   kpi_status: string | null
+  /* Months this financial year the manager has scored. Added to
+     v_login_status by 0137, counted the same way HR's own screens count
+     them, so "has anybody actually been assessed" can be asked of the
+     rows this report already loads. */
+  months_scored: number
 }
 
 const STATE_STYLE: Record<string, string> = {
@@ -1630,13 +1635,17 @@ type Share = {
   kpiSet: number
   /** kpiSet as a share of total, 0 to 100. */
   kpiPct: number
+  /** How many of total have had at least one month scored by their manager. */
+  scored: number
+  /** scored as a share of total, 0 to 100. */
+  scoredPct: number
   pct: number
   /** Managers only: whether the manager has signed in themselves. */
   selfIn?: boolean
 }
 
 /** What the share table can be sorted by. */
-type ShareSortKey = 'name' | 'self' | 'pct' | 'here' | 'kpiPct' | 'kpiSet'
+type ShareSortKey = 'name' | 'self' | 'pct' | 'here' | 'kpiPct' | 'kpiSet' | 'scoredPct' | 'scored'
 
 /**
  * The share rows in the order the table and the saved image both show.
@@ -1653,7 +1662,9 @@ function sortShares(rows: readonly Share[], key: ShareSortKey | null, asc: boole
     : key === 'pct' ? r.pct
     : key === 'here' ? r.here
     : key === 'kpiPct' ? r.kpiPct
-    : r.kpiSet
+    : key === 'kpiSet' ? r.kpiSet
+    : key === 'scoredPct' ? r.scoredPct
+    : r.scored
   return [...rows].sort((a, b) => {
     const c = key === 'name' ? a.name.localeCompare(b.name) : num(a) - num(b)
     return c * dir || b.total - a.total || a.name.localeCompare(b.name)
@@ -1719,6 +1730,9 @@ function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
             <SortHeader label="KPI set up %" col="kpiPct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <SortHeader label="KPI set up" col="kpiSet" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
             <th className="px-4 py-2.5" />
+            <SortHeader label="Scored %" col="scoredPct" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
+            <SortHeader label="Scored" col="scored" align="right" sortKey={sortKey} asc={asc} onSort={onSort} />
+            <th className="px-4 py-2.5" />
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-100">
@@ -1752,6 +1766,16 @@ function ShareTable({ label, rows, showSelf, sortKey, asc, onSort }: {
               </td>
               <td className="w-40 px-4 py-2.5">
                 <ShareBar pct={r.kpiPct} />
+              </td>
+              {/* And how many of them have been scored at all. Out of the
+                  same people again, so the three bars read across as one
+                  sentence: come in, set up, assessed. */}
+              <td className="px-4 py-2.5 text-right tabular-nums">{Math.round(r.scoredPct)}%</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-ink-500">
+                {r.scored} / {r.total}
+              </td>
+              <td className="w-40 px-4 py-2.5">
+                <ShareBar pct={r.scoredPct} />
               </td>
             </tr>
           ))}
@@ -1807,6 +1831,10 @@ export function SummaryTab() {
     // An approved KPI for this year. A draft, one awaiting approval or one
     // sent back cannot be assessed against yet, so none of those is set up.
     const kpiSetUp = (r: LoginStatusRow) => r.kpi_status === 'active'
+    // The question after set-up: has anything been assessed against it.
+    // One scored month is the whole test — it is the difference between a
+    // KPI on file and a KPI in use.
+    const scoredOnce = (r: LoginStatusRow) => (r.months_scored ?? 0) > 0
 
     // Somebody is a manager because people report to them, not because of
     // a title: the reporting line is what the process actually follows.
@@ -1818,32 +1846,35 @@ export function SummaryTab() {
 
     /* One counter, three groupings. */
     const tally = (key: (r: LoginStatusRow) => string): Share[] => {
-      const m = new Map<string, { total: number; here: number; kpiSet: number }>()
+      const m = new Map<string, { total: number; here: number; kpiSet: number; scored: number }>()
       for (const r of active) {
         const k = key(r)
-        const e = m.get(k) ?? { total: 0, here: 0, kpiSet: 0 }
+        const e = m.get(k) ?? { total: 0, here: 0, kpiSet: 0, scored: 0 }
         e.total += 1
         if (signedIn(r)) e.here += 1
         if (kpiSetUp(r)) e.kpiSet += 1
+        if (scoredOnce(r)) e.scored += 1
         m.set(k, e)
       }
       return [...m.entries()]
         .map(([name, v]) => ({
           key: name, name, ...v, pct: v.total ? (v.here / v.total) * 100 : 0,
           kpiPct: v.total ? (v.kpiSet / v.total) * 100 : 0,
+          scoredPct: v.total ? (v.scored / v.total) * 100 : 0,
         }))
         // Worst first: these lists are read to find who to chase.
         .sort((x, y) => x.pct - y.pct || y.total - x.total)
     }
 
-    const team = new Map<string, { here: number; total: number; kpiSet: number }>()
+    const team = new Map<string, { here: number; total: number; kpiSet: number; scored: number }>()
     for (const r of active) {
       const m = r.manager_ecode?.toUpperCase()
       if (!m) continue
-      const e = team.get(m) ?? { here: 0, total: 0, kpiSet: 0 }
+      const e = team.get(m) ?? { here: 0, total: 0, kpiSet: 0, scored: 0 }
       e.total += 1
       if (signedIn(r)) e.here += 1
       if (kpiSetUp(r)) e.kpiSet += 1
+      if (scoredOnce(r)) e.scored += 1
       team.set(m, e)
     }
 
@@ -1855,9 +1886,10 @@ export function SummaryTab() {
       managerCount: managers.length,
       managersIn: managers.filter(signedIn).length,
       kpiSetUp: active.filter(kpiSetUp).length,
+      scoredOnce: active.filter(scoredOnce).length,
       managerRows: managers
         .map((m): Share => {
-          const t = team.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0, kpiSet: 0 }
+          const t = team.get(m.ecode.toUpperCase()) ?? { here: 0, total: 0, kpiSet: 0, scored: 0 }
           return {
             key: m.ecode,
             name: m.full_name,
@@ -1867,6 +1899,8 @@ export function SummaryTab() {
             total: t.total,
             kpiSet: t.kpiSet,
             kpiPct: t.total ? (t.kpiSet / t.total) * 100 : 0,
+            scored: t.scored,
+            scoredPct: t.total ? (t.scored / t.total) * 100 : 0,
             pct: t.total ? (t.here / t.total) * 100 : 0,
           }
         })
@@ -1975,7 +2009,7 @@ export function SummaryTab() {
     // Room for the table's columns in the table's order -- percentage,
     // count and bar for signing in, then the same for KPI set-up -- and no
     // more: a phone shrinks a wider image until its text cannot be read.
-    const W = 1200
+    const W = 1600
     const PAD = 32
     /*
       Every row, however many that is.
@@ -2029,6 +2063,7 @@ export function SummaryTab() {
       `${pct(stats.signedIn, stats.total)}% of ${stats.total.toLocaleString()} employees · `
       + `${pct(stats.managersIn, stats.managerCount)}% of ${stats.managerCount} managers · `
       + `${pct(stats.kpiSetUp, stats.total)}% KPI set up · `
+      + `${pct(stats.scoredOnce, stats.total)}% scored at least once · `
       + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       PAD, 62,
     )
@@ -2038,6 +2073,7 @@ export function SummaryTab() {
     const sortedBy = sortKey && ({
       name: current[2].toLowerCase(), self: 'themselves', pct: 'signed in %',
       here: 'signed in', kpiPct: 'KPI set up %', kpiSet: 'KPI set up',
+      scoredPct: 'scored %', scored: 'scored',
     } as Record<ShareSortKey, string>)[sortKey]
     const order = sortKey === 'name' ? (asc ? 'A to Z' : 'Z to A')
       : sortKey === 'self' ? (asc ? 'not signed in first' : 'signed in first')
@@ -2053,33 +2089,45 @@ export function SummaryTab() {
     }
 
     /*
-      From the right margin back, in the table's order: a percentage and a
-      count, right-aligned under their headings, then a bar -- once for
-      signing in, once for KPI set-up. Each step is the widest text in that
-      column plus a gap: "KPI SET UP %" is 67px in Segoe UI and a four-digit
-      "1188 / 1188" 63px, with room to spare for a wider phone font.
+      Three blocks, laid out by one rule instead of six offsets.
+
+      Each is a percentage and a count, right-aligned under their headings,
+      then a bar: signing in, KPI set-up, and scored at least once. A block
+      is the widest text in it plus its gaps -- "KPI SET UP %" is 67px in
+      Segoe UI and a four-digit "1188 / 1188" 63px, with room to spare for
+      a wider phone font -- and they are placed from the right margin back,
+      so a fourth would only need adding to the list.
     */
     const barW = 200
-    const kpiBarX = W - PAD - barW
-    const kpiCountRight = kpiBarX - 16
-    const kpiPctRight = kpiCountRight - 88
-    const barX = kpiPctRight - 96 - barW
-    const countRight = barX - 16
-    const pctRight = countRight - 88
+    const BLOCK = 96 + 88 + 16 + barW
+    /** Block k, counting 0 from the right-hand margin. */
+    const at = (k: number) => {
+      const barX = W - PAD - k * BLOCK - barW
+      const countRight = barX - 16
+      return { barX, countRight, pctRight: countRight - 88 }
+    }
+    const blocks = [
+      { ...at(2), heads: ['SIGNED IN %', 'SIGNED IN'] as const,
+        pct: (d: Share) => d.pct, count: (d: Share) => `${d.here} / ${d.total}` },
+      { ...at(1), heads: ['KPI SET UP %', 'KPI SET UP'] as const,
+        pct: (d: Share) => d.kpiPct, count: (d: Share) => `${d.kpiSet} / ${d.total}` },
+      { ...at(0), heads: ['SCORED %', 'SCORED'] as const,
+        pct: (d: Share) => d.scoredPct, count: (d: Share) => `${d.scored} / ${d.total}` },
+    ]
     // Names stop short of the widest heading beside them, "SIGNED IN %".
-    const nameMax = pctRight - 96 - PAD
+    const nameMax = blocks[0].pctRight - 96 - PAD
 
     g.fillStyle = MUTED
     g.font = font(11, '600')
     g.fillText(current[2].toUpperCase(), PAD, top - 14)
     g.textAlign = 'right'
-    g.fillText('SIGNED IN %', pctRight, top - 14)
-    g.fillText('SIGNED IN', countRight, top - 14)
-    g.fillText('KPI SET UP %', kpiPctRight, top - 14)
-    g.fillText('KPI SET UP', kpiCountRight, top - 14)
+    for (const b of blocks) {
+      g.fillText(b.heads[0], b.pctRight, top - 14)
+      g.fillText(b.heads[1], b.countRight, top - 14)
+    }
     g.textAlign = 'left'
 
-    // Both bars drawn the one way, in the table's colours for the same
+    // Every bar drawn the one way, in the table's colours for the same
     // shares: the track, then the share, never thinner than a stub.
     const bar = (x: number, y: number, share: number) => {
       g.fillStyle = '#e5e7eb'
@@ -2104,18 +2152,17 @@ export function SummaryTab() {
       g.fillText(name === (d.note ? `${d.name} · ${d.note}` : d.name) ? name : name + '…', PAD, y + 4)
 
       g.textAlign = 'right'
-      g.fillStyle = INK
-      g.font = font(12, '600')
-      g.fillText(`${Math.round(d.pct)}%`, pctRight, y + 4)
-      g.fillText(`${Math.round(d.kpiPct)}%`, kpiPctRight, y + 4)
-      g.fillStyle = MUTED
-      g.font = font(12)
-      g.fillText(`${d.here} / ${d.total}`, countRight, y + 4)
-      g.fillText(`${d.kpiSet} / ${d.total}`, kpiCountRight, y + 4)
+      for (const b of blocks) {
+        g.fillStyle = INK
+        g.font = font(12, '600')
+        g.fillText(`${Math.round(b.pct(d))}%`, b.pctRight, y + 4)
+        g.fillStyle = MUTED
+        g.font = font(12)
+        g.fillText(b.count(d), b.countRight, y + 4)
+      }
       g.textAlign = 'left'
 
-      bar(barX, y, d.pct)
-      bar(kpiBarX, y, d.kpiPct)
+      for (const b of blocks) bar(b.barX, y, b.pct(d))
     })
 
     canvas.toBlob(blob => {
@@ -2151,6 +2198,14 @@ export function SummaryTab() {
           label="KPI set up"
           value={pct(stats.kpiSetUp, stats.total) + '%'}
           sub={stats.kpiSetUp.toLocaleString() + ' of ' + stats.total.toLocaleString() + ' approved'}
+        />
+        {/* The question after set-up, and the one the rollout is finished
+            on: a KPI nobody has scored has not been used yet. One month is
+            the test — whether the manager has ever assessed them. */}
+        <StatTile
+          label="Scored at least once"
+          value={pct(stats.scoredOnce, stats.total) + '%'}
+          sub={stats.scoredOnce.toLocaleString() + ' of ' + stats.total.toLocaleString() + ' people'}
         />
       </div>
 

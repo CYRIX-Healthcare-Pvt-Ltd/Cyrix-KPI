@@ -41,12 +41,16 @@ export default function AdminOverview() {
     const byStatus: Record<string, number> = {}
     let scored = 0
     let awaiting = 0
+    let scoredOnce = 0
     const scores: number[] = []
 
     for (const e of org) {
       byStatus[e.kpi_status] = (byStatus[e.kpi_status] ?? 0) + 1
       scored += e.months_scored
       awaiting += e.months_awaiting_manager
+      // People, not months: one scored month is the difference between a
+      // KPI on file and a KPI that has been used.
+      if (e.months_scored > 0) scoredOnce += 1
       if (e.avg_score !== null) scores.push(e.avg_score)
     }
 
@@ -55,6 +59,7 @@ export default function AdminOverview() {
       byStatus,
       scored,
       awaiting,
+      scoredOnce,
       avgScore: scores.length
         ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
         : null,
@@ -97,7 +102,7 @@ export default function AdminOverview() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-5">
         <StatTile
           label="KPIs approved"
           value={stats.byStatus.active ?? 0}
@@ -117,6 +122,15 @@ export default function AdminOverview() {
           label="Months scored"
           value={stats.scored}
           sub={`${stats.withScores} people with a score`}
+        />
+        {/* The rollout question this screen could not answer: how many
+            people have been assessed at all. It was small print under the
+            months count, which is a different figure — twelve months
+            scored can be one person. */}
+        <StatTile
+          label="Scored at least once"
+          value={stats.scoredOnce}
+          sub={`of ${stats.total} employees`}
         />
       </div>
 
