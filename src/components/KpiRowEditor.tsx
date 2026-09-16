@@ -1,7 +1,7 @@
 import { useState, useId } from 'react'
 import clsx from 'clsx'
 import {
-  Trash2, Shuffle, Calculator, ArrowUp, ArrowDown, Minus, FlaskConical, TrendingDown,
+  Trash2, Calculator, ArrowUp, ArrowDown, Minus, FlaskConical, TrendingDown,
   AlertTriangle,
 } from 'lucide-react'
 import RuleTraits from './RuleTraits'
@@ -436,7 +436,7 @@ export default function RowEditor({
                         className="btn-secondary whitespace-nowrap px-3 py-1 text-xs"
                         onClick={() => setPendingRule(null)}
                       >
-                        Keep the current one
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -515,6 +515,13 @@ export default function RowEditor({
         </div>
       )}
 
+      {/*
+        Removing a row is the one thing done to a row here. "Add an
+        alternative" used to sit beside it and has been taken away: new
+        alternatives are no longer offered. The few KPIs that already carry
+        them keep them — shown above, each with its own remove — so no month
+        that relies on one breaks.
+      */}
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <button
           onClick={onRemove}
@@ -522,24 +529,6 @@ export default function RowEditor({
         >
           <Trash2 className="h-3.5 w-3.5" /> Remove this row
         </button>
-        {/* Same weight of text as Remove, deliberately: they are the two
-            things you can do to a row, and one of them being a button
-            would make it look like the expected next step. Five is the
-            cap the column enforces. */}
-        {row.alternates.length < 5 && (
-          <button
-            onClick={() => onChange({
-              alternates: [...row.alternates, {
-                id: `alt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                kra: '', kpi_description: '', target_value: null,
-                scoring_rule: row.scoring_rule, rule_params: row.rule_params,
-              }],
-            })}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-ink-900"
-          >
-            <Shuffle className="h-3.5 w-3.5" /> Add an alternative
-          </button>
-        )}
       </div>
     </div>
   )

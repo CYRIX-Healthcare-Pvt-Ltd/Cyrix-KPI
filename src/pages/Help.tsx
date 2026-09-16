@@ -195,7 +195,6 @@ export default function Help() {
               // First, because for most people it is now the whole answer.
               { what: t('s1.p0.what'), how: t('s1.p0.how'), to: '/my-kpi/setup', cta: 'Set up my KPI' },
               { what: t('s1.p1.what'), how: t('s1.p1.how'), to: '/my-kpi', cta: 'Open my KPI' },
-              { what: t('s1.p2.what'), how: t('s1.p2.how'), to: '/my-kpi', cta: 'Open my KPI' },
               { what: t('s1.p3.what'), how: t('s1.p3.how'), to: '/my-kpi', cta: 'Open my KPI' },
               { what: t('s1.p4.what'), how: t('s1.p4.how') },
               { what: t('s1.p5.what'), how: t('s1.p5.how') },
@@ -296,12 +295,16 @@ export default function Help() {
             { what: t('team.p12.what'), how: t('team.p12.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p13.what'), how: t('team.p13.how'), to: '/team/templates', cta: 'Open KPI templates' },
             { what: t('team.p14.what'), how: t('team.p14.how'), to: '/approvals', cta: 'Open approvals' },
+            { what: t('team.p19.what'), how: t('team.p19.how'), to: '/team/templates', cta: 'Open KPI templates' },
+            { what: t('team.p20.what'), how: t('team.p20.how'), to: '/team/templates', cta: 'Open KPI templates' },
+            { what: t('team.p21.what'), how: t('team.p21.how'), to: '/team/templates', cta: 'Open KPI templates' },
+            { what: t('team.p22.what'), how: t('team.p22.how'), to: '/team/templates', cta: 'Open KPI templates' },
             // The three rules that arrived with the manager's own
             // scoring screen: every core value rated, a reason for a low
             // one, and how their own position is worked out.
             { what: t('team.p15.what'), how: t('team.p15.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p16.what'), how: t('team.p16.how'), to: '/team', cta: 'Open my team' },
-            { what: t('team.p17.what'), how: t('team.p17.how'), to: '/me', cta: 'See my rating' },
+            { what: t('team.p17.what'), how: t('team.p17.how') },
             { what: t('team.p18.what'), how: t('team.p18.how'), to: '/approvals', cta: 'Open approvals' },
           ]}
         />
@@ -362,6 +365,7 @@ export default function Help() {
           ...(appraised
             ? [{ what: t('prof.p6.what'), how: t('prof.p6.how'), to: '/me', cta: 'Open my profile' }]
             : []),
+          { what: t('prof.p7.what'), how: t('prof.p7.how'), to: '/me', cta: 'Open my profile' },
         ]}
       />
 

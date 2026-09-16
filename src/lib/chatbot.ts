@@ -261,6 +261,11 @@ const ALIASES: Record<string, string[]> = {
             'ready made', 'copy my manager', 'same as my colleague'],
   'team.p13': ['template', 'templates', 'save a template', 'team template',
                'reuse', 'same kpi for everyone', 'standard kpi'],
+  'team.p19': ['assign to', 'assign template', 'give template', 'paste codes', 'many people'],
+  'team.p20': ['edit template', 'change template', 'update template', 'from now on', 'start clean'],
+  'team.p21': ['edit for my team', 'my own version', 'template from my manager', 'merge'],
+  'team.p22': ['remove template', 'delete template'],
+  'prof.p7': ['official number', 'phone number', 'mobile number', 'contact number', 'mail id'],
   // A manager correcting somebody else's row before approving it. The
   // answer says so; the heading does not, so the words never matched.
   'team.p1': ['approve', 'their target', 'their weightage', 'change their',
