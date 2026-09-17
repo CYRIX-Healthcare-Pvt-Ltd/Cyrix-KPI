@@ -223,6 +223,7 @@ export default function Help() {
               // Final stopped being printed twice.
               { what: t('s2.p7.what'), how: t('s2.p7.how'), to: '/history', cta: 'Open assessments' },
               { what: t('s2.p8.what'), how: t('s2.p8.how'), to: '/history', cta: 'Open assessments' },
+              { what: t('s2.p9.what'), how: t('s2.p9.how'), to: '/history', cta: 'Open assessments' },
             ]}
           />
 
@@ -299,6 +300,7 @@ export default function Help() {
             { what: t('team.p20.what'), how: t('team.p20.how'), to: '/team/templates', cta: 'Open KPI templates' },
             { what: t('team.p21.what'), how: t('team.p21.how'), to: '/team/templates', cta: 'Open KPI templates' },
             { what: t('team.p22.what'), how: t('team.p22.how'), to: '/team/templates', cta: 'Open KPI templates' },
+            { what: t('team.p23.what'), how: t('team.p23.how'), to: '/team/templates', cta: 'Open KPI templates' },
             // The three rules that arrived with the manager's own
             // scoring screen: every core value rated, a reason for a low
             // one, and how their own position is worked out.
@@ -324,6 +326,7 @@ export default function Help() {
             { what: t('hr.p5.what'), how: t('hr.p5.how'), to: '/admin/requests', cta: 'Open leavers' },
             { what: t('hr.p6.what'), how: t('hr.p6.how'), to: '/admin/reports', cta: 'Open reports' },
             { what: t('hr.p7.what'), how: t('hr.p7.how'), to: '/admin/employees', cta: 'Open employees' },
+            { what: t('hr.p8.what'), how: t('hr.p8.how'), to: '/admin/support', cta: 'Open support' },
           ]}
         />
       )}
@@ -338,6 +341,9 @@ export default function Help() {
             { what: t('sw.p1.what'), how: t('sw.p1.how'), to: '/admin/logins', cta: 'Open logins' },
             { what: t('sw.p2.what'), how: t('sw.p2.how'), to: '/admin/timing', cta: 'Open KPI timing' },
             { what: t('sw.p3.what'), how: t('sw.p3.how'), to: '/admin/logins', cta: 'Open logins' },
+            { what: t('sw.p4.what'), how: t('sw.p4.how'), to: '/admin/logins', cta: 'Open logins' },
+            { what: t('sw.p5.what'), how: t('sw.p5.how'), to: '/admin/logins', cta: 'Open SW Admin' },
+            { what: t('sw.p6.what'), how: t('sw.p6.how'), to: '/admin/logins', cta: 'Open SW Admin' },
           ]}
         />
       )}

@@ -80,6 +80,12 @@ export interface AnswerContext {
   /** The five core values rated separately, month by month. */
   coreTrend?: Array<{ core_value_id: string; period_month: string; rating: string | null }>
   coreValues?: Array<{ id: string; name: string }>
+  /**
+   * From kpi_ranking. The team rank is counted against the manager's
+   * whole team, as the profile shows it; the manager rank is null for
+   * anybody without a team of their own.
+   */
+  rank?: { team: number | null; teamOf: number | null; mgr: number | null; mgrOf: number | null } | null
 }
 
 /**
@@ -145,6 +151,19 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
     case 'chit.hello': return t('greeting', { name: ctx.firstName })
     case 'chit.whoisbot': return t('whoisbot')
     case 'whoami': return t('whoami', { name: ctx.me.full_name, ecode: ctx.me.ecode })
+
+    case 'rank': {
+      const r = ctx.rank
+      const parts: string[] = []
+      if (r?.team != null && r.teamOf != null) {
+        parts.push(r.teamOf > 1 ? t('rank.team', { rank: r.team, of: r.teamOf }) : t('rank.alone'))
+      }
+      // A manager's standing, when they have one — said after their own.
+      if (r?.mgr != null && r.mgrOf != null && r.mgrOf > 1) {
+        parts.push(t('stand.mgrrank', { rank: r.mgr, of: r.mgrOf }))
+      }
+      return parts.length ? parts.join(' ') : t('rank.none')
+    }
 
     case 'score.last': {
       const v = scoreOf(latest)

@@ -349,15 +349,6 @@ export default function ChatBot() {
   }, [isManager, teamNow, teamMonths, ranking])
 
 
-  const tip = useMemo(
-    () => (systemAccount ? null : pickTip({
-      isManager,
-      isHrAdmin,
-      hasKpi: !!assignment?.assignment,
-      hasScoredMonth: (annual?.months_scored ?? 0) > 0,
-    }, tipSeen)),
-    [systemAccount, isManager, isHrAdmin, assignment, annual, tipSeen],
-  )
 
   /**
    * What is waiting on this person, right now.
@@ -451,8 +442,9 @@ export default function ChatBot() {
       .map(sub => ({ period_month: sub.period_month, value: Number(sub.final_total_score) }))
     const f = forecastYear(points, 0)
     return pickStanding({
-      rank: ranking.org_rank,
-      of: ranking.org_of,
+      // The team rank, as on the profile — see StandingContext.
+      rank: ranking.team_rank,
+      of: ranking.team_size,
       lever: lever ? { kra: lever.kra, target: lever.target, gain: lever.gain } : null,
       climb: f && f.direction === 'up' ? { soFar: f.soFar, recent: f.recent } : null,
       team: teamStanding,
@@ -463,6 +455,26 @@ export default function ChatBot() {
       ? SAID_BY_IDLE[idleOpening.key] ?? []
       : [])
   }, [systemAccount, ranking, kras, history, teamStanding, standSeen, nudges.length, idleOpening])
+
+  /*
+    Which tip this sitting gets — after the standing line, so it is never
+    the same thing twice. "You are 3 of 3 in your team" followed by "did
+    you know you can see where you stand in your team" was one sentence
+    said two ways, one above the other.
+  */
+  const tip = useMemo(() => {
+    if (systemAccount) return null
+    const avoid = [
+      ...(standing && /^stand\.rank/.test(standing.key) ? ['tip.rank'] : []),
+      ...(standing?.key === 'stand.mgrrank' ? ['tip.mgrrank'] : []),
+    ]
+    return pickTip({
+      isManager,
+      isHrAdmin,
+      hasKpi: !!assignment?.assignment,
+      hasScoredMonth: (annual?.months_scored ?? 0) > 0,
+    }, tipSeen, avoid)
+  }, [systemAccount, isManager, isHrAdmin, assignment, annual, tipSeen, standing])
 
   /*
     The unread mark.
@@ -484,7 +496,7 @@ export default function ChatBot() {
   */
   const signature = JSON.stringify([
     nudges.map(n => [n.key, n.vars]),
-    ranking?.org_rank ?? null,
+    ranking?.team_rank ?? null,
     ranking?.mgr_rank ?? null,
     teamStanding?.lowest?.id ?? null,
   ])
@@ -645,6 +657,10 @@ export default function ChatBot() {
       kras: kras ?? [],
       coreTrend: coreTrend ?? [],
       coreValues: coreValues ?? [],
+      rank: ranking ? {
+        team: ranking.team_rank, teamOf: ranking.team_size,
+        mgr: ranking.mgr_rank, mgrOf: ranking.mgr_of,
+      } : null,
       /*
         Months still ahead of this person, which is what a projection has
         to spread the recent run across.

@@ -60,7 +60,6 @@ export const TIPS: Tip[] = [
   { key: 'tip.months', to: '/history', toLabel: 'Assessments', when: hasKpi },
   { key: 'tip.query', to: '/history', toLabel: 'Assessments', when: scored },
   { key: 'tip.split', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
-  { key: 'tip.alternates', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
   { key: 'tip.startmonth', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
 
   // ---- the app itself
@@ -75,7 +74,7 @@ export const TIPS: Tip[] = [
   { key: 'tip.drill', to: '/team', toLabel: 'My Team', when: manager },
   { key: 'tip.approveall', to: '/approvals', toLabel: 'Approvals', when: manager },
   { key: 'tip.export', to: '/team', toLabel: 'My Team', when: manager },
-  { key: 'tip.mgrrank', to: '/me', toLabel: 'My profile', when: manager },
+  { key: 'tip.mgrrank', to: null, toLabel: '', when: manager },
 ]
 
 /** The ones that apply to this person, in order. */
@@ -91,8 +90,10 @@ export const tipsFor = (ctx: TipContext): Tip[] =>
  * through the list rather than being handed the same tip twice in a
  * week by chance.
  */
-export function pickTip(ctx: TipContext, seen: number): Tip | null {
-  const list = tipsFor(ctx)
+export function pickTip(ctx: TipContext, seen: number, avoid: readonly string[] = []): Tip | null {
+  // `avoid`: what the panel has just said another way, so the tip does
+  // not say it a second time straight underneath.
+  const list = tipsFor(ctx).filter(t => !avoid.includes(t.key))
   if (list.length === 0) return null
   const n = Math.max(0, Math.floor(seen))
   return list[n % list.length]

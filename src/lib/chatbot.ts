@@ -78,6 +78,8 @@ export type FactId =
    */
   | 'score.forecast'
   | 'kra.lever'
+  /** Their rank in their team, and a manager's among managers. */
+  | 'rank'
 
 /**
  * Who a section of the manual is written for.
@@ -266,6 +268,15 @@ const ALIASES: Record<string, string[]> = {
   'team.p21': ['edit for my team', 'my own version', 'template from my manager', 'merge'],
   'team.p22': ['remove template', 'delete template'],
   'prof.p7': ['official number', 'phone number', 'mobile number', 'contact number', 'mail id'],
+  's4.p4': ['rank', 'ranking', 'ranked', 'calculated', 'worked out', 'position', '80 20'],
+  's2.p9': ['changed my score', 'score changed', 'reduced', 'raised', 'manager entered',
+            'lower than mine', 'cut my score'],
+  'team.p23': ['which template', 'find template', 'search template', 'template is on'],
+  'hr.p8': ['reminder email', 'overdue request', 'request waiting', 'answered in'],
+  'sw.p4': ['correct record', 'wrong name', 'wrong manager', 'wrong email', 'fix email',
+            'edit employee', 'change email', 'work email'],
+  'sw.p5': ['software questions', 'support tab', 'software desk', 'answer questions'],
+  'sw.p6': ['revive lab', 'revive', 'bemmp', 'delete ticket', 'route card'],
   // A manager correcting somebody else's row before approving it. The
   // answer says so; the heading does not, so the words never matched.
   'team.p1': ['approve', 'their target', 'their weightage', 'change their',
@@ -340,6 +351,14 @@ const FACT_PATTERNS: Array<{ id: FactId; any: string[]; all?: string[] }> = [
     id: 'whoami',
     any: ['my name', 'who am i', 'my ecode', 'my employee code', 'my code',
           'എന്റെ പേര്', 'मेरा नाम', 'నా పేరు'],
+  },
+  {
+    // Asked outright. It had no answer of its own, so "what is my rank"
+    // fell through to a manual page, and the only rank Cyra ever said
+    // was the Cyrix-wide one in her opening lines.
+    id: 'rank',
+    any: ['my rank', 'rank', 'ranking', 'ranked', 'my position', 'where do i stand',
+          'where i stand', 'my standing', 'റാങ്ക്', 'रैंक', 'ర్యాంక్', 'தரவரிசை'],
   },
   {
     id: 'score.last',
@@ -662,6 +681,9 @@ const NOT_MINE = new RegExp(
   'i',
 )
 
+/** A question about how ranking works, rather than where the asker is. */
+const RANK_RULE = /\b(calculat\w*|worked out|work out|decided|formula|based on|why)\b|\bhow\s+(is|are|does|do)\b/
+
 export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
   const asked = tokens(query)
   const teachMe = TEACH_ME.test(normalise(query))
@@ -720,6 +742,9 @@ export function matchQuestion(query: string, who: Reader = {}): AnswerSource {
     manual hands back a page about how scoring works to somebody who
     asked what to work on.
   */
+  // "How is my rank worked out" wants the rule, not the number. TEACH_ME
+  // does not catch "how is", and a figure given in reply reads as the rule.
+  if (bestFact?.id === 'rank' && RANK_RULE.test(normalise(query))) bestFact = null
   if (bestFact && (!teachMe || bestFact.id === 'manual' || bestFact.id === 'kra.lever')) {
     return { kind: 'fact', id: bestFact.id }
   }

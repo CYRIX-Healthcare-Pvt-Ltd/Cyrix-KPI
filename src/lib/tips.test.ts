@@ -45,9 +45,17 @@ describe('did-you-know tips', () => {
   it('does not talk about KPI rows to somebody with no KPI', () => {
     const none = tipsFor({ ...member, hasKpi: false })
     expect(none.some(t => t.key === 'tip.split')).toBe(false)
-    expect(none.some(t => t.key === 'tip.alternates')).toBe(false)
     // The app-wide ones still apply — they are true of anybody.
     expect(none.some(t => t.key === 'tip.manual')).toBe(true)
+  })
+
+  it('does not offer a tip that repeats what Cyra has just said', () => {
+    // "You are 3 of 3 in your team" and then "did you know you can see
+    // where you stand in your team" is one sentence said twice.
+    const list = tipsFor(member)
+    for (let i = 0; i < list.length * 2; i++) {
+      expect(pickTip(member, i, ['tip.rank'])!.key).not.toBe('tip.rank')
+    }
   })
 
   it('works through the whole list before repeating one', () => {

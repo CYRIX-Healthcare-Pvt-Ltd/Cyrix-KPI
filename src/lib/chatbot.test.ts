@@ -383,3 +383,31 @@ describe('spelled the way people type it', () => {
     }
   })
 })
+
+describe('where somebody stands', () => {
+  it('answers "what is my rank" with the rank, not a manual page', () => {
+    for (const q of ['what is my rank', 'my rank', 'where do i stand', 'what is my position']) {
+      expect(matchQuestion(q), q).toEqual({ kind: 'fact', id: 'rank' })
+    }
+  })
+
+  it('sends "how is it worked out" to the rule instead of a number', () => {
+    for (const q of ['how is my rank calculated', 'how are ranks worked out']) {
+      expect(matchQuestion(q), q).toMatchObject({ kind: 'manual', key: 's4.p4' })
+    }
+  })
+
+  it('says the team rank the profile shows, and a manager’s standing after it', async () => {
+    const { answerFact } = await import('./chatAnswers')
+    const base = { lang: 'en' as const, fy: '2026-27', firstName: 'Asha', me: { full_name: 'Asha', ecode: 'E1' }, history: [] }
+    const rank = (r: { team: number | null; teamOf: number | null; mgr: number | null; mgrOf: number | null } | null) =>
+      answerFact('rank', { ...base, rank: r })
+
+    expect(rank({ team: 2, teamOf: 17, mgr: null, mgrOf: null })).toContain('2 of 17 in your team')
+    expect(rank({ team: 2, teamOf: 17, mgr: null, mgrOf: null })).not.toMatch(/Cyrix/)
+    const manager = rank({ team: 3, teamOf: 9, mgr: 5, mgrOf: 40 })
+    expect(manager.indexOf('3 of 9 in your team')).toBeLessThan(manager.indexOf('Among managers you are 5 of 40'))
+    expect(rank({ team: 1, teamOf: 1, mgr: null, mgrOf: null })).toMatch(/only person/)
+    expect(rank(null)).toMatch(/do not have a rank yet/)
+  })
+})

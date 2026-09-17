@@ -3,7 +3,7 @@ import { WEAK_THRESHOLD } from './bands'
 /**
  * Where somebody stands, said out loud, with the lever attached.
  *
- * The positions already exist — a rank tile on the profile, a team
+ * The positions already exist — a rank under the name on the profile, a team
  * average on the team screen, a turnaround figure in a tooltip — and a
  * number sitting on a screen somebody has to go and open is a number
  * nobody acts on. So Cyra says one of them when she opens, the way a
@@ -43,7 +43,12 @@ export interface TeamStanding {
 }
 
 export interface StandingContext {
-  /** Their own position for the year, among everybody with a score. */
+  /**
+   * Their own position for the year in their team: against everybody who
+   * reports to the same manager, which is the figure under their name on
+   * the profile. It used to be the Cyrix-wide position, and "426 of 523"
+   * beside a profile saying "2nd of 17" was two answers to one question.
+   */
   rank: number | null
   of: number | null
   /** Their own weakest KRA, and what closing it is worth. */
@@ -120,10 +125,9 @@ export function standingLines(ctx: StandingContext): StandingLine[] {
     }
     if (team.rank !== null && team.of !== null && team.of > 1) {
       out.push({
+        // No link: no screen shows a manager's own standing.
         key: 'stand.mgrrank',
         vars: { rank: team.rank, of: team.of },
-        to: '/me',
-        toLabel: 'My profile',
       })
     }
     if (team.average !== null) {
@@ -139,7 +143,10 @@ export function standingLines(ctx: StandingContext): StandingLine[] {
   // Their own score. A field of one is not a position, so it is not
   // stated as one — a divisional head ranked "1 of 1" learns nothing.
   if (ctx.rank !== null && ctx.of !== null && ctx.of > 1) {
-    if (ctx.rank <= 10) {
+    // Near the top of their own team — the top quarter, and never less
+    // than first place. "Top ten" was a Cyrix-wide idea: in a team of
+    // seventeen, tenth is below the middle.
+    if (ctx.rank <= Math.max(1, Math.floor(ctx.of / 4))) {
       out.push({ key: 'stand.ranktop', vars: { rank: ctx.rank, of: ctx.of }, to: '/me', toLabel: 'My profile' })
     } else if (ctx.lever) {
       out.push({

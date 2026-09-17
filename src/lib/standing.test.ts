@@ -3,9 +3,9 @@ import { standingLines, pickStanding, type StandingContext, type TeamStanding } 
 import { CHAT } from './chat-strings'
 import { READY_LANGS } from './i18n'
 
-/** Somebody in the middle of the field with a weak KRA — the ordinary case. */
+/** Somebody in the middle of their team with a weak KRA — the ordinary case. */
 const member: StandingContext = {
-  rank: 42, of: 177,
+  rank: 9, of: 17,
   lever: { kra: 'FTFR', target: 80, gain: 6.25 },
   climb: null,
   team: null,
@@ -96,17 +96,30 @@ describe('what Cyra says about where you stand', () => {
       .toBe(false)
   })
 
-  it('congratulates the top ten instead of handing them a lever', () => {
-    const lines = standingLines({ ...member, rank: 7 })
+  it('congratulates the top of the team instead of handing them a lever', () => {
+    const lines = standingLines({ ...member, rank: 2 })
     expect(lines[0].key).toBe('stand.ranktop')
     expect(lines.some(l => l.key === 'stand.ranklever')).toBe(false)
   })
 
-  it('always gives somebody outside the top ten the next move', () => {
-    // The reported worry: 160 of 177 must never be a bare position.
-    const line = standingLines({ ...member, rank: 160 })[0]
+  it('always gives somebody outside the top of the team the next move', () => {
+    // The reported worry: 15 of 17 must never be a bare position.
+    const line = standingLines({ ...member, rank: 15 })[0]
     expect(line.key).toBe('stand.ranklever')
-    expect(line.vars).toEqual({ rank: 160, of: 177, kra: 'FTFR', target: 80, gain: '6.3' })
+    expect(line.vars).toEqual({ rank: 15, of: 17, kra: 'FTFR', target: 80, gain: '6.3' })
+  })
+
+  it('counts the top as the top quarter of the team, and first place at least', () => {
+    expect(standingLines({ ...member, rank: 4, lever: null })[0].key).toBe('stand.ranktop')
+    expect(standingLines({ ...member, rank: 5, lever: null })[0].key).toBe('stand.rank')
+    expect(standingLines({ ...member, rank: 1, of: 3, lever: null })[0].key).toBe('stand.ranktop')
+    expect(standingLines({ ...member, rank: 2, of: 3, lever: null })[0].key).toBe('stand.rank')
+  })
+
+  it('does not send a manager to a screen for their standing, because none shows it', () => {
+    const line = standingLines({ ...member, team: team() }).find(l => l.key === 'stand.mgrrank')
+    expect(line).toBeDefined()
+    expect(line!.to).toBeUndefined()
   })
 
   it('states the position plainly when there is no lever to offer', () => {
@@ -151,7 +164,7 @@ describe('not saying the same thing twice', () => {
     expect(pickStanding(member, 0)?.key).toBe('stand.ranklever')
     const line = pickStanding(member, 0, ['stand.ranklever'])
     expect(line?.key).toBe('stand.rank')
-    expect(line?.vars).toEqual({ rank: 42, of: 177 })
+    expect(line?.vars).toEqual({ rank: 9, of: 17 })
   })
 
   it('says nothing rather than repeating, when that was the only line', () => {
