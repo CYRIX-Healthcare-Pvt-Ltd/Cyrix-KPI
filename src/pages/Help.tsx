@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
-  MessageSquare, ShieldAlert, Timer, Trash2, Users, HelpCircle, LifeBuoy, UserRound, Scale,
+  MessageSquare, ShieldAlert, Users, HelpCircle, LifeBuoy, UserRound, Scale,
   Languages, MessageCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -435,20 +435,18 @@ export default function Help() {
         ]}
       />
 
+      {/*
+        Only the way back. There used to be a Records button here for
+        managers and KPI timing for SW Admin, and neither belonged to a
+        manual: Records is a queue whose tab appears only when somebody is
+        waiting, so the button opened an empty tray and made its tab show
+        for nothing; KPI timing is a tab inside Administration now. Every
+        point above already links to its own screen.
+      */}
       <div className="flex flex-wrap gap-2">
         <Link to="/me" className="btn-secondary btn-press">
           <ArrowLeft className="h-4 w-4" /> {t('page.back')}
         </Link>
-        {isSwAdmin && (
-          <Link to="/admin/timing" className="btn-secondary btn-press">
-            <Timer className="h-4 w-4" /> KPI timing
-          </Link>
-        )}
-        {isManager && !isHrAdmin && (
-          <Link to="/deletions" className="btn-secondary btn-press">
-            <Trash2 className="h-4 w-4" /> Records
-          </Link>
-        )}
       </div>
     </div>
   )

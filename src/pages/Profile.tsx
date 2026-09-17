@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, Camera, KeyRound, LifeBuoy, Medal, Plus, UserRound, X,
+  ArrowLeft, BookOpen, Camera, KeyRound, LifeBuoy, Medal, Plus, Trash2, UserRound, X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -602,6 +602,18 @@ export default function Profile() {
         >
           <LifeBuoy className="h-4 w-4" /> Contact support
         </Link>
+        {/* The way into Records the rest of the time. Its tab is a queue
+            and only shows while a request is waiting for a decision, so
+            without this a manager had no way back to what was decided or
+            to what they asked for. Not HR: Records sits in their own bar. */}
+        {isManager && !isHrAdmin && (
+          <Link
+            to="/deletions"
+            className="btn-secondary btn-press inline-flex"
+          >
+            <Trash2 className="h-4 w-4" /> Records
+          </Link>
+        )}
         {/* Renders nothing where it is already installed, or where the
             browser cannot install at all. */}
         <InstallButton />
