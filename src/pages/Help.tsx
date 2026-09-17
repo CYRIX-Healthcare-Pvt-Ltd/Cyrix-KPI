@@ -4,14 +4,14 @@ import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
   MessageSquare, ShieldAlert, Users, HelpCircle, LifeBuoy, UserRound, Scale,
-  Languages, MessageCircle, PlayCircle,
+  Languages, MessageCircle, Play, PlayCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy, useMonthClose } from '@/lib/queries'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { markHelpSeen } from '@/lib/seenHelp'
-import { MANUAL_VIDEOS, type ManualVideo } from '@/lib/manualVideos'
+import { MANUAL_VIDEOS, VIDEO_SERIES, nextVideo, type ManualVideo } from '@/lib/manualVideos'
 import VideoModal from '@/components/VideoModal'
 
 /**
@@ -140,6 +140,71 @@ function Section({
   )
 }
 
+/**
+ * All four videos, first, in the order they are numbered.
+ *
+ * Everyone gets all four, managers and team members alike. The videos
+ * number themselves 1 to 4 and each ends on the next, so a list with only
+ * a person's own two in it reads as two missing — which is exactly how it
+ * was read. Two columns, and the columns mean something: the team
+ * member's part down the left, the manager's down the right.
+ */
+function VideoSeries({ title, lead, partLabel, whoLabel, titleOf, play }: {
+  title: string
+  lead: string
+  partLabel: (v: ManualVideo) => string
+  whoLabel: (v: ManualVideo) => string
+  titleOf: (v: ManualVideo) => string
+  play: (v: ManualVideo) => void
+}) {
+  return (
+    <section className="card overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <PlayCircle className="h-4 w-4 shrink-0 text-cyrixRed-600" />
+        <h2 className="text-sm font-semibold text-ink-800">{title}</h2>
+      </div>
+      <div className="p-4">
+        <p className="mb-3 text-sm text-ink-500">{lead}</p>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {VIDEO_SERIES.map(v => (
+            <li key={v.id}>
+              <button
+                type="button"
+                onClick={() => play(v)}
+                className="btn-press group flex w-full items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-ink-50"
+              >
+                <span className="relative w-28 shrink-0 overflow-hidden rounded-lg bg-shade">
+                  <img
+                    src={v.poster}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-video w-full object-cover"
+                  />
+                  <span className="absolute inset-0 grid place-items-center">
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-white/90 shadow transition-transform duration-150 ease-out group-hover:scale-110">
+                      <Play className="ml-0.5 h-3.5 w-3.5 fill-cyrixRed-600 text-cyrixRed-600" />
+                    </span>
+                  </span>
+                  <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-medium tabular-nums leading-4 text-white">
+                    {v.duration}
+                  </span>
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                    {partLabel(v)}
+                  </span>
+                  <span className="block text-sm font-medium text-ink-900">{titleOf(v)}</span>
+                  <span className="block text-xs text-ink-500">{whoLabel(v)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
 export default function Help() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
   const { data: policy } = useTatPolicy()
@@ -179,6 +244,7 @@ export default function Help() {
     }
   }, [params, setParams])
   const watch: Watch = { label: t('video.watch'), play: setPlaying }
+  const after = playing && nextVideo(playing)
 
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
@@ -241,6 +307,15 @@ export default function Help() {
         {t('page.scopeBefore')} <strong>{t('page.scopeStrong')}</strong>{' '}
         {t('page.scopeAfter')}
       </div>
+
+      <VideoSeries
+        title={t('video.series.title')}
+        lead={t('video.series.lead')}
+        partLabel={v => t('video.part', { n: v.part })}
+        whoLabel={v => t(v.who === 'manager' ? 'video.who.manager' : 'video.who.member')}
+        titleOf={v => t(v.titleKey)}
+        play={setPlaying}
+      />
 
       {appraised && (
         <>
@@ -481,6 +556,7 @@ export default function Help() {
         icon={HelpCircle}
         tint="text-ink-400"
         title={t('ask.title')}
+        watch={watch}
         points={[
           { what: t('ask.p1.what'), how: t('ask.p1.how') },
           ...(appraised ? [
@@ -495,6 +571,7 @@ export default function Help() {
           { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },
           { what: t('ask.p11.what'), how: t('ask.p11.how') },
           { what: t('ask.p12.what'), how: t('ask.p12.how'), to: '/change-password', cta: 'Change my password' },
+          { what: t('ask.p13.what'), how: t('ask.p13.how'), video: MANUAL_VIDEOS['your-kpi'] },
         ]}
       />
 
@@ -509,7 +586,9 @@ export default function Help() {
       {playing && (
         <VideoModal
           video={playing}
+          part={t('video.part', { n: playing.part })}
           title={t(playing.titleKey)}
+          next={after && { label: t('video.next', { title: t(after.titleKey) }), play: () => setPlaying(after) }}
           note={lang === 'en' ? null : t('video.english')}
           closeLabel={t('video.close')}
           onClose={stop}

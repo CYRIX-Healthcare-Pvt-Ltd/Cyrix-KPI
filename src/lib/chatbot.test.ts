@@ -138,6 +138,9 @@ describe('what people actually type', () => {
       ['why can I not submit anything', 'ask.p2'],
       ['can I query a score twice', 'ask.p7'],
       ['I sent the wrong month in', 'ask.p6'],
+      ['is there a demo video', 'ask.p13'],
+      ['show me the videos', 'ask.p13'],
+      ['any tutorial', 'ask.p13'],
     ]
     for (const [q, key] of cases) {
       const r = asks(q)

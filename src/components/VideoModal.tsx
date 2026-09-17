@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { ArrowRight, X } from 'lucide-react'
 import type { ManualVideo } from '@/lib/manualVideos'
 
 /**
@@ -10,14 +10,20 @@ import type { ManualVideo } from '@/lib/manualVideos'
  * reading is still there when the video ends. It closes with the cross,
  * Escape, or a tap on the dark around it — and closing stops it, because
  * the element goes with the dialog.
+ *
+ * Each video ends by naming the next one, so the next one is a button
+ * here: the series can be watched straight through without closing.
  */
 export default function VideoModal({
-  video, title, note, closeLabel, onClose,
+  video, part, title, note, next, closeLabel, onClose,
 }: {
   video: ManualVideo
+  /** "Video 2 of 4", as its title card says. */
+  part: string
   title: string
   /** Shown under the player — that the captions are English, when the manual is not. */
   note?: string | null
+  next?: { label: string; play: () => void } | null
   closeLabel: string
   onClose: () => void
 }) {
@@ -41,7 +47,7 @@ export default function VideoModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label={`${part} · ${title}`}
       onClick={onClose}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-shade/80 p-3 sm:p-6"
     >
@@ -50,7 +56,9 @@ export default function VideoModal({
         className="w-full max-w-5xl overflow-hidden rounded-2xl bg-shade shadow-2xl"
       >
         <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <p className="truncate text-sm font-semibold text-white">{title}</p>
+          <p className="truncate text-sm font-semibold text-white">
+            <span className="text-white/60">{part} · </span>{title}
+          </p>
           <button
             ref={closeButton}
             type="button"
@@ -71,7 +79,20 @@ export default function VideoModal({
           preload="metadata"
           className="aspect-video w-full bg-black"
         />
-        {note && <p className="px-4 py-2 text-xs text-white/60">{note}</p>}
+        {(note || next) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+            {note && <p className="text-xs text-white/60">{note}</p>}
+            {next && (
+              <button
+                type="button"
+                onClick={next.play}
+                className="btn-press ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+              >
+                {next.label} <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

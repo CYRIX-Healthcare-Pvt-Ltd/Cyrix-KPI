@@ -85,6 +85,84 @@ export const HELP: Record<string, Phrase> = {
     te: 'ఈ వీడియోలోని క్యాప్షన్లు ఇంగ్లీష్‌లో ఉన్నాయి.',
     ta: 'இந்த வீடியோவின் தலைப்புகள் ஆங்கிலத்தில் உள்ளன.',
   },
+  // The four videos as the series they are. Their title cards say "Video
+  // 2 of 4" and end on "Next · 3", so the manual numbers them the same way
+  // and lists all four for everybody: the team member's part is 1 and 3,
+  // the manager's is 2 and 4, and each is easier to follow for having
+  // seen the other.
+  'video.series.title': {
+    en: 'How it works, in 4 short videos',
+    ml: 'ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു, 4 ചെറിയ വീഡിയോകളിൽ',
+    hi: 'यह कैसे काम करता है, 4 छोटे वीडियो में',
+    te: 'ఇది ఎలా పనిచేస్తుంది, 4 చిన్న వీడియోలలో',
+    ta: 'இது எப்படி செயல்படுகிறது, 4 சிறிய வீடியோக்களில்',
+  },
+  'video.series.lead': {
+    en: 'One KPI year, from start to finish. Videos 1 and 3 are what the team member does; 2 and 4 are what the manager does.',
+    ml: 'ഒരു KPI വർഷം, തുടക്കം മുതൽ ഒടുക്കം വരെ. 1, 3 വീഡിയോകൾ ടീം അംഗം ചെയ്യുന്നതാണ്; 2, 4 മാനേജർ ചെയ്യുന്നതാണ്.',
+    hi: 'एक KPI साल, शुरू से आख़िर तक। वीडियो 1 और 3 में वह है जो टीम सदस्य करता है; 2 और 4 में वह जो मैनेजर करता है।',
+    te: 'ఒక KPI సంవత్సరం, మొదటి నుండి చివరి వరకు. 1, 3 వీడియోలు టీమ్ సభ్యుడు చేసేవి; 2, 4 మేనేజర్ చేసేవి.',
+    ta: 'ஒரு KPI ஆண்டு, தொடக்கம் முதல் முடிவு வரை. வீடியோ 1, 3 குழு உறுப்பினர் செய்வது; 2, 4 மேலாளர் செய்வது.',
+  },
+  'video.part': {
+    en: 'Video {n} of 4',
+    ml: 'വീഡിയോ {n} / 4',
+    hi: 'वीडियो {n} / 4',
+    te: 'వీడియో {n} / 4',
+    ta: 'வீடியோ {n} / 4',
+  },
+  'video.who.member': {
+    en: 'Team member',
+    ml: 'ടീം അംഗം',
+    hi: 'टीम सदस्य',
+    te: 'టీమ్ సభ్యుడు',
+    ta: 'குழு உறுப்பினர்',
+  },
+  'video.who.manager': {
+    en: 'Manager',
+    ml: 'മാനേജർ',
+    hi: 'मैनेजर',
+    te: 'మేనేజర్',
+    ta: 'மேலாளர்',
+  },
+  'video.next': {
+    en: 'Next: {title}',
+    ml: 'അടുത്തത്: {title}',
+    hi: 'अगला: {title}',
+    te: 'తదుపరి: {title}',
+    ta: 'அடுத்தது: {title}',
+  },
+  // The names on the videos' own title cards. Not the manual headings they
+  // sit under: those carry the manual's section numbers, and "2. Every
+  // month" over a video that calls itself 3 of 4 is the confusion itself.
+  'video.your-kpi.title': {
+    en: 'Your KPI for the year',
+    ml: 'ഈ വർഷത്തെ നിങ്ങളുടെ KPI',
+    hi: 'इस साल का आपका KPI',
+    te: 'ఈ సంవత్సరం మీ KPI',
+    ta: 'இந்த ஆண்டுக்கான உங்கள் KPI',
+  },
+  'video.approve.title': {
+    en: 'Approve their KPI',
+    ml: 'അവരുടെ KPI അംഗീകരിക്കുക',
+    hi: 'उनका KPI मंज़ूर करें',
+    te: 'వారి KPI ఆమోదించండి',
+    ta: 'அவர்களின் KPI ஒப்புதல் அளியுங்கள்',
+  },
+  'video.every-month.title': {
+    en: 'Every month',
+    ml: 'എല്ലാ മാസവും',
+    hi: 'हर महीने',
+    te: 'ప్రతి నెలా',
+    ta: 'ஒவ்வொரு மாதமும்',
+  },
+  'video.score.title': {
+    en: 'Score their months',
+    ml: 'അവരുടെ മാസങ്ങൾക്ക് സ്കോർ നൽകുക',
+    hi: 'उनके महीनों को स्कोर दें',
+    te: 'వారి నెలలకు స్కోరు ఇవ్వండి',
+    ta: 'அவர்களின் மாதங்களுக்கு மதிப்பெண் அளியுங்கள்',
+  },
 
   // ---- 1. your KPI ---------------------------------------------
   's1.title': {
@@ -1301,6 +1379,22 @@ export const HELP: Record<string, Phrase> = {
     hi: 'रीसेट करने के लिए SW Admin से कहें। यह वापस आपके एम्प्लॉयी कोड पर आ जाता है।',
     te: 'రీసెట్ చేయమని SW Admin ను అడగండి. ఇది మీ ఎంప్లాయీ కోడ్‌కు తిరిగి వస్తుంది.',
     ta: 'மீட்டமைக்க SW Admin ஐக் கேளுங்கள். இது உங்கள் ஊழியர் குறியீட்டுக்குத் திரும்பும்.',
+  },
+  // Asked out loud more than it is looked for, which makes it Cyra's as
+  // much as the manual's: this is the entry she answers "demo video" with.
+  'ask.p13.what': {
+    en: 'Is there a demo video?',
+    ml: 'ഡെമോ വീഡിയോ ഉണ്ടോ?',
+    hi: 'क्या कोई डेमो वीडियो है?',
+    te: 'డెమో వీడియో ఉందా?',
+    ta: 'டெமோ வீடியோ இருக்கிறதா?',
+  },
+  'ask.p13.how': {
+    en: 'Yes, four short ones at the top of this page. Together they show a KPI year: setting up a KPI, approving it, filling in a month and scoring it. Each plays over the page, with English captions.',
+    ml: 'ഉണ്ട്, ഈ പേജിന്റെ മുകളിൽ നാല് ചെറിയ വീഡിയോകൾ. ഒരുമിച്ച് അവ ഒരു KPI വർഷം കാണിക്കുന്നു: ഒരു KPI സജ്ജമാക്കുന്നത്, അത് അംഗീകരിക്കുന്നത്, ഒരു മാസം പൂരിപ്പിക്കുന്നത്, അതിന് സ്കോർ നൽകുന്നത്. ഓരോന്നും ഇംഗ്ലീഷ് അടിക്കുറിപ്പുകളോടെ ഈ പേജിന് മുകളിൽ പ്ലേ ആകും.',
+    hi: 'हाँ, इस पेज में सबसे ऊपर चार छोटे वीडियो। साथ मिलकर वे एक KPI साल दिखाते हैं: KPI सेट करना, उसे मंज़ूर करना, महीना भरना और उसे स्कोर करना। हर वीडियो अंग्रेज़ी कैप्शन के साथ इसी पेज के ऊपर चलता है।',
+    te: 'ఉంది, ఈ పేజీ పైభాగంలో నాలుగు చిన్న వీడియోలు. అవి కలిసి ఒక KPI సంవత్సరాన్ని చూపిస్తాయి: KPI సెట్ చేయడం, దాన్ని ఆమోదించడం, ఒక నెల నింపడం, దానికి స్కోర్ ఇవ్వడం. ప్రతిదీ ఇంగ్లీష్ క్యాప్షన్లతో ఇదే పేజీపై ప్లే అవుతుంది.',
+    ta: 'ஆம், இந்தப் பக்கத்தின் மேலே நான்கு சிறிய வீடியோக்கள். அவை சேர்ந்து ஒரு KPI ஆண்டைக் காட்டுகின்றன: KPI ஐ அமைப்பது, அதற்கு ஒப்புதல் அளிப்பது, ஒரு மாதத்தை நிரப்புவது, அதற்கு மதிப்பெண் அளிப்பது. ஒவ்வொன்றும் ஆங்கில தலைப்புகளுடன் இதே பக்கத்தின் மேல் இயங்கும்.',
   },
 
   // ---- added with the September changes -------------------------

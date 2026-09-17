@@ -55,8 +55,9 @@ export const TIPS: Tip[] = [
   { key: 'tip.rank', to: '/me', toLabel: 'My profile', when: scored },
   { key: 'tip.language', to: null, toLabel: '', when: anyone },
   { key: 'tip.manual', to: '/help', toLabel: 'The manual', when: anyone },
-  // Not HR or SW Admin: the videos are on the sections about a KPI of one's own.
-  { key: 'tip.videos', to: '/help', toLabel: 'The manual', when: notHr },
+  // Everyone: the four videos head the manual whatever the role, and HR
+  // answers questions about both halves of what they show.
+  { key: 'tip.videos', to: '/help', toLabel: 'The manual', when: anyone },
 
   // ---- the monthly job
   { key: 'tip.months', to: '/history', toLabel: 'Assessments', when: hasKpi },
