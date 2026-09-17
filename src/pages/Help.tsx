@@ -1,16 +1,18 @@
-import { useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckSquare, ClipboardList,
   MessageSquare, ShieldAlert, Users, HelpCircle, LifeBuoy, UserRound, Scale,
-  Languages, MessageCircle,
+  Languages, MessageCircle, PlayCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTatPolicy, useMonthClose } from '@/lib/queries'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { markHelpSeen } from '@/lib/seenHelp'
+import { MANUAL_VIDEOS, type ManualVideo } from '@/lib/manualVideos'
+import VideoModal from '@/components/VideoModal'
 
 /**
  * What this person can do, in plain words.
@@ -57,10 +59,18 @@ interface Point {
    * at words that do not exist.
    */
   cta?: string
+  /** A how-to video for this point, played over the page. */
+  video?: ManualVideo
+}
+
+/** What a Watch video button needs from the page. */
+interface Watch {
+  label: string
+  play: (video: ManualVideo) => void
 }
 
 function Section({
-  icon: Icon, tint, title, lead, points,
+  icon: Icon, tint, title, lead, points, video, watch,
 }: {
   icon: React.ComponentType<{ className?: string }>
   /**
@@ -73,12 +83,25 @@ function Section({
   title: string
   lead?: string
   points: Point[]
+  /** A video for the whole section, on its heading. */
+  video?: ManualVideo
+  watch?: Watch
 }) {
   return (
     <section className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
         <Icon className={clsx('h-4 w-4 shrink-0', tint)} />
         <h2 className="text-sm font-semibold text-ink-800">{title}</h2>
+        {video && watch && (
+          <button
+            type="button"
+            onClick={() => watch.play(video)}
+            className="btn-secondary btn-press ml-auto !px-2.5 !py-1 text-xs"
+          >
+            <PlayCircle className="h-4 w-4 text-cyrixRed-600" />
+            {watch.label} · {video.duration}
+          </button>
+        )}
       </div>
       <div className="p-4">
         {lead && <p className="mb-3 text-sm text-ink-500">{lead}</p>}
@@ -87,13 +110,27 @@ function Section({
             <li key={p.what}>
               <p className="text-sm font-medium text-ink-900">{p.what}</p>
               <p className="mt-0.5 text-sm text-ink-600">{p.how}</p>
-              {p.to && (
-                <Link
-                  to={p.to}
-                  className="link-accent mt-1 inline-flex items-center gap-1 text-sm font-medium"
-                >
-                  {p.cta ?? 'Go there'} <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
+              {(p.to || (p.video && watch)) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  {p.to && (
+                    <Link
+                      to={p.to}
+                      className="link-accent inline-flex items-center gap-1 text-sm font-medium"
+                    >
+                      {p.cta ?? 'Go there'} <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                  {p.video && watch && (
+                    <button
+                      type="button"
+                      onClick={() => watch.play(p.video!)}
+                      className="link-accent inline-flex items-center gap-1 text-sm font-medium"
+                    >
+                      <PlayCircle className="h-4 w-4 text-cyrixRed-600" />
+                      {watch.label} · {p.video.duration}
+                    </button>
+                  )}
+                </div>
               )}
             </li>
           ))}
@@ -121,6 +158,27 @@ export default function Help() {
   // so the card retires itself here rather than needing a dismiss.
   const myId = employee?.id
   useEffect(() => { markHelpSeen(myId) }, [myId])
+
+  /*
+    The video playing, if any. Also opened from a link — Cyra's "Watch the
+    video" goes to /help?video=… — and closing takes the parameter off
+    again, so the back button does not reopen it.
+  */
+  const [params, setParams] = useSearchParams()
+  const [playing, setPlaying] = useState<ManualVideo | null>(null)
+  useEffect(() => {
+    const asked = params.get('video')
+    if (asked && MANUAL_VIDEOS[asked]) setPlaying(MANUAL_VIDEOS[asked])
+  }, [params])
+  const stop = useCallback(() => {
+    setPlaying(null)
+    if (params.has('video')) {
+      const next = new URLSearchParams(params)
+      next.delete('video')
+      setParams(next, { replace: true })
+    }
+  }, [params, setParams])
+  const watch: Watch = { label: t('video.watch'), play: setPlaying }
 
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
@@ -191,6 +249,8 @@ export default function Help() {
             tint="text-violet-600"
             title={t('s1.title')}
             lead={t('s1.lead')}
+            video={MANUAL_VIDEOS['your-kpi']}
+            watch={watch}
             points={[
               // First, because for most people it is now the whole answer.
               { what: t('s1.p0.what'), how: t('s1.p0.how'), to: '/my-kpi/setup', cta: 'Set up my KPI' },
@@ -207,6 +267,8 @@ export default function Help() {
             tint="text-emerald-600"
             title={t('s2.title')}
             lead={t('s2.lead')}
+            video={MANUAL_VIDEOS['every-month']}
+            watch={watch}
             points={[
               { what: t('s2.p1.what'), how: t('s2.p1.how'), to: '/history', cta: 'Open assessments' },
               { what: t('s2.p2.what'), how: t('s2.p2.how') },
@@ -281,10 +343,11 @@ export default function Help() {
           tint="text-indigo-600"
           title={t(appraised ? 'team.title.num' : 'team.title.plain')}
           lead={t('team.lead')}
+          watch={watch}
           points={[
-            { what: t('team.p1.what'), how: t('team.p1.how'), to: '/approvals', cta: 'Open approvals' },
+            { what: t('team.p1.what'), how: t('team.p1.how'), to: '/approvals', cta: 'Open approvals', video: MANUAL_VIDEOS.approve },
             { what: t('team.p2.what'), how: t('team.p2.how'), to: '/approvals', cta: 'Open approvals' },
-            { what: t('team.p3.what'), how: t('team.p3.how'), to: '/team', cta: 'Open my team' },
+            { what: t('team.p3.what'), how: t('team.p3.how'), to: '/team', cta: 'Open my team', video: MANUAL_VIDEOS.score },
             { what: t('team.p4.what'), how: t('team.p4.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p5.what'), how: t('team.p5.how'), to: '/queries', cta: 'Open queries' },
             { what: t('team.p6.what'), how: t('team.p6.how'), to: '/team', cta: 'Open my team' },
@@ -443,6 +506,16 @@ export default function Help() {
         for nothing; KPI timing is a tab inside Administration now. Every
         point above already links to its own screen.
       */}
+      {playing && (
+        <VideoModal
+          video={playing}
+          title={t(playing.titleKey)}
+          note={lang === 'en' ? null : t('video.english')}
+          closeLabel={t('video.close')}
+          onClose={stop}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Link to="/me" className="btn-secondary btn-press">
           <ArrowLeft className="h-4 w-4" /> {t('page.back')}

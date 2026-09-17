@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight,
-  IdCard, Wrench,
+  IdCard, Wrench, PlayCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -18,6 +18,7 @@ import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
 import { answerFact } from '@/lib/chatAnswers'
 import { matchQuestion, SECTION_TITLE, type FactId } from '@/lib/chatbot'
+import { videoFor } from '@/lib/manualVideos'
 import { pickTip } from '@/lib/tips'
 import { pickStanding, type TeamStanding } from '@/lib/standing'
 import { greetingKey } from '@/lib/greeting'
@@ -970,6 +971,17 @@ export default function ChatBot() {
                       {turn.section && SECTION_TITLE[turn.section]
                         ? t(SECTION_TITLE[turn.section])
                         : t('page.title')}
+                    </Link>
+                  )}
+                  {/* The same thing shown, when the manual has a video of it. */}
+                  {turn.say.kind === 'manual' && videoFor(turn.say.key) && (
+                    <Link
+                      to={`/help?video=${videoFor(turn.say.key)!.id}`}
+                      onClick={() => setOpen(false)}
+                      className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:text-violet-900"
+                    >
+                      <PlayCircle className="h-3.5 w-3.5" />
+                      {c('video.link')} · {videoFor(turn.say.key)!.duration}
                     </Link>
                   )}
                 </div>
