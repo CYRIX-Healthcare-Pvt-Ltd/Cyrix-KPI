@@ -18,8 +18,8 @@ export default function VideoModal({
   video, part, title, note, next, closeLabel, onClose,
 }: {
   video: ManualVideo
-  /** "Video 2 of 4", as its title card says. */
-  part: string
+  /** "Video 2 of 4", as its title card says — only when all four are the reader's. */
+  part: string | null
   title: string
   /** Shown under the player — that the captions are English, when the manual is not. */
   note?: string | null
@@ -47,7 +47,7 @@ export default function VideoModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${part} · ${title}`}
+      aria-label={part ? `${part} · ${title}` : title}
       onClick={onClose}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-shade/80 p-3 sm:p-6"
     >
@@ -57,7 +57,7 @@ export default function VideoModal({
       >
         <div className="flex items-center justify-between gap-3 px-4 py-2.5">
           <p className="truncate text-sm font-semibold text-white">
-            <span className="text-white/60">{part} · </span>{title}
+            {part && <span className="text-white/60">{part} · </span>}{title}
           </p>
           <button
             ref={closeButton}

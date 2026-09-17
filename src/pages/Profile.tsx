@@ -579,19 +579,22 @@ export default function Profile() {
       <AvatarCard employee={employee} />
 
       {/* Beside the password, because this is where somebody comes when
-          the question is about themselves rather than about a number. */}
+          the question is about themselves rather than about a number.
+          Each icon in the manual's own colours: sky to read, amber for
+          the password, teal for support as its section is, red where
+          things are taken away, violet for installing. */}
       <div className="flex flex-wrap gap-2">
         <Link
           to="/help"
           className="btn-secondary btn-press inline-flex"
         >
-          <BookOpen className="h-4 w-4" /> What I can do
+          <BookOpen className="h-4 w-4 text-sky-600" /> What I can do
         </Link>
         <Link
           to="/change-password"
           className="btn-secondary btn-press inline-flex"
         >
-          <KeyRound className="h-4 w-4" /> Change my password
+          <KeyRound className="h-4 w-4 text-amber-600" /> Change my password
         </Link>
         {/* Beside the manual on purpose. That one answers what the app
             does; this one is where you go when the answer is not in it,
@@ -600,7 +603,7 @@ export default function Profile() {
           to="/support"
           className="btn-secondary btn-press inline-flex"
         >
-          <LifeBuoy className="h-4 w-4" /> Contact support
+          <LifeBuoy className="h-4 w-4 text-teal-600" /> Contact support
         </Link>
         {/* The way into Records the rest of the time. Its tab is a queue
             and only shows while a request is waiting for a decision, so
@@ -611,7 +614,7 @@ export default function Profile() {
             to="/deletions"
             className="btn-secondary btn-press inline-flex"
           >
-            <Trash2 className="h-4 w-4" /> Records
+            <Trash2 className="h-4 w-4 text-cyrixRed-600" /> Records
           </Link>
         )}
         {/* Renders nothing where it is already installed, or where the

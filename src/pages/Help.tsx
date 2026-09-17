@@ -11,7 +11,7 @@ import { useTatPolicy, useMonthClose } from '@/lib/queries'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { markHelpSeen } from '@/lib/seenHelp'
-import { MANUAL_VIDEOS, VIDEO_SERIES, nextVideo, type ManualVideo } from '@/lib/manualVideos'
+import { MANUAL_VIDEOS, VIDEO_SERIES, videosFor, nextVideo, type ManualVideo } from '@/lib/manualVideos'
 import VideoModal from '@/components/VideoModal'
 
 /**
@@ -141,19 +141,22 @@ function Section({
 }
 
 /**
- * All four videos, first, in the order they are numbered.
+ * The videos for this person's part of the year, first, in order.
  *
- * Everyone gets all four, managers and team members alike. The videos
- * number themselves 1 to 4 and each ends on the next, so a list with only
- * a person's own two in it reads as two missing — which is exactly how it
- * was read. Two columns, and the columns mean something: the team
- * member's part down the left, the manager's down the right.
+ * Only the steps they do: a team member gets setting up their KPI and
+ * filling in a month, not the manager's two. Somebody who does both sides
+ * gets all four, numbered as the title cards number them, with the team
+ * member's part down the left and the manager's down the right. Anybody
+ * else gets no numbers — "Video 3 of 4" beside a list of two is how parts
+ * 2 and 4 came to be asked for.
  */
-function VideoSeries({ title, lead, partLabel, whoLabel, titleOf, play }: {
+function VideoSeries({ videos, title, lead, partLabel, whoLabel, titleOf, play }: {
+  videos: ManualVideo[]
   title: string
   lead: string
-  partLabel: (v: ManualVideo) => string
-  whoLabel: (v: ManualVideo) => string
+  /** "Video 2 of 4", or null where the numbers would point at videos not shown. */
+  partLabel: ((v: ManualVideo) => string) | null
+  whoLabel: ((v: ManualVideo) => string) | null
   titleOf: (v: ManualVideo) => string
   play: (v: ManualVideo) => void
 }) {
@@ -166,7 +169,7 @@ function VideoSeries({ title, lead, partLabel, whoLabel, titleOf, play }: {
       <div className="p-4">
         <p className="mb-3 text-sm text-ink-500">{lead}</p>
         <ul className="grid gap-2 sm:grid-cols-2">
-          {VIDEO_SERIES.map(v => (
+          {videos.map(v => (
             <li key={v.id}>
               <button
                 type="button"
@@ -190,11 +193,13 @@ function VideoSeries({ title, lead, partLabel, whoLabel, titleOf, play }: {
                   </span>
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                    {partLabel(v)}
-                  </span>
+                  {partLabel && (
+                    <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                      {partLabel(v)}
+                    </span>
+                  )}
                   <span className="block text-sm font-medium text-ink-900">{titleOf(v)}</span>
-                  <span className="block text-xs text-ink-500">{whoLabel(v)}</span>
+                  {whoLabel && <span className="block text-xs text-ink-500">{whoLabel(v)}</span>}
                 </span>
               </button>
             </li>
@@ -244,12 +249,18 @@ export default function Help() {
     }
   }, [params, setParams])
   const watch: Watch = { label: t('video.watch'), play: setPlaying }
-  const after = playing && nextVideo(playing)
 
   // HR administers the system rather than being appraised by it, and SW
   // Admin only handles logins. Neither has a KPI, so neither is told how
   // to submit one.
   const appraised = !isHrAdmin && !(isSwAdmin && !isHrAdmin)
+  const hasTeam = isManager && !isHrAdmin
+
+  // The videos for the steps this person does, and whether that is the
+  // whole series — the only case where "Video 2 of 4" means anything.
+  const videos = videosFor({ appraised, hasTeam })
+  const whole = videos.length === VIDEO_SERIES.length
+  const after = playing && nextVideo(playing, videos)
 
   return (
     // lang on the container, not the document: the navigation and the
@@ -308,14 +319,17 @@ export default function Help() {
         {t('page.scopeAfter')}
       </div>
 
-      <VideoSeries
-        title={t('video.series.title')}
-        lead={t('video.series.lead')}
-        partLabel={v => t('video.part', { n: v.part })}
-        whoLabel={v => t(v.who === 'manager' ? 'video.who.manager' : 'video.who.member')}
-        titleOf={v => t(v.titleKey)}
-        play={setPlaying}
-      />
+      {videos.length > 0 && (
+        <VideoSeries
+          videos={videos}
+          title={t('video.series.title', { count: videos.length })}
+          lead={t(whole ? 'video.series.lead' : appraised ? 'video.series.lead.member' : 'video.series.lead.manager')}
+          partLabel={whole ? v => t('video.part', { n: v.part }) : null}
+          whoLabel={whole ? v => t(v.who === 'manager' ? 'video.who.manager' : 'video.who.member') : null}
+          titleOf={v => t(v.titleKey)}
+          play={setPlaying}
+        />
+      )}
 
       {appraised && (
         <>
@@ -571,7 +585,9 @@ export default function Help() {
           { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },
           { what: t('ask.p11.what'), how: t('ask.p11.how') },
           { what: t('ask.p12.what'), how: t('ask.p12.how'), to: '/change-password', cta: 'Change my password' },
-          { what: t('ask.p13.what'), how: t('ask.p13.how'), video: MANUAL_VIDEOS['your-kpi'] },
+          ...(videos.length > 0
+            ? [{ what: t('ask.p13.what'), how: t('ask.p13.how'), video: videos[0] }]
+            : []),
         ]}
       />
 
@@ -586,7 +602,7 @@ export default function Help() {
       {playing && (
         <VideoModal
           video={playing}
-          part={t('video.part', { n: playing.part })}
+          part={whole ? t('video.part', { n: playing.part }) : null}
           title={t(playing.titleKey)}
           next={after && { label: t('video.next', { title: t(after.titleKey) }), play: () => setPlaying(after) }}
           note={lang === 'en' ? null : t('video.english')}

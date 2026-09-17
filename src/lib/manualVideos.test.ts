@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { MANUAL_VIDEOS, VIDEO_KEYS, VIDEO_SERIES, nextVideo, videoFor } from './manualVideos'
+import { MANUAL_VIDEOS, VIDEO_KEYS, VIDEO_SERIES, nextVideo, videoFor, videosFor } from './manualVideos'
 import { HELP } from './help-strings'
 
 describe('the how-to videos', () => {
@@ -48,6 +48,21 @@ describe('the how-to videos', () => {
     // The file names carry the same number, so a re-render cannot swap two.
     for (const v of VIDEO_SERIES) expect(v.file).toContain(`/videos/kpi-${v.part}-`)
     expect(VIDEO_SERIES.map(v => nextVideo(v)?.part ?? null)).toEqual([2, 3, 4, null])
+  })
+
+  it('gives each reader only the videos for the steps they do', () => {
+    const ids = (appraised: boolean, hasTeam: boolean) =>
+      videosFor({ appraised, hasTeam }).map(v => v.id)
+    expect(ids(true, false)).toEqual(['your-kpi', 'every-month'])                    // a team member
+    expect(ids(true, true)).toEqual(['your-kpi', 'approve', 'every-month', 'score']) // a manager with a KPI
+    expect(ids(false, true)).toEqual(['approve', 'score'])                           // a team, no KPI
+    expect(ids(false, false)).toEqual([])                                            // HR, SW Admin
+
+    // Next stays inside what they have: a team member goes from setting up
+    // their KPI straight to the month, and nothing follows that.
+    const mine = videosFor({ appraised: true, hasTeam: false })
+    expect(nextVideo(MANUAL_VIDEOS['your-kpi'], mine)?.id).toBe('every-month')
+    expect(nextVideo(MANUAL_VIDEOS['every-month'], mine)).toBeNull()
   })
 
   it('titles a video by its own name, not by the numbered manual heading above it', () => {

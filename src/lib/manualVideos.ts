@@ -8,7 +8,8 @@
  *
  * They are one series, and say so: each title card reads "Video 2 of 4"
  * and each ends on what comes next. The manual lists them in that order at
- * the top, for everyone, as well as beside the entries they show.
+ * the top, as well as beside the entries they show — but only the ones for
+ * steps the reader does. A team member gets their two, not the manager's.
  *
  * The captions in the videos are English whatever language the manual is
  * read in; the manual says so beside the player.
@@ -52,9 +53,17 @@ export const MANUAL_VIDEOS: Record<string, ManualVideo> = {
 export const VIDEO_SERIES: ManualVideo[] =
   Object.values(MANUAL_VIDEOS).sort((a, b) => a.part - b.part)
 
-/** The one its end card points to, or null after the last. */
-export const nextVideo = (video: ManualVideo): ManualVideo | null =>
-  VIDEO_SERIES.find(v => v.part === video.part + 1) ?? null
+/**
+ * The videos for somebody's own part of the year, by the same rule as the
+ * manual's sections: the team member's two if they are appraised, the
+ * manager's two if they have a team. HR and SW Admin do neither, so none.
+ */
+export const videosFor = ({ appraised, hasTeam }: { appraised: boolean; hasTeam: boolean }) =>
+  VIDEO_SERIES.filter(v => (v.who === 'member' ? appraised : hasTeam))
+
+/** The one after it among those somebody has, or null after the last. */
+export const nextVideo = (video: ManualVideo, among: ManualVideo[] = VIDEO_SERIES): ManualVideo | null =>
+  among.find(v => v.part > video.part) ?? null
 
 /**
  * The manual entries each video walks through. A section's own key stands

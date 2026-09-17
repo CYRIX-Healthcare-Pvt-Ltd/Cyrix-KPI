@@ -85,17 +85,16 @@ export const HELP: Record<string, Phrase> = {
     te: 'ఈ వీడియోలోని క్యాప్షన్లు ఇంగ్లీష్‌లో ఉన్నాయి.',
     ta: 'இந்த வீடியோவின் தலைப்புகள் ஆங்கிலத்தில் உள்ளன.',
   },
-  // The four videos as the series they are. Their title cards say "Video
-  // 2 of 4" and end on "Next · 3", so the manual numbers them the same way
-  // and lists all four for everybody: the team member's part is 1 and 3,
-  // the manager's is 2 and 4, and each is easier to follow for having
-  // seen the other.
+  // The videos for the steps the reader does, at the top of the manual. A
+  // team member has two, a manager with a KPI of their own all four, so
+  // the count is filled in. Only somebody with all four gets the numbers
+  // the title cards use ("Video 2 of 4") and the lead that explains them.
   'video.series.title': {
-    en: 'How it works, in 4 short videos',
-    ml: 'ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു, 4 ചെറിയ വീഡിയോകളിൽ',
-    hi: 'यह कैसे काम करता है, 4 छोटे वीडियो में',
-    te: 'ఇది ఎలా పనిచేస్తుంది, 4 చిన్న వీడియోలలో',
-    ta: 'இது எப்படி செயல்படுகிறது, 4 சிறிய வீடியோக்களில்',
+    en: 'How it works, in {count} short videos',
+    ml: 'ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു, {count} ചെറിയ വീഡിയോകളിൽ',
+    hi: 'यह कैसे काम करता है, {count} छोटे वीडियो में',
+    te: 'ఇది ఎలా పనిచేస్తుంది, {count} చిన్న వీడియోలలో',
+    ta: 'இது எப்படி செயல்படுகிறது, {count} சிறிய வீடியோக்களில்',
   },
   'video.series.lead': {
     en: 'One KPI year, from start to finish. Videos 1 and 3 are what the team member does; 2 and 4 are what the manager does.',
@@ -103,6 +102,20 @@ export const HELP: Record<string, Phrase> = {
     hi: 'एक KPI साल, शुरू से आख़िर तक। वीडियो 1 और 3 में वह है जो टीम सदस्य करता है; 2 और 4 में वह जो मैनेजर करता है।',
     te: 'ఒక KPI సంవత్సరం, మొదటి నుండి చివరి వరకు. 1, 3 వీడియోలు టీమ్ సభ్యుడు చేసేవి; 2, 4 మేనేజర్ చేసేవి.',
     ta: 'ஒரு KPI ஆண்டு, தொடக்கம் முதல் முடிவு வரை. வீடியோ 1, 3 குழு உறுப்பினர் செய்வது; 2, 4 மேலாளர் செய்வது.',
+  },
+  'video.series.lead.member': {
+    en: 'Your part of the KPI year: setting up your KPI, then filling in each month.',
+    ml: 'KPI വർഷത്തിൽ നിങ്ങളുടെ ഭാഗം: നിങ്ങളുടെ KPI സജ്ജമാക്കുന്നത്, പിന്നെ ഓരോ മാസവും പൂരിപ്പിക്കുന്നത്.',
+    hi: 'KPI साल में आपका हिस्सा: अपना KPI सेट करना, फिर हर महीना भरना।',
+    te: 'KPI సంవత్సరంలో మీ భాగం: మీ KPI సెట్ చేయడం, తర్వాత ప్రతి నెలా నింపడం.',
+    ta: 'KPI ஆண்டில் உங்கள் பங்கு: உங்கள் KPI ஐ அமைப்பது, பிறகு ஒவ்வொரு மாதத்தையும் நிரப்புவது.',
+  },
+  'video.series.lead.manager': {
+    en: 'Your part as a manager: approving your team’s KPI, then scoring their months.',
+    ml: 'മാനേജർ എന്ന നിലയിൽ നിങ്ങളുടെ ഭാഗം: നിങ്ങളുടെ ടീമിന്റെ KPI അംഗീകരിക്കുന്നത്, പിന്നെ അവരുടെ മാസങ്ങൾക്ക് സ്കോർ നൽകുന്നത്.',
+    hi: 'मैनेजर के रूप में आपका हिस्सा: अपनी टीम का KPI मंज़ूर करना, फिर उनके महीनों को स्कोर देना।',
+    te: 'మేనేజర్‌గా మీ భాగం: మీ టీమ్ KPI ఆమోదించడం, తర్వాత వారి నెలలకు స్కోరు ఇవ్వడం.',
+    ta: 'மேலாளராக உங்கள் பங்கு: உங்கள் குழுவின் KPI க்கு ஒப்புதல் அளிப்பது, பிறகு அவர்களின் மாதங்களுக்கு மதிப்பெண் அளிப்பது.',
   },
   'video.part': {
     en: 'Video {n} of 4',
@@ -1390,11 +1403,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'டெமோ வீடியோ இருக்கிறதா?',
   },
   'ask.p13.how': {
-    en: 'Yes, four short ones at the top of this page. Together they show a KPI year: setting up a KPI, approving it, filling in a month and scoring it. Each plays over the page, with English captions.',
-    ml: 'ഉണ്ട്, ഈ പേജിന്റെ മുകളിൽ നാല് ചെറിയ വീഡിയോകൾ. ഒരുമിച്ച് അവ ഒരു KPI വർഷം കാണിക്കുന്നു: ഒരു KPI സജ്ജമാക്കുന്നത്, അത് അംഗീകരിക്കുന്നത്, ഒരു മാസം പൂരിപ്പിക്കുന്നത്, അതിന് സ്കോർ നൽകുന്നത്. ഓരോന്നും ഇംഗ്ലീഷ് അടിക്കുറിപ്പുകളോടെ ഈ പേജിന് മുകളിൽ പ്ലേ ആകും.',
-    hi: 'हाँ, इस पेज में सबसे ऊपर चार छोटे वीडियो। साथ मिलकर वे एक KPI साल दिखाते हैं: KPI सेट करना, उसे मंज़ूर करना, महीना भरना और उसे स्कोर करना। हर वीडियो अंग्रेज़ी कैप्शन के साथ इसी पेज के ऊपर चलता है।',
-    te: 'ఉంది, ఈ పేజీ పైభాగంలో నాలుగు చిన్న వీడియోలు. అవి కలిసి ఒక KPI సంవత్సరాన్ని చూపిస్తాయి: KPI సెట్ చేయడం, దాన్ని ఆమోదించడం, ఒక నెల నింపడం, దానికి స్కోర్ ఇవ్వడం. ప్రతిదీ ఇంగ్లీష్ క్యాప్షన్లతో ఇదే పేజీపై ప్లే అవుతుంది.',
-    ta: 'ஆம், இந்தப் பக்கத்தின் மேலே நான்கு சிறிய வீடியோக்கள். அவை சேர்ந்து ஒரு KPI ஆண்டைக் காட்டுகின்றன: KPI ஐ அமைப்பது, அதற்கு ஒப்புதல் அளிப்பது, ஒரு மாதத்தை நிரப்புவது, அதற்கு மதிப்பெண் அளிப்பது. ஒவ்வொன்றும் ஆங்கில தலைப்புகளுடன் இதே பக்கத்தின் மேல் இயங்கும்.',
+    en: 'Yes, short ones at the top of this page, for the parts you do: setting up your KPI and filling in a month — and, if you have a team, approving a KPI and scoring one. Each plays over the page, with English captions.',
+    ml: 'ഉണ്ട്, ഈ പേജിന്റെ മുകളിൽ, നിങ്ങൾ ചെയ്യുന്ന ഭാഗങ്ങൾക്ക് ചെറിയ വീഡിയോകൾ: നിങ്ങളുടെ KPI സജ്ജമാക്കുന്നതും ഒരു മാസം പൂരിപ്പിക്കുന്നതും — നിങ്ങൾക്ക് ഒരു ടീം ഉണ്ടെങ്കിൽ, ഒരു KPI അംഗീകരിക്കുന്നതും സ്കോർ ചെയ്യുന്നതും. ഓരോന്നും ഇംഗ്ലീഷ് അടിക്കുറിപ്പുകളോടെ ഈ പേജിന് മുകളിൽ പ്ലേ ആകും.',
+    hi: 'हाँ, इस पेज में सबसे ऊपर, उन हिस्सों के छोटे वीडियो जो आप करते हैं: अपना KPI सेट करना और महीना भरना — और अगर आपकी टीम है, तो KPI मंज़ूर करना और स्कोर करना। हर वीडियो अंग्रेज़ी कैप्शन के साथ इसी पेज के ऊपर चलता है।',
+    te: 'ఉంది, ఈ పేజీ పైభాగంలో, మీరు చేసే భాగాలకు చిన్న వీడియోలు: మీ KPI సెట్ చేయడం, ఒక నెల నింపడం — మీకు టీమ్ ఉంటే, ఒక KPI ఆమోదించడం, స్కోర్ చేయడం. ప్రతిదీ ఇంగ్లీష్ క్యాప్షన్లతో ఇదే పేజీపై ప్లే అవుతుంది.',
+    ta: 'ஆம், இந்தப் பக்கத்தின் மேலே, நீங்கள் செய்யும் பகுதிகளுக்குச் சிறிய வீடியோக்கள்: உங்கள் KPI ஐ அமைப்பது, ஒரு மாதத்தை நிரப்புவது — உங்களுக்குக் குழு இருந்தால், ஒரு KPI க்கு ஒப்புதல் அளிப்பது, மதிப்பெண் அளிப்பது. ஒவ்வொன்றும் ஆங்கில தலைப்புகளுடன் இதே பக்கத்தின் மேல் இயங்கும்.',
   },
 
   // ---- added with the September changes -------------------------
