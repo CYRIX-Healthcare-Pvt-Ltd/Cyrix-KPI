@@ -11,6 +11,7 @@ import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
+import { moduleTemplateRows, readModuleRow } from '@/lib/moduleSheet'
 import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
 import SpareFields from './SpareFields'
 import SupportDeskQueue from '@/components/SupportDeskQueue'
@@ -66,6 +67,8 @@ const STATE_STYLE: Record<string, string> = {
 function LoginsTab() {
   const qc = useQueryClient()
   const { data: modules } = useAppModules()
+  // "KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab" — whatever the modules are now.
+  const moduleNames = (modules ?? []).map(m => m.name).join(', ') || 'KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab'
   const { data: grants } = useModuleGrants(true)
   const setModule = useSetModuleAccess()
   const [search, setSearch] = useState('')
@@ -265,36 +268,23 @@ function LoginsTab() {
           title="Assign modules from a sheet"
           help={
             <>
-              Two columns: the employee code, and the modules they should be
-              offered — separated by commas. Codes are{' '}
-              {(modules ?? []).map(m => m.code).join(', ') || 'kpi, spare, bemmp'}.
-              An empty modules cell takes every tile away from that person.
+              One row a person: the employee code, then <strong>Yes</strong> under
+              each module they should have — {moduleNames}. A module left blank is
+              taken away, so a row with none marked takes every tile away. An older
+              sheet with them all in one Modules column still works: names or codes,
+              separated by commas, or <em>all</em>.
             </>
           }
           templateName="Cyrix-module-access-template.xlsx"
-          templateHeaders={['Employee Code', 'Modules']}
-          templateExamples={[
-            { 'Employee Code': 'CT655', Modules: 'kpi, spare' },
-            { 'Employee Code': 'CT656', Modules: 'kpi' },
-            { 'Employee Code': 'CT661', Modules: 'kpi, spare, bemmp' },
-          ]}
-          parseRow={row => {
-            const ecode = pick(row, 'employee_code', 'ecode', 'employee code', 'code', 'emp code')
-            const raw = pick(row, 'modules', 'module', 'access', 'tiles', 'apps')
-            const known = new Set((modules ?? []).map(m => m.code))
-            const wanted = raw
-              .split(/[,;/|]+/)
-              .map(s => s.trim().toLowerCase())
-              .filter(Boolean)
-            const unknown = wanted.filter(w => !known.has(w))
-            if (unknown.length > 0) {
-              return { ecode, problem: `unknown module ${unknown.join(', ')}` }
-            }
-            // A blank cell is a decision, not a gap: it says this person
-            // gets nothing. The preview spells that out before it happens.
-            return { ecode, value: [...new Set(wanted)] }
-          }}
-          describe={codes => (codes.length ? codes.join(', ') : 'no modules at all')}
+          // Every module a column of its own — all five, where the old
+          // template showed three codes and left the rest to be guessed
+          // (the user, 23 Sep: "these all modules cannot be done").
+          templateHeaders={['Employee Code', ...(modules ?? []).map(m => m.name)]}
+          templateExamples={moduleTemplateRows(modules ?? [])}
+          parseRow={row => readModuleRow(row, modules ?? [])}
+          describe={codes => (codes.length
+            ? codes.map(c => (modules ?? []).find(m => m.code === c)?.name ?? c).join(', ')
+            : 'no modules at all')}
           apply={async assignments => {
             const byEcode = new Map((data ?? []).map(r => [r.ecode.toUpperCase(), r]))
             const missing: string[] = []

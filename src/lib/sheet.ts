@@ -16,6 +16,18 @@
 /** "Employee Code" and "employee_code" and "EMPCODE" are the same header. */
 const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
+/** The same loose match, for a value: "Revive Lab" and "revive-lab" are one thing. */
+export const looseKey = key
+
+/** Whether the sheet has a column by any of these names at all — filled in or not. */
+export function hasColumn(row: Record<string, unknown>, ...names: string[]): boolean {
+  const keys = new Set(Object.keys(row).map(key))
+  return names.some(n => keys.has(key(n)))
+}
+
+/** A cell that says yes the way people say it in Excel: Yes, Y, ✓, 1, TRUE, x. */
+export const isYes = (v: string) => /^(y|yes|true|1|x|✓|✔|ok|granted)$/i.test(v.trim())
+
 /**
  * The first non-empty value under any of these header names.
  *
