@@ -1283,6 +1283,11 @@ function SpareRolesView() {
  *   contracts  which contracts they see at all
  *   area       which slice of a contract, when they should not see it whole
  *
+ * And a fourth, a switch rather than a question: whether they have Cyra,
+ * BEMMP's assistant. Off for everybody unless ticked here (the user, 23 Sep:
+ * "defaulty make everyone as disabled"; BEMMP 0011_cyra_access.sql). BEMMP
+ * hides the button without it and its endpoint refuses the call.
+ *
  * The area lists are read from the dataset rows rather than declared here.
  * Districts are a property of the ticket data and a hard-coded fourteen
  * goes stale the day a contract gains one; 0063 records them beside the
@@ -1297,6 +1302,7 @@ interface BemmpProfile {
   scope: string[] | null
   zones: string[] | null
   districts: string[] | null
+  cyra: boolean | null
 }
 
 interface DatasetRow {
@@ -1316,10 +1322,15 @@ const BEMMP_ROLES: { value: string; label: string }[] = [
   { value: 'purchase', label: 'Purchase' },
 ]
 
-/** The contracts BEMMP runs. Two, and they are structural, not data. */
+/**
+ * The contracts BEMMP runs. Structural, not data — BEMMP's STATES list in
+ * shared/schema.mjs is the same three.
+ */
 const CONTRACTS: { id: string; label: string }[] = [
   { id: 'kl', label: 'Kerala' },
   { id: 'ap', label: 'Andhra' },
+  // The user, 23 Sep: "up also should come".
+  { id: 'up', label: 'Uttar Pradesh' },
 ]
 
 function BemmpTab() {
@@ -1334,7 +1345,7 @@ function BemmpTab() {
       for (let from = 0; ; from += 1000) {
         const page = await supabase
           .from('profile')
-          .select('id, code, full_name, role, scope, zones, districts')
+          .select('id, code, full_name, role, scope, zones, districts, cyra')
           .order('code')
           .range(from, from + 999)
         if (page.error) throw page.error
@@ -1397,6 +1408,8 @@ function BemmpTab() {
       (r.full_name ?? '').toLowerCase().includes(q))
   }, [data, search])
 
+  const cyraOn = useMemo(() => (data ?? []).filter(r => r.cyra).length, [data])
+
   if (isLoading) return <PageLoader />
 
   return (
@@ -1404,7 +1417,7 @@ function BemmpTab() {
       <div>
         <h2 className="text-lg font-semibold text-ink-900">BEMMP access</h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          {filtered.length} of {data?.length ?? 0} people
+          {filtered.length} of {data?.length ?? 0} people · Cyra on for {cyraOn}
         </p>
       </div>
 
@@ -1417,6 +1430,11 @@ function BemmpTab() {
             they see at all. The area narrows a contract for people who work
             one zone — leave it on <strong>Everything</strong> and they get the
             whole contract, which is right for most.
+          </p>
+          <p className="mt-1.5">
+            Cyra, the assistant, is off for everybody until it is ticked
+            here. Without it BEMMP shows no Cyra button, and asking it
+            anyway is refused.
           </p>
           <p className="mt-1.5">
             Whether the tile is offered at all is the Modules column on the
@@ -1452,6 +1470,7 @@ function BemmpTab() {
               <th className="px-3 py-2.5">Role</th>
               <th className="px-3 py-2.5">Contracts</th>
               <th className="px-3 py-2.5">Area</th>
+              <th className="px-3 py-2.5">Cyra</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -1559,6 +1578,20 @@ function BemmpTab() {
                         {(r.districts ?? []).join(', ')}
                       </p>
                     )}
+                  </td>
+
+                  <td className="px-3 py-2.5">
+                    <label className="inline-flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[color:var(--score-accent)]"
+                        checked={Boolean(r.cyra)}
+                        disabled={update.isPending}
+                        onChange={e => update.mutate({ id: r.id, patch: { cyra: e.target.checked } })}
+                        aria-label={`Cyra for ${r.full_name ?? r.code}`}
+                      />
+                      <span className="text-xs text-ink-500">{r.cyra ? 'On' : 'Off'}</span>
+                    </label>
                   </td>
                 </tr>
               )
