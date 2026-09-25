@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
-  Upload, Download, FileSpreadsheet, Plus, ArrowLeft, Send, Save, Lock, X,
+  Upload, Download, FileSpreadsheet, Plus, ArrowLeft, Send, Save, Lock, X, AlertTriangle,
   Search,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -56,6 +56,8 @@ export default function KpiSetup() {
   // null until the saved answer is known, so a draft that already has
   // ESMS does not flash as unticked and then correct itself.
   const [esmsChoice, setEsmsChoice] = useState<boolean | null>(null)
+  // Ticking ESMS asks first: it is a manager-level parameter (the user, 25 Sep).
+  const [askEsms, setAskEsms] = useState(false)
   const [startChoice, setStartChoice] = useState<string | null>(null)
   /** Which template these rows came from, for the record on the assignment. */
   const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null)
@@ -540,6 +542,44 @@ export default function KpiSetup() {
             20%. Letting someone type the numbers only creates ways for
             them not to add up.
           */}
+          {askEsms && (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="esms-title"
+              onClick={() => setAskEsms(false)}
+            >
+              <div
+                className="animate-pop-in w-full max-w-md rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <AlertTriangle className="h-5 w-5 text-amber-700" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 id="esms-title" className="text-lg font-semibold text-ink-900">
+                      ESMS is a manager-level parameter
+                    </h2>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-600">
+                      Tick it only if you are at manager level and ESMS is part of your role.
+                      It takes {ESMS_WEIGHT}% out of core values.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => setAskEsms(false)} autoFocus>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn-primary" onClick={() => { setEsmsChoice(true); setAskEsms(false) }}>
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
@@ -553,7 +593,7 @@ export default function KpiSetup() {
               <input
                 type="checkbox"
                 checked={esms}
-                onChange={e => setEsmsChoice(e.target.checked)}
+                onChange={e => { if (e.target.checked) setAskEsms(true); else setEsmsChoice(false) }}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-300 accent-cyrixRed-600"
               />
               <span className="min-w-0">
