@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { moduleTemplateRows, readModuleRow } from './moduleSheet'
+import { describeModuleChange, moduleTemplateRows, readModuleRow } from './moduleSheet'
 
 const MODULES = [
   { code: 'kpi', name: 'KPI' },
@@ -10,20 +10,33 @@ const MODULES = [
 ]
 
 describe('the module sheet — every module, as people write them', () => {
-  it('reads the template: a column for each module, Yes where they should have it', () => {
-    const row = { 'Employee Code': 'CT655', KPI: 'Yes', 'Spare Mapping': '', 'BEMMP Dashboard': null, Pulse: 'y', 'Revive Lab': '✓' }
-    expect(readModuleRow(row, MODULES)).toEqual({ ecode: 'CT655', value: ['kpi', 'pulse', 'revive'] })
+  it('reads the template: Yes gives a module, No takes it away, blank leaves it as it is', () => {
+    const row = { 'Employee Code': 'CT655', KPI: 'Yes', 'Spare Mapping': '', 'BEMMP Dashboard': null, Pulse: 'no', 'Revive Lab': '✓' }
+    expect(readModuleRow(row, MODULES)).toEqual({ ecode: 'CT655', value: { give: ['kpi', 'revive'], take: ['pulse'] } })
   })
 
-  it('takes every tile away from a row with none marked', () => {
-    const row = { 'Employee Code': 'CT656', KPI: '', 'Spare Mapping': '', 'BEMMP Dashboard': '', Pulse: '', 'Revive Lab': '' }
-    expect(readModuleRow(row, MODULES)).toEqual({ ecode: 'CT656', value: [] })
+  it('gives Revive Lab and touches nothing else when that is all that is marked (the user, 29 Sep)', () => {
+    const row = { 'Employee Code': 'E6666', KPI: '', 'Spare Mapping': '', 'BEMMP Dashboard': '', Pulse: '', 'Revive Lab': 'Yes' }
+    const r = readModuleRow(row, MODULES)
+    expect(r).toEqual({ ecode: 'E6666', value: { give: ['revive'], take: [] } })
+    expect('value' in r && describeModuleChange(r.value, MODULES)).toBe('gives Revive Lab — the rest as they are')
   })
 
-  it('still reads an older sheet, by code or by name, in any case', () => {
-    expect(readModuleRow({ 'Employee Code': 'E1', Modules: 'kpi, Revive Lab, BEMMP dashboard, pulse, spare mapping' }, MODULES))
-      .toEqual({ ecode: 'E1', value: ['kpi', 'revive', 'bemmp', 'pulse', 'spare'] })
-    expect(readModuleRow({ ecode: 'E2', modules: 'All' }, MODULES)).toEqual({ ecode: 'E2', value: MODULES.map(m => m.code) })
+  it('changes nothing for a row with nothing marked', () => {
+    const r = readModuleRow({ 'Employee Code': 'CT656', KPI: '', 'Spare Mapping': '', 'BEMMP Dashboard': '', Pulse: '', 'Revive Lab': '' }, MODULES)
+    expect(r).toEqual({ ecode: 'CT656', value: { give: [], take: [] } })
+    expect('value' in r && describeModuleChange(r.value, MODULES)).toBe('nothing marked — left as they are')
+  })
+
+  it('asks rather than guesses at a cell that is neither yes nor no', () => {
+    expect(readModuleRow({ 'Employee Code': 'E4', KPI: 'maybe' }, MODULES))
+      .toEqual({ ecode: 'E4', problem: expect.stringContaining('KPI "maybe"') })
+  })
+
+  it('still reads an older sheet, by code or by name, in any case — as the whole list', () => {
+    expect(readModuleRow({ 'Employee Code': 'E1', Modules: 'kpi, Revive Lab, BEMMP dashboard' }, MODULES))
+      .toEqual({ ecode: 'E1', value: { give: ['kpi', 'revive', 'bemmp'], take: ['spare', 'pulse'] } })
+    expect(readModuleRow({ ecode: 'E2', modules: 'All' }, MODULES)).toEqual({ ecode: 'E2', value: { give: MODULES.map(m => m.code), take: [] } })
   })
 
   it('names the modules when one is not known', () => {
@@ -32,11 +45,10 @@ describe('the module sheet — every module, as people write them', () => {
     expect('problem' in r && r.problem).toContain('Revive Lab')
   })
 
-  it('gives a template with all five modules as columns', () => {
+  it('gives a template with all five modules as columns, and it means what it shows', () => {
     const rows = moduleTemplateRows(MODULES)
     expect(Object.keys(rows[0])).toEqual(['Employee Code', 'KPI', 'Spare Mapping', 'BEMMP Dashboard', 'Pulse', 'Revive Lab'])
     expect(rows[2]).toMatchObject({ KPI: 'Yes', 'Spare Mapping': 'Yes', 'BEMMP Dashboard': 'Yes', Pulse: 'Yes', 'Revive Lab': 'Yes' })
-    // Read back, the template means what it shows.
-    expect(readModuleRow(rows[1], MODULES)).toEqual({ ecode: 'CT656', value: ['kpi', 'revive'] })
+    expect(readModuleRow(rows[1], MODULES)).toEqual({ ecode: 'CT656', value: { give: ['revive'], take: ['pulse'] } })
   })
 })

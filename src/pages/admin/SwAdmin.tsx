@@ -12,7 +12,7 @@ import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
-import { moduleTemplateRows, readModuleRow } from '@/lib/moduleSheet'
+import { describeModuleChange, moduleTemplateRows, readModuleRow, type ModuleChange } from '@/lib/moduleSheet'
 import { SPARE_ROLES, ADMIN_HINT, normaliseRole, saysAdmin, type SpareRole } from '@/lib/spareRoles'
 import SpareFields from './SpareFields'
 import SupportDeskQueue from '@/components/SupportDeskQueue'
@@ -265,15 +265,15 @@ function LoginsTab() {
       </div>
 
       {importing && (
-        <BulkAssign<string[]>
+        <BulkAssign<ModuleChange>
           title="Assign modules from a sheet"
           help={
             <>
-              One row a person: the employee code, then <strong>Yes</strong> under
-              each module they should have — {moduleNames}. A module left blank is
-              taken away, so a row with none marked takes every tile away. An older
-              sheet with them all in one Modules column still works: names or codes,
-              separated by commas, or <em>all</em>.
+              One row a person: the employee code, then under each module — {moduleNames} —{' '}
+              <strong>Yes</strong> to give it, <strong>No</strong> to take it away, or leave it{' '}
+              <strong>blank</strong> to keep it as it is. So a row with only Revive Lab marked Yes
+              gives Revive Lab and changes nothing else. An older sheet with them all in one Modules
+              column still works, as the whole list: names or codes, separated by commas, or <em>all</em>.
             </>
           }
           templateName="Cyrix-module-access-template.xlsx"
@@ -283,9 +283,7 @@ function LoginsTab() {
           templateHeaders={['Employee Code', ...(modules ?? []).map(m => m.name)]}
           templateExamples={moduleTemplateRows(modules ?? [])}
           parseRow={row => readModuleRow(row, modules ?? [])}
-          describe={codes => (codes.length
-            ? codes.map(c => (modules ?? []).find(m => m.code === c)?.name ?? c).join(', ')
-            : 'no modules at all')}
+          describe={change => describeModuleChange(change, modules ?? [])}
           apply={async assignments => {
             const byEcode = new Map((data ?? []).map(r => [r.ecode.toUpperCase(), r]))
             const missing: string[] = []
@@ -293,10 +291,11 @@ function LoginsTab() {
             for (const a of assignments) {
               const person = byEcode.get(a.ecode.toUpperCase())
               if (!person) { missing.push(a.ecode); continue }
-              const want = new Set(a.value)
               for (const m of modules ?? []) {
+                // Blank in the sheet: neither given nor taken — left as it is.
+                if (!a.value.give.includes(m.code) && !a.value.take.includes(m.code)) continue
                 const has = grants?.has(`${person.employee_id}:${m.code}`) ?? false
-                const should = want.has(m.code)
+                const should = a.value.give.includes(m.code)
                 // Only the differences are written. A sheet that repeats
                 // what is already true should cost nothing and should not
                 // fill the audit with grants nobody made.

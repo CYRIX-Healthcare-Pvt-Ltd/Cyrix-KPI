@@ -28,6 +28,9 @@ export function hasColumn(row: Record<string, unknown>, ...names: string[]): boo
 /** A cell that says yes the way people say it in Excel: Yes, Y, ✓, 1, TRUE, x. */
 export const isYes = (v: string) => /^(y|yes|true|1|x|✓|✔|ok|granted)$/i.test(v.trim())
 
+/** A cell that says no: No, N, 0, FALSE, ✗, Remove. A blank cell is neither. */
+export const isNo = (v: string) => /^(n|no|false|0|✗|✘|remove|removed|revoke|revoked)$/i.test(v.trim())
+
 /**
  * The first non-empty value under any of these header names.
  *
