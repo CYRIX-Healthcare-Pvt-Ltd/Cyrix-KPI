@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench,
-  Image as ImageIcon,
+  Image as ImageIcon, Gauge,
 } from 'lucide-react'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
+import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
@@ -2334,6 +2335,12 @@ const ADMIN_TABS = [
   // Who works in Revive Lab, in which TRCs, doing what — the same table
   // the module's own admins edit from inside it.
   { id: 'revive', label: 'Revive Lab', short: 'Revive', icon: Wrench, render: () => <ReviveLabAccess /> },
+  // Admin vs director inside Pulse, for people already granted the tile
+  // above. Pulse's own data lives outside this database (SQL Server on
+  // cyrix-svc01), so this tab calls Pulse's own admin API rather than a
+  // Supabase table — see PulseAccess.tsx. Replaces Pulse's own
+  // /user-management page.
+  { id: 'pulse', label: 'Pulse', short: 'Pulse', icon: Gauge, render: () => <PulseAccess /> },
   // Last, because it is the only tab that is somebody else's work
   // rather than a setting. Everything to its left is configuration;
   // this is a queue with people waiting in it.
