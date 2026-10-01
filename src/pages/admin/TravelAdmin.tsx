@@ -370,6 +370,8 @@ function DeleteClaim() {
             {busy && !found && <Spinner className="h-4 w-4" />} Find
           </button>
         </form>
+        {/* A claim is numbered when it is submitted (te_0008), so only a submitted one can be found here. */}
+        <p className="text-xs text-ink-500">A trip that was never submitted has no number: its engineer cancels it, or deletes it from its own page in Travel Expense.</p>
         {found && (
           <div className="space-y-3 rounded-lg border border-cyrixRed-200 bg-cyrixRed-50 p-3">
             <p className="text-sm text-cyrixRed-900">
