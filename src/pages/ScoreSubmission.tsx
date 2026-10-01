@@ -7,6 +7,7 @@ import {
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
 import { supabase } from '@/lib/supabase'
+import { useReveal } from '@/lib/useReveal'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
@@ -92,6 +93,10 @@ export default function ScoreSubmission() {
   const [deleteReason, setDeleteReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Both forms open under the buttons at the foot of the page, which is
+  // below the screen: brought into view as they open, cursor in the box.
+  const returnRef = useReveal<HTMLDivElement>(showReturn)
+  const deleteRef = useReveal<HTMLDivElement>(showDelete && !openDeletion)
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
@@ -1043,8 +1048,11 @@ export default function ScoreSubmission() {
                 )}
               </>
             )}
+            {/* One question at a time: sending it back and asking for it
+                to be deleted are different answers to the same month, and
+                both forms open at once read as if both were going. */}
             <button
-              onClick={() => setShowReturn(v => !v)}
+              onClick={() => { setShowReturn(v => !v); setShowDelete(false) }}
               disabled={busy}
               className="btn-secondary"
             >
@@ -1061,7 +1069,7 @@ export default function ScoreSubmission() {
               </span>
             ) : (
               <button
-                onClick={() => setShowDelete(v => !v)}
+                onClick={() => { setShowDelete(v => !v); setShowReturn(false) }}
                 disabled={busy}
                 className="btn-secondary !text-cyrixRed-700"
               >
@@ -1071,7 +1079,7 @@ export default function ScoreSubmission() {
           </div>
 
           {showDelete && !openDeletion && (
-            <div className="card space-y-3 border-cyrixRed-200 p-4">
+            <div ref={deleteRef} className="card space-y-3 border-cyrixRed-200 p-4 scroll-mb-24 lg:scroll-mb-6">
               <div>
                 <p className="font-medium text-ink-900">
                   Request deletion of {monthLabel(submission.period_month)}
@@ -1105,7 +1113,7 @@ export default function ScoreSubmission() {
           )}
 
           {showReturn && (
-            <div className="card space-y-3 p-4">
+            <div ref={returnRef} className="card space-y-3 p-4 scroll-mb-24 lg:scroll-mb-6">
               <label className="label" htmlFor="reason">
                 Why are you sending this back?
               </label>
@@ -1117,13 +1125,18 @@ export default function ScoreSubmission() {
                 onChange={e => setReturnReason(e.target.value)}
                 placeholder="e.g. The repeat-call figure does not match the service log"
               />
-              <button
-                onClick={onReturn}
-                disabled={!returnReason.trim() || busy}
-                className="btn-danger"
-              >
-                Send back to {data.employee.full_name.split(' ')[0]}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onReturn}
+                  disabled={!returnReason.trim() || busy}
+                  className="btn-danger"
+                >
+                  Send back to {data.employee.full_name.split(' ')[0]}
+                </button>
+                <button onClick={() => setShowReturn(false)} className="btn-secondary">
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>

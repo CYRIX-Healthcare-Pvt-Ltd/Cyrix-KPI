@@ -10,6 +10,7 @@ import {
   useScoringRules, useVisibleTemplates, useTemplateFromAssignment, currentFy,
 } from '@/lib/queries'
 import { freeName } from '@/lib/templates'
+import { useReveal } from '@/lib/useReveal'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, PageLoader, Spinner, EmptyState, NumberInput } from '@/components/ui'
 import { sectionsOf } from '@/lib/sections'
@@ -613,6 +614,9 @@ function ApprovalCard({
   const action = useAssignmentAction()
   const setStart = useSetKpiStart()
   const [rejecting, setRejecting] = useState(false)
+  // The question is taller than the row of buttons it replaces, so its
+  // own button can open below the screen: brought into view as it opens.
+  const rejectRef = useReveal<HTMLDivElement>(rejecting)
   const [editing, setEditing] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -794,7 +798,7 @@ function ApprovalCard({
                     />
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div ref={rejectRef} className="space-y-2 scroll-mb-24 lg:scroll-mb-6">
                     <label className="label" htmlFor={`r-${assignmentId}`}>
                       What needs changing?
                     </label>
