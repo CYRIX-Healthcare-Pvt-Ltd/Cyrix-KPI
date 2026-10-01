@@ -4,11 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench,
-  Image as ImageIcon, Gauge,
+  Image as ImageIcon, Gauge, Navigation,
 } from 'lucide-react'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
+import { TravelAdmin } from '@/pages/admin/TravelAdmin'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
@@ -2340,6 +2341,9 @@ const ADMIN_TABS = [
   // Supabase table — see PulseAccess.tsx. Replaces Pulse's own
   // /user-management page.
   { id: 'pulse', label: 'Pulse', short: 'Pulse', icon: Gauge, render: () => <PulseAccess /> },
+  // Whether photographs are required, what each mode pays, and deleting a
+  // claim by its number — the module's own settings, also on its Rates page.
+  { id: 'travel', label: 'Travel Expense', short: 'Travel', icon: Navigation, render: () => <TravelAdmin /> },
   // Last, because it is the only tab that is somebody else's work
   // rather than a setting. Everything to its left is configuration;
   // this is a queue with people waiting in it.
