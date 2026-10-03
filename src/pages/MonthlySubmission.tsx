@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, Paperclip, CheckCircle2,
+  ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, MessageSquarePlus, Paperclip, CheckCircle2,
   Shuffle,
 } from 'lucide-react'
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
+import OutOfInput from '@/components/OutOfInput'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -42,6 +43,8 @@ export default function MonthlySubmission() {
 
   const [achieved, setAchieved] = useState<Record<string, string>>({})
   const [targets, setTargets] = useState<Record<string, string>>({})
+  // A note against each row, in the person's own words: why the figure is what it is.
+  const [notes, setNotes] = useState<Record<string, string>>({})
   const [remarks, setRemarks] = useState('')
   const [showDelete, setShowDelete] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
@@ -64,6 +67,7 @@ export default function MonthlySubmission() {
     setTargets(Object.fromEntries(
       data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
     ))
+    setNotes(Object.fromEntries(data.items.map(i => [i.id, i.self_remarks ?? ''])))
     setRemarks(data.submission.employee_remarks ?? '')
   }, [data])
 
@@ -142,6 +146,11 @@ export default function MonthlySubmission() {
   // in five places — including none of the ones that needed it to colour
   // the score correctly.
   const coreWeight = coreRows.reduce((a, i) => a + Number(i.weightage), 0)
+  // The same question of the core values alone: does their final differ from the manager's figure?
+  const coreAdjusted =
+    coreRows[0]?.final_score != null
+    && coreRows[0]?.manager_score != null
+    && Math.abs(coreRows[0].final_score - coreRows[0].manager_score) > 0.005
   // The same treatment for the other two bands, which were summed from
   // the rows in one place and hard-coded to 80 in another.
   //
@@ -218,6 +227,8 @@ export default function MonthlySubmission() {
             id: i.id,
             achieved: achieved[i.id] === '' || achieved[i.id] === undefined
               ? null : Number(achieved[i.id]),
+            // An empty note is no note.
+            remarks: (notes[i.id] ?? '').trim() || null,
           })),
       })
       /*
@@ -505,17 +516,27 @@ export default function MonthlySubmission() {
                   />
                 </div>
 
+                {/*
+                  Achieved, in the target's own terms, and saying so.
+
+                  Against a target of 100 people were typing 8 — their score
+                  out of 10 — because "My score … / 10" sat beside the box
+                  (the user, 3 Oct: "some user think my score is target …
+                  in achieved they are entering 8"). On 3 Oct, 282 rows by
+                  129 people this year looked like it. The box now says what
+                  it is out of, and a figure that looks like a score is
+                  questioned below.
+                */}
                 <div>
                   <label className="label text-xs" htmlFor={`ach-${item.id}`}>
                     Achieved
                   </label>
-                  <input
+                  <OutOfInput
                     id={`ach-${item.id}`}
-                    type="number" inputMode="decimal" step="any"
-                    className="input"
+                    target={targets[item.id] ?? ''}
                     disabled={!editable}
                     value={achieved[item.id] ?? ''}
-                    onChange={e => setAchieved({ ...achieved, [item.id]: e.target.value })}
+                    onChange={v => setAchieved({ ...achieved, [item.id]: v })}
                   />
                 </div>
 
@@ -571,10 +592,25 @@ export default function MonthlySubmission() {
                 )}
               </div>
 
+              {editable && (
+                <ScoreForResult
+                  achieved={achieved[item.id] ?? ''}
+                  target={targets[item.id] ?? ''}
+                  weightage={item.weightage}
+                />
+              )}
+
               <RuleHint
                 rule={item.scoring_rule as ScoringRule}
                 weightage={item.weightage}
                 params={item.rule_params as RuleParams}
+              />
+
+              <RowNote
+                id={item.id}
+                value={notes[item.id] ?? ''}
+                editable={editable}
+                onChange={v => setNotes({ ...notes, [item.id]: v })}
               />
             </div>
           ))}
@@ -711,26 +747,34 @@ export default function MonthlySubmission() {
             <span className="text-sm font-medium text-ink-700">
               Core values score
             </span>
-            <div className="flex items-center gap-5 text-sm">
-              <span className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
-                  Mine
+            {/*
+              One figure. "Mine" came off here as it did from the header:
+              nobody rates their own core values since 0095, so it read 0.00,
+              in red, on every month — 100 of 3,218 scored months have a self
+              figure at all, and it counts for nothing. And while score_blend
+              is 0/1 the final is the manager's figure, the same number twice
+              (the user, 3 Oct: "Why still core values mine showing? and
+              manager n final is same isnt?"). The two are shown apart only
+              if they ever differ, as the month's totals are.
+            */}
+            {coreAdjusted ? (
+              <div className="flex items-center gap-5 text-sm">
+                <span className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                    Manager
+                  </span>
+                  <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
                 </span>
-                <ScorePill value={coreRows[0]?.self_score} outOf={coreWeight} size="sm" />
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
-                  Manager
+                <span className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                    Final
+                  </span>
+                  <ScorePill value={coreRows[0]?.final_score} outOf={coreWeight} size="sm" />
                 </span>
-                <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
-                  Final
-                </span>
-                <ScorePill value={coreRows[0]?.final_score} outOf={coreWeight} size="sm" />
-              </span>
-            </div>
+              </div>
+            ) : (
+              <ScorePill value={coreRows[0]?.final_score ?? coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
+            )}
           </div>
         )}
       </div>
@@ -1270,6 +1314,98 @@ function BackLink() {
 }
 
 /** Tells the person entering a number which direction is good. */
+/**
+ * A result that looks like a score: at most the row's weightage, against a
+ * target well above it, and under half of that target — 8 typed against a
+ * target of 100 on a row worth 10. Asked about, not refused: it can be a
+ * true result, and the person knows.
+ */
+function ScoreForResult({ achieved, target, weightage }: { achieved: string; target: string; weightage: number }) {
+  const a = Number(achieved), t = Number(target), w = Number(weightage)
+  if (achieved.trim() === '' || target.trim() === '' || !Number.isFinite(a) || !Number.isFinite(t)) return null
+  if (!(a > 0 && a <= w && t > w * 2 && a < t * 0.5)) return null
+  return (
+    <p className="mt-2 text-xs text-amber-700">
+      {a} of {t} — is that the result? Enter what you reached against the target, not your score. The score out of {w} is worked out from it.
+    </p>
+  )
+}
+
+/** How long a row's note may be: a few sentences, said once. */
+const NOTE_MAX = 500
+
+/**
+ * A note against one row: why the figure is what it is, in the person's own
+ * words — optional (management, 3 Oct, through the user: "against each kra,
+ * provide them a text box to justify or explain why they scored that much
+ * but not mandatory field").
+ *
+ * Out of the way until it is wanted. A box under every KRA would double the
+ * height of a month on a phone and read as one more field to fill; a quiet
+ * "Add a note" keeps every row the shape it was, on a phone and on a
+ * computer, and opens a box the full width of the row when pressed. Left
+ * empty, it folds away again. Once the month is sent, it is a quotation —
+ * read by the manager beside the figure it explains (ScoreSubmission).
+ */
+function RowNote({ id, value, editable, onChange }: {
+  id: string
+  value: string
+  editable: boolean
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLTextAreaElement>(null)
+  // Grows with what is typed, so a note is read whole rather than scrolled inside a box.
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value, open])
+
+  if (!editable) {
+    if (!value.trim()) return null
+    return (
+      <figure className="mt-3 rounded-lg border-l-2 border-violet-400 bg-violet-50 px-3 py-2">
+        <figcaption className="text-xs font-medium text-violet-700">Your note</figcaption>
+        <p className="mt-0.5 whitespace-pre-line break-words text-sm text-ink-700">{value}</p>
+      </figure>
+    )
+  }
+  if (!open && !value) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn-press mt-2 inline-flex items-center gap-1.5 rounded-lg py-1 text-left text-sm font-medium text-violet-700 hover:text-violet-800"
+      >
+        <MessageSquarePlus className="h-4 w-4 shrink-0" />
+        <span>Add a note <span className="font-normal text-violet-700/75">— why this figure</span></span>
+      </button>
+    )
+  }
+  return (
+    <div className="mt-3">
+      <label className="label text-xs !text-violet-700" htmlFor={`note-${id}`}>Your note</label>
+      <textarea
+        ref={box}
+        id={`note-${id}`}
+        rows={2}
+        maxLength={NOTE_MAX}
+        autoFocus={open && !value}
+        className="input resize-none leading-relaxed focus:!border-violet-400 focus:!ring-violet-400/30"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={() => { if (!value.trim()) { onChange(''); setOpen(false) } }}
+        placeholder="What explains this figure — what helped, what held it back. Your manager reads it when scoring."
+      />
+      {value.length > NOTE_MAX - 100 && (
+        <p className="mt-1 text-right text-xs tabular-nums text-ink-400">{value.length}/{NOTE_MAX}</p>
+      )}
+    </div>
+  )
+}
+
 function RuleHint({
   rule, weightage, params,
 }: {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import OutOfInput from '@/components/OutOfInput'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
@@ -627,7 +628,8 @@ export default function ScoreSubmission() {
                 </div>
 
                 <div>
-                  <label className="label text-xs">They claimed</label>
+                  {/* By name, as the rest of this page says it: "Kevin claimed" rather than "They claimed". */}
+                  <label className="label text-xs">{data?.employee.full_name.split(' ')[0] ?? 'They'} claimed</label>
                   <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
                     {item.self_achieved ?? '—'}
                     <span
@@ -643,13 +645,13 @@ export default function ScoreSubmission() {
                   <label className="label text-xs" htmlFor={`mgr-${item.id}`}>
                     My figure
                   </label>
-                  <input
+                  {/* In the target's terms, as the team member's own box now is. */}
+                  <OutOfInput
                     id={`mgr-${item.id}`}
-                    type="number" inputMode="decimal" step="any"
-                    className="input"
+                    target={targets[item.id] ?? ''}
                     disabled={!editable}
                     value={achieved[item.id] ?? ''}
-                    onChange={e => setAchieved({ ...achieved, [item.id]: e.target.value })}
+                    onChange={v => setAchieved({ ...achieved, [item.id]: v })}
                   />
                 </div>
 
@@ -676,6 +678,16 @@ export default function ScoreSubmission() {
                   </div>
                 </div>
               </div>
+
+              {/* Their note on the row, if they left one: why their figure is what it is, beside it, in their words. */}
+              {item.self_remarks?.trim() && (
+                <figure className="mt-3 rounded-lg border-l-2 border-violet-400 bg-violet-50 px-3 py-2">
+                  <figcaption className="text-xs font-medium text-violet-700">
+                    {data?.employee.full_name.split(' ')[0] ? `${data.employee.full_name.split(' ')[0]}'s note` : 'Their note'}
+                  </figcaption>
+                  <p className="mt-0.5 whitespace-pre-line break-words text-sm text-ink-700">{item.self_remarks}</p>
+                </figure>
+              )}
             </div>
           ))}
         </div>
