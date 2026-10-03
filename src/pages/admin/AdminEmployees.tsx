@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, type FormEvent } from 'react'
 import { Search, UserPlus, Upload, Download, X, ArrowLeftRight } from 'lucide-react'
 import { downloadTemplate, bigDeactivation } from '@/lib/sheet'
+import { repeatedCodes, type RepeatedCode } from '@/lib/ecodes'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
 import EditEmployee from '@/components/EditEmployee'
@@ -485,9 +486,11 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [activeNow, setActiveNow] = useState(0)
   /** The confirmation is open. Only ever for a big deactivation. */
   const [confirming, setConfirming] = useState(false)
+  /** Codes on more than one row of the file: named, and nothing imported until the file is put right. */
+  const [repeats, setRepeats] = useState<RepeatedCode[]>([])
 
   const read = async (file: File) => {
-    setError(null); setResult(null)
+    setError(null); setResult(null); setRepeats([])
     try {
       const XLSX = await import('xlsx')
       const buf = await file.arrayBuffer()
@@ -504,7 +507,13 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         }
         return ''
       }
-      const parsed = raw.map(r => ({
+      const parsed = raw.map((r, i) => ({
+        /*
+          The row it is on in Excel, to say where a repeated code is. SheetJS
+          keeps each row's own index, so blank rows in the sheet do not
+          throw the count out; without it, the header is row 1.
+        */
+        row: ((r as { __rowNum__?: number }).__rowNum__ ?? i + 1) + 1,
         ecode: pick(r, 'employee_code', 'ecode', 'employee code', 'code'),
         full_name: pick(r, 'employee_name', 'name', 'full name'),
         designation: pick(r, 'designation', 'title'),
@@ -531,7 +540,19 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         setError('No rows had both an employee code and a name. Check the column headers.')
         return
       }
-      setRows(parsed)
+      /*
+        The same code on two rows. The import writes every row at once, and
+        the database will not write one person twice in one go, so the whole
+        upload would fail at the end with a Postgres sentence and no code
+        (3 Oct). Said here instead, with the rows, before anything is pressed.
+      */
+      const twice = repeatedCodes(parsed)
+      if (twice.length > 0) {
+        setRows(null)
+        setRepeats(twice)
+        return
+      }
+      setRows(parsed.map(({ row: _row, ...fields }) => fields))
 
       // Who is active now and not in this file. Compared on upper case,
       // the same way the codes are stored and the same way the server
@@ -595,6 +616,9 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   const save = async () => {
     if (!rows) return
+    // Read once already; checked again, because a repeat fails the whole upload.
+    const twice = repeatedCodes(rows.map((r, i) => ({ ecode: r.ecode, full_name: r.full_name, row: i + 2 })))
+    if (twice.length > 0) { setRepeats(twice); setRows(null); return }
     setBusy(true); setError(null)
     try {
       const existing = await everyEmployee<
@@ -764,6 +788,27 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   return (
     <Panel title="Bulk import employees" onClose={onClose}>
       {error && <Alert kind="error">{error}</Alert>}
+      {repeats.length > 0 && (
+        <Alert
+          kind="error"
+          title={repeats.length === 1 ? 'An employee code is on more than one row' : `${repeats.length} employee codes are on more than one row`}
+        >
+          <p>
+            Each code can be on one row only. Keep one row for each, save the file and choose it again.
+            Nothing has been imported.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-xs">
+            {repeats.slice(0, 15).map(r => (
+              <li key={r.ecode}>
+                <span className="font-semibold">{r.ecode}</span>
+                {' — rows '}
+                {r.rows.map(x => `${x.row} (${x.name})`).join(', ').replace(/, ([^,]*)$/, ' and $1')}
+              </li>
+            ))}
+            {repeats.length > 15 && <li>… and {repeats.length - 15} more</li>}
+          </ul>
+        </Alert>
+      )}
 
       {result ? (
         <Alert kind="success" title={`${result.added} employee record(s) imported`}>

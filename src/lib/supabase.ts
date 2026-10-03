@@ -52,6 +52,10 @@ export function friendlyError(err: unknown): string {
   if (msg.includes('duplicate key') && msg.includes('idx_revision_one_open')) {
     return 'A revision request for this KPI has already been raised and is still being reviewed.'
   }
+  // One upsert carrying the same key twice — an employee code on two rows of a sheet.
+  if (msg.includes('cannot affect row a second time')) {
+    return 'The same employee code is on more than one row of the file. Keep one row for each code and try again.'
+  }
   if (msg.includes('row-level security') || msg.includes('Not permitted')) {
     return 'You do not have access to this.'
   }

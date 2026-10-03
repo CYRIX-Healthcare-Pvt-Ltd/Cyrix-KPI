@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseEcodes } from './ecodes'
+import { parseEcodes, repeatedCodes } from './ecodes'
 
 /**
  * Every case here is a real paste, and the second describe block exists
@@ -56,5 +56,30 @@ describe('parseEcodes — the lost backslash', () => {
 
   it('leaves an s inside a code alone', () => {
     expect(parseEcodes('ES12 SC44')).toEqual(['ES12', 'SC44'])
+  })
+})
+
+describe('repeatedCodes — the same employee twice in one master sheet', () => {
+  const row = (r: number, ecode: string, full_name = 'Somebody') => ({ row: r, ecode, full_name })
+  it('finds nothing in a sheet where every code is once', () => {
+    expect(repeatedCodes([row(2, 'E1'), row(3, 'E2'), row(4, 'CT1')])).toEqual([])
+  })
+  it('names a code on two rows, with both rows and the names on them', () => {
+    expect(repeatedCodes([row(2, 'E1000', 'Ajith P V'), row(3, 'E2'), row(210, 'E1000', 'Ajith P V')]))
+      .toEqual([{ ecode: 'E1000', rows: [{ row: 2, name: 'Ajith P V' }, { row: 210, name: 'Ajith P V' }] }])
+  })
+  it('matches as the codes are stored: case and stray spaces do not make two codes', () => {
+    expect(repeatedCodes([row(5, 'e1000 '), row(9, 'E1000')]).map(r => r.ecode)).toEqual(['E1000'])
+  })
+  it('keeps the prefix: E616 and CT616 are two people', () => {
+    expect(repeatedCodes([row(2, 'E616'), row(3, 'CT616')])).toEqual([])
+  })
+  it('lists the repeats in the order they first appear, a code three times with all three rows', () => {
+    const out = repeatedCodes([row(2, 'B'), row(3, 'A'), row(4, 'B'), row(5, 'A'), row(6, 'A')])
+    expect(out.map(r => r.ecode)).toEqual(['B', 'A'])
+    expect(out[1].rows.map(r => r.row)).toEqual([3, 5, 6])
+  })
+  it('passes over a row with no code', () => {
+    expect(repeatedCodes([row(2, ''), row(3, '  ')])).toEqual([])
   })
 })

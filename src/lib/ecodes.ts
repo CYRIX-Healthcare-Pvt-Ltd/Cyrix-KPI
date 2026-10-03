@@ -20,3 +20,32 @@ export function parseEcodes(pasted: string): string[] {
   }
   return [...seen]
 }
+
+/** An employee code on more than one row of a sheet, and each row it is on (1 is the header). */
+export interface RepeatedCode { ecode: string; rows: Array<{ row: number; name: string }> }
+
+/**
+ * Codes on more than one row of an employee sheet, matched as they are
+ * stored — trimmed and upper-cased, so "e1000 " and "E1000" are one code.
+ *
+ * The bulk import writes every row in one statement, and Postgres refuses a
+ * statement that would write the same employee twice: "ON CONFLICT DO
+ * UPDATE command cannot affect row a second time", which is what HR saw on
+ * 3 Oct with nothing to say which code. Found while the file is read, and
+ * named with its rows, before anything is pressed. In the order they first
+ * appear in the sheet.
+ */
+export function repeatedCodes(rows: ReadonlyArray<{ ecode: string; full_name: string; row: number }>): RepeatedCode[] {
+  const byCode = new Map<string, Array<{ row: number; name: string }>>()
+  for (const r of rows) {
+    const code = r.ecode.trim().toUpperCase()
+    if (!code) continue
+    const seen = byCode.get(code)
+    const line = { row: r.row, name: r.full_name.trim() }
+    if (seen) seen.push(line); else byCode.set(code, [line])
+  }
+  return [...byCode]
+    .filter(([, lines]) => lines.length > 1)
+    .map(([ecode, lines]) => ({ ecode, rows: lines }))
+    .sort((a, b) => a.rows[0].row - b.rows[0].row)
+}
