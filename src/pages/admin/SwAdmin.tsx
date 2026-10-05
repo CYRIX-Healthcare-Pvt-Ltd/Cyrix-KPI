@@ -10,6 +10,7 @@ import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
+import MissingLogins from '@/components/MissingLogins'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { readSheet, pick, downloadTemplate } from '@/lib/sheet'
@@ -231,6 +232,9 @@ function LoginsTab() {
           }}
         />
       )}
+
+      {/* Everybody who cannot sign in yet, with the one button that lets them all in (0143). */}
+      <MissingLogins />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

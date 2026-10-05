@@ -431,7 +431,7 @@ export default function ScoreSubmission() {
           <h1 className="text-xl font-semibold text-ink-900">
             {data.employee.full_name}
           </h1>
-          <StatusBadge status={submission.status} />
+          <StatusBadge status={submission.status} whose={data.employee.full_name.split(' ')[0]} />
         </div>
         <p className="mt-0.5 text-sm text-ink-500">
           {data.employee.ecode} · {monthLabel(submission.period_month)}

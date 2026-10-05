@@ -213,9 +213,16 @@ export function StatusBadge({
   status,
   kind = 'submission',
   queried = false,
+  whose,
 }: {
   status: SubmissionStatus | AssignmentStatus | null
   kind?: 'submission' | 'assignment'
+  /**
+   * The first name of the person whose month it is, on a manager's screen.
+   * "Returned to you" is the person's own word; their manager sent it back
+   * to them, so the manager reads "Returned to Amal" (the user, 5 Oct).
+   */
+  whose?: string
   /**
    * A question is open on this month. It outranks the stored status,
    * because "Manager reviewed" is true and unhelpful while somebody is
@@ -236,7 +243,8 @@ export function StatusBadge({
   const map = kind === 'submission' ? SUBMISSION_BADGES : ASSIGNMENT_BADGES
   const cfg = (map as Record<string, { label: string; cls: string }>)[status]
   if (!cfg) return <span className="badge bg-ink-100 text-ink-500">{status}</span>
-  return <span className={clsx('badge', cfg.cls)}>{cfg.label}</span>
+  const label = kind === 'submission' && status === 'returned' && whose ? `Returned to ${whose}` : cfg.label
+  return <span className={clsx('badge', cfg.cls)}>{label}</span>
 }
 
 /** A score out of 100, coloured by band. */

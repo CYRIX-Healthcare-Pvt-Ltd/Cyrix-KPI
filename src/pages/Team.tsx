@@ -721,6 +721,7 @@ export default function Team() {
                     <StatusBadge
                       status={sub?.status ?? null}
                       queried={!!sub && !!queried?.has(sub.id)}
+                      whose={member.full_name.split(' ')[0]}
                     />
                   )}
                 </div>
@@ -1087,6 +1088,7 @@ function MemberPeek({
               <StatusBadge
                 status={sub?.status ?? null}
                 queried={!!sub && !!queried?.has(sub.id)}
+                whose={member.full_name.split(' ')[0]}
               />
             </div>
           </div>

@@ -5,6 +5,8 @@ import { repeatedCodes, type RepeatedCode } from '@/lib/ecodes'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { BulkAssign } from '@/pages/admin/SwAdmin'
 import EditEmployee from '@/components/EditEmployee'
+import MissingLogins from '@/components/MissingLogins'
+import { createMissingLogins } from '@/lib/logins'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOrgKpiStatusAll, currentFy } from '@/lib/queries'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
@@ -98,14 +100,17 @@ export default function AdminEmployees() {
         </div>
       </div>
 
+      {/* Everybody who cannot sign in yet, with the one button that lets them all in. */}
+      <MissingLogins />
+
       {adding && <AddEmployee onClose={() => setAdding(false)}
                               onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
       {bulk && <BulkImport onClose={() => setBulk(false)}
                            onSaved={() => qc.invalidateQueries({ queryKey: ['org_kpi_status'] })} />}
 
-      {/* Correcting one record — and the only way to give somebody a
-          login, because Add employee never made one. Everybody added
-          through that form has a record and no account. */}
+      {/* Correcting one record, and a login for that one person if they
+          have none. Add employee makes the login itself, and the card at
+          the top makes everybody's who is still without one. */}
       {editing && (
         <EditEmployee
           ecode={editing}
@@ -304,9 +309,8 @@ function AddEmployee({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         manager_id = data.id
       }
 
-      // The login itself needs the service role, which the browser must
-      // never hold. The record is created here and the account is issued
-      // by the import script, which HR runs with the admin key.
+      // The record first, then the login (hr_create_login, below), so a
+      // login that cannot be made never costs the record.
       const { error: insErr } = await supabase.from('employees').insert({
         ecode,
         full_name: form.full_name.trim(),
@@ -739,34 +743,26 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       const gone = (goneRows ?? []) as Array<{ ecode: string; full_name: string }>
 
       /*
-        And give the new people a way in.
+        And give the new people a way in: everybody active without a
+        login, the joiners in this file and anybody left from before.
 
-        This used to end with "now run import-employees.mjs", because
-        making an account needs the service role key and that cannot go
-        anywhere near a browser. It can go in an edge function, so it
-        does — the same accounts, the same first password, the same
-        forced change, just without somebody having to remember.
-
-        Looped because the function works in batches: a joiner batch is
-        one call, and a first-ever import of the whole company is a few.
-        A failure here is reported and does not undo the import — the
-        records are correct either way, and the script is still there to
-        finish the job.
+        Through hr_create_missing_logins (0143), which makes each one as
+        "Create their login" does. It was the create-logins edge function
+        until 5 Oct, and on 3 Oct that made none of the eight people HR
+        imported — each was then given a login by hand. A failure here is
+        reported and does not undo the import: the records are right
+        either way, and whoever is left is listed at the top of the page
+        with the button that tries again.
       */
       const madeLogins: string[] = []
       const loginProblems: string[] = []
       try {
-        for (let round = 0; round < 20; round++) {
-          const { data, error: fnErr } = await supabase.functions.invoke('create-logins', {})
-          if (fnErr) throw fnErr
-          const said = data as {
-            created?: string[]; failed?: string[]; remaining?: number
-          } | null
-          madeLogins.push(...(said?.created ?? []))
-          loginProblems.push(...(said?.failed ?? []))
-          // Nothing left, or nothing moving — either way, stop asking.
-          if (!said?.remaining || (said.created ?? []).length === 0) break
-        }
+        const run = await createMissingLogins()
+        madeLogins.push(...run.created)
+        loginProblems.push(
+          ...run.failed,
+          ...run.unlinked.map(e => `${e}: an account with their address exists but is not linked to their record`),
+        )
       } catch (e) {
         loginProblems.push(
           e instanceof Error ? e.message : 'Logins could not be created just now.',
@@ -858,24 +854,18 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           {result.logins.length > 0 && (
             <p className="mt-3">
               {result.logins.length} login(s) created. They sign in with their
-              employee code as both the user and the password, and are asked to
-              change it the first time.
+              employee code as both the user and the password, and should change it.
             </p>
           )}
-          {/* Only when it actually went wrong. The script is the fallback
-              rather than the instruction it used to be. */}
+          {/* Only when it actually went wrong. Whoever is left is listed at
+              the top of Employees, with the button that tries again. */}
           {result.loginProblems.length > 0 && (
-            <>
-              <p className="mt-3">
-                {result.loginProblems.length} login(s) could not be created:{' '}
-                {result.loginProblems.slice(0, 3).join('; ')}
-                {result.loginProblems.length > 3 && ' …'}
-              </p>
-              <p className="mt-2">To finish them off:</p>
-              <code className="mt-2 block rounded bg-ink-900 px-2 py-1.5 text-xs text-onInk">
-                node scripts/import-employees.mjs "your-file.xlsx"
-              </code>
-            </>
+            <p className="mt-3">
+              {result.loginProblems.length} login(s) could not be created:{' '}
+              {result.loginProblems.slice(0, 3).join('; ')}
+              {result.loginProblems.length > 3 && ' …'}
+              {' '}They are listed at the top of Employees, with Create their logins to try again.
+            </p>
           )}
           {result.failed.length > 0 && (
             <p className="mt-2">

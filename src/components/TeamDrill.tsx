@@ -278,7 +278,7 @@ function PersonRow({
       {/* Right-aligned in a fixed box: a badge that centres itself moves
           left and right as its own word gets longer. */}
       <div className="hidden w-36 shrink-0 text-right sm:block">
-        <StatusBadge status={(row.submission_status as SubmissionStatus | null) ?? null} />
+        <StatusBadge status={(row.submission_status as SubmissionStatus | null) ?? null} whose={row.full_name.split(' ')[0]} />
       </div>
 
       <div className="w-16 shrink-0 text-right">
