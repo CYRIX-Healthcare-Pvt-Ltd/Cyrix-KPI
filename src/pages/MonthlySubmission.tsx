@@ -8,6 +8,7 @@ import {
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
 import OutOfInput from '@/components/OutOfInput'
+import KpiStatusNote from '@/components/KpiStatusNote'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -317,10 +318,8 @@ export default function MonthlySubmission() {
       <div className="space-y-4">
         <BackLink />
         {!kpiActive ? (
-          <Alert kind="warning" title="Your KPI is not approved yet">
-            You can start monthly assessments once your manager has approved your KPI
-            for FY {fy}. <Link to="/my-kpi" className="font-medium underline">View my KPI</Link>
-          </Alert>
+          // Whose move it is, by name: a draft handed back after a revision is the person's own, not the manager's.
+          <KpiStatusNote assignment={assignmentData?.assignment ?? null} fy={fy} where="month" />
         ) : (
           <EmptyState title={`${monthLabel(month)} has not been started`}>
             <p>Open the month to enter what you achieved.</p>

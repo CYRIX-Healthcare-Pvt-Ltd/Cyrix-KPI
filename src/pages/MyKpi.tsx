@@ -1,3 +1,4 @@
+import KpiStatusNote from '@/components/KpiStatusNote'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, FileSpreadsheet, PencilRuler, Shuffle } from 'lucide-react'
@@ -74,6 +75,8 @@ export default function MyKpi() {
         )}
       </div>
 
+      {/* A draft — never sent, or handed back by an approved revision — is the person's move, and says so. */}
+      {assignment.status === 'draft' && <KpiStatusNote assignment={assignment} fy={fy} where="my-kpi" />}
       {assignment.status === 'rejected' && (
         <Alert kind="error" title="Sent back by your manager">
           <p className="italic">“{assignment.rejection_reason}”</p>

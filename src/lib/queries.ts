@@ -1989,6 +1989,25 @@ export function useKpiRanking(employeeId: string | undefined, fy: string) {
   })
 }
 
+/**
+ * The latest revision of a KPI that went all the way through — the one that
+ * handed it back to its owner as a draft — for saying so on their screens.
+ */
+export function useLastApprovedRevision(assignmentId: string | undefined) {
+  return useQuery({
+    enabled: !!assignmentId,
+    queryKey: ['last_revision', assignmentId],
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ hr_decided_at: string | null; reason: string | null }>>(
+        supabase.from('kpi_revision_requests').select('hr_decided_at, reason')
+          .eq('assignment_id', assignmentId!).eq('status', 'approved')
+          .order('hr_decided_at', { ascending: false }).limit(1),
+      )
+      return rows[0] ?? null
+    },
+  })
+}
+
 /** The one person above you in the tree. RLS already allows reading them. */
 export function useMyManager(managerId: string | null | undefined) {
   return useQuery({
