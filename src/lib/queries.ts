@@ -342,7 +342,19 @@ export function useSaveAssignmentRows() {
         .delete().eq('assignment_id', assignmentId)
       if (fresh.length > 0) stale = stale.not('id', 'in', `(${fresh.map(r => r.id).join(',')})`)
       const del = await stale
-      if (del.error) throw new Error(friendlyError(del.error))
+      /*
+        If the old rows will not go, the new ones do instead, so a save that
+        fails leaves the KPI exactly as it was. Without this every failed try
+        left one more copy of every row behind — Ammu Gopan's KPI had eleven
+        of each by 5 Oct, from a finalised month refusing to let go of its
+        rows (fixed in 0142).
+      */
+      if (del.error) {
+        if (fresh.length > 0) {
+          await supabase.from('kpi_assignment_items').delete().in('id', fresh.map(r => r.id))
+        }
+        throw new Error(friendlyError(del.error))
+      }
 
       // Core values and ESMS are identical for everyone who has them, so
       // the system owns those rows rather than the team member. Stamped
