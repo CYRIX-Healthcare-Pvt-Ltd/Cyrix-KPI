@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useMyAssignment, useSetKpiStart, currentFy } from '@/lib/queries'
+import { useMyAssignment, useSetKpiStart, useFirstAssessedMonth, currentFy } from '@/lib/queries'
 import { defaultStartMonth, fyMonths, monthLabel } from '@/lib/fy'
 import { Alert, Spinner } from '@/components/ui'
-import { StartMonthSelect } from './StartMonth'
+import { StartMonthSelect, AssessedFrom, noLaterThan } from './StartMonth'
 import { needsStartMonth } from '@/lib/startMonth'
 
 /**
@@ -27,6 +27,7 @@ export default function StartMonthPrompt() {
   const fy = currentFy()
   const { pathname } = useLocation()
   const { data } = useMyAssignment(employee?.id, fy)
+  const { data: firstAssessed } = useFirstAssessedMonth(employee?.id, fy)
   const setStart = useSetKpiStart()
   const [month, setMonth] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +35,7 @@ export default function StartMonthPrompt() {
   const assignment = data?.assignment ?? null
   if (!assignment || !needsStartMonth(assignment, pathname)) return null
 
-  const chosen = month ?? defaultStartMonth(fy, employee?.date_of_joining)
+  const chosen = month ?? noLaterThan(defaultStartMonth(fy, employee?.date_of_joining), firstAssessed)
   const skipped = Math.max(0, fyMonths(fy).indexOf(chosen))
 
   const save = async () => {
@@ -81,7 +82,9 @@ export default function StartMonthPrompt() {
             fy={fy}
             value={chosen}
             onChange={setMonth}
+            latest={firstAssessed}
           />
+          <AssessedFrom latest={firstAssessed} />
           <p className="mt-2 text-sm text-ink-500">
             {skipped === 0
               ? `You are assessed on all twelve months of FY ${fy}.`

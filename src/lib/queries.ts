@@ -662,6 +662,28 @@ export function useSetKpiStart() {
   })
 }
 
+/**
+ * The first month of the year already filed on this person's KPI —
+ * submitted, sent back, reviewed or final. The KPI cannot start after it
+ * (set_kpi_start refuses), so every start-month choice stops there rather
+ * than offering a month that is then refused. A draft does not count.
+ */
+export function useFirstAssessedMonth(employeeId: string | undefined, fy: string) {
+  return useQuery({
+    enabled: !!employeeId,
+    queryKey: ['first_assessed_month', employeeId, fy],
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ period_month: string }>>(
+        supabase.from('kpi_submissions').select('period_month')
+          .eq('employee_id', employeeId!).eq('financial_year', fy)
+          .neq('status', 'draft')
+          .order('period_month').limit(1),
+      )
+      return rows[0]?.period_month ?? null
+    },
+  })
+}
+
 export function useAssignmentAction() {
   const qc = useQueryClient()
   return useMutation({

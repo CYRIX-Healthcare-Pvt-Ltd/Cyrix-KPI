@@ -6,11 +6,11 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyAssignment, useSaveAssignmentRows, useAssignmentAction, useSetKpiStart,
+  useMyAssignment, useSaveAssignmentRows, useAssignmentAction, useSetKpiStart, useFirstAssessedMonth,
   useScoringRules, useVisibleTemplates, useTemplateItems, useCoreValues, currentFy,
 } from '@/lib/queries'
 import { defaultStartMonth, fyMonths } from '@/lib/fy'
-import { StartMonthSelect, StartMonthNote } from '@/components/StartMonth'
+import { StartMonthSelect, StartMonthNote, AssessedFrom, noLaterThan } from '@/components/StartMonth'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import { displayTemplateName } from '@/lib/templates'
 import type { ParseResult } from '@/lib/excel'
@@ -35,6 +35,7 @@ export default function KpiSetup() {
   const [askUpload, setAskUpload] = useState(false)
 
   const { data, isLoading } = useMyAssignment(employee?.id, fy)
+  const { data: firstAssessed } = useFirstAssessedMonth(employee?.id, fy)
   const { data: rules } = useScoringRules()
   const { data: coreValues } = useCoreValues()
   // Everything this person's own reporting line has agreed, plus HR's for
@@ -81,7 +82,7 @@ export default function KpiSetup() {
   // guessing, and the joining date is already known.
   const startMonth = startChoice
     ?? assignment?.starts_from
-    ?? defaultStartMonth(fy, employee?.date_of_joining)
+    ?? noLaterThan(defaultStartMonth(fy, employee?.date_of_joining), firstAssessed)
   // Its position in the year is exactly how many months it skips.
   const skippedMonths = Math.max(0, fyMonths(fy).indexOf(startMonth))
   const coreWeight = esms ? REMAINDER_TOTAL - ESMS_WEIGHT : REMAINDER_TOTAL
@@ -487,6 +488,7 @@ export default function KpiSetup() {
                 fy={fy}
                 value={startMonth}
                 onChange={setStartChoice}
+                latest={firstAssessed}
               />
               {skippedMonths > 0 && (
                 <span className="badge bg-amber-100 text-amber-800">
@@ -495,6 +497,7 @@ export default function KpiSetup() {
               )}
             </div>
             <StartMonthNote />
+            <AssessedFrom latest={firstAssessed} />
           </div>
 
           <div className="card overflow-hidden">

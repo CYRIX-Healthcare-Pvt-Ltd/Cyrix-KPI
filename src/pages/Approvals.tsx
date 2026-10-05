@@ -6,7 +6,7 @@ import {
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  usePendingApprovals, useAssignmentAction, useEditAssignmentItem, useSetKpiStart,
+  usePendingApprovals, useAssignmentAction, useEditAssignmentItem, useSetKpiStart, useFirstAssessedMonth,
   useScoringRules, useVisibleTemplates, useTemplateFromAssignment, currentFy,
 } from '@/lib/queries'
 import { freeName } from '@/lib/templates'
@@ -613,6 +613,7 @@ function ApprovalCard({
   const assignmentId = assignment.id
   const action = useAssignmentAction()
   const setStart = useSetKpiStart()
+  const { data: firstAssessed } = useFirstAssessedMonth(assignment.employee_id, assignment.financial_year)
   const [rejecting, setRejecting] = useState(false)
   // The question is taller than the row of buttons it replaces, so its
   // own button can open below the screen: brought into view as it opens.
@@ -696,6 +697,7 @@ function ApprovalCard({
                   editable
                   busy={setStart.isPending}
                   onChange={chooseStart}
+                  latest={firstAssessed}
                 />
               </div>
 

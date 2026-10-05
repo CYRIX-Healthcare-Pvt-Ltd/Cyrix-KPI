@@ -12,7 +12,7 @@ import { Spinner } from '@/components/ui'
  * and drifting.
  */
 export function StartMonthSelect({
-  fy, value, onChange, disabled, id, className, placeholder,
+  fy, value, onChange, disabled, id, className, placeholder, latest,
 }: {
   fy: string
   value: string
@@ -20,6 +20,11 @@ export function StartMonthSelect({
   disabled?: boolean
   id?: string
   className?: string
+  /**
+   * The first month already assessed on this KPI. The KPI cannot start
+   * after it, so the months after it are shown but cannot be chosen.
+   */
+  latest?: string | null
   /**
    * Shown as a disabled first option while `value` is ''. For the
    * approval screen, where every KPI made before this existed has no
@@ -38,9 +43,37 @@ export function StartMonthSelect({
     >
       {placeholder && <option value="" disabled>{placeholder}</option>}
       {fyMonths(fy).map(m => (
-        <option key={m} value={m}>{monthLabel(m)}</option>
+        <option key={m} value={m} disabled={!!latest && m > latest}>{monthLabel(m)}</option>
       ))}
     </select>
+  )
+}
+
+/** A suggested start, brought back to the first assessed month if it falls after it. */
+export const noLaterThan = (month: string, latest: string | null | undefined): string =>
+  latest && month > latest ? latest : month
+
+/**
+ * Why the later months cannot be chosen, and what a change does instead.
+ *
+ * Somebody changing a KPI they have used since April picked the month the
+ * change was for, Sep-26, and was told to request the deletion of April —
+ * advice that would have thrown away an assessed month (the user, 5 Oct).
+ * The start is where the KPI began; a change reaches the months the
+ * manager has not reviewed, whatever the start.
+ */
+export function AssessedFrom({ latest, who }: { latest: string | null | undefined; who?: string }) {
+  if (!latest) return null
+  const month = monthLabel(latest)
+  return (
+    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-ink-600">
+      <CalendarClock className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600" />
+      <span>
+        {who
+          ? `${who} has been assessed from ${month}, so this KPI starts from ${month} or earlier. A change to it reaches the months not yet reviewed; assessed months keep what they were assessed on.`
+          : `Your KPI has been assessed from ${month}, so it starts from ${month} or earlier. A change you make now reaches the months your manager hasn't reviewed yet; assessed months keep what they were assessed on.`}
+      </span>
+    </p>
   )
 }
 
@@ -57,7 +90,7 @@ export function StartMonthSelect({
  * manager is, because they are the one who knows.
  */
 export function StartMonthBanner({
-  fy, startsFrom, who, editable, onChange, busy,
+  fy, startsFrom, who, editable, onChange, busy, latest,
 }: {
   fy: string
   startsFrom: string | null
@@ -66,6 +99,8 @@ export function StartMonthBanner({
   editable?: boolean
   onChange?: (month: string) => void
   busy?: boolean
+  /** The first month already assessed: the latest the start can be. */
+  latest?: string | null
 }) {
   const months = fyMonths(fy)
   const skipped = startsFrom ? Math.max(0, months.indexOf(startsFrom)) : 0
@@ -118,6 +153,7 @@ export function StartMonthBanner({
             start can pass it.
           </p>
         )}
+        {editable && <AssessedFrom latest={latest} who={who} />}
       </div>
 
       {editable && onChange && (
@@ -129,6 +165,7 @@ export function StartMonthBanner({
             onChange={onChange}
             placeholder="Choose a month"
             className="input w-auto"
+            latest={latest}
           />
         </div>
       )}

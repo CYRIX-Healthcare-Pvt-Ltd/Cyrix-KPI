@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import {
-  useSubmissionHistory, useAnnualSummary, useMyAssignment, useSetKpiStart, currentFy,
+  useSubmissionHistory, useAnnualSummary, useMyAssignment, useSetKpiStart, useFirstAssessedMonth, currentFy,
 } from '@/lib/queries'
 import { StartMonthBanner } from '@/components/StartMonth'
 import { fyMonthsFrom, openFyMonthsFrom, monthLabel } from '@/lib/fy'
@@ -35,6 +35,7 @@ export default function TeamMember() {
   const { data: history } = useSubmissionHistory(employeeId, fy)
   const { data: annual } = useAnnualSummary(employeeId, fy)
   const { data: assignment } = useMyAssignment(employeeId, fy)
+  const { data: firstAssessed } = useFirstAssessedMonth(employeeId, fy)
 
   if (isLoading) return <PageLoader />
   if (!member) return <Alert kind="error">Team member not found.</Alert>
@@ -222,6 +223,7 @@ export default function TeamMember() {
             startsFrom={startsFrom}
             who={member.full_name.split(' ')[0]}
             editable
+            latest={firstAssessed}
             busy={setStart.isPending}
             onChange={month => {
               setStartError(null)
