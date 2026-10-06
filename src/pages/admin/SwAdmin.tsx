@@ -345,7 +345,8 @@ function LoginsTab() {
         <div className="text-ink-600">
           <p className="font-medium text-ink-900">Modules decide what appears on app.cyrix.in</p>
           <p className="mt-1">
-            Everybody has <strong>KPI</strong> — everybody is appraised. The rest
+            Everybody has <strong>KPI</strong> — everybody is appraised — and{' '}
+            <strong>My Task</strong>, where they keep their tasks. The rest
             are handed out here: click a name in the Modules column to give or
             take away the tile. It changes what a person is{' '}
             <em>offered</em> on the portal, not what they are permitted to do
