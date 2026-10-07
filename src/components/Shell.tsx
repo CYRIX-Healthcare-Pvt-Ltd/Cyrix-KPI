@@ -512,9 +512,9 @@ export default function Shell() {
 
           Installing the app used to sit here too, as a dialog on every
           sign-in. It is an offer rather than a requirement, so it moved
-          to the profile page beside the password: in front of somebody
-          who came to submit a month, it was a toll on the thing they
-          opened the app to do. */}
+          to the profile page, and on 7 Oct out of KPI altogether: the
+          whole platform installs as one app, from the icon in the
+          portal's top bar. */}
       <ChatBot />
       <StartMonthPrompt />
     </div>

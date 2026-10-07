@@ -12,7 +12,6 @@ import { emailFeedback, OFFICIAL_DOMAIN } from '@/lib/officialEmail'
 
 import { PageLoader, Alert, Spinner } from '@/components/ui'
 import Avatar from '@/components/Avatar'
-import InstallButton from '@/components/InstallButton'
 import {
   fileToAvatar, humanBytes, dataUrlBytes, shouldWarnAboutFace,
 } from '@/lib/avatar'
@@ -582,7 +581,9 @@ export default function Profile() {
           the question is about themselves rather than about a number.
           Each icon in the manual's own colours: sky to read, amber for
           the password, teal for support as its section is, red where
-          things are taken away, violet for installing. */}
+          things are taken away. Installing is not here: the whole
+          platform installs as one app, from the icon in the top bar of
+          the page with all the modules. */}
       <div className="flex flex-wrap gap-2">
         <Link
           to="/help"
@@ -617,9 +618,6 @@ export default function Profile() {
             <Trash2 className="h-4 w-4 text-cyrixRed-600" /> Records
           </Link>
         )}
-        {/* Renders nothing where it is already installed, or where the
-            browser cannot install at all. */}
-        <InstallButton />
       </div>
     </div>
   )

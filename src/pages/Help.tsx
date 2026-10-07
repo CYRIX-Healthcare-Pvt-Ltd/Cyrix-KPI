@@ -53,6 +53,8 @@ interface Point {
   what: string
   how: string
   to?: string
+  /** A page above this app's basename (the portal), reached by a plain anchor. */
+  href?: string
   /**
    * Deliberately not translated: it names a button or a tab that is
    * itself in English. "Open my KPI" translated is a signpost pointing
@@ -110,7 +112,7 @@ function Section({
             <li key={p.what}>
               <p className="text-sm font-medium text-ink-900">{p.what}</p>
               <p className="mt-0.5 text-sm text-ink-600">{p.how}</p>
-              {(p.to || (p.video && watch)) && (
+              {(p.to || p.href || (p.video && watch)) && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                   {p.to && (
                     <Link
@@ -119,6 +121,14 @@ function Section({
                     >
                       {p.cta ?? 'Go there'} <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
+                  )}
+                  {p.href && (
+                    <a
+                      href={p.href}
+                      className="link-accent inline-flex items-center gap-1 text-sm font-medium"
+                    >
+                      {p.cta ?? 'Go there'} <ArrowRight className="h-3.5 w-3.5" />
+                    </a>
                   )}
                   {p.video && watch && (
                     <button
@@ -515,9 +525,9 @@ export default function Help() {
             ? [{ what: t('prof.p4.what'), how: t('prof.p4.how'), to: '/me', cta: 'Open my profile' }]
             : []),
           // Nobody would go looking for this, and the offer stopped
-          // coming to them when the sign-in dialog was removed. The
-          // manual is now the only thing that says it exists.
-          { what: t('prof.p5.what'), how: t('prof.p5.how'), to: '/me', cta: 'Open my profile' },
+          // coming to them when the sign-in dialog was removed. Since
+          // 7 Oct it installs the whole platform, from the portal.
+          { what: t('prof.p5.what'), how: t('prof.p5.how'), href: '/', cta: 'Open Modules' },
           // The band and the two sub-bands only exist once something has
           // been scored. Offered on the same condition as the rank above.
           ...(appraised

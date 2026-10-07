@@ -66,7 +66,8 @@ export const TIPS: Tip[] = [
   { key: 'tip.startmonth', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
 
   // ---- the app itself
-  { key: 'tip.install', to: '/me', toLabel: 'My profile', when: anyone },
+  // The install icon is in the portal, above this app's basename: the sentence says where.
+  { key: 'tip.install', to: null, toLabel: '', when: anyone },
   { key: 'tip.dark', to: null, toLabel: '', when: anyone },
   { key: 'tip.support', to: null, toLabel: '', when: anyone },
   { key: 'tip.ask', to: null, toLabel: '', when: anyone },

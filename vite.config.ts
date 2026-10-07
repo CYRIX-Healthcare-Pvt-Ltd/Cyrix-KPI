@@ -57,34 +57,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
-      manifest: {
-        name: 'Cyrix KPI',
-        short_name: 'Cyrix KPI',
-        description: 'Monthly KPI submission and appraisal scoring for Cyrix Healthcare',
-        theme_color: '#000000',
-        background_color: '#ffffff',
-        display: 'standalone',
-        orientation: 'portrait-primary',
-        start_url: '/kpi/',
-        scope: '/kpi/',
-        icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-        // Naming itself here is what lets getInstalledRelatedApps() answer
-        // "yes, it is already on this device" from inside an ordinary tab
-        // — the one case display-mode: standalone cannot see. Without it
-        // somebody who followed a link to the app they already installed
-        // gets asked to install it again.
-        //
-        // prefer_related_applications stays false, and must: true would
-        // tell the browser to stop offering the install altogether.
-        related_applications: [
-          { platform: 'webapp', url: 'https://app.cyrix.in/manifest.webmanifest' },
-        ],
-        prefer_related_applications: false,
-      },
+      // No manifest of its own: the whole platform installs as one app, "Cyrix",
+      // from the manifest the portal serves at app.cyrix.in/manifest.webmanifest
+      // (linked in index.html). The worker stays for notifications.
+      manifest: false,
       workbox: {
         // Old hashed chunks are what a stale tab asks for after a
         // deploy. Keeping them cached forever is how a browser ends up
