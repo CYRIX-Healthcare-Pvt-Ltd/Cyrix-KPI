@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import OutOfInput from '@/components/OutOfInput'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
@@ -88,6 +88,18 @@ export default function ScoreSubmission() {
   const [cutReason, setCutReason] = useState('')
   /** Submit asks once first — the manager's figure is now the score. */
   const [arming, setArming] = useState(false)
+  // The second press appears under the first, below the fold when the page is at its end: bring it
+  // into view and onto the keyboard (the user, 7 Oct: "it is not auto scrolling to submit again button").
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const b = confirmRef.current
+    if (!arming || !b) return
+    b.scrollIntoView({
+      block: 'center',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+    b.focus({ preventScroll: true })
+  }, [arming])
   const [returnReason, setReturnReason] = useState('')
   const [showReturn, setShowReturn] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -525,24 +537,6 @@ export default function ScoreSubmission() {
         />
       </div>
 
-      {/* A materially lower score, explained where it happens.
-          Between the totals and the rows on purpose: it is about the
-          number directly above it, and a manager who scrolls past the
-          tiles has already seen the gap by the time they read this.
-
-          One column, full width, generous target. The temptation is to
-          put the figure and the box side by side, which on a phone gives
-          a textarea about forty characters wide for the most important
-          sentence on the screen. */}
-      {editable && cutGap > SCORE_CUT_POINTS && (
-        <ScoreCutPrompt
-          gap={cutGap}
-          name={data.employee.full_name.split(' ')[0]}
-          value={cutReason}
-          onChange={setCutReason}
-        />
-      )}
-
       {/* What was said last time, once it is no longer editable. The
           manager should be able to see their own reasoning without
           opening the team member's view of it. */}
@@ -853,6 +847,26 @@ export default function ScoreSubmission() {
         />
       </div>
 
+      {/* A materially lower score, explained right above the button it
+          holds locked (the user, 7 Oct: "this should come near the submit
+          score") — it used to sit under the totals, a page away from the
+          Submit it was stopping. Outside the actions block, not in it: in
+          there the sticky buttons ride up over it and cover the box being
+          typed in.
+
+          One column, full width, generous target. The temptation is to
+          put the figure and the box side by side, which on a phone gives
+          a textarea about forty characters wide for the most important
+          sentence on the screen. */}
+      {editable && cutGap > SCORE_CUT_POINTS && (
+        <ScoreCutPrompt
+          gap={cutGap}
+          name={data.employee.full_name.split(' ')[0]}
+          value={cutReason}
+          onChange={setCutReason}
+        />
+      )}
+
       {/* ---- actions ---- */}
       {editable && (
         <div className="space-y-3">
@@ -889,7 +903,7 @@ export default function ScoreSubmission() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={onSubmitScores} disabled={busy} className="btn-primary">
+                    <button ref={confirmRef} onClick={onSubmitScores} disabled={busy} className="btn-primary">
                       {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                       Yes, submit my scores
                     </button>
