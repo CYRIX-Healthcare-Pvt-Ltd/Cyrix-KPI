@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { Plus, Save, Search } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { useScoringRules, type TemplateReach } from '@/lib/queries'
-import { JOB_ROLE_TOTAL } from '@/lib/sections'
+import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import ReachChoice from '@/components/ReachChoice'
 import { Alert, Spinner } from '@/components/ui'
@@ -13,7 +13,7 @@ import type { KpiTemplateItem } from '@/types/db'
 interface Found {
   fy: string
   employee: { id: string; ecode: string; full_name: string; designation: string | null; is_active: boolean }
-  assignment: { id: string; status: string; job_role_weight: number | string | null; template: string | null } | null
+  assignment: { id: string; status: string; job_role_weight: number | string | null; esms: boolean; template: string | null } | null
   items: KpiTemplateItem[]
   months: Record<string, number>
 }
@@ -48,6 +48,8 @@ export default function KpiEdit() {
   const [found, setFound] = useState<Found | null>(null)
   const [rows, setRows] = useState<Draft[]>([])
   const [reach, setReach] = useState<TemplateReach>('forward')
+  // ESMS on or off (0147; the user, 8 Oct: "enable or disable esms also").
+  const [esms, setEsms] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -58,6 +60,7 @@ export default function KpiEdit() {
     const f = data as Found
     setFound(f)
     setRows(f.items.map(fromItem))
+    setEsms(!!f.assignment?.esms)
     return f
   }
 
@@ -86,6 +89,7 @@ export default function KpiEdit() {
     try {
       const { data, error: err } = await supabase.rpc('admin_edit_assignment', {
         p_assignment_id: found.assignment.id, p_rows: payload, p_mode: reach,
+        p_esms: esms === found.assignment.esms ? null : esms,
       })
       if (err) throw new Error(friendlyError(err))
       const months = Number((data as { months: number }).months ?? 0)
@@ -163,6 +167,10 @@ export default function KpiEdit() {
           </div>
 
           <div className="card space-y-3 p-4">
+            <label className="flex w-fit cursor-pointer items-center gap-2.5 rounded-lg border border-ink-200 px-3 py-2 text-sm font-medium text-ink-900 hover:bg-ink-50">
+              <input type="checkbox" checked={esms} onChange={e => setEsms(e.target.checked)} />
+              ESMS <span className="font-normal text-ink-500">— {ESMS_WEIGHT}%</span>
+            </label>
             <ReachChoice value={reach} onChange={setReach} name="reach-admin-edit" />
             <div className="flex flex-wrap gap-2">
             <button onClick={save} disabled={busy || total !== job || named.length === 0} className="btn-primary">
