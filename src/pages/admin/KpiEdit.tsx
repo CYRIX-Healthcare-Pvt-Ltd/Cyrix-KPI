@@ -89,7 +89,8 @@ export default function KpiEdit() {
       })
       if (err) throw new Error(friendlyError(err))
       const months = Number((data as { months: number }).months ?? 0)
-      await load(found.employee.ecode)
+      // Saved is done: the editor closes, the line saying so stays (the user, 8 Oct).
+      setFound(null); setRows([]); setCode('')
       setNotice(`Saved ${found.employee.full_name}'s KPI — ${months} month${months === 1 ? '' : 's'} updated.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save that KPI.')
