@@ -451,6 +451,8 @@ Deno.serve(async req => {
         return json({ error: said[result.reason ?? ''] ?? 'That code is not right.' }, 400)
       }
       const signOutOthers = body.choice === 'signout_others'
+      // Which button arrived, plainly, for the day somebody says it did the other thing.
+      console.log('device_submit', JSON.stringify({ ecode, choice: body.choice ?? null }))
       const { error: okErr } = await db.rpc('confirm_device_session', {
         p_user: result.auth_user_id, p_session: sid, p_signout_others: signOutOthers,
       })

@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' }) /* this device only; Sign out from all devices is the code step's (0149) */
     setEmployee(null)
     // Everything cached was fetched as the person who just left. This is
     // an installable PWA and a shared handset is normal, so the next
