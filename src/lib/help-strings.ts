@@ -1074,6 +1074,20 @@ export const HELP: Record<string, Phrase> = {
     te: 'My profile లో My details కింద Official number పక్కన Add లేదా Edit నొక్కండి. మీ Mail ID కూడా అక్కడే కనిపిస్తుంది; దాన్ని HR, SW Admin మారుస్తారు. Revive Lab route card పై contact number మీ అధికారిక నంబర్ నుండి నిండుతుంది.',
     ta: 'My profile இல் My details கீழ் Official number அருகில் உள்ள Add அல்லது Edit ஐ அழுத்துங்கள். உங்கள் Mail ID உம் அங்கே தெரியும்; அதை HR மற்றும் SW Admin மாற்றுவார்கள். Revive Lab route card இல் contact number உங்கள் அதிகாரப்பூர்வ எண்ணிலிருந்து நிரம்பும்.',
   },
+  'prof.p8.what': {
+    en: 'Signing in on another device',
+    ml: 'മറ്റൊരു ഉപകരണത്തിൽ സൈൻ ഇൻ ചെയ്യുമ്പോൾ',
+    hi: 'दूसरे डिवाइस पर साइन इन करना',
+    te: 'మరో పరికరంలో సైన్ ఇన్ చేయడం',
+    ta: 'மற்றொரு சாதனத்தில் உள்நுழைதல்',
+  },
+  'prof.p8.how': {
+    en: 'If your account is already signed in on another device, a code is sent to your official email. Enter it, then press Log in, or Sign out from all devices and log in. No email on your record? Ask IT (it_support@cyrix.in) or HR to add it.',
+    ml: 'നിങ്ങളുടെ അക്കൗണ്ട് മറ്റൊരു ഉപകരണത്തിൽ ഇതിനകം സൈൻ ഇൻ ആണെങ്കിൽ, നിങ്ങളുടെ ഔദ്യോഗിക ഇമെയിലിലേക്ക് ഒരു കോഡ് അയയ്ക്കും. അത് നൽകി Log in അല്ലെങ്കിൽ Sign out from all devices and log in അമർത്തുക. നിങ്ങളുടെ റെക്കോർഡിൽ ഇമെയിൽ ഇല്ലേ? അത് ചേർക്കാൻ IT (it_support@cyrix.in) അല്ലെങ്കിൽ HR-നോട് ആവശ്യപ്പെടുക.',
+    hi: 'अगर आपका अकाउंट पहले से किसी दूसरे डिवाइस पर साइन इन है, तो आपके आधिकारिक ईमेल पर एक कोड भेजा जाता है। उसे डालें, फिर Log in या Sign out from all devices and log in दबाएँ। आपके रिकॉर्ड में ईमेल नहीं है? उसे जोड़ने के लिए IT (it_support@cyrix.in) या HR से कहें।',
+    te: 'మీ ఖాతా ఇప్పటికే మరో పరికరంలో సైన్ ఇన్ అయి ఉంటే, మీ అధికారిక ఇమెయిల్‌కు ఒక కోడ్ పంపబడుతుంది. దాన్ని నమోదు చేసి Log in లేదా Sign out from all devices and log in నొక్కండి. మీ రికార్డులో ఇమెయిల్ లేదా? దాన్ని చేర్చమని IT (it_support@cyrix.in) లేదా HR ను అడగండి.',
+    ta: 'உங்கள் கணக்கு ஏற்கனவே மற்றொரு சாதனத்தில் உள்நுழைந்திருந்தால், உங்கள் அதிகாரப்பூர்வ மின்னஞ்சலுக்கு ஒரு குறியீடு அனுப்பப்படும். அதை உள்ளிட்டு Log in அல்லது Sign out from all devices and log in அழுத்துங்கள். உங்கள் பதிவில் மின்னஞ்சல் இல்லையா? அதைச் சேர்க்க IT (it_support@cyrix.in) அல்லது HR-ஐக் கேளுங்கள்.',
+  },
   'cyra.title': {
     en: 'Cyra, the assistant',
     ml: 'Cyra, സഹായി',

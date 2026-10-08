@@ -26,6 +26,7 @@ import {
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 import EditEmployee from '@/components/EditEmployee'
+import { useAuth } from '@/contexts/AuthContext'
 import KpiTiming from './KpiTiming'
 import BulkKpi from './BulkKpi'
 import KpiEdit from './KpiEdit'
@@ -70,6 +71,29 @@ const STATE_STYLE: Record<string, string> = {
 
 function LoginsTab() {
   const qc = useQueryClient()
+  // IT_ADMIN (0151): this list, and an official email, nothing else.
+  const { isSwAdmin } = useAuth()
+  const itOnly = !isSwAdmin
+  /*
+    Who signs in on a second device without a code (0150; the user, 8 Oct:
+    "for some id for testing im sharing so that i can disable it, only for
+    sw_admin can change it"). Everybody is checked unless unticked here.
+  */
+  const { data: deviceOff } = useQuery({
+    queryKey: ['device_check_off'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('device_check_off_list')
+      if (error) throw new Error(error.message)
+      return new Set((data as string[] | null) ?? [])
+    },
+  })
+  const setDeviceCheck = useMutation({
+    mutationFn: async (a: { id: string; on: boolean }) => {
+      const { error } = await supabase.rpc('set_device_check', { p_employee_id: a.id, p_on: a.on })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['device_check_off'] }),
+  })
   const { data: modules } = useAppModules()
   // "KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab" — whatever the modules are now.
   const moduleNames = (modules ?? []).map(m => m.name).join(', ') || 'KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab'
@@ -226,6 +250,7 @@ function LoginsTab() {
       {picked && (
         <EditEmployee
           ecode={picked}
+          emailOnly={itOnly}
           onClose={() => setPicked(null)}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ['login_status'] })
@@ -235,7 +260,7 @@ function LoginsTab() {
       )}
 
       {/* Everybody who cannot sign in yet, with the one button that lets them all in (0143). */}
-      <MissingLogins />
+      {!itOnly && <MissingLogins />}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -246,7 +271,7 @@ function LoginsTab() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          {!importing && (
+          {!importing && !itOnly && (
             <button onClick={() => setImporting(true)} className="btn-secondary">
               <Upload className="h-4 w-4" /> Bulk assign modules
             </button>
@@ -319,7 +344,10 @@ function LoginsTab() {
         />
       )}
 
-      {/* Said plainly rather than buried: this is the question people ask
+      {/* Not for IT (0151; the user, 8 Oct: "DONT NEED THIS for it login"). */}
+      {!itOnly && (
+      <>
+{/* Said plainly rather than buried: this is the question people ask
           first, and the honest answer is that nobody can answer it. */}
       <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
@@ -357,6 +385,8 @@ function LoginsTab() {
       </div>
 
       <OtpSenderCard />
+      </>
+      )}
 
       {notice && <Alert kind="success">{notice}</Alert>}
       {resetError && <Alert kind="error">{resetError}</Alert>}
@@ -506,7 +536,7 @@ function LoginsTab() {
                 <th className="px-4 py-2.5">Modules</th>
                 <th className="px-4 py-2.5">Last sign-in</th>
                 <th className="px-4 py-2.5">Password changed</th>
-                <th className="px-4 py-2.5 text-right">Actions</th>
+                {!itOnly && <th className="px-4 py-2.5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
@@ -554,7 +584,7 @@ function LoginsTab() {
                             onClick={() => setModule.mutate({
                               employeeId: r.employee_id, module: m.code, granted: !on,
                             })}
-                            disabled={setModule.isPending}
+                            disabled={setModule.isPending || itOnly}
                             // Named rather than ticked: a row of bare
                             // checkboxes needs a header to decode, and this
                             // table is already seven columns wide.
@@ -577,8 +607,23 @@ function LoginsTab() {
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
+                  {!itOnly && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1.5">
+                      {r.has_login && (
+                        <label
+                          className="inline-flex cursor-pointer items-center gap-1.5 self-center whitespace-nowrap pr-1 text-xs text-ink-600"
+                          title="Ask for a code when this login is already signed in on another device"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!deviceOff?.has(r.employee_id)}
+                            disabled={setDeviceCheck.isPending || !deviceOff}
+                            onChange={e => setDeviceCheck.mutate({ id: r.employee_id, on: e.target.checked })}
+                          />
+                          Device check
+                        </label>
+                      )}
                       {r.has_login ? (
                         <button
                           onClick={() => {
@@ -605,6 +650,7 @@ function LoginsTab() {
                       </button>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2417,8 +2463,11 @@ function BuildStamp() {
  * is answerable here; the one tab that still points elsewhere says why.
  */
 export default function SwAdmin() {
+  // IT_ADMIN (0151): the Logins tab alone.
+  const { isSwAdmin } = useAuth()
+  const TABS = isSwAdmin ? ADMIN_TABS : ADMIN_TABS.filter(t => t.id === 'logins')
   const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
-  const active = ADMIN_TABS.find(t => t.id === tab) ?? ADMIN_TABS[0]
+  const active = TABS.find(t => t.id === tab) ?? TABS[0]
 
   /*
     How many people are waiting, on the tab rather than only inside it.
@@ -2427,7 +2476,7 @@ export default function SwAdmin() {
     out somebody had asked something was to open it and look. Which means
     an administrator who did not think to look did not answer.
   */
-  const { data: waiting } = useOpenTicketCount('software', true)
+  const { data: waiting } = useOpenTicketCount('software', isSwAdmin)
 
   return (
     <div className="space-y-5">
@@ -2442,7 +2491,7 @@ export default function SwAdmin() {
       {/* Desktop: a row under the heading, where tabs belong on a wide
           screen. */}
       <div className="hidden gap-1 overflow-x-auto border-b border-ink-200 lg:flex">
-        {ADMIN_TABS.map(t => (
+        {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -2486,9 +2535,9 @@ export default function SwAdmin() {
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
         <div
           className="grid"
-          style={{ gridTemplateColumns: `repeat(${ADMIN_TABS.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}
         >
-          {ADMIN_TABS.map(t => (
+          {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}

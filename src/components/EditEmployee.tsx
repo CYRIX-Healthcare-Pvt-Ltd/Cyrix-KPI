@@ -35,9 +35,11 @@ interface Row {
 }
 
 export default function EditEmployee({
-  ecode, onClose, onSaved,
+  ecode, onClose, onSaved, emailOnly = false,
 }: {
   ecode: string
+  /** IT_ADMIN (0151): the official email alone, saved through it_set_work_email. */
+  emailOnly?: boolean
   onClose: () => void
   onSaved: () => void
 }) {
@@ -92,6 +94,13 @@ export default function EditEmployee({
         be saved as "no manager", which reads on every screen as a person
         at the top of the company.
       */
+      if (emailOnly) {
+        const { error: err } = await supabase.rpc('it_set_work_email', { p_ecode: row.ecode, p_email: row.work_email ?? '' })
+        if (err) throw new Error(friendlyError(err))
+        onSaved()
+        onClose()
+        return
+      }
       let managerId: string | null = null
       const wanted = managerCode.trim().toUpperCase()
       if (wanted) {
@@ -191,11 +200,15 @@ export default function EditEmployee({
         ) : (
           <>
             <div className="mt-4 space-y-3">
+              {!emailOnly && (
+              <>
               <Field label="Full name" value={row.full_name} onChange={set('full_name')} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Designation" value={row.designation ?? ''} onChange={set('designation')} />
                 <Field label="Department" value={row.department ?? ''} onChange={set('department')} />
               </div>
+              </>
+              )}
               {/* Checked as it is typed, and never refused: the warning
                   is about whether mail will reach them, which is a thing
                   to know rather than a thing to be stopped by. */}
@@ -213,6 +226,8 @@ export default function EditEmployee({
                 )}
               </div>
 
+              {!emailOnly && (
+              <>
               <div className="grid gap-3 sm:grid-cols-2">
                 {/* The business unit — RJBEMP, Care 360, TCQAS. What the
                     KPI report groups by. */}
@@ -250,12 +265,14 @@ export default function EditEmployee({
                   </span>
                 </span>
               </button>
+              </>
+              )}
             </div>
 
             {/* The gap that made this dialog necessary. Add employee never
                 created an account, so the person could not sign in and the
                 sign-in screen could only say the password was wrong. */}
-            {!row.auth_user_id && (
+            {!row.auth_user_id && !emailOnly && (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm font-medium text-amber-900">
                   This person has no login

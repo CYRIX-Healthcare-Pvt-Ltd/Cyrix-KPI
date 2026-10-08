@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LifeBuoy, IdCard, Wrench, MessageSquarePlus, ListChecks, Send,
-  CheckCircle2, Clock, MessageSquareWarning,
+  CheckCircle2, Clock, MessageSquareWarning, Mail,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMyTickets, useRaiseTicket } from '@/lib/queries'
@@ -143,7 +143,7 @@ function RaiseForm({ onSent }: { onSent: () => void }) {
 
       <div>
         <p className="label mb-2">Who is it for?</p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           {DESKS.map(d => (
             <button
               key={d.key}
@@ -162,6 +162,13 @@ function RaiseForm({ onSent }: { onSent: () => void }) {
               </p>
             </button>
           ))}
+          {/* IT by email (0151; the user, 8 Oct): the official email on your record, and the sign-in code it gets. */}
+          <a href="mailto:it_support@cyrix.in" className="rounded-xl border-2 border-ink-200 p-4 text-left transition-colors hover:border-ink-300">
+            <p className="flex items-center gap-2 font-medium text-ink-900">
+              <Mail className="h-4 w-4 shrink-0" /> IT
+            </p>
+            <p className="mt-1 text-xs text-ink-500">Your official email and sign-in codes — it_support@cyrix.in</p>
+          </a>
         </div>
       </div>
 

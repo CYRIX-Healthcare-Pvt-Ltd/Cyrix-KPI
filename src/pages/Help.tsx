@@ -534,6 +534,8 @@ export default function Help() {
             ? [{ what: t('prof.p6.what'), how: t('prof.p6.how'), to: '/me', cta: 'Open my profile' }]
             : []),
           { what: t('prof.p7.what'), how: t('prof.p7.how'), to: '/me', cta: 'Open my profile' },
+          // Signed in elsewhere already (0149), and whom to ask about a missing email (0151).
+          { what: t('prof.p8.what'), how: t('prof.p8.how'), to: '/support', cta: 'Contact support' },
         ]}
       />
 

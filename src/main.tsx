@@ -1,3 +1,4 @@
+import { startSessionGuard } from '@/lib/sessionGuard'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -27,6 +28,9 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Signed out within a minute when another device signs everybody out (0149).
+startSessionGuard()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

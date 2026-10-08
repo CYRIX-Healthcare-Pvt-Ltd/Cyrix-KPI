@@ -65,7 +65,7 @@ interface NavItem {
 }
 
 export default function Shell() {
-  const { employee, isManager, isHrAdmin, isSwAdmin, signOut } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, signOut } = useAuth()
 
   /*
     Once a day, from whoever is here.
@@ -157,7 +157,7 @@ export default function Shell() {
     queue: true,
   }
 
-  const allItems: NavItem[] = isSwAdmin && !isHrAdmin
+  const allItems: NavItem[] = (isSwAdmin || isItAdmin) && !isHrAdmin
     // One destination, named for what it opens. It used to be two — Logins
     // and KPI Timing — which put a single module's settings beside the
     // screen that administers all of them, and left the bar saying Logins
@@ -396,7 +396,7 @@ export default function Shell() {
             {/* Not for SW Admin: their remit is logins, and every kind of
                 notification there is names an appraisal. */}
             <ThemeToggle />
-            <Notifications enabled={!isSwAdmin || isHrAdmin} />
+            <Notifications enabled={(!isSwAdmin && !isItAdmin) || isHrAdmin} />
             {/* Changing a password lives on the profile page, next to
                 the photo and the manual — everything about the account
                 in one place, rather than one of them promoted to a

@@ -190,6 +190,21 @@ function callerFromToken(req: Request): string | null {
   }
 }
 
+/**
+ * Which sign-in the token belongs to (0149): the device being let in, or
+ * kept while every other one is signed out.
+ */
+function sessionFromToken(req: Request): string | null {
+  const parts = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').split('.')
+  if (parts.length !== 3) return null
+  try {
+    const claims = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))) as { session_id?: string; role?: string }
+    return claims.role === 'authenticated' ? claims.session_id ?? null : null
+  } catch {
+    return null
+  }
+}
+
 /** ...and which employee that is. */
 async function signedInEcode(req: Request): Promise<string | null> {
   const userId = callerFromToken(req)
@@ -211,7 +226,8 @@ async function sendCode(
   db: ReturnType<typeof admin>,
   to: string, name: string, code: string, purpose: string,
 ): Promise<string | null> {
-  const what = purpose === 'reset' ? 'reset your password' : 'change your password'
+  const what = purpose === 'reset' ? 'reset your password'
+    : purpose === 'device' ? 'sign in on a new device' : 'change your password'
   const sent = await sendMail(db, {
     to: [to],
     // Not "Cyrix KPI". Recovery moved to the portal and serves all four
@@ -287,8 +303,9 @@ Deno.serve(async req => {
     return json({ error: 'Expected JSON' }, 400)
   }
 
-  const purpose = body.purpose === 'change' ? 'change' : 'reset'
-  const signedIn = purpose === 'change' || body.action === 'test'
+  // device (0149): a sign-in on a second device, signed in already and waiting for its code.
+  const purpose = body.purpose === 'change' ? 'change' : body.purpose === 'device' ? 'device' : 'reset'
+  const signedIn = purpose !== 'reset' || body.action === 'test'
 
   // For a signed-in change the identity comes from the token. Letting
   // the body name the account would make this a way to reset anybody's
@@ -396,8 +413,9 @@ Deno.serve(async req => {
       // sentence to everybody else however it went.
       if (!result.ok && signedIn) {
         const said: Record<string, string> = {
-          no_email_on_record:
-            'There is no email address on your record yet. Ask HR to add your official email.',
+          no_email_on_record: purpose === 'device'
+            ? 'There is no email address on your record, so no code can be sent. Ask IT (it_support@cyrix.in) or HR to add your official email.'
+            : 'There is no email address on your record yet. Ask HR to add your official email.',
           email_mismatch: 'That is not the email address on your record.',
           rate_limited: 'Too many codes requested. Try again in 15 minutes.',
         }
@@ -405,6 +423,43 @@ Deno.serve(async req => {
       }
 
       return json({ ok: true, message: signedIn ? 'Code sent to your email.' : NEUTRAL })
+    }
+
+    /*
+      The second device's code (0149). Right, and this sign-in is let in —
+      with "sign out from all", every other sign-in of the account is ended
+      by the auth server, this one kept (the user, 8 Oct).
+    */
+    if (body.action === 'device_submit') {
+      const sid = sessionFromToken(req)
+      const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+      if (!sid) return json({ error: 'Please sign in again.' }, 401)
+      const { data, error } = await db.rpc('check_password_otp', {
+        p_ecode: ecode, p_code: (body.code ?? '').trim(), p_purpose: 'device',
+      })
+      if (error) throw error
+      const result = data as { ok: boolean; reason?: string; attempts_left?: number; auth_user_id?: string }
+      if (!result.ok) {
+        const said: Record<string, string> = {
+          wrong_code: result.attempts_left
+            ? `That code is not right. ${result.attempts_left} attempt${result.attempts_left === 1 ? '' : 's'} left.`
+            : 'That code is not right.',
+          expired: 'That code has expired. Ask for a new one.',
+          too_many_attempts: 'Too many wrong codes. Ask for a new one.',
+          no_code_outstanding: 'No code is waiting. Ask for a new one.',
+        }
+        return json({ error: said[result.reason ?? ''] ?? 'That code is not right.' }, 400)
+      }
+      const signOutOthers = body.choice === 'signout_others'
+      const { error: okErr } = await db.rpc('confirm_device_session', {
+        p_user: result.auth_user_id, p_session: sid, p_signout_others: signOutOthers,
+      })
+      if (okErr) return json({ error: okErr.message }, 400)
+      if (signOutOthers) {
+        const { error: outErr } = await db.auth.admin.signOut(token, 'others')
+        if (outErr) return json({ error: 'Signed in, but the other devices could not be signed out. Try again from Sign out from all devices.' }, 502)
+      }
+      return json({ ok: true, message: signOutOthers ? 'Signed out from every other device.' : 'Signed in.' })
     }
 
     if (body.action === 'submit') {

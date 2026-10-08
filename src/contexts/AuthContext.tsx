@@ -14,6 +14,8 @@ interface AuthState {
   isHrAdmin: boolean
   /** Software administrator: sees every login's state, never a password. */
   isSwAdmin: boolean
+  /** IT (0151): the Logins tab, and the official email field only. */
+  isItAdmin: boolean
   directReportCount: number
   /**
    * From the force_password_change setting. False during the testing phase,
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [directReportCount, setDirectReportCount] = useState(0)
   const [isHrAdmin, setIsHrAdmin] = useState(false)
   const [isSwAdmin, setIsSwAdmin] = useState(false)
+  const [isItAdmin, setIsItAdmin] = useState(false)
   const [forcePasswordChange, setForcePasswordChange] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -45,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDirectReportCount(0)
       setIsHrAdmin(false)
       setIsSwAdmin(false)
+      setIsItAdmin(false)
       return
     }
 
@@ -59,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDirectReportCount(0)
       setIsHrAdmin(false)
       setIsSwAdmin(false)
+      setIsItAdmin(false)
       return
     }
 
@@ -77,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDirectReportCount(count ?? 0)
     setIsHrAdmin(roleNames.some(r => ['hr_admin', 'super_admin'].includes(r)))
     setIsSwAdmin(roleNames.some(r => ['sw_admin', 'super_admin'].includes(r)))
+    setIsItAdmin(roleNames.includes('it_admin'))
     setForcePasswordChange(setting?.value === true)
   }, [])
 
@@ -161,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isManager: directReportCount > 0,
         isHrAdmin,
         isSwAdmin,
+        isItAdmin,
         directReportCount,
         forcePasswordChange,
         loading,

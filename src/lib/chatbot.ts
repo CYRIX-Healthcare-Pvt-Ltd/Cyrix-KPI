@@ -268,6 +268,9 @@ const ALIASES: Record<string, string[]> = {
   'team.p21': ['edit for my team', 'my own version', 'template from my manager', 'merge'],
   'team.p22': ['remove template', 'delete template'],
   'prof.p7': ['official number', 'phone number', 'mobile number', 'contact number', 'mail id'],
+  // Signed in on another device, the code, and IT for a missing email (0149, 0151).
+  'prof.p8': ['another device', 'other device', 'second device', 'new phone', 'otp', 'code not received',
+              'sign out all', 'signed in elsewhere', 'no email', 'email missing', 'it support', 'it_support'],
   's4.p4': ['rank', 'ranking', 'ranked', 'calculated', 'worked out', 'position', '80 20'],
   's2.p9': ['changed my score', 'score changed', 'reduced', 'raised', 'manager entered',
             'lower than mine', 'cut my score'],

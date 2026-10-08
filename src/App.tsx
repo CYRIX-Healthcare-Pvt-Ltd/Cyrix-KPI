@@ -82,6 +82,14 @@ function RequireHr({ children }: { children: JSX.Element }) {
   return children
 }
 
+/** The Logins tab: SW admin, and IT for official emails (0151). */
+function RequireSwOrIt({ children }: { children: JSX.Element }) {
+  const { isSwAdmin, isItAdmin, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (!isSwAdmin && !isItAdmin) return <Navigate to="/" replace />
+  return children
+}
+
 function RequireSw({ children }: { children: JSX.Element }) {
   const { isSwAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
@@ -94,10 +102,10 @@ function RequireSw({ children }: { children: JSX.Element }) {
  * land on the admin overview instead of a personal dashboard.
  */
 function HomeRoute() {
-  const { isHrAdmin, isSwAdmin, loading } = useAuth()
+  const { isHrAdmin, isSwAdmin, isItAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
   if (isHrAdmin) return <Navigate to="/admin" replace />
-  if (isSwAdmin) return <Navigate to="/admin/logins" replace />
+  if (isSwAdmin || isItAdmin) return <Navigate to="/admin/logins" replace />
   return <Dashboard />
 }
 
@@ -152,7 +160,7 @@ export default function App() {
           <Route path="admin/reports" element={<RequireHr><AdminReports /></RequireHr>} />
           <Route path="admin/requests" element={<RequireHr><AdminRequests /></RequireHr>} />
           <Route path="admin/support" element={<RequireHr><HrSupport /></RequireHr>} />
-          <Route path="admin/logins" element={<RequireSw><SwAdmin /></RequireSw>} />
+          <Route path="admin/logins" element={<RequireSwOrIt><SwAdmin /></RequireSwOrIt>} />
           {/* When the clock starts is a rollout decision, so it sits with
               the people who ran the rollout rather than with the people
               the clock reports on. */}
