@@ -73,3 +73,75 @@ export default function ReachChoice({
     </fieldset>
   )
 }
+
+/**
+ * Asked once more before a change is applied (the user, 8 Oct: "a warning
+ * pop up … briefly explain what it will happen in simpler English").
+ * Plain lines for the choice that is ticked, then Yes or Go back.
+ */
+const WARN: Record<TemplateReach, { title: string; lines: string[] }> = {
+  forward: {
+    title: 'Change from now on?',
+    lines: [
+      'Months not filed yet get the new KPI.',
+      'Months already submitted, scored or finalised stay as they are.',
+    ],
+  },
+  keep: {
+    title: 'Change every month and keep the figures?',
+    lines: [
+      'Every month this year gets the new KPI, including ones already scored.',
+      'Figures already typed stay where the same KRA is still there.',
+      'Scores are worked out again, so they may go up or down.',
+    ],
+  },
+  clean: {
+    title: 'Change every month and start clean?',
+    lines: [
+      'Every month this year gets the new KPI, including ones already scored.',
+      'All figures typed so far are cleared and must be filled in again.',
+      'Scores for those months are lost. This cannot be undone.',
+    ],
+  },
+}
+
+export function ReachConfirm({
+  reach, who, busy, onConfirm, onCancel,
+}: {
+  reach: TemplateReach
+  /** e.g. "254 people" or "Kevin's KPI" — who it lands on. */
+  who?: string
+  busy?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const w = WARN[reach]
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="reach-confirm-title"
+      onClick={e => { if (e.target === e.currentTarget && !busy) onCancel() }}
+    >
+      <div className="animate-pop-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl">
+        <h2 id="reach-confirm-title" className="text-base font-semibold text-ink-900">{w.title}</h2>
+        {who && <p className="mt-0.5 text-sm text-ink-500">This applies to {who}.</p>}
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-ink-800">
+          {w.lines.map(l => <li key={l}>{l}</li>)}
+        </ul>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className={clsx('btn-primary', reach === 'clean' && '!bg-cyrixRed-600 hover:!bg-cyrixRed-700')}
+            autoFocus
+          >
+            Yes, apply
+          </button>
+          <button onClick={onCancel} disabled={busy} className="btn-secondary">Go back</button>
+        </div>
+      </div>
+    </div>
+  )
+}

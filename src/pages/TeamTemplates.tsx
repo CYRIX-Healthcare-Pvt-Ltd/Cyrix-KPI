@@ -17,7 +17,7 @@ import {
 } from '@/lib/templates'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
-import ReachChoice from '@/components/ReachChoice'
+import ReachChoice, { ReachConfirm } from '@/components/ReachChoice'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
 import type { KpiTemplateItem, VisibleTemplate } from '@/types/db'
 
@@ -729,6 +729,7 @@ function AssignPanel({
   const [pasted, setPasted] = useState('')
   const [reach, setReach] = useState<TemplateReach>('forward')
   const [out, setOut] = useState<AssignOutcome | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const codes = useMemo(() => parseEcodes(pasted), [pasted])
@@ -777,9 +778,18 @@ function AssignPanel({
               joiner has no month to reach back into — and a mixed list
               is the normal case, so it is always asked. */}
           <ReachChoice value={reach} onChange={setReach} name={`reach-${template.id}`} />
+          {confirming && (
+            <ReachConfirm
+              reach={reach}
+              who={`${codes.length} ${codes.length === 1 ? 'person' : 'people'}`}
+              busy={apply.isPending}
+              onConfirm={() => { setConfirming(false); void run() }}
+              onCancel={() => setConfirming(false)}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={run}
+              onClick={() => setConfirming(true)}
               disabled={codes.length === 0 || apply.isPending}
               className="btn-primary"
             >
@@ -929,6 +939,7 @@ function TemplateEditor({
   const onMyTeam = Number(initial.onMyTeam ?? 0)
   const [reach, setReach] = useState<TemplateReach>('forward')
   const [asking, setAsking] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const askRef = useRef<HTMLDivElement>(null)
   // The question is taller than the button row it replaces, so the part
   // with the choices in it can open below the fold. Brought into view —
@@ -1205,8 +1216,17 @@ function TemplateEditor({
             </p>
           </div>
           <ReachChoice value={reach} onChange={setReach} name="reach-edit" />
+          {confirming && (
+            <ReachConfirm
+              reach={reach}
+              who={`${inUse} ${inUse === 1 ? 'person' : 'people'} on this template`}
+              busy={push.isPending}
+              onConfirm={() => { setConfirming(false); void onSave() }}
+              onCancel={() => setConfirming(false)}
+            />
+          )}
           <div className="flex flex-wrap gap-2">
-            <button onClick={onSave} disabled={push.isPending} className="btn-primary">
+            <button onClick={() => setConfirming(true)} disabled={push.isPending} className="btn-primary">
               {push.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
               Save and apply
             </button>

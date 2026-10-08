@@ -5,7 +5,7 @@ import { supabase, friendlyError } from '@/lib/supabase'
 import { useScoringRules, type TemplateReach } from '@/lib/queries'
 import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
-import ReachChoice from '@/components/ReachChoice'
+import ReachChoice, { ReachConfirm } from '@/components/ReachChoice'
 import { Alert, Spinner } from '@/components/ui'
 import type { KpiTemplateItem } from '@/types/db'
 
@@ -53,6 +53,7 @@ export default function KpiEdit() {
   // ESMS on or off (0147; the user, 8 Oct: "enable or disable esms also").
   const [esms, setEsms] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -174,8 +175,17 @@ export default function KpiEdit() {
               ESMS <span className="font-normal text-ink-500">— {ESMS_WEIGHT}%</span>
             </label>
             <ReachChoice value={reach} onChange={setReach} name="reach-admin-edit" />
+            {confirming && (
+              <ReachConfirm
+                reach={reach}
+                who={found ? `${found.employee.full_name}'s KPI` : undefined}
+                busy={busy}
+                onConfirm={() => { setConfirming(false); void save() }}
+                onCancel={() => setConfirming(false)}
+              />
+            )}
             <div className="flex flex-wrap gap-2">
-            <button onClick={save} disabled={busy || total !== job || named.length === 0} className="btn-primary">
+            <button onClick={() => setConfirming(true)} disabled={busy || total !== job || named.length === 0} className="btn-primary">
               {busy ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} Save and apply
             </button>
             <button onClick={() => { setFound(null); setRows([]); setCode(''); setError(null); setNotice(null) }} disabled={busy} className="btn-secondary">

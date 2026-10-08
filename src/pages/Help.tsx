@@ -571,8 +571,10 @@ export default function Help() {
         title={t('sup.title')}
         lead={t('sup.lead')}
         points={[
+          { what: t('sup.p0.what'), how: t('sup.p0.how'), to: '/support', cta: 'Contact support' },
           { what: t('sup.p1.what'), how: t('sup.p1.how'), to: '/support', cta: 'Contact support' },
           { what: t('sup.p2.what'), how: t('sup.p2.how'), to: '/support', cta: 'Contact support' },
+          { what: t('sup.p5.what'), how: t('sup.p5.how'), to: '/support', cta: 'Contact support' },
           { what: t('sup.p3.what'), how: t('sup.p3.how'), to: '/history', cta: 'Open assessments' },
           { what: t('sup.p4.what'), how: t('sup.p4.how'), to: '/support', cta: 'My requests' },
         ]}

@@ -26,7 +26,10 @@ import type { SupportDesk } from '@/types/db'
 const DESKS: Array<{
   key: SupportDesk
   name: string
+  /** Who it lands with, on the Send button. */
+  admin: string
   icon: typeof IdCard
+  example: string
   takes: string
   /** Tinted so the two are told apart before either is read. */
   on: string
@@ -34,15 +37,29 @@ const DESKS: Array<{
   {
     key: 'hr',
     name: 'HR',
+    admin: 'HR Admin',
     icon: IdCard,
-    takes: 'Leave, attendance, your employee record, policy — anything about your employment.',
+    example: 'e.g. My reporting manager is shown wrongly — it should be my new manager.',
+    takes: 'Your employee details — name, designation, department or reporting manager.',
     on: 'border-ink-900 bg-ink-50 text-ink-900',
   },
   {
     key: 'software',
     name: 'Software',
+    admin: 'Software Admin',
     icon: Wrench,
-    takes: 'Something broken, something you cannot get into, or anything about how the app behaves.',
+    example: 'e.g. My Team does not load on my phone — it stays on the spinner.',
+    takes: 'Something in the app is not working, or a page you cannot get into.',
+    on: 'border-ink-900 bg-ink-50 text-ink-900',
+  },
+  // A third desk (0152): IT_ADMIN reads and answers it, and the mail goes to it_support@cyrix.in.
+  {
+    key: 'it',
+    name: 'IT',
+    admin: 'IT Admin',
+    icon: Mail,
+    takes: 'Your official email or sign-in codes.',
+    example: 'e.g. The sign-in code is not reaching my email.',
     on: 'border-ink-900 bg-ink-50 text-ink-900',
   },
 ]
@@ -62,7 +79,7 @@ export default function Support() {
           Contact support
         </h1>
         <p className="mt-0.5 text-sm text-ink-500">
-          Ask HR or Software something. You get one answer back, here.
+          Ask HR, Software or IT something. You get one answer back, here.
         </p>
       </div>
 
@@ -162,13 +179,6 @@ function RaiseForm({ onSent }: { onSent: () => void }) {
               </p>
             </button>
           ))}
-          {/* IT by email (0151; the user, 8 Oct): the official email on your record, and the sign-in code it gets. */}
-          <a href="mailto:it_support@cyrix.in" className="rounded-xl border-2 border-ink-200 p-4 text-left transition-colors hover:border-ink-300">
-            <p className="flex items-center gap-2 font-medium text-ink-900">
-              <Mail className="h-4 w-4 shrink-0" /> IT
-            </p>
-            <p className="mt-1 text-xs text-ink-500">Your official email and sign-in codes — it_support@cyrix.in</p>
-          </a>
         </div>
       </div>
 
@@ -182,9 +192,7 @@ function RaiseForm({ onSent }: { onSent: () => void }) {
               className="input mt-1"
               value={note}
               onChange={e => setNote(e.target.value)}
-              placeholder={desk === 'hr'
-                ? 'e.g. My leave balance shows 4 days but I have taken only 2 this year.'
-                : 'e.g. My Team does not load on my phone — it stays on the spinner.'}
+              placeholder={DESKS.find(d => d.key === desk)!.example}
               autoFocus
             />
             {/* Counted down rather than up: the limit is the useful
@@ -202,7 +210,7 @@ function RaiseForm({ onSent }: { onSent: () => void }) {
             className="btn-primary"
           >
             {raise.isPending ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            Send to {DESKS.find(d => d.key === desk)!.name}
+            Send to {DESKS.find(d => d.key === desk)!.admin}
           </button>
         </div>
       )}
@@ -224,7 +232,7 @@ function MyTickets({
   if (tickets.length === 0) {
     return (
       <EmptyState icon={MessageSquareWarning} title="Nothing raised yet">
-        <p>When you ask HR or Software something, it shows here with their answer.</p>
+        <p>When you ask HR, Software or IT something, it shows here with their answer.</p>
         <button onClick={onRaise} className="btn-primary mt-4">
           <MessageSquarePlus className="h-4 w-4" /> Raise a request
         </button>

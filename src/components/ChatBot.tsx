@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import {
   MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight,
   IdCard, Wrench, PlayCircle,
+  Mail,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -154,7 +155,7 @@ const mine = (base: string, employeeId: string | undefined) =>
   employeeId ? `${base}.${employeeId}` : base
 
 /** English on purpose: they are the names on the tabs the answer comes from. */
-const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR', software: 'Software' }
+const DESK_NAME: Record<SupportDesk, string> = { hr: 'HR Admin', software: 'Software Admin', it: 'IT Admin' }
 
 export default function ChatBot() {
   const { employee, isManager, isHrAdmin, isSwAdmin } = useAuth()
@@ -723,6 +724,8 @@ export default function ChatBot() {
               // paraphrased into meaning something slightly different.
               say: { kind: 'manual', key: found.key },
               section: found.section,
+              // Contact support as a whole: the three desks, right here (0152).
+              offerDesks: found.key === 'sup.p0',
             }
           : {
               say: { kind: 'chat', key: 'lost', vars: { name: firstName } },
@@ -950,7 +953,7 @@ export default function ChatBot() {
                       becomes the request as it stands. */}
                   {turn.offerDesks && !ticketDesk && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {([['hr', IdCard], ['software', Wrench]] as const).map(([d, Icon]) => (
+                      {([['hr', IdCard], ['software', Wrench], ['it', Mail]] as const).map(([d, Icon]) => (
                         <button
                           key={d}
                           onClick={() => startTicket(d)}

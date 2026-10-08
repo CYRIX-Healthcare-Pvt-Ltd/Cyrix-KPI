@@ -2463,9 +2463,10 @@ function BuildStamp() {
  * is answerable here; the one tab that still points elsewhere says why.
  */
 export default function SwAdmin() {
-  // IT_ADMIN (0151): the Logins tab alone.
-  const { isSwAdmin } = useAuth()
-  const TABS = isSwAdmin ? ADMIN_TABS : ADMIN_TABS.filter(t => t.id === 'logins')
+  // IT_ADMIN (0151): the Logins tab, and (0152) Support with IT's own queue.
+  const { isSwAdmin, isItAdmin } = useAuth()
+  const TABS = isSwAdmin ? ADMIN_TABS : ADMIN_TABS.filter(t => t.id === 'logins' || (t.id === 'support' && isItAdmin))
+  const deskHere = isSwAdmin ? 'software' : 'it'
   const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
   const active = TABS.find(t => t.id === tab) ?? TABS[0]
 
@@ -2476,7 +2477,7 @@ export default function SwAdmin() {
     out somebody had asked something was to open it and look. Which means
     an administrator who did not think to look did not answer.
   */
-  const { data: waiting } = useOpenTicketCount('software', isSwAdmin)
+  const { data: waiting } = useOpenTicketCount(deskHere, isSwAdmin || isItAdmin)
 
   return (
     <div className="space-y-5">
@@ -2515,7 +2516,9 @@ export default function SwAdmin() {
 
       {/* pb for the bar below, which is fixed and would otherwise sit over
           the last row of whichever table is open. */}
-      <div className="pb-16 lg:pb-0">{active.render()}</div>
+      <div className="pb-16 lg:pb-0">
+        {active.id === 'support' ? <SupportDeskQueue key={deskHere} desk={deskHere} enabled /> : active.render()}
+      </div>
 
       {/*
         Phone: the same tabs as a bar along the bottom.

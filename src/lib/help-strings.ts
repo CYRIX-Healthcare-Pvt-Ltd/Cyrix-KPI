@@ -1175,11 +1175,40 @@ export const HELP: Record<string, Phrase> = {
 
   // ---- asking HR or Software -----------------------------------
   'sup.title': {
-    en: 'Asking HR or Software',
-    ml: 'HR-നോടോ Software-നോടോ ചോദിക്കുക',
-    hi: 'HR या Software से पूछना',
-    te: 'HR ను లేదా Software ను అడగడం',
-    ta: 'HR அல்லது Software இடம் கேட்பது',
+    en: 'Asking HR, Software or IT',
+    ml: 'HR, Software അല്ലെങ്കിൽ IT-യോട് ചോദിക്കുക',
+    hi: 'HR, Software या IT से पूछना',
+    te: 'HR, Software లేదా IT ను అడగడం',
+    ta: 'HR, Software அல்லது IT இடம் கேட்பது',
+  },
+  // Contact support as a whole, so "support" names all three desks (0152).
+  'sup.p0.what': {
+    en: 'Contact support',
+    ml: 'Contact support',
+    hi: 'Contact support',
+    te: 'Contact support',
+    ta: 'Contact support',
+  },
+  'sup.p0.how': {
+    en: 'Contact support is on your profile. Pick who it is for — HR Admin for your employee details (name, designation, department or reporting manager); Software Admin when something in the app is not working; IT Admin for your official email or sign-in codes. Write what you need and send it. Their answer comes back there.',
+    ml: 'Contact support നിങ്ങളുടെ പ്രൊഫൈലിലുണ്ട്. ആർക്കാണെന്ന് തിരഞ്ഞെടുക്കുക — നിങ്ങളുടെ ജീവനക്കാരന്റെ വിവരങ്ങൾക്ക് (പേര്, തസ്തിക, വകുപ്പ്, റിപ്പോർട്ടിംഗ് മാനേജർ) HR Admin; ആപ്പിൽ എന്തെങ്കിലും പ്രവർത്തിക്കുന്നില്ലെങ്കിൽ Software Admin; ഔദ്യോഗിക ഇമെയിലിനോ സൈൻ-ഇൻ കോഡിനോ IT Admin. ആവശ്യം എഴുതി അയയ്ക്കുക. മറുപടി അവിടെ തന്നെ വരും.',
+    hi: 'Contact support आपकी प्रोफ़ाइल पर है। चुनें कि किसके लिए है — आपके कर्मचारी विवरण (नाम, पद, विभाग या रिपोर्टिंग मैनेजर) के लिए HR Admin; ऐप में कुछ काम न करे तो Software Admin; आधिकारिक ईमेल या साइन-इन कोड के लिए IT Admin। अपनी बात लिखें और भेजें। जवाब वहीं आता है।',
+    te: 'Contact support మీ ప్రొఫైల్‌లో ఉంది. ఎవరికో ఎంచుకోండి — మీ ఉద్యోగి వివరాల (పేరు, హోదా, విభాగం లేదా రిపోర్టింగ్ మేనేజర్) కోసం HR Admin; యాప్‌లో ఏదైనా పనిచేయకపోతే Software Admin; అధికారిక ఇమెయిల్ లేదా సైన్-ఇన్ కోడ్ కోసం IT Admin. మీకు ఏం కావాలో రాసి పంపండి. సమాధానం అక్కడే వస్తుంది.',
+    ta: 'Contact support உங்கள் சுயவிவரத்தில் உள்ளது. யாருக்கு என்று தேர்ந்தெடுங்கள் — உங்கள் ஊழியர் விவரங்களுக்கு (பெயர், பதவி, துறை அல்லது அறிக்கை மேலாளர்) HR Admin; ஆப்பில் ஏதாவது வேலை செய்யவில்லை என்றால் Software Admin; அதிகாரப்பூர்வ மின்னஞ்சல் அல்லது உள்நுழைவுக் குறியீட்டுக்கு IT Admin. தேவையை எழுதி அனுப்புங்கள். பதில் அங்கேயே வரும்.',
+  },
+  'sup.p5.what': {
+    en: 'Ask IT',
+    ml: 'IT-യോട് ചോദിക്കുക',
+    hi: 'IT से पूछें',
+    te: 'IT ను అడగండి',
+    ta: 'IT இடம் கேளுங்கள்',
+  },
+  'sup.p5.how': {
+    en: 'Your official email or sign-in codes. It goes to IT Admin, and their answer comes back under Contact support.',
+    ml: 'നിങ്ങളുടെ ഔദ്യോഗിക ഇമെയിൽ അല്ലെങ്കിൽ സൈൻ-ഇൻ കോഡുകൾ. ഇത് IT Admin-ന് പോകും, മറുപടി Contact support-ൽ വരും.',
+    hi: 'आपका आधिकारिक ईमेल या साइन-इन कोड। यह IT Admin के पास जाता है, और उनका जवाब Contact support में आता है।',
+    te: 'మీ అధికారిక ఇమెయిల్ లేదా సైన్-ఇన్ కోడ్‌లు. ఇది IT Admin కు వెళ్తుంది, వారి సమాధానం Contact support లో వస్తుంది.',
+    ta: 'உங்கள் அதிகாரப்பூர்வ மின்னஞ்சல் அல்லது உள்நுழைவுக் குறியீடுகள். இது IT Admin-க்குச் செல்லும், அவர்களின் பதில் Contact support இல் வரும்.',
   },
   'sup.lead': {
     en: 'For anything that is not about a score. One answer comes back, and it finishes there.',
@@ -1196,11 +1225,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'HR இடம் கேளுங்கள்',
   },
   'sup.p1.how': {
-    en: 'Leave, attendance, your employee record, policy — anything about your employment. Contact support is on your profile.',
-    ml: 'അവധി, ഹാജർ, നിങ്ങളുടെ ജീവനക്കാരന്റെ രേഖ, നയം — നിങ്ങളുടെ ജോലിയുമായി ബന്ധപ്പെട്ട എന്തും. Contact support നിങ്ങളുടെ പ്രൊഫൈലിലുണ്ട്.',
-    hi: 'छुट्टी, हाज़िरी, आपका कर्मचारी रिकॉर्ड, नीति — आपकी नौकरी से जुड़ी कोई भी बात। Contact support आपकी प्रोफ़ाइल पर है।',
-    te: 'సెలవు, హాజరు, మీ ఉద్యోగి రికార్డు, విధానం — మీ ఉద్యోగానికి సంబంధించిన ఏదైనా. Contact support మీ ప్రొఫైల్‌లో ఉంది.',
-    ta: 'விடுப்பு, வருகை, உங்கள் ஊழியர் பதிவு, கொள்கை — உங்கள் வேலை தொடர்பான எதுவும். Contact support உங்கள் சுயவிவரத்தில் உள்ளது.',
+    en: 'Your employee details — name, designation, department or reporting manager. Contact support is on your profile.',
+    ml: 'നിങ്ങളുടെ ജീവനക്കാരന്റെ വിവരങ്ങൾ — പേര്, തസ്തിക, വകുപ്പ് അല്ലെങ്കിൽ റിപ്പോർട്ടിംഗ് മാനേജർ. Contact support നിങ്ങളുടെ പ്രൊഫൈലിലുണ്ട്.',
+    hi: 'आपके कर्मचारी विवरण — नाम, पद, विभाग या रिपोर्टिंग मैनेजर। Contact support आपकी प्रोफ़ाइल पर है।',
+    te: 'మీ ఉద్యోగి వివరాలు — పేరు, హోదా, విభాగం లేదా రిపోర్టింగ్ మేనేజర్. Contact support మీ ప్రొఫైల్‌లో ఉంది.',
+    ta: 'உங்கள் ஊழியர் விவரங்கள் — பெயர், பதவி, துறை அல்லது அறிக்கை மேலாளர். Contact support உங்கள் சுயவிவரத்தில் உள்ளது.',
   },
   'sup.p2.what': {
     en: 'Ask Software',

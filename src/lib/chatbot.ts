@@ -270,7 +270,10 @@ const ALIASES: Record<string, string[]> = {
   'prof.p7': ['official number', 'phone number', 'mobile number', 'contact number', 'mail id'],
   // Signed in on another device, the code, and IT for a missing email (0149, 0151).
   'prof.p8': ['another device', 'other device', 'second device', 'new phone', 'otp', 'code not received',
-              'sign out all', 'signed in elsewhere', 'no email', 'email missing', 'it support', 'it_support'],
+              'sign out all', 'signed in elsewhere', 'no email', 'email missing'],
+  // "support" on its own names all three desks (0152).
+  'sup.p0': ['support', 'contact support', 'help desk', 'raise request', 'complaint', 'ticket', 'helpdesk'],
+  'sup.p5': ['it support', 'it_support', 'it desk', 'it admin'],
   's4.p4': ['rank', 'ranking', 'ranked', 'calculated', 'worked out', 'position', '80 20'],
   's2.p9': ['changed my score', 'score changed', 'reduced', 'raised', 'manager entered',
             'lower than mine', 'cut my score'],

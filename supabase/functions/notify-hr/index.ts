@@ -78,7 +78,7 @@ function callerFromToken(req: Request): string | null {
 }
 
 type Kind = 'support' | 'leaver' | 'record' | 'revision'
-type Desk = 'hr' | 'sw'
+type Desk = 'hr' | 'sw' | 'it'
 
 const BASE = (Deno.env.get('APP_BASE_URL') ?? 'https://app.cyrix.in').replace(/\/+$/, '')
 
@@ -93,8 +93,11 @@ const WHERE: Record<Kind, { path: string; screen: string }> = {
 /** The software desk staffs one queue, on its own screen. */
 const SW_SUPPORT = { path: '/kpi/admin/logins', screen: 'Support' }
 
+/** IT (0152) answers on the same screen as Software: Administration, Support. */
+const DESK_NAME: Record<Desk, string> = { hr: 'HR', sw: 'the software desk', it: 'IT' }
+
 const placeOf = (kind: Kind, desk: Desk) =>
-  kind === 'support' && desk === 'sw' ? SW_SUPPORT : WHERE[kind]
+  kind === 'support' && desk !== 'hr' ? SW_SUPPORT : WHERE[kind]
 
 /**
  * A date column, as something a person would write.
@@ -151,12 +154,12 @@ async function summarise(
     const { data } = await db.from('support_tickets')
       .select('employee_id, desk, employee_note').eq('id', id).maybeSingle()
     if (!data) return null
-    const desk: Desk = data.desk === 'software' ? 'sw' : 'hr'
+    const desk: Desk = data.desk === 'software' ? 'sw' : data.desk === 'it' ? 'it' : 'hr'
     const who = await person(data.employee_id)
     return {
       who,
       desk,
-      headline: `${who} has asked ${desk === 'sw' ? 'the software desk' : 'HR'} a question`,
+      headline: `${who} has asked ${DESK_NAME[desk]} a question`,
       detail: data.employee_note ?? '',
     }
   }
@@ -214,7 +217,7 @@ async function recipients(
   // holder of the role — turns maybeSingle() into an error and nobody
   // gets told anything. Two queries cannot be ambiguous.
   const { data: role } = await db.from('user_roles')
-    .select('employee_id').eq('role', desk === 'sw' ? 'sw_admin' : 'hr_admin')
+    .select('employee_id').eq('role', desk === 'sw' ? 'sw_admin' : desk === 'it' ? 'it_admin' : 'hr_admin')
     .limit(1).maybeSingle()
 
   let to = ''
@@ -226,7 +229,7 @@ async function recipients(
 
   // The copy list is HR's own setting. The software desk has one address
   // and no list to keep, which is why nothing is read for it here.
-  if (desk === 'sw') return { to: to ? [to] : [], cc: [] }
+  if (desk !== 'hr') return { to: to ? [to] : [], cc: [] }
 
   const { data: setting } = await db.from('app_settings')
     .select('value').eq('key', 'hr_notify_cc').maybeSingle()
@@ -315,7 +318,7 @@ async function sweepDesk(
   if (late.length === 0) return { desk, sent: false, reason: 'nothing has been waiting a day' }
 
   const day = istDay()
-  const kind = desk === 'sw' ? 'digest_sw' : 'digest_hr'
+  const kind = `digest_${desk}`
   const { data: claim, error: claimErr } = await db.from('admin_notifications')
     .insert({ kind, source_id: await dayKey(desk, day) })
     .select('id')
@@ -332,7 +335,7 @@ async function sweepDesk(
   }
 
   const oldest = Math.max(...late.map(w => daysWaiting(w.waiting_since)))
-  const deskName = desk === 'sw' ? 'the software desk' : 'HR'
+  const deskName = DESK_NAME[desk]
   const headline =
     `${late.length} thing${late.length === 1 ? ' is' : 's are'} waiting on ${deskName}` +
     ` — the oldest ${oldest} day${oldest === 1 ? '' : 's'}`
@@ -415,7 +418,7 @@ Deno.serve(async req => {
       return json({ ok: true, sent: false, reason: 'outside the hours it is sent in' })
     }
     const results = await Promise.all(
-      (['hr', 'sw'] as Desk[]).map(desk => sweepDesk(db, desk)),
+      (['hr', 'sw', 'it'] as Desk[]).map(desk => sweepDesk(db, desk)),
     )
     return json({ ok: true, results })
   }

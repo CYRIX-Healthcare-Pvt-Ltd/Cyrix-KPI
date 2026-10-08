@@ -678,7 +678,7 @@ export interface TeamStatusRow {
  * reporting line; this is the other kind — "my leave balance looks
  * wrong", "the page will not load" — and it goes to a desk.
  */
-export type SupportDesk = 'hr' | 'software'
+export type SupportDesk = 'hr' | 'software' | 'it'
 
 export interface SupportTicket {
   id: string
