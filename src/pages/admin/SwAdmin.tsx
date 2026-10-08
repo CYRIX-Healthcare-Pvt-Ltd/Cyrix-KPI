@@ -28,6 +28,7 @@ import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 import EditEmployee from '@/components/EditEmployee'
 import KpiTiming from './KpiTiming'
 import BulkKpi from './BulkKpi'
+import KpiEdit from './KpiEdit'
 
 interface LoginStatusRow {
   employee_id: string
@@ -959,7 +960,7 @@ export function BulkAssign<T>({
  * not come for.
  */
 function KpiTab() {
-  const [view, setView] = useState<'timing' | 'bulk'>('timing')
+  const [view, setView] = useState<'timing' | 'bulk' | 'edit'>('timing')
 
   return (
     <div className="space-y-5">
@@ -967,6 +968,8 @@ function KpiTab() {
         {([
           { key: 'timing' as const, label: 'Timing' },
           { key: 'bulk' as const, label: 'Bulk assign' },
+          // One person's KPI, found by E-code (the user, 8 Oct).
+          { key: 'edit' as const, label: 'Edit a KPI' },
         ]).map(t => (
           <button
             key={t.key}
@@ -982,7 +985,7 @@ function KpiTab() {
         ))}
       </div>
 
-      {view === 'timing' ? <KpiTiming /> : <BulkKpi />}
+      {view === 'timing' ? <KpiTiming /> : view === 'bulk' ? <BulkKpi /> : <KpiEdit />}
     </div>
   )
 }
