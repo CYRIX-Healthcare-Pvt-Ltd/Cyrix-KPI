@@ -22,7 +22,9 @@ const MONTH_WORD: Record<string, string> = {
   draft: 'draft', submitted: 'submitted', returned: 'returned', scored: 'scored', finalized: 'finalised',
 }
 
+// Each row keeps the id of the KPI row it is: months are matched by it, since a KRA heads several KPIs (0148).
 const fromItem = (i: KpiTemplateItem, idx: number): Draft => ({
+  id: i.id,
   _key: crypto.randomUUID(),
   section: 'job_role',
   kra: i.kra,
@@ -34,7 +36,7 @@ const fromItem = (i: KpiTemplateItem, idx: number): Draft => ({
   rule_params: i.rule_params ?? {},
   sort_order: idx + 1,
   alternates: i.alternates ?? [],
-})
+} as Draft)
 
 /**
  * One person's KPI, edited by the software administrator (0146; the user,
