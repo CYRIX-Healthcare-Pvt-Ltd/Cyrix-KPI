@@ -1,4 +1,6 @@
 import { startSessionGuard } from '@/lib/sessionGuard'
+import { startIdleSignOut } from '@/lib/idleSignOut'
+import { supabase } from '@/lib/supabase'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -31,6 +33,8 @@ const queryClient = new QueryClient({
 
 // Signed out within a minute when another device signs everybody out (0149).
 startSessionGuard()
+// Signed out after 3 hours with nothing done, across every Cyrix app.
+startIdleSignOut(supabase)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
