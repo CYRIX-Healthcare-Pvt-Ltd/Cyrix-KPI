@@ -342,11 +342,11 @@ type Person = {
   seen_at: string | null; opened_at: string | null; opens: number
   liked_at: string | null; comments: number; joins: number; joined_at: string | null; voted: string | null
 }
-type Lens = 'seen' | 'not_seen' | 'opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted'
+type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted'
 
 function Details({ row }: { row: Row }) {
   const qc = useQueryClient()
-  const [lens, setLens] = useState<Lens>('seen')
+  const [lens, setLens] = useState<Lens>('opened')
   const [find, setFind] = useState('')
   const { data: people } = useQuery({
     queryKey: ['digest_people', row.id],
@@ -370,13 +370,12 @@ function Details({ row }: { row: Row }) {
   const all = people ?? []
   const n = all.length || 1
   const test: Record<Lens, (p: Person) => boolean> = {
-    seen: p => !!p.seen_at, not_seen: p => !p.seen_at, opened: p => !!p.opened_at,
+    opened: p => !!p.opened_at, not_opened: p => !p.opened_at,
     liked: p => !!p.liked_at, not_liked: p => !p.liked_at, commented: p => p.comments > 0,
     joined: p => p.joins > 0, not_joined: p => p.joins === 0,
     voted: p => !!p.voted, not_voted: p => !p.voted,
   }
   const tiles: Array<[Lens, string, number]> = [
-    ['seen', 'Seen', all.filter(test.seen).length],
     ['opened', 'Opened', all.filter(test.opened).length],
     ...(row.kind === 'news' ? [['liked', 'Liked', all.filter(test.liked).length] as [Lens, string, number]] : []),
     ['commented', 'Commented', all.filter(test.commented).length],
@@ -384,7 +383,7 @@ function Details({ row }: { row: Row }) {
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
-    ['seen', 'Seen'], ['not_seen', 'Not seen'], ['opened', 'Opened'],
+    ['opened', 'Opened'], ['not_opened', 'Not opened'],
     ...(row.kind === 'news' ? [['liked', 'Liked'], ['not_liked', 'Not liked']] as Array<[Lens, string]> : []),
     ['commented', 'Commented'],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
@@ -392,20 +391,30 @@ function Details({ row }: { row: Row }) {
   ]
   const f = find.trim().toLowerCase()
   const list = all.filter(test[lens]).filter(p => !f || `${p.full_name} ${p.ecode} ${p.department ?? ''} ${p.function_name ?? ''}`.toLowerCase().includes(f))
+  // One sheet with everybody, a Yes/No for each thing, to filter in Excel (the user, 10 Oct).
   const download = () => {
-    const head = ['E-code', 'Name', 'Department', 'Function', 'Seen', 'Opened', 'Times opened', 'Liked', 'Comments', 'Join clicks', 'Answer']
+    const yn = (b: boolean) => (b ? 'Yes' : 'No')
+    const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Times opened',
+      ...(row.kind === 'news' ? ['Liked', 'Liked at'] : []),
+      'Commented', 'Comments',
+      ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
+      ...(row.kind === 'poll' ? ['Voted', 'Answer'] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const lines = [head, ...list.map(p => [p.ecode, p.full_name, p.department, p.function_name,
-      p.seen_at ? fmt(p.seen_at) : '', p.opened_at ? fmt(p.opened_at) : '', p.opens, p.liked_at ? fmt(p.liked_at) : '', p.comments, p.joins, p.voted ?? ''])]
+    const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
+      yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.opens,
+      ...(row.kind === 'news' ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
+      yn(p.comments > 0), p.comments,
+      ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
+      ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : [])])]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
-    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)} - ${lenses.find(([k]) => k === lens)?.[1]}.csv`
+    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)}.csv`
     a.click()
   }
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
             className={clsx('rounded-xl border px-3 py-2 text-left transition-colors',
@@ -431,14 +440,14 @@ function Details({ row }: { row: Row }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
           <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code or department" />
         </div>
-        <button type="button" className="btn-secondary" onClick={download} disabled={!list.length}>Download</button>
+        <button type="button" className="btn-secondary" onClick={download} disabled={!all.length}>Download all</button>
       </div>
       <div className="max-h-80 overflow-auto rounded-lg border border-ink-200 bg-surface">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <th className="px-3 py-2">Name</th><th className="px-3 py-2">E-code</th><th className="px-3 py-2">Department</th>
-              <th className="px-3 py-2">Seen</th><th className="px-3 py-2">Opened</th>
+              <th className="px-3 py-2">Opened</th>
               {row.kind === 'news' ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
             </tr>
           </thead>
@@ -448,7 +457,6 @@ function Details({ row }: { row: Row }) {
                 <td className="px-3 py-1.5 text-ink-900">{p.full_name}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.seen_at ? fmt(p.seen_at) : '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmt(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
                 {row.kind === 'news'
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmt(p.liked_at) : '—'}</td>
@@ -459,7 +467,7 @@ function Details({ row }: { row: Row }) {
             ))}
           </tbody>
         </table>
-        {list.length > 300 && <p className="px-3 py-2 text-xs text-ink-500">Showing 300 of {list.length}. Download for the full list.</p>}
+        {list.length > 300 && <p className="px-3 py-2 text-xs text-ink-500">Showing 300 of {list.length}. Download all for everybody.</p>}
         {!list.length && <p className="px-3 py-3 text-sm text-ink-500">Nobody.</p>}
       </div>
 
