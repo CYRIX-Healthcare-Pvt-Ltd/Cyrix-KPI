@@ -173,7 +173,8 @@ Deno.serve(async req => {
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
-    const title = (post.kind === 'meeting' ? 'Meeting · ' : post.kind === 'poll' ? 'Poll · ' : 'Cyrix Digest · ') + post.title
+    const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy' }
+    const title = (KIND[post.kind] ?? 'Cyrix Digest') + ' · ' + post.title
     const body = post.kind === 'meeting'
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
       : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'

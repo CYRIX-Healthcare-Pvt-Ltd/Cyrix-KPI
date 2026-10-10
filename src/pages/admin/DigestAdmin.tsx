@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
+  Megaphone, TriangleAlert, Pin, Briefcase,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -14,7 +15,15 @@ import { Alert } from '@/components/ui'
  * post shows its likes and comments, and a meeting shows who clicked Join,
  * how often, first and last.
  */
-type Kind = 'news' | 'meeting' | 'poll'
+type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll'
+/** Every kind, its word and its icon (0170; the user: "announcement, alerts, notice, vacancy"). */
+const KINDS: Array<[Kind, string, typeof Newspaper]> = [
+  ['news', 'News', Newspaper], ['announcement', 'Announcement', Megaphone], ['alert', 'Alert', TriangleAlert],
+  ['notice', 'Notice', Pin], ['vacancy', 'Vacancy', Briefcase], ['meeting', 'Meeting', Video], ['poll', 'Poll', BarChart3],
+]
+const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
+/** The kinds that are like news: words, a picture, likes. */
+const LIKABLE = new Set<Kind>(['news', 'announcement', 'alert', 'notice', 'vacancy'])
 /** A named colour, or any colour as #rrggbb (0168; the user: "need more colours picker also"). */
 type Hue = string
 const HUES: Array<[Hue, string, string]> = [
@@ -39,14 +48,17 @@ interface Row {
   posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
+  vac_location: string | null; apply_by: string | null; apply_link: string | null
 }
 interface Draft {
   id: string | null; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   date: string; minutes: number; link: string; place: string
   /** A poll (0167): its options, single or multiple choice, and when it closes. */
   options: string[]; multi: boolean; closes: string
+  /** A vacancy (0170): where, apply by, and how to apply. */
+  vloc: string; vby: string; vlink: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', options: ['', ''], multi: false, closes: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -95,6 +107,12 @@ export default function DigestAdmin() {
         p_meet_link: d.kind === 'meeting' ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
       })
       if (error) throw new Error(friendlyError(error))
+      if (d.kind === 'vacancy') {
+        const { error: ve } = await supabase.rpc('digest_set_vacancy', {
+          p_id: id, p_location: d.vloc, p_apply_by: d.vby || null, p_apply_link: d.vlink,
+        })
+        if (ve) throw new Error(friendlyError(ve))
+      }
       if (d.kind === 'poll') {
         const { error: pe } = await supabase.rpc('digest_set_poll', {
           p_id: id, p_options: d.options, p_closes_at: d.closes ? new Date(d.closes).toISOString() : null, p_multi: d.multi,
@@ -125,7 +143,7 @@ export default function DigestAdmin() {
     setUploading(true)
     try { set({ image_url: await upload(f) }) } catch (e) { setDone(null); alert((e as Error).message) } finally { setUploading(false) }
   }
-  const ready = d.title.trim() && (d.kind === 'news'
+  const ready = d.title.trim() && (LIKABLE.has(d.kind)
     || (d.kind === 'poll' && d.options.filter(o => o.trim()).length >= 2)
     || (d.kind === 'meeting' && d.date && /^https:\/\//.test(d.link.trim())))
 
@@ -141,12 +159,12 @@ export default function DigestAdmin() {
 
       <div className="card space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
-          {(['news', 'meeting', 'poll'] as const).map(k => (
+          {KINDS.map(([k, word, Icon]) => (
             <button key={k} type="button" onClick={() => set({ kind: k })}
               className={clsx('inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium',
                 d.kind === k ? 'border-violet-600 bg-violet-600 text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
-              {k === 'news' ? <Newspaper className="h-4 w-4" /> : k === 'poll' ? <BarChart3 className="h-4 w-4" /> : <Video className="h-4 w-4" />}
-              {k === 'news' ? 'News' : k === 'poll' ? 'Poll' : 'Meeting'}
+              <Icon className="h-4 w-4" />
+              {word}
             </button>
           ))}
           {d.id && (
@@ -157,15 +175,32 @@ export default function DigestAdmin() {
         </div>
 
         <div>
-          <label className="label" htmlFor="dg-title">{d.kind === 'poll' ? 'Question' : 'Title'}</label>
+          <label className="label" htmlFor="dg-title">{d.kind === 'poll' ? 'Question' : d.kind === 'vacancy' ? 'Job post' : 'Title'}</label>
           <input id="dg-title" className="input" maxLength={120} value={d.title} onChange={e => set({ title: e.target.value })}
-            placeholder={d.kind === 'meeting' ? 'Quarterly town hall' : d.kind === 'poll' ? 'Which day suits the team lunch?' : 'Diwali celebration at all offices'} />
+            placeholder={({ meeting: 'Quarterly town hall', poll: 'Which day suits the team lunch?', vacancy: 'Biomedical Engineer', alert: 'Office closed tomorrow', notice: 'Holiday list for 2027', announcement: 'New branch opens in Madurai', news: 'Diwali celebration at all offices' } as Record<Kind, string>)[d.kind]} />
         </div>
         <div>
           <label className="label" htmlFor="dg-body">Description</label>
           <textarea id="dg-body" className="input min-h-[110px]" maxLength={4000} value={d.body} onChange={e => set({ body: e.target.value })}
-            placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : 'Lunch, rangoli and prizes on 30 Oct'} />
+            placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : d.kind === 'vacancy' ? 'Two years in equipment repair; field travel' : 'Lunch, rangoli and prizes on 30 Oct'} />
         </div>
+
+        {d.kind === 'vacancy' && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label" htmlFor="dg-vloc">Location</label>
+              <input id="dg-vloc" className="input" value={d.vloc} onChange={e => set({ vloc: e.target.value })} placeholder="Kochi" />
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-vby">Apply by</label>
+              <input id="dg-vby" type="date" className="input" value={d.vby} onChange={e => set({ vby: e.target.value })} />
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-vlink">How to apply</label>
+              <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
+            </div>
+          </div>
+        )}
 
         {d.kind === 'poll' && (
           <div className="space-y-3">
@@ -296,17 +331,17 @@ export default function DigestAdmin() {
                   {open === r.id ? <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />}
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white"
                     style={{ background: r.image_url ? `center/cover url(${r.image_url})` : grad(r.color) }}>
-                    {!r.image_url && (r.kind === 'meeting' ? <Video className="h-4 w-4" /> : r.kind === 'poll' ? <BarChart3 className="h-4 w-4" /> : <Newspaper className="h-4 w-4" />)}
+                    {!r.image_url && (() => { const I = kindOf(r.kind)[2]; return <I className="h-4 w-4" /> })()}
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink-900">{r.title}</span>
                     <span className="block text-xs text-ink-500">
-                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : r.kind === 'poll' ? 'Poll' : 'News'} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
+                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
                     </span>
                   </span>
                 </button>
                 <span className="hidden shrink-0 items-center gap-3 text-xs text-ink-600 sm:flex">
-                  {r.kind === 'news' && <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {r.likes}</span>}
+                  {LIKABLE.has(r.kind) && <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {r.likes}</span>}
                   <span className="inline-flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {r.comments}</span>
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
                 </span>
@@ -316,7 +351,8 @@ export default function DigestAdmin() {
                     : []
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '',
-                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '' })
+                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
@@ -377,14 +413,14 @@ function Details({ row }: { row: Row }) {
   }
   const tiles: Array<[Lens, string, number]> = [
     ['opened', 'Opened', all.filter(test.opened).length],
-    ...(row.kind === 'news' ? [['liked', 'Liked', all.filter(test.liked).length] as [Lens, string, number]] : []),
+    ...(LIKABLE.has(row.kind) ? [['liked', 'Liked', all.filter(test.liked).length] as [Lens, string, number]] : []),
     ['commented', 'Commented', all.filter(test.commented).length],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join', all.filter(test.joined).length] as [Lens, string, number]] : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
     ['opened', 'Opened'], ['not_opened', 'Not opened'],
-    ...(row.kind === 'news' ? [['liked', 'Liked'], ['not_liked', 'Not liked']] as Array<[Lens, string]> : []),
+    ...(LIKABLE.has(row.kind) ? [['liked', 'Liked'], ['not_liked', 'Not liked']] as Array<[Lens, string]> : []),
     ['commented', 'Commented'],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted'], ['not_voted', 'Not voted']] as Array<[Lens, string]> : []),
@@ -395,14 +431,14 @@ function Details({ row }: { row: Row }) {
   const download = () => {
     const yn = (b: boolean) => (b ? 'Yes' : 'No')
     const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Times opened',
-      ...(row.kind === 'news' ? ['Liked', 'Liked at'] : []),
+      ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.opens,
-      ...(row.kind === 'news' ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
+      ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
       ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
       ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : [])])]
@@ -448,7 +484,7 @@ function Details({ row }: { row: Row }) {
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <th className="px-3 py-2">Name</th><th className="px-3 py-2">E-code</th><th className="px-3 py-2">Department</th>
               <th className="px-3 py-2">Opened</th>
-              {row.kind === 'news' ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
+              {LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -458,7 +494,7 @@ function Details({ row }: { row: Row }) {
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmt(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
-                {row.kind === 'news'
+                {LIKABLE.has(row.kind)
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmt(p.liked_at) : '—'}</td>
                   : row.kind === 'poll'
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
