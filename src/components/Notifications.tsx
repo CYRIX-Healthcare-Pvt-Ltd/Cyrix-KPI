@@ -11,7 +11,7 @@ import { enablePush, pushState, syncPush, type PushState } from '@/lib/push'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useNotifications, useMarkNotificationsRead, useDismissNotification,
-  useMyMessages, useMessageActions,
+  useMyMessages, useMessageActions, usePushEnabled,
 } from '@/lib/queries'
 import {
   alertsEnabled, setAlertsEnabled, askToNotify, notifyPermission, canNotify,
@@ -189,7 +189,8 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
   // whoever is signed in wherever it is already allowed.
   const [device, setDevice] = useState<PushState>(() => pushState())
   const [turningOn, setTurningOn] = useState(false)
-  useEffect(() => { if (enabled) void syncPush(supabase).catch(() => {}) }, [enabled, employee?.id])
+  const { data: pushOn = true } = usePushEnabled(enabled)
+  useEffect(() => { if (enabled && pushOn) void syncPush(supabase).catch(() => {}) }, [enabled, employee?.id, pushOn])
   const turnOnDevice = async () => {
     setTurningOn(true)
     try { setDevice(await enablePush(supabase)) } finally { setTurningOn(false) }
@@ -357,7 +358,7 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
           </div>
 
           {/* On the phone or the desktop even when Cyrix is closed (the user, 10 Oct). */}
-          {device !== 'unsupported' && (
+          {device !== 'unsupported' && pushOn && (
             <div className="flex items-center gap-2 border-b border-ink-200 px-4 py-2 text-xs">
               {device === 'on' ? (
                 <span className="inline-flex items-center gap-1.5 text-emerald-700">

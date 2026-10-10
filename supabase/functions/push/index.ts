@@ -8,7 +8,8 @@ import webpush from 'npm:web-push@3.6.7'
  *       a message to everyone, one person, a manager and everyone under
  *       them, a function or a department.
  *   { action: 'bell' }        every 5 minutes, from pg_cron: whatever has
- *       come into somebody's bell since it was last looked at.
+ *       come into somebody's bell since it was last looked at; and Revive
+ *       Lab tickets newly waiting on them, or raised in their team (0160).
  *   { action: 'reminders' }   09:30 IST, from pg_cron: on the 1st, last month
  *       is open (0155); and the last-day reminder, from three days before,
  *       once a day, the same message.
@@ -95,6 +96,13 @@ Deno.serve(async req => {
   try { input = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   const db = admin()
 
+  // Switched off by SW Admin (0161): nothing reaches a phone or desktop.
+  // The app itself carries on — a message still lands in the bell (the
+  // user: "when disabled means only device notification, not in app").
+  const { data: on } = await db.rpc('push_is_enabled')
+  const devicesOn = on !== false
+  if (!devicesOn && input.action !== 'send') return json({ off: true })
+
   // ---- the timers ----
   if (input.action === 'bell' || input.action === 'reminders') {
     if (req.headers.get('x-push-key') !== Deno.env.get('PUSH_REMINDER_KEY')) return json({ error: 'Not allowed' }, 403)
@@ -103,10 +111,15 @@ Deno.serve(async req => {
       const { data, error } = await db.rpc('push_bell_due')
       if (error) return json({ error: error.message }, 500)
       const total: Tally = { people: 0, devices: 0, delivered: 0, failed: 0 }
-      for (const r of (data ?? []) as Array<{ employee_id: string; kind: string; n: number }>) {
-        const b = BELL[r.kind]
-        if (!b) continue
-        const t = await deliver(db, [r.employee_id], { title: b.title(r.n), body: b.body, url: '/kpi' + b.href, tag: 'bell-' + r.kind })
+      for (const r of (data ?? []) as Array<{ employee_id: string; kind: string; n: number; detail: string | null }>) {
+        // Revive Lab (0160): the tickets themselves, in the words of its Waiting on you.
+        const p: Payload | null = r.kind === 'revive'
+          ? { title: `${plural(r.n, 'Revive Lab ticket')} waiting for you`, body: r.detail ?? '', url: '/revive/', tag: 'bell-revive' }
+          : r.kind === 'revive_team'
+          ? { title: 'Revive Lab · your team', body: r.detail ?? `${plural(r.n, 'ticket')} raised in your team`, url: '/revive/', tag: 'bell-revive-team' }
+          : BELL[r.kind] ? { title: BELL[r.kind].title(r.n), body: BELL[r.kind].body, url: '/kpi' + BELL[r.kind].href, tag: 'bell-' + r.kind } : null
+        if (!p) continue
+        const t = await deliver(db, [r.employee_id], p)
         total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
       }
       return json(total)
@@ -160,7 +173,9 @@ Deno.serve(async req => {
         await db.from('push_inbox').insert(people.slice(i, i + 500).map(employee_id => ({ message_id: row.id, employee_id })))
       }
     }
-    const t = await deliver(db, people, { title, body, url: '/kpi/', tag: 'msg-' + (row?.id ?? '') })
+    const t = devicesOn
+      ? await deliver(db, people, { title, body, url: '/kpi/', tag: 'msg-' + (row?.id ?? '') })
+      : { people: people.length, devices: 0, delivered: 0, failed: 0 }
     if (row) await db.from('push_messages').update(t).eq('id', row.id)
     return json(t)
   }

@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { nudgeAdmins } from '@/lib/notifyHr'
 import {
   usePendingCounts, useRemovalRequests, useAnnualSummary,
-  usePendingRecordRequests, useOpenScoreQueries, useOpenTicketCount, currentFy,
+  usePendingRecordRequests, useOpenScoreQueries, useOpenTicketCount, usePushEnabled, currentFy,
 } from '@/lib/queries'
 import { useBaseScore, useScoreTheme } from '@/contexts/ScoreThemeContext'
 import Notifications from './Notifications'
@@ -124,6 +124,8 @@ export default function Shell() {
     isManager ? employee?.id : undefined, fy,
   )
   const { data: removals } = useRemovalRequests('pending')
+  // HR's Notify tab goes while SW Admin has device notifications off (0161).
+  const { data: pushOn = true } = usePushEnabled(isHrAdmin)
   const { data: recordRequests } = usePendingRecordRequests(isManager || isHrAdmin)
   const { data: openQueries } = useOpenScoreQueries(isManager && !isHrAdmin, employee?.id)
   const { data: hrTickets } = useOpenTicketCount('hr', isHrAdmin)
@@ -190,7 +192,7 @@ export default function Shell() {
           badge: hrTickets ?? 0,
         },
         records,
-        { to: '/admin/notify', label: 'Notify', icon: BellRing },
+        ...(pushOn ? [{ to: '/admin/notify', label: 'Notify', icon: BellRing }] : []),
         ...(isSwAdmin
           ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]
           : []),

@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BellRing, Send, Loader2, ChevronDown, ChevronRight, Check, Smartphone } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
+import { usePushEnabled, useSetPushEnabled } from '@/lib/queries'
 import { Alert } from '@/components/ui'
 import MultiPick from '@/components/MultiPick'
 
@@ -41,12 +42,37 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 export default function SendNotification({ desk = 'hr' }: { desk?: Desk }) {
   const [tab, setTab] = useState<'send' | 'history'>('send')
+  const { data: on = true } = usePushEnabled()
+  const setOn = useSetPushEnabled()
   return (
     <div className="space-y-5">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900">
-        <BellRing className="h-5 w-5 text-cyrixRed-600" />
-        Send notification
-      </h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="flex flex-1 items-center gap-2 text-lg font-semibold text-ink-900">
+          <BellRing className="h-5 w-5 text-cyrixRed-600" />
+          Send notification
+        </h2>
+        {/* SW Admin's switch for all of it (the user, 10 Oct: "if any glitch happens SW Admin should be able to disable it"). */}
+        {desk === 'sw' && (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-ink-700">
+            Notifications
+            <button type="button" role="switch" aria-checked={on} disabled={setOn.isPending}
+              onClick={() => setOn.mutate(!on)}
+              className={clsx('relative h-6 w-11 rounded-full transition-colors', on ? 'bg-emerald-600' : 'bg-ink-300')}>
+              <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+            </button>
+            <span className={on ? 'text-emerald-700' : 'text-ink-500'}>{on ? 'On' : 'Off'}</span>
+          </label>
+        )}
+      </div>
+      {!on && (
+        <Alert kind="warning" title="Phone and desktop notifications are off">
+          Nothing reaches a device. The app's notifications carry on. HR's Notify tab is hidden.
+        </Alert>
+      )}
+      {setOn.error && <Alert kind="error">{(setOn.error as Error).message}</Alert>}
+      {/* HR's tab is gone while it is off; opened by its address, it says why. */}
+      {!on && desk === 'hr' ? null : (
+      <>
       <div className="flex gap-1 border-b border-ink-200">
         {(['send', 'history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
@@ -57,6 +83,8 @@ export default function SendNotification({ desk = 'hr' }: { desk?: Desk }) {
         ))}
       </div>
       {tab === 'send' ? <SendForm desk={desk} onSent={() => {}} /> : <History desk={desk} />}
+      </>
+      )}
     </div>
   )
 }

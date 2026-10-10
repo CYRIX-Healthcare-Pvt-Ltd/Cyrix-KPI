@@ -1986,6 +1986,30 @@ export function useDismissNotification() {
   })
 }
 
+/** Notifications switched on or off by SW Admin (0161). On unless it says false. */
+export function usePushEnabled(enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ['push_enabled'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'push_enabled').maybeSingle()
+      return data?.value !== false
+    },
+  })
+}
+
+export function useSetPushEnabled() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (on: boolean) => {
+      const { error } = await supabase.rpc('set_push_enabled', { p_on: on })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['push_enabled'] }),
+  })
+}
+
 /** Messages from HR or SW Admin, in the bell (0158). */
 export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean }
 

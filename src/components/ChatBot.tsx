@@ -11,7 +11,7 @@ import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
   useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
   useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket,
-  useKpiRanking, currentFy,
+  useKpiRanking, usePushEnabled, currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonthsFrom } from '@/lib/fy'
 import { daysLeft, lastDayLabel } from '@/lib/lastDay'
@@ -373,6 +373,7 @@ export default function ChatBot() {
   // This device's notifications (0154). Asked about until they are on.
   const [device, setDevice] = useState<PushState>(() => pushState())
   const [turningOn, setTurningOn] = useState(false)
+  const { data: pushOn = true } = usePushEnabled()
   const nudges = useMemo<Nudge[]>(() => {
     if (systemAccount) return []
     /*
@@ -457,10 +458,10 @@ export default function ChatBot() {
         toLabel: 'Approvals',
       })
     }
-    if (device === 'ask') list.push({ key: 'nudge.push', push: true })
-    if (device === 'install-first') list.push({ key: 'nudge.pushinstall' })
+    if (pushOn && device === 'ask') list.push({ key: 'nudge.push', push: true })
+    if (pushOn && device === 'install-first') list.push({ key: 'nudge.pushinstall' })
     return list
-  }, [assignment, history, pending, month, systemAccount, policy, device])
+  }, [assignment, history, pending, month, systemAccount, policy, device, pushOn])
 
   /**
    * The one position Cyra mentions this time.
