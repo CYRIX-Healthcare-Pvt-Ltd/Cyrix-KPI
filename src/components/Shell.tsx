@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight, BellRing,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { nudgeAdmins } from '@/lib/notifyHr'
@@ -49,6 +49,7 @@ const NAV_TINT: Record<string, string> = {
   '/admin/support':    'text-teal-600',     // people asking for help
   '/admin/logins':     'text-cyrixRed-600', // security
   '/admin/timing':     'text-amber-600',    // deadlines
+  '/admin/notify':     'text-cyrixRed-600', // to people's phones
 }
 
 interface NavItem {
@@ -189,6 +190,7 @@ export default function Shell() {
           badge: hrTickets ?? 0,
         },
         records,
+        { to: '/admin/notify', label: 'Notify', icon: BellRing },
         ...(isSwAdmin
           ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]
           : []),

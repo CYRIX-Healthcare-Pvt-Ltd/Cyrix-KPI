@@ -1986,6 +1986,37 @@ export function useDismissNotification() {
   })
 }
 
+/** Messages from HR or SW Admin, in the bell (0158). */
+export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean }
+
+export function useMyMessages(employeeId: string | undefined, enabled: boolean) {
+  return useQuery({
+    enabled: enabled && !!employeeId,
+    queryKey: ['my_messages', employeeId],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('my_messages')
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as InboxMessage[]
+    },
+  })
+}
+
+export function useMessageActions() {
+  const qc = useQueryClient()
+  const done = () => qc.invalidateQueries({ queryKey: ['my_messages'] })
+  return {
+    read: useMutation({
+      mutationFn: async () => { const { error } = await supabase.rpc('mark_messages_read'); if (error) throw new Error(friendlyError(error)) },
+      onSuccess: done,
+    }),
+    dismiss: useMutation({
+      mutationFn: async (id: string) => { const { error } = await supabase.rpc('dismiss_message', { p_id: id }); if (error) throw new Error(friendlyError(error)) },
+      onSuccess: done,
+    }),
+  }
+}
+
 /** Opening the panel is reading it: stamps every kind currently listed. */
 export function useMarkNotificationsRead() {
   const qc = useQueryClient()

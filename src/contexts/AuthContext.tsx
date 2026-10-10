@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, ecodeToEmail, friendlyError } from '@/lib/supabase'
 import type { Employee } from '@/types/db'
+import { dropPush } from '@/lib/push'
 
 interface AuthState {
   session: Session | null
@@ -128,6 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    // This device stops receiving their notifications (0154).
+    await dropPush(supabase)
     await supabase.auth.signOut({ scope: 'local' }) /* this device only; Sign out from all devices is the code step's (0149) */
     setEmployee(null)
     // Everything cached was fetched as the person who just left. This is

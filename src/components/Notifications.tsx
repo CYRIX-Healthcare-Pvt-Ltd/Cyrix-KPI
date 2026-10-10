@@ -4,11 +4,14 @@ import clsx from 'clsx'
 import {
   Bell, CalendarCheck, CheckCircle2, CheckSquare, ClipboardList,
   LifeBuoy, MessageSquare, Trash2, Undo2, UserMinus, Volume2, VolumeX, X,
-  FileSpreadsheet,
+  FileSpreadsheet, BellRing, Loader2,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { enablePush, pushState, syncPush, type PushState } from '@/lib/push'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useNotifications, useMarkNotificationsRead, useDismissNotification,
+  useMyMessages, useMessageActions,
 } from '@/lib/queries'
 import {
   alertsEnabled, setAlertsEnabled, askToNotify, notifyPermission, canNotify,
@@ -173,10 +176,24 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
       .sort((a, b) => CATALOGUE[a.kind].priority - CATALOGUE[b.kind].priority),
     [data],
   )
-  const unreadCount = rows.filter(r => r.unread).length
+  // Messages from HR or SW Admin (0158): the words themselves, newest first.
+  const { data: messages } = useMyMessages(employee?.id, enabled)
+  const msgs = messages ?? []
+  const msgActions = useMessageActions()
+  const [msgWasUnread, setMsgWasUnread] = useState<Set<string>>(new Set())
+  const unreadCount = rows.filter(r => r.unread).length + msgs.filter(m => m.unread).length
 
   const [alertsOn, setAlertsOn] = useState(() => alertsEnabled())
   const [permission, setPermission] = useState(() => notifyPermission())
+  // This device, for when the app is closed (0154). Kept subscribed for
+  // whoever is signed in wherever it is already allowed.
+  const [device, setDevice] = useState<PushState>(() => pushState())
+  const [turningOn, setTurningOn] = useState(false)
+  useEffect(() => { if (enabled) void syncPush(supabase).catch(() => {}) }, [enabled, employee?.id])
+  const turnOnDevice = async () => {
+    setTurningOn(true)
+    try { setDevice(await enablePush(supabase)) } finally { setTurningOn(false) }
+  }
 
   /**
    * Ping when something new lands.
@@ -209,8 +226,21 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
       title: e.title(top.n),
       body: e.body,
       url: e.href,
+      system: device !== 'on',
     })
-  }, [data, rows])
+  }, [data, rows, device])
+
+  // A new message while the page is open: the ping, and a pop-up only
+  // where the device is not already getting it pushed.
+  const seenMsgs = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!messages) return
+    const before = seenMsgs.current
+    seenMsgs.current = new Set(messages.map(m => m.id))
+    if (!before) return
+    const fresh = messages.find(m => m.unread && !before.has(m.id))
+    if (fresh) void raiseAlert({ kind: 'msg-' + fresh.id, title: fresh.title, body: fresh.body, url: '/', system: device !== 'on' })
+  }, [messages, device])
 
   useEffect(() => {
     if (!open) return
@@ -253,7 +283,9 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
     setOpen(next)
     if (next) {
       setWasUnread(new Set(rows.filter(r => r.unread).map(r => r.kind)))
-      if (unreadCount > 0) markRead.mutate()
+      setMsgWasUnread(new Set(msgs.filter(m => m.unread).map(m => m.id)))
+      if (rows.some(r => r.unread)) markRead.mutate()
+      if (msgs.some(m => m.unread)) msgActions.read.mutate()
     }
   }
 
@@ -297,7 +329,7 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
           <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2">
             <h2 className="flex-1 text-sm font-semibold text-ink-800">Notifications</h2>
             <span className="text-xs text-ink-400">
-              {rows.length === 0 ? 'All clear' : plural(rows.length, 'item')}
+              {rows.length + msgs.length === 0 ? 'All clear' : plural(rows.length + msgs.length, 'item')}
             </span>
             {/* In the header rather than a row of its own: it is a setting
                 somebody touches twice a year, and it was taking as much
@@ -324,7 +356,51 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
             </button>
           </div>
 
-          {rows.length === 0 ? (
+          {/* On the phone or the desktop even when Cyrix is closed (the user, 10 Oct). */}
+          {device !== 'unsupported' && (
+            <div className="flex items-center gap-2 border-b border-ink-200 px-4 py-2 text-xs">
+              {device === 'on' ? (
+                <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                  <BellRing className="h-3.5 w-3.5" /> On for this device
+                </span>
+              ) : device === 'blocked' ? (
+                <span className="text-ink-500">Blocked for this site in the browser settings</span>
+              ) : device === 'install-first' ? (
+                <span className="text-ink-500">On iPhone, add Cyrix to the Home Screen first, then turn it on there</span>
+              ) : (
+                <button onClick={turnOnDevice} disabled={turningOn}
+                  className="btn-secondary inline-flex items-center gap-1.5 !px-3 !py-1.5 !text-xs">
+                  {turningOn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellRing className="h-3.5 w-3.5" />}
+                  Turn on for this device
+                </button>
+              )}
+            </div>
+          )}
+
+          {msgs.length > 0 && (
+            <ul className="max-h-[16rem] divide-y divide-ink-100 overflow-y-auto border-b border-ink-200">
+              {msgs.map(m => (
+                <li key={m.id} className="relative flex gap-3 px-4 py-3">
+                  <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink-900">{m.title}</p>
+                    <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-ink-600">{m.body}</p>
+                    <p className="mt-1 text-[11px] text-ink-400">
+                      {new Date(m.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <span className="flex w-4 shrink-0 flex-col items-center gap-2">
+                    {msgWasUnread.has(m.id) && <span className="mt-1.5 block h-2 w-2 rounded-full bg-cyrixRed-600" aria-label="New" />}
+                    <button onClick={() => msgActions.dismiss.mutate(m.id)} className="text-ink-300 hover:text-ink-600" aria-label="Clear" title="Clear">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {rows.length === 0 && msgs.length > 0 ? null : rows.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <CheckCircle2 className="mx-auto h-6 w-6 text-emerald-600" />
               <p className="mt-2 text-sm font-medium text-ink-700">

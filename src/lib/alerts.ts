@@ -141,6 +141,8 @@ export async function raiseAlert(args: {
   title: string
   body: string
   url: string
+  /** False where the device gets the same thing pushed (0154): the ping only, no second pop-up. */
+  system?: boolean
 }): Promise<void> {
   if (!alertsEnabled()) return
   if (!claimAlert(args.kind)) return
@@ -150,7 +152,7 @@ export async function raiseAlert(args: {
   // Only when the app is in the background. Looking straight at the bell
   // and being told about it by the operating system is one notification
   // too many.
-  if (document.hidden) {
+  if (document.hidden && args.system !== false) {
     await showNotification(args.title, args.body, args.url)
   }
 }

@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   MessageCircle, X, SendHorizonal, BookOpen, Languages, ArrowRight,
   IdCard, Wrench, PlayCircle,
-  Mail,
+  Mail, Bell,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -15,6 +15,8 @@ import {
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonthsFrom } from '@/lib/fy'
 import { daysLeft, lastDayLabel } from '@/lib/lastDay'
+import { enablePush, pushState, type PushState } from '@/lib/push'
+import { supabase } from '@/lib/supabase'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
@@ -85,14 +87,17 @@ interface Turn {
   toLabel?: string
   /** Offer to hand this question to a person. */
   offerDesks?: boolean
+  /** A button that turns on notifications for this device (0154). */
+  push?: boolean
 }
 
 /** One thing waiting on this person, and where to go and do it. */
 interface Nudge {
   key: string
   vars?: Record<string, string | number>
-  to: string
-  toLabel: string
+  to?: string
+  toLabel?: string
+  push?: boolean
 }
 
 /**
@@ -365,6 +370,9 @@ export default function ChatBot() {
    * this is a sentence with the way to fix it attached.
    */
   const month = currentReportingMonth()
+  // This device's notifications (0154). Asked about until they are on.
+  const [device, setDevice] = useState<PushState>(() => pushState())
+  const [turningOn, setTurningOn] = useState(false)
   const nudges = useMemo<Nudge[]>(() => {
     if (systemAccount) return []
     /*
@@ -449,8 +457,10 @@ export default function ChatBot() {
         toLabel: 'Approvals',
       })
     }
+    if (device === 'ask') list.push({ key: 'nudge.push', push: true })
+    if (device === 'install-first') list.push({ key: 'nudge.pushinstall' })
     return list
-  }, [assignment, history, pending, month, systemAccount, policy])
+  }, [assignment, history, pending, month, systemAccount, policy, device])
 
   /**
    * The one position Cyra mentions this time.
@@ -617,6 +627,7 @@ export default function ChatBot() {
           say: { kind: 'chat', key: n.key, vars: n.vars },
           to: n.to,
           toLabel: n.toLabel,
+          push: n.push,
         })
       }
       /*
@@ -969,6 +980,19 @@ export default function ChatBot() {
                       <ArrowRight className="h-3.5 w-3.5" />
                       {turn.toLabel}
                     </Link>
+                  )}
+                  {turn.push && (
+                    <button
+                      onClick={async () => {
+                        setTurningOn(true)
+                        try { setDevice(await enablePush(supabase)) } finally { setTurningOn(false) }
+                      }}
+                      disabled={turningOn || device !== 'ask'}
+                      className="btn-press mt-2 inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-70"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                      {device === 'on' ? 'On for this device' : device === 'blocked' ? 'Blocked in the browser' : 'Turn on notifications'}
+                    </button>
                   )}
                   {/* The bot failing is the best moment to offer a
                       person: they have just typed the question, and it

@@ -332,6 +332,21 @@ export const CHAT: Record<string, Phrase> = {
     te: '{month} స్కోర్ చేయడానికి చివరి రోజు {day}. అప్పటిలోగా స్కోర్ చేయకపోతే, వారి సొంత job role స్కోరు, core values కి పూర్తి మార్కులు లెక్కించబడతాయి.',
     ta: '{month} மதிப்பிட கடைசி நாள் {day}. அதற்குள் மதிப்பிடாவிட்டால், அவர்களின் சொந்த job role மதிப்பெண்ணும் core values-க்கு முழு மதிப்பெண்ணும் கணக்கிடப்படும்.',
   },
+  // Notifications on this device (0154), with a button to turn them on.
+  'nudge.push': {
+    en: 'Turn on notifications on this device, so reminders and messages reach you even when Cyrix is closed.',
+    ml: 'ഈ ഉപകരണത്തിൽ നോട്ടിഫിക്കേഷനുകൾ ഓൺ ചെയ്യുക, Cyrix അടച്ചിരിക്കുമ്പോഴും ഓർമ്മപ്പെടുത്തലുകളും സന്ദേശങ്ങളും നിങ്ങൾക്ക് ലഭിക്കും.',
+    hi: 'इस डिवाइस पर नोटिफ़िकेशन चालू करें, ताकि Cyrix बंद होने पर भी रिमाइंडर और संदेश आप तक पहुँचें।',
+    te: 'ఈ పరికరంలో నోటిఫికేషన్‌లను ఆన్ చేయండి, Cyrix మూసి ఉన్నా రిమైండర్‌లు, సందేశాలు మీకు అందుతాయి.',
+    ta: 'இந்தச் சாதனத்தில் அறிவிப்புகளை இயக்குங்கள், Cyrix மூடியிருந்தாலும் நினைவூட்டல்களும் செய்திகளும் உங்களை வந்தடையும்.',
+  },
+  'nudge.pushinstall': {
+    en: 'On iPhone, add Cyrix to your Home Screen (Share → Add to Home Screen), then open it from there to turn on notifications.',
+    ml: 'iPhone-ൽ, Cyrix ഹോം സ്ക്രീനിലേക്ക് ചേർക്കുക (Share → Add to Home Screen), തുടർന്ന് അവിടെ നിന്ന് തുറന്ന് നോട്ടിഫിക്കേഷനുകൾ ഓൺ ചെയ്യുക.',
+    hi: 'iPhone पर, Cyrix को होम स्क्रीन पर जोड़ें (Share → Add to Home Screen), फिर वहीं से खोलकर नोटिफ़िकेशन चालू करें।',
+    te: 'iPhoneలో, Cyrixని హోమ్ స్క్రీన్‌కు జోడించండి (Share → Add to Home Screen), తర్వాత అక్కడి నుండి తెరిచి నోటిఫికేషన్‌లను ఆన్ చేయండి.',
+    ta: 'iPhone-இல், Cyrix-ஐ முகப்புத் திரையில் சேர்க்கவும் (Share → Add to Home Screen), பிறகு அங்கிருந்து திறந்து அறிவிப்புகளை இயக்கவும்.',
+  },
   'nudge.kpi': {
     en: 'You have not set up your KPI for this year yet. Nothing can be submitted until it is approved.',
     ml: 'ഈ വർഷത്തെ KPI നിങ്ങൾ ഇതുവരെ സെറ്റ് ചെയ്തിട്ടില്ല. അത് അംഗീകരിക്കുന്നതുവരെ ഒന്നും സമർപ്പിക്കാൻ കഴിയില്ല.',

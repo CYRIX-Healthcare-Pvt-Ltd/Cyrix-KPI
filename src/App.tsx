@@ -27,6 +27,7 @@ const AdminReports      = lazyRoute(() => import('@/pages/admin/AdminReports'))
 const AdminRequests     = lazyRoute(() => import('@/pages/admin/AdminRequests'))
 const SwAdmin           = lazyRoute(() => import('@/pages/admin/SwAdmin'))
 const KpiTiming         = lazyRoute(() => import('@/pages/admin/KpiTiming'))
+const SendNotification  = lazyRoute(() => import('@/pages/admin/SendNotification'))
 const DeletionRequests  = lazyRoute(() => import('@/pages/DeletionRequests'))
 const ScoreQueries      = lazyRoute(() => import('@/pages/ScoreQueries'))
 const Help              = lazyRoute(() => import('@/pages/Help'))
@@ -165,6 +166,8 @@ export default function App() {
               the people who ran the rollout rather than with the people
               the clock reports on. */}
           <Route path="admin/timing" element={<RequireSw><KpiTiming /></RequireSw>} />
+          {/* HR's own tab; SW Admin has the same page inside Administration (0154). */}
+          <Route path="admin/notify" element={<RequireHr><SendNotification /></RequireHr>} />
           {/* The approval chain is the reporting manager and then HR. The
               link was removed from the SW Admin nav, but a nav is not a
               permission — the route has to say so too. */}
