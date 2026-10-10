@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight, BellRing,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight, BellRing, Newspaper,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { nudgeAdmins } from '@/lib/notifyHr'
@@ -50,6 +50,7 @@ const NAV_TINT: Record<string, string> = {
   '/admin/logins':     'text-cyrixRed-600', // security
   '/admin/timing':     'text-amber-600',    // deadlines
   '/admin/notify':     'text-cyrixRed-600', // to people's phones
+  '/admin/digest':     'text-violet-600',   // company news
 }
 
 interface NavItem {
@@ -66,7 +67,7 @@ interface NavItem {
 }
 
 export default function Shell() {
-  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, signOut } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, isMktAdmin, signOut } = useAuth()
 
   /*
     Once a day, from whoever is here.
@@ -160,7 +161,10 @@ export default function Shell() {
     queue: true,
   }
 
-  const allItems: NavItem[] = (isSwAdmin || isItAdmin) && !isHrAdmin
+  const allItems: NavItem[] = isMktAdmin && !isHrAdmin && !isSwAdmin && !isItAdmin
+    // Marketing posts to Cyrix Digest, and that is all (0164).
+    ? [{ to: '/admin/digest', label: 'Cyrix Digest', icon: Newspaper, end: true }]
+    : (isSwAdmin || isItAdmin) && !isHrAdmin
     // One destination, named for what it opens. It used to be two — Logins
     // and KPI Timing — which put a single module's settings beside the
     // screen that administers all of them, and left the bar saying Logins
@@ -193,6 +197,7 @@ export default function Shell() {
         },
         records,
         ...(pushOn ? [{ to: '/admin/notify', label: 'Notify', icon: BellRing }] : []),
+        { to: '/admin/digest', label: 'Digest', icon: Newspaper },
         ...(isSwAdmin
           ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]
           : []),

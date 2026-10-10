@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench,
-  Image as ImageIcon, Gauge, Navigation, BellRing,
+  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
+import DigestAdmin from './DigestAdmin'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
@@ -2401,6 +2402,8 @@ const ADMIN_TABS = [
   { id: 'travel', label: 'Travel Expense', short: 'Travel', icon: Navigation, render: () => <TravelAdmin /> },
   // A message to people's phones and desktops; HR has the same page (0154).
   { id: 'notify', label: 'Send notification', short: 'Notify', icon: BellRing, render: () => <SendNotification desk="sw" /> },
+  // IT posts to Cyrix Digest from here; HR has it in its own menu (0163).
+  { id: 'digest', label: 'Cyrix Digest', short: 'Digest', icon: Newspaper, render: () => <DigestAdmin /> },
   // Last, because it is the only tab that is somebody else's work
   // rather than a setting. Everything to its left is configuration;
   // this is a queue with people waiting in it.
@@ -2468,7 +2471,10 @@ function BuildStamp() {
 export default function SwAdmin() {
   // IT_ADMIN (0151): the Logins tab, and (0152) Support with IT's own queue.
   const { isSwAdmin, isItAdmin } = useAuth()
-  const TABS = isSwAdmin ? ADMIN_TABS : ADMIN_TABS.filter(t => t.id === 'logins' || (t.id === 'support' && isItAdmin))
+  // SW Admin does not post to Cyrix Digest; IT does (0163).
+  const TABS = isSwAdmin
+    ? ADMIN_TABS.filter(t => t.id !== 'digest' || isItAdmin)
+    : ADMIN_TABS.filter(t => t.id === 'logins' || ((t.id === 'support' || t.id === 'digest') && isItAdmin))
   const deskHere = isSwAdmin ? 'software' : 'it'
   const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
   const active = TABS.find(t => t.id === tab) ?? TABS[0]

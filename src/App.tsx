@@ -28,6 +28,7 @@ const AdminRequests     = lazyRoute(() => import('@/pages/admin/AdminRequests'))
 const SwAdmin           = lazyRoute(() => import('@/pages/admin/SwAdmin'))
 const KpiTiming         = lazyRoute(() => import('@/pages/admin/KpiTiming'))
 const SendNotification  = lazyRoute(() => import('@/pages/admin/SendNotification'))
+const DigestAdmin       = lazyRoute(() => import('@/pages/admin/DigestAdmin'))
 const DeletionRequests  = lazyRoute(() => import('@/pages/DeletionRequests'))
 const ScoreQueries      = lazyRoute(() => import('@/pages/ScoreQueries'))
 const Help              = lazyRoute(() => import('@/pages/Help'))
@@ -91,6 +92,14 @@ function RequireSwOrIt({ children }: { children: JSX.Element }) {
   return children
 }
 
+/** Cyrix Digest: HR, IT and Marketing post (0163, 0164). */
+function RequireDigest({ children }: { children: JSX.Element }) {
+  const { isHrAdmin, isItAdmin, isMktAdmin, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (!isHrAdmin && !isItAdmin && !isMktAdmin) return <Navigate to="/" replace />
+  return children
+}
+
 function RequireSw({ children }: { children: JSX.Element }) {
   const { isSwAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
@@ -103,9 +112,11 @@ function RequireSw({ children }: { children: JSX.Element }) {
  * land on the admin overview instead of a personal dashboard.
  */
 function HomeRoute() {
-  const { isHrAdmin, isSwAdmin, isItAdmin, loading } = useAuth()
+  const { isHrAdmin, isSwAdmin, isItAdmin, isMktAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
   if (isHrAdmin) return <Navigate to="/admin" replace />
+  // Marketing's whole KPI is the Digest tab (0164).
+  if (isMktAdmin && !isSwAdmin && !isItAdmin) return <Navigate to="/admin/digest" replace />
   if (isSwAdmin || isItAdmin) return <Navigate to="/admin/logins" replace />
   return <Dashboard />
 }
@@ -168,6 +179,7 @@ export default function App() {
           <Route path="admin/timing" element={<RequireSw><KpiTiming /></RequireSw>} />
           {/* HR's own tab; SW Admin has the same page inside Administration (0154). */}
           <Route path="admin/notify" element={<RequireHr><SendNotification /></RequireHr>} />
+          <Route path="admin/digest" element={<RequireDigest><DigestAdmin /></RequireDigest>} />
           {/* The approval chain is the reporting manager and then HR. The
               link was removed from the SW Admin nav, but a nav is not a
               permission — the route has to say so too. */}

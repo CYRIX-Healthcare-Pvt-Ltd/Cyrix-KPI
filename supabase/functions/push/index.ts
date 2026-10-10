@@ -101,7 +101,7 @@ Deno.serve(async req => {
   // user: "when disabled means only device notification, not in app").
   const { data: on } = await db.rpc('push_is_enabled')
   const devicesOn = on !== false
-  if (!devicesOn && input.action !== 'send') return json({ off: true })
+  if (!devicesOn && input.action !== 'send' && input.action !== 'digest') return json({ off: true })
 
   // ---- the timers ----
   if (input.action === 'bell' || input.action === 'reminders') {
@@ -121,6 +121,20 @@ Deno.serve(async req => {
         if (!p) continue
         const t = await deliver(db, [r.employee_id], p)
         total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
+      }
+      // A Cyrix Digest meeting about to start (0163): everybody, 15 minutes before, once.
+      const { data: soon } = await db.rpc('digest_meetings_due')
+      for (const m of (soon ?? []) as Array<{ id: string; title: string; meet_at: string; meet_place: string | null }>) {
+        const at = new Date(m.meet_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+        const { data: claim, error: dup } = await db.from('push_messages').insert({
+          kind: 'reminder', title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`,
+          url: '/', target: { kind: 'reminder', side: 'meeting' }, dedupe_key: 'digest-reminder:' + m.id,
+        }).select('id').single()
+        if (dup || !claim) continue
+        const { data: all } = await db.from('employees').select('id').eq('is_active', true)
+        const t = await deliver(db, ((all ?? []) as Array<{ id: string }>).map(r => r.id),
+          { title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`, url: '/', tag: 'digest-' + m.id })
+        await db.from('push_messages').update(t).eq('id', claim.id)
       }
       return json(total)
     }
@@ -145,6 +159,39 @@ Deno.serve(async req => {
       out[side] = t
     }
     return json(out)
+  }
+
+  // ---- a Cyrix Digest post, from HR or IT (0163): into everybody's bell, and their devices ----
+  if (input.action === 'digest') {
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    })
+    const { data: desk } = await user.rpc('digest_can_post')
+    if (!desk) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
+    const { data: post } = await db.from('digest_posts').select('*').eq('id', String(input.post_id ?? '')).is('deleted_at', null).maybeSingle()
+    if (!post) return json({ error: 'That post is not there' }, 404)
+    const when = post.kind === 'meeting'
+      ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+      : ''
+    const title = (post.kind === 'meeting' ? 'Meeting · ' : post.kind === 'poll' ? 'Poll · ' : 'Cyrix Digest · ') + post.title
+    const body = post.kind === 'meeting'
+      ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
+      : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'
+      : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
+    const { data: me } = await user.rpc('current_employee_id')
+    const { data: all } = await db.from('employees').select('id').eq('is_active', true)
+    const people = ((all ?? []) as Array<{ id: string }>).map(r => r.id)
+    const { data: row } = await db.from('push_messages').insert({
+      kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
+    }).select('id').single()
+    if (row) {
+      for (let i = 0; i < people.length; i += 500) {
+        await db.from('push_inbox').insert(people.slice(i, i + 500).map(employee_id => ({ message_id: row.id, employee_id })))
+      }
+    }
+    const t = devicesOn ? await deliver(db, people, { title, body, url: '/', tag: 'digest-' + post.id }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
+    if (row) await db.from('push_messages').update(t).eq('id', row.id)
+    return json(t)
   }
 
   // ---- a message from HR or SW Admin ----

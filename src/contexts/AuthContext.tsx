@@ -17,6 +17,8 @@ interface AuthState {
   isSwAdmin: boolean
   /** IT (0151): the Logins tab, and the official email field only. */
   isItAdmin: boolean
+  /** MRK_ADMIN: posts to Cyrix Digest, and nothing else (0164). */
+  isMktAdmin: boolean
   directReportCount: number
   /**
    * From the force_password_change setting. False during the testing phase,
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isHrAdmin, setIsHrAdmin] = useState(false)
   const [isSwAdmin, setIsSwAdmin] = useState(false)
   const [isItAdmin, setIsItAdmin] = useState(false)
+  const [isMktAdmin, setIsMktAdmin] = useState(false)
   const [forcePasswordChange, setForcePasswordChange] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -50,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsHrAdmin(false)
       setIsSwAdmin(false)
       setIsItAdmin(false)
+      setIsMktAdmin(false)
       return
     }
 
@@ -65,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsHrAdmin(false)
       setIsSwAdmin(false)
       setIsItAdmin(false)
+      setIsMktAdmin(false)
       return
     }
 
@@ -84,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsHrAdmin(roleNames.some(r => ['hr_admin', 'super_admin'].includes(r)))
     setIsSwAdmin(roleNames.some(r => ['sw_admin', 'super_admin'].includes(r)))
     setIsItAdmin(roleNames.includes('it_admin'))
+    setIsMktAdmin(roleNames.includes('mkt_admin'))
     setForcePasswordChange(setting?.value === true)
   }, [])
 
@@ -171,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isHrAdmin,
         isSwAdmin,
         isItAdmin,
+        isMktAdmin,
         directReportCount,
         forcePasswordChange,
         loading,
