@@ -1695,6 +1695,8 @@ export interface TatPolicy {
   manager_grace_days: number
   /** First month turnaround is measured at all. Null = every month. */
   starts_from: string | null
+  /** First month the last days apply to (0153). Null = none. */
+  deadlines_from?: string | null
 }
 
 export const TAT_POLICY_FALLBACK: TatPolicy = {
@@ -1733,9 +1735,9 @@ export function useSaveTatPolicy() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tat_policy'] })
-      // Every turnaround figure on every screen is measured against it.
-      qc.invalidateQueries({ queryKey: ['kpi_report'] })
-      qc.invalidateQueries({ queryKey: ['kpi_ranking'] })
+      // Every turnaround figure on every screen is measured against it,
+      // and moving a last day opens or settles months (0153).
+      qc.invalidateQueries()
     },
   })
 }

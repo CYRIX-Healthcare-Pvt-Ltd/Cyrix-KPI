@@ -6,9 +6,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
-  useSubmissionHistory, useTeamSubmissions,
+  useSubmissionHistory, useTeamSubmissions, useTatPolicy,
   currentFy,
 } from '@/lib/queries'
+import { daysLeft, lastDayLabel } from '@/lib/lastDay'
+import { TimeLeft } from '@/components/TimeLeft'
 import { currentReportingMonth, monthLabel, openFyMonthsFrom } from '@/lib/fy'
 import { waitingForScore, waitingCaption } from '@/lib/waiting'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
@@ -60,6 +62,7 @@ export default function Dashboard() {
   // query My Team makes, so going from here to there costs nothing.
   const teamIds = useMemo(() => (teamData?.team ?? []).map(t => t.id), [teamData])
   const { data: teamSubs } = useTeamSubmissions(teamIds.length ? teamIds : undefined, fy)
+  const { data: policy } = useTatPolicy()
 
   const startsFrom = assignment?.assignment?.starts_from ?? null
 
@@ -121,6 +124,16 @@ export default function Dashboard() {
   // loaded, except for somebody with nobody reporting to them.
   const waitingOnMe = waitingForScore(teamSubs ?? [], new Set(teamIds))
   const waitingKnown = teamIds.length === 0 ? !!teamData : !!teamSubs
+  // The last days (0153): how long this person has to send the month in,
+  // and the soonest month their team is waiting on them to score.
+  const submitLeft = daysLeft(month, 'tm', policy)
+  const pastSubmitDay = !!policy?.deadlines_from && month >= policy.deadlines_from && submitLeft === null
+  const toScore = (teamSubs ?? [])
+    .filter(s => s.status === 'submitted' && teamIds.includes(s.employee_id)
+      && daysLeft(s.period_month, 'manager', policy) !== null)
+    .sort((a, b) => a.period_month.localeCompare(b.period_month))
+  const scoreMonth = toScore[0]?.period_month
+  const scoreCount = scoreMonth ? toScore.filter(s => s.period_month === scoreMonth).length : 0
   const notSubmitted = (teamData?.team.length ?? 0) -
     (teamData?.submissions.filter(s => s.status !== 'draft').length ?? 0)
 
@@ -135,9 +148,11 @@ export default function Dashboard() {
 
       {kpiStatus === null && (
         <ActionRequired
-          eyebrow="KPI Not Set Up"
+          eyebrow={submitLeft !== null ? <TimeLeft period={month} side="tm" policy={policy} /> : 'KPI Not Set Up'}
           title="Your KPI for this year is not in place yet"
-          body="Define your Job Role KRAs. Your manager approves them before monthly submissions can begin."
+          body={submitLeft !== null
+            ? `Define your Job Role KRAs and get them approved, then submit ${monthLabel(month)} by ${lastDayLabel(month, 'tm', policy)}. Not submitted by then, the month is scored 0.`
+            : 'Define your Job Role KRAs. Your manager approves them before monthly submissions can begin.'}
           to="/my-kpi/setup"
           cta="Set Up My KPI"
         />
@@ -145,25 +160,44 @@ export default function Dashboard() {
 
       {kpiStatus === 'rejected' && (
         <ActionRequired
-          eyebrow="Sent Back"
+          eyebrow={submitLeft !== null ? <TimeLeft period={month} side="tm" policy={policy} /> : 'Sent Back'}
           title="Your manager returned your KPI"
-          body={<span className="italic">“{assignment?.assignment?.rejection_reason}”</span>}
+          body={<>
+            <span className="italic">“{assignment?.assignment?.rejection_reason}”</span>
+            {submitLeft !== null && (
+              <span className="mt-1 block">
+                {monthLabel(month)} must be submitted by {lastDayLabel(month, 'tm', policy)}, or it is scored 0.
+              </span>
+            )}
+          </>}
           to="/my-kpi/setup"
           cta="Make Changes"
         />
       )}
 
       {kpiStatus === 'pending_approval' && (
-        <Alert kind="info" title="Your KPI is with your manager for approval">
+        <Alert kind={submitLeft !== null ? 'warning' : 'info'} title="Your KPI is with your manager for approval">
           You will be able to submit monthly assessments once it is approved.
+          {submitLeft !== null && (
+            <span className="mt-1 block font-medium">
+              <TimeLeft period={month} side="tm" policy={policy} /> {monthLabel(month)} (last day {lastDayLabel(month, 'tm', policy)}).
+            </span>
+          )}
         </Alert>
       )}
 
-      {sub?.status === 'returned' && (
+      {sub?.status === 'returned' && !pastSubmitDay && (
         <ActionRequired
-          eyebrow="Returned To You"
+          eyebrow={submitLeft !== null ? <TimeLeft period={month} side="tm" policy={policy} /> : 'Returned To You'}
           title={`${monthLabel(month)} needs your attention`}
-          body={<span className="italic">“{sub.return_reason}”</span>}
+          body={<>
+            <span className="italic">“{sub.return_reason}”</span>
+            {submitLeft !== null && (
+              <span className="mt-1 block">
+                Last day {lastDayLabel(month, 'tm', policy)}. Not sent in by then, the month is scored 0.
+              </span>
+            )}
+          </>}
           to={`/submission/${month}`}
           cta="Review & Resubmit"
         />
@@ -171,13 +205,28 @@ export default function Dashboard() {
 
       {/* Not before the KPI starts. Somebody joining in September was
           being told every month since April was overdue. */}
-      {kpiStatus === 'active' && monthInScope && (!sub || sub.status === 'draft') && (
+      {kpiStatus === 'active' && monthInScope && (!sub || sub.status === 'draft') && !pastSubmitDay && (
         <ActionRequired
-          eyebrow="Assessment Due"
+          eyebrow={submitLeft !== null ? <TimeLeft period={month} side="tm" policy={policy} /> : 'Assessment Due'}
           title={`${monthLabel(month)} has not been submitted`}
-          body="Enter what you achieved so your manager can score the month."
+          body={submitLeft !== null
+            ? `Last day ${lastDayLabel(month, 'tm', policy)}. Not submitted by then, the month is scored 0.`
+            : 'Enter what you achieved so your manager can score the month.'}
           to={`/submission/${month}`}
           cta={sub ? 'Continue' : 'Start Now'}
+        />
+      )}
+
+      {/* The one team item with a date on it (HR, 10 Oct): a month not
+          scored by the manager's last day takes the team member's own
+          score, so the manager is told how long is left. */}
+      {scoreMonth && (
+        <ActionRequired
+          eyebrow={<TimeLeft period={scoreMonth} side="manager" policy={policy} />}
+          title={`${scoreCount} team member${scoreCount === 1 ? ' is' : 's are'} waiting for your ${monthLabel(scoreMonth)} score`}
+          body={`Last day ${lastDayLabel(scoreMonth, 'manager', policy)}. Not scored by then, their own job role score counts, with full marks for core values.`}
+          to="/team"
+          cta="Score Now"
         />
       )}
 

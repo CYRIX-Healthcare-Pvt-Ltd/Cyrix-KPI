@@ -57,7 +57,7 @@ export function Alert({
   children,
 }: {
   kind?: 'info' | 'error' | 'success' | 'warning'
-  title?: string
+  title?: ReactNode
   children?: ReactNode
 }) {
   /*
@@ -214,6 +214,7 @@ export function StatusBadge({
   kind = 'submission',
   queried = false,
   whose,
+  outcome,
 }: {
   status: SubmissionStatus | AssignmentStatus | null
   kind?: 'submission' | 'assignment'
@@ -230,7 +231,15 @@ export function StatusBadge({
    * one, so the badge should say the thing that is actually holding it.
    */
   queried?: boolean
+  /** A missed last day (0153) says so, rather than "Final". */
+  outcome?: 'not_submitted' | 'not_scored' | null
 }) {
+  if (outcome === 'not_submitted') {
+    return <span className="badge bg-red-100 text-red-800">Not submitted</span>
+  }
+  if (outcome === 'not_scored') {
+    return <span className="badge bg-amber-100 text-amber-800">Not scored · self score</span>
+  }
   if (!status) {
     // ink-600, not ink-500: the lighter grey measured 4.4:1 on its own
     // wash, which is under the 4.5 a small label needs. One step down

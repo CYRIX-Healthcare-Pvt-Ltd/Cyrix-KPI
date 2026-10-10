@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
@@ -21,6 +21,7 @@ import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
 
 export default function MyHistory() {
   const { employee } = useAuth()
+  const navigate = useNavigate()
   const fy = currentFy()
   const ink = useIsDark() ? '#f4f5f7' : '#141519'
   // Carried here by the submission screen so the confirmation lands
@@ -212,11 +213,17 @@ export default function MyHistory() {
                 const s = byMonth.get(m)
                 // A month that has not finished cannot be assessed yet.
                 const open = isMonthOpen(m)
+                // A missed last day (0153): the score that counts is the final one.
+                const missed = !!s?.deadline_outcome
 
                 return (
                   <tr
                     key={m}
-                    className={open ? 'hover:bg-ink-50' : 'bg-ink-50/40 text-ink-300'}
+                    // The whole row opens the month. On a phone the View /
+                    // Start link sat off the right edge of the table, and
+                    // people said the months would not open (10 Oct).
+                    onClick={open ? () => navigate(`/submission/${m}`, { state: { from: 'history' } }) : undefined}
+                    className={open ? 'cursor-pointer hover:bg-ink-50' : 'bg-ink-50/40 text-ink-300'}
                   >
                     <td className="whitespace-nowrap px-4 py-3 font-medium">
                       <span className={open ? 'text-ink-900' : 'text-ink-400'}>
@@ -228,6 +235,7 @@ export default function MyHistory() {
                         <StatusBadge
                           status={s?.status ?? null}
                           queried={!!s && !!queried?.has(s.id)}
+                          outcome={s?.deadline_outcome}
                         />
                       ) : (
                         <span className="badge inline-flex items-center gap-1 bg-ink-100 text-ink-400">
@@ -280,10 +288,10 @@ export default function MyHistory() {
                       </td>
                     )}
                     <BandCell
-                      total={open ? s?.mgr_total_score : null}
-                      job={s?.mgr_job_role_score}
-                      esms={s?.mgr_esms_score}
-                      core={s?.mgr_core_score}
+                      total={open ? (missed ? s?.final_total_score : s?.mgr_total_score) : null}
+                      job={missed ? s?.final_job_role_score : s?.mgr_job_role_score}
+                      esms={missed ? s?.final_esms_score : s?.mgr_esms_score}
+                      core={missed ? s?.final_core_score : s?.mgr_core_score}
                       hasEsms={hasEsms}
                       /* The pill marks the score that counts. That is the
                          manager's, right up until a final overrides it. */

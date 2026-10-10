@@ -14,6 +14,7 @@ import {
   useKpiRanking, currentFy,
 } from '@/lib/queries'
 import { currentReportingMonth, monthLabel, fyMonthsFrom } from '@/lib/fy'
+import { daysLeft, lastDayLabel } from '@/lib/lastDay'
 import { useLang, say, READY_LANGS, type Lang } from '@/lib/i18n'
 import { HELP } from '@/lib/help-strings'
 import { CHAT } from '@/lib/chat-strings'
@@ -411,6 +412,19 @@ export default function ChatBot() {
       }
     }
 
+    // The last day to send this month in (0153), while it is still to come
+    // and the month is not yet with the manager — KPI or no KPI, because a
+    // KPI approved after it would start with this month at 0.
+    if (inScope && daysLeft(month, 'tm', policy) !== null
+        && (!sub || sub.status === 'draft' || sub.status === 'returned')) {
+      list.push({
+        key: 'nudge.lastday',
+        vars: { month: monthLabel(month), day: lastDayLabel(month, 'tm', policy) ?? '' },
+        to: kpi?.status === 'active' ? `/submission/${month}` : '/my-kpi/setup',
+        toLabel: kpi?.status === 'active' ? 'Assessments' : 'My KPI',
+      })
+    }
+
     if ((pending?.scoring ?? 0) > 0) {
       list.push({
         key: pending!.scoring === 1 ? 'nudge.score1' : 'nudge.score',
@@ -418,6 +432,14 @@ export default function ChatBot() {
         to: '/team',
         toLabel: 'My Team',
       })
+      if (daysLeft(month, 'manager', policy) !== null) {
+        list.push({
+          key: 'nudge.scoreday',
+          vars: { month: monthLabel(month), day: lastDayLabel(month, 'manager', policy) ?? '' },
+          to: '/team',
+          toLabel: 'My Team',
+        })
+      }
     }
     if ((pending?.approvals ?? 0) > 0) {
       list.push({
@@ -428,7 +450,7 @@ export default function ChatBot() {
       })
     }
     return list
-  }, [assignment, history, pending, month, systemAccount])
+  }, [assignment, history, pending, month, systemAccount, policy])
 
   /**
    * The one position Cyra mentions this time.

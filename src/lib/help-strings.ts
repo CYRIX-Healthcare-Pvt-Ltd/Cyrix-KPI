@@ -320,11 +320,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'உங்கள் மேலாளருக்கு அனுப்புங்கள்',
   },
   's2.p3.how': {
-    en: 'Try to send it within {tmDays} days of the month ending. After that it counts as late.',
-    ml: 'മാസം അവസാനിച്ച് {tmDays} ദിവസത്തിനുള്ളിൽ അയയ്ക്കാൻ ശ്രമിക്കുക. അതിനുശേഷം അത് വൈകിയതായി കണക്കാക്കും.',
-    hi: 'महीना खत्म होने के {tmDays} दिन के भीतर भेजने की कोशिश कीजिए। उसके बाद यह देर माना जाता है।',
-    te: 'నెల ముగిసిన {tmDays} రోజుల్లోపు పంపడానికి ప్రయత్నించండి. ఆ తర్వాత అది ఆలస్యంగా పరిగణించబడుతుంది.',
-    ta: 'மாதம் முடிந்த {tmDays} நாட்களுக்குள் அனுப்ப முயலுங்கள். அதன் பிறகு அது தாமதம் என்று கணக்கிடப்படும்.',
+    en: 'Send it by the {tmDays} of the following month. That is the last day: from the next day nothing can be entered, and the month is scored 0.',
+    ml: 'അടുത്ത മാസത്തെ {tmDays}-ാം തീയതിക്കുള്ളിൽ അയയ്ക്കുക. അതാണ് അവസാന ദിവസം: അതിനടുത്ത ദിവസം മുതൽ ഒന്നും നൽകാനാവില്ല, ആ മാസത്തിന് സ്കോർ 0 ആകും.',
+    hi: 'अगले महीने की {tmDays} तारीख तक भेज दीजिए। वही आख़िरी दिन है: अगले दिन से कुछ भरा नहीं जा सकता, और उस महीने का स्कोर 0 होगा।',
+    te: 'తర్వాతి నెల {tmDays}వ తేదీ లోపు పంపండి. అదే చివరి రోజు: మరుసటి రోజు నుండి ఏమీ నమోదు చేయలేరు, ఆ నెల స్కోరు 0 అవుతుంది.',
+    ta: 'அடுத்த மாதத்தின் {tmDays}ஆம் தேதிக்குள் அனுப்புங்கள். அதுவே கடைசி நாள்: அடுத்த நாளிலிருந்து எதையும் நிரப்ப முடியாது, அந்த மாதத்தின் மதிப்பெண் 0 ஆகும்.',
   },
   's2.p4.what': {
     en: 'Your manager reviews it',
@@ -334,11 +334,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'உங்கள் மேலாளர் இதைப் பரிசீலிக்கிறார்',
   },
   's2.p4.how': {
-    en: 'They enter their own figure for each row, and they rate the Core Values. Their score is your final score. They have {mgrDays} days. The status then reads Manager reviewed.',
-    ml: 'ഓരോ വരിക്കും അവർ സ്വന്തം കണക്ക് നൽകും, Core Values-ഉം അവർ റേറ്റ് ചെയ്യും. അവരുടെ സ്കോർ ആണ് നിങ്ങളുടെ അന്തിമ സ്കോർ. അവർക്ക് {mgrDays} ദിവസമുണ്ട്. തുടർന്ന് സ്ഥിതി Manager reviewed എന്ന് കാണിക്കും.',
-    hi: 'हर पंक्ति के लिए वे अपना आँकड़ा भरते हैं, और Core Values भी वही रेट करते हैं। उनका स्कोर ही आपका अंतिम स्कोर है। उनके पास {mgrDays} दिन हैं। फिर स्थिति Manager reviewed दिखती है।',
-    te: 'ప్రతి వరుసకూ వారు తమ సొంత సంఖ్యను నమోదు చేస్తారు, Core Values కూడా వారే రేట్ చేస్తారు. వారి స్కోరే మీ తుది స్కోరు. వారికి {mgrDays} రోజులు ఉన్నాయి. తర్వాత స్థితి Manager reviewed అని చూపిస్తుంది.',
-    ta: 'ஒவ்வொரு வரிசைக்கும் அவர்கள் தங்கள் எண்ணை நிரப்புவார்கள், Core Values-ஐயும் அவர்களே மதிப்பிடுவார்கள். அவர்களின் மதிப்பெண்ணே உங்கள் இறுதி மதிப்பெண். அவர்களுக்கு {mgrDays} நாட்கள் உள்ளன. பிறகு நிலை Manager reviewed எனக் காட்டும்.',
+    en: 'They enter their own figure for each row, and they rate the Core Values. Their score is your final score. They have until the {mgrDays} of the following month; if they have not scored it by then, your own job role score counts, with full marks for Core Values. The status then reads Manager reviewed.',
+    ml: 'ഓരോ വരിക്കും അവർ സ്വന്തം കണക്ക് നൽകും, Core Values-ഉം അവർ റേറ്റ് ചെയ്യും. അവരുടെ സ്കോർ ആണ് നിങ്ങളുടെ അന്തിമ സ്കോർ. അടുത്ത മാസത്തെ {mgrDays}-ാം തീയതി വരെ അവർക്ക് സമയമുണ്ട്; അതിനുള്ളിൽ സ്കോർ ചെയ്തില്ലെങ്കിൽ, നിങ്ങളുടെ സ്വന്തം job role സ്കോറും Core Values-ന് മുഴുവൻ മാർക്കും കണക്കാക്കും. തുടർന്ന് സ്ഥിതി Manager reviewed എന്ന് കാണിക്കും.',
+    hi: 'हर पंक्ति के लिए वे अपना आँकड़ा भरते हैं, और Core Values भी वही रेट करते हैं। उनका स्कोर ही आपका अंतिम स्कोर है। उनके पास अगले महीने की {mgrDays} तारीख तक का समय है; तब तक स्कोर न करें तो आपका अपना job role स्कोर और Core Values के पूरे अंक गिने जाते हैं। फिर स्थिति Manager reviewed दिखती है।',
+    te: 'ప్రతి వరుసకూ వారు తమ సొంత సంఖ్యను నమోదు చేస్తారు, Core Values కూడా వారే రేట్ చేస్తారు. వారి స్కోరే మీ తుది స్కోరు. తర్వాతి నెల {mgrDays}వ తేదీ వరకు వారికి సమయం ఉంది; అప్పటిలోగా స్కోర్ చేయకపోతే, మీ సొంత job role స్కోరు, Core Values కి పూర్తి మార్కులు లెక్కించబడతాయి. తర్వాత స్థితి Manager reviewed అని చూపిస్తుంది.',
+    ta: 'ஒவ்வொரு வரிசைக்கும் அவர்கள் தங்கள் எண்ணை நிரப்புவார்கள், Core Values-ஐயும் அவர்களே மதிப்பிடுவார்கள். அவர்களின் மதிப்பெண்ணே உங்கள் இறுதி மதிப்பெண். அடுத்த மாதத்தின் {mgrDays}ஆம் தேதி வரை அவர்களுக்கு அவகாசம் உள்ளது; அதற்குள் மதிப்பிடாவிட்டால், உங்கள் சொந்த job role மதிப்பெண்ணும் Core Values-க்கு முழு மதிப்பெண்ணும் கணக்கிடப்படும். பிறகு நிலை Manager reviewed எனக் காட்டும்.',
   },
   's2.p5.what': {
     en: 'If their score is a lot lower than yours',

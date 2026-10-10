@@ -140,7 +140,7 @@ export default function TeamMember() {
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-ink-900">
                       {monthLabel(m)}
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={s?.status ?? null} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={s?.status ?? null} outcome={s?.deadline_outcome} /></td>
                     {/* The total, and underneath it what it is made of.
                         A month at 88 built on a weak job role and a full
                         core-values score is a different conversation

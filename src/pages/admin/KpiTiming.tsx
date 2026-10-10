@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Timer, Info, Save, CalendarClock } from 'lucide-react'
+import { Timer, Save, CalendarClock } from 'lucide-react'
 import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
   currentFy, type TatPolicy,
@@ -70,7 +70,7 @@ export default function KpiTiming() {
   const mgrDays = Number(mgr)
   const valid =
     Number.isInteger(tmDays) && Number.isInteger(mgrDays) &&
-    tmDays >= 0 && mgrDays >= 0 && tmDays <= 60 && mgrDays <= 60 &&
+    tmDays >= 1 && mgrDays >= 1 && tmDays <= 28 && mgrDays <= 28 &&
     mgrDays >= tmDays
 
   const dirty =
@@ -83,6 +83,7 @@ export default function KpiTiming() {
   const submit = async () => {
     setNotice(null); setFailed(null)
     const next: TatPolicy = {
+      ...policy,
       tm_grace_days: tmDays,
       manager_grace_days: mgrDays,
       starts_from: from || null,
@@ -90,11 +91,8 @@ export default function KpiTiming() {
     try {
       await save.mutateAsync(next)
       setNotice(
-        `Saved. Team members get ${tmDays} day${tmDays === 1 ? '' : 's'}, managers ` +
-        `get ${mgrDays}, and turnaround is measured ` +
-        (next.starts_from
-          ? `from ${monthLabel(next.starts_from)} onwards.`
-          : 'on every month of the year.'),
+        `Saved. Team members submit until the ${tmDays} and managers score until the ${mgrDays} ` +
+        'of the following month.',
       )
     } catch (err) {
       setFailed(err instanceof Error ? err.message : 'Could not save that.')
@@ -111,30 +109,8 @@ export default function KpiTiming() {
           KPI timing
         </h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          How long each side gets before a month counts as late, and which
-          month the clock starts on.
+          The last day to submit and to score each month, and when a month closes.
         </p>
-      </div>
-
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div className="text-ink-600">
-          <p className="font-medium text-ink-900">
-            Both clocks start when the month ends
-          </p>
-          <p className="mt-1">
-            July's assessment becomes due on 1 August. A team member with a{' '}
-            {tmDays}-day allowance who takes {tmDays + 1} days is{' '}
-            <strong>1 day late</strong>; one who takes {Math.max(0, tmDays - 1)}{' '}
-            is on time, not early — finishing inside the allowance earns nothing
-            to spend next month.
-          </p>
-          <p className="mt-1.5">
-            The manager's allowance runs from the same 1 August, not from the
-            moment the work arrives, so it cannot be shorter than the team
-            member's.
-          </p>
-        </div>
       </div>
 
       {notice && <Alert kind="success">{notice}</Alert>}
@@ -144,48 +120,32 @@ export default function KpiTiming() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="tm-days">
-              Team member cool-off
+              Team member last day
             </label>
             <div className="flex items-baseline gap-2">
-              <input
-                id="tm-days"
-                type="number" inputMode="numeric" min={0} max={60} step={1}
-                className="input w-28"
-                value={tm}
-                onChange={e => setTm(e.target.value)}
-              />
-              <span className="text-sm text-ink-500">days to submit</span>
+              <select id="tm-days" className="input w-28" value={tm} onChange={e => setTm(e.target.value)}>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <span className="text-sm text-ink-500">of the following month, to submit</span>
             </div>
-            <p className="mt-1.5 text-xs text-ink-500">
-              Counted against Submit TAT — how slow the team is.
-            </p>
           </div>
 
           <div>
             <label className="label" htmlFor="mgr-days">
-              Manager cool-off
+              Manager last day
             </label>
             <div className="flex items-baseline gap-2">
-              <input
-                id="mgr-days"
-                type="number" inputMode="numeric" min={0} max={60} step={1}
-                className="input w-28"
-                value={mgr}
-                onChange={e => setMgr(e.target.value)}
-              />
-              <span className="text-sm text-ink-500">days to score</span>
+              <select id="mgr-days" className="input w-28" value={mgr} onChange={e => setMgr(e.target.value)}>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <span className="text-sm text-ink-500">of the following month, to score</span>
             </div>
-            <p className="mt-1.5 text-xs text-ink-500">
-              Counted against Completion TAT and against anything still pending.
-            </p>
           </div>
         </div>
 
         {mgrDays < tmDays && (
           <Alert kind="warning">
-            The manager's allowance ends before the team member's, so a manager
-            would be late before the work could reach them. Give managers at
-            least {tmDays} days.
+            The manager's last day comes before the team member's. Choose the {tmDays} or later.
           </Alert>
         )}
 
@@ -290,14 +250,14 @@ export default function KpiTiming() {
 
       <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile
-          label="Team member allowance"
+          label="Team member last day"
           value={policy?.tm_grace_days ?? '—'}
-          sub="days after the month ends"
+          sub="of the following month"
         />
         <StatTile
-          label="Manager allowance"
+          label="Manager last day"
           value={policy?.manager_grace_days ?? '—'}
-          sub="days after the month ends"
+          sub="of the following month"
         />
         <StatTile
           label="Month closes on"
@@ -315,11 +275,6 @@ export default function KpiTiming() {
         />
       </div>
 
-      <p className="text-xs text-ink-400">
-        This is one setting for the whole company. It changes what the HR
-        report and every manager's profile call late — not any score, and not
-        who owes what.
-      </p>
     </div>
   )
 }

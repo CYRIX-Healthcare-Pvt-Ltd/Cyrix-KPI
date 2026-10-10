@@ -317,6 +317,21 @@ export const CHAT: Record<string, Phrase> = {
     te: '{month} డ్రాఫ్ట్‌గా సేవ్ అయింది. పూర్తి చేసి మీ మేనేజర్‌కు పంపండి.',
     ta: '{month} வரைவாகச் சேமிக்கப்பட்டுள்ளது. முடித்து உங்கள் மேலாளருக்கு அனுப்புங்கள்.',
   },
+  // The last days (0153). {day} is "12 Oct", filled from the live setting.
+  'nudge.lastday': {
+    en: 'The last day to submit {month} is {day}. Not submitted by then, the month is scored 0.',
+    ml: '{month} സമർപ്പിക്കാനുള്ള അവസാന ദിവസം {day} ആണ്. അതിനുള്ളിൽ സമർപ്പിച്ചില്ലെങ്കിൽ, ആ മാസത്തിന് സ്കോർ 0 ആകും.',
+    hi: '{month} भेजने का आख़िरी दिन {day} है। तब तक न भेजा तो उस महीने का स्कोर 0 होगा।',
+    te: '{month} సమర్పించడానికి చివరి రోజు {day}. అప్పటిలోగా సమర్పించకపోతే, ఆ నెల స్కోరు 0 అవుతుంది.',
+    ta: '{month} சமர்ப்பிக்க கடைசி நாள் {day}. அதற்குள் சமர்ப்பிக்காவிட்டால், அந்த மாதத்தின் மதிப்பெண் 0 ஆகும்.',
+  },
+  'nudge.scoreday': {
+    en: 'The last day to score {month} is {day}. Not scored by then, their own job role score counts, with full marks for core values.',
+    ml: '{month} സ്കോർ ചെയ്യാനുള്ള അവസാന ദിവസം {day} ആണ്. അതിനുള്ളിൽ സ്കോർ ചെയ്തില്ലെങ്കിൽ, അവരുടെ സ്വന്തം job role സ്കോറും core values-ന് മുഴുവൻ മാർക്കും കണക്കാക്കും.',
+    hi: '{month} स्कोर करने का आख़िरी दिन {day} है। तब तक स्कोर न किया तो उनका अपना job role स्कोर और core values के पूरे अंक गिने जाएँगे।',
+    te: '{month} స్కోర్ చేయడానికి చివరి రోజు {day}. అప్పటిలోగా స్కోర్ చేయకపోతే, వారి సొంత job role స్కోరు, core values కి పూర్తి మార్కులు లెక్కించబడతాయి.',
+    ta: '{month} மதிப்பிட கடைசி நாள் {day}. அதற்குள் மதிப்பிடாவிட்டால், அவர்களின் சொந்த job role மதிப்பெண்ணும் core values-க்கு முழு மதிப்பெண்ணும் கணக்கிடப்படும்.',
+  },
   'nudge.kpi': {
     en: 'You have not set up your KPI for this year yet. Nothing can be submitted until it is approved.',
     ml: 'ഈ വർഷത്തെ KPI നിങ്ങൾ ഇതുവരെ സെറ്റ് ചെയ്തിട്ടില്ല. അത് അംഗീകരിക്കുന്നതുവരെ ഒന്നും സമർപ്പിക്കാൻ കഴിയില്ല.',

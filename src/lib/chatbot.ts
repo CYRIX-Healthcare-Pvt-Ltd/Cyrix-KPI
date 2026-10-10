@@ -290,7 +290,7 @@ const ALIASES: Record<string, string[]> = {
               'correct their', 'edit their', 'their kra'],
   'team.p3': ['score my team', 'score them', 'scoring', 'their figures'],
   's2.p1': ['submit', 'fill month', 'monthly', 'achieved', 'enter month'],
-  's2.p3': ['deadline', 'due', 'late', 'last date', 'how many days'],
+  's2.p3': ['deadline', 'due', 'late', 'last date', 'last day', 'how many days', 'time left', 'missed', 'scored 0', 'zero'],
   's3.p1': ['disagree', 'dispute', 'query', 'complain', 'wrong score', 'appeal'],
   'prof.p1': ['photo', 'picture', 'avatar', 'profile'],
   // Nobody is prompted to install any more, so the words people would

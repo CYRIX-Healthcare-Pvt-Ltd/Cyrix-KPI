@@ -25,7 +25,9 @@ import Avatar from './components/Avatar'
 import ThemeToggle from './components/ThemeToggle'
 import { ViewTeamButton } from './components/TeamDrill'
 import { ScorePill, StatusBadge } from './components/ui'
-import { ScoreHeader } from './components/analysis'
+import { ScoreHeader, ActionRequired } from './components/analysis'
+import { Alert } from './components/ui'
+import { TimeLeft } from './components/TimeLeft'
 import { BANDS } from './lib/bands'
 import { BulkAssign } from './pages/admin/SwAdmin'
 import SpareFields from './pages/admin/SpareFields'
@@ -545,6 +547,7 @@ function Harness() {
       <BrandPanel />
       <ScoringRows />
       <ScoreHeaders />
+      <LastDays />
       <UploadPanel />
       <div className="mx-auto max-w-7xl space-y-3 p-4">
         {['Jul-26 status', 'Jul-26 score', 'Months scored', 'Job role / core values'].map(t => (
@@ -554,6 +557,32 @@ function Harness() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** The last-day banners (0153), against a policy whose days are tomorrow and today. */
+function LastDays() {
+  const now = new Date()
+  const ist = new Date(now.getTime() + 330 * 60_000)
+  const period = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 1, 1)).toISOString().slice(0, 10)
+  const policy = { tm_grace_days: Math.min(28, ist.getUTCDate() + 1), manager_grace_days: Math.min(28, ist.getUTCDate()), starts_from: null, deadlines_from: '2026-01-01' }
+  return (
+    <div id="last-days" className="mx-auto max-w-7xl space-y-3 p-4">
+      <ActionRequired
+        eyebrow={<TimeLeft period={period} side="tm" policy={policy} />}
+        title="Sep-26 has not been submitted"
+        body="Last day 12 Oct. Not submitted by then, the month is scored 0."
+        to="/" cta="Start Now"
+      />
+      <ActionRequired
+        eyebrow={<TimeLeft period={period} side="manager" policy={policy} />}
+        title="3 team members are waiting for your Sep-26 score"
+        body="Last day 15 Oct. Not scored by then, their own job role score counts, with full marks for core values."
+        to="/" cta="Score Now"
+      />
+      <Alert kind="error" title="The last day to submit Sep-26 was 12 Oct">It was not submitted, so the month is scored 0.</Alert>
+      <div className="flex gap-2"><StatusBadge status="finalized" outcome="not_submitted" /><StatusBadge status="finalized" outcome="not_scored" /></div>
     </div>
   )
 }

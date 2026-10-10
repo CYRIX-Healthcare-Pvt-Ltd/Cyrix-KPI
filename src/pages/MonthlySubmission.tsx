@@ -15,8 +15,10 @@ import {
   useSubmission, useOpenSubmission, useSaveItemValues,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
-  useScoreQueries, useUseAlternate, currentFy, type QueryPointInput,
+  useScoreQueries, useUseAlternate, useTatPolicy, currentFy, type QueryPointInput,
 } from '@/lib/queries'
+import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
+import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
   calcKpiScore, averageCoreValueRatings, type ScoringRule, type RuleParams,
@@ -54,7 +56,11 @@ export default function MonthlySubmission() {
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
-  const editable = submission?.status === 'draft' || submission?.status === 'returned'
+  const { data: policy } = useTatPolicy()
+  // The last day to submit (0153): after it nothing more is entered.
+  const pastLastDay = isPastLastDay(month, 'tm', policy)
+  const lastDay = lastDayLabel(month, 'tm', policy)
+  const editable = (submission?.status === 'draft' || submission?.status === 'returned') && !pastLastDay
 
   const { data: openDeletion } = useOpenRequestFor('deletion', submission?.id)
   const { data: queryState } = useScoreQueryState(submission?.id)
@@ -317,7 +323,12 @@ export default function MonthlySubmission() {
     return (
       <div className="space-y-4">
         <BackLink />
-        {!kpiActive ? (
+        {pastLastDay && (
+          <Alert kind="error" title={`The last day to submit ${monthLabel(month)} was ${lastDay}`}>
+            It was not submitted, so the month is scored 0.
+          </Alert>
+        )}
+        {pastLastDay ? null : !kpiActive ? (
           // Whose move it is, by name: a draft handed back after a revision is the person's own, not the manager's.
           <KpiStatusNote assignment={assignmentData?.assignment ?? null} fy={fy} where="month" />
         ) : (
@@ -361,13 +372,31 @@ export default function MonthlySubmission() {
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
 
-      {submission.status === 'returned' && (
+      {/* The last day (0153), said before it and after it. */}
+      {(submission.deadline_outcome === 'not_submitted'
+        || (pastLastDay && (submission.status === 'draft' || submission.status === 'returned'))) && (
+        <Alert kind="error" title={`The last day to submit ${monthLabel(month)} was ${lastDay}`}>
+          It was not submitted, so the month is scored 0.
+        </Alert>
+      )}
+      {submission.deadline_outcome === 'not_scored' && (
+        <Alert kind="warning" title="Your manager did not score this month in time">
+          Your own job role score counts, with full marks for core values.
+        </Alert>
+      )}
+      {editable && lastDay && (
+        <Alert kind="warning" title={<TimeLeft period={month} side="tm" policy={policy} />}>
+          Last day {lastDay}. Not submitted by then, the month is scored 0.
+        </Alert>
+      )}
+
+      {submission.status === 'returned' && !pastLastDay && (
         <Alert kind="warning" title="Your manager sent this back">
           <p className="italic">“{submission.return_reason}”</p>
         </Alert>
       )}
 
-      {!editable && submission.status !== 'returned' && (
+      {!editable && submission.status !== 'returned' && !submission.deadline_outcome && !pastLastDay && (
         <Alert kind="info" title="This month is read-only">
           <span className="inline-flex items-center gap-1.5">
             <Lock className="h-3.5 w-3.5" />

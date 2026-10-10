@@ -320,7 +320,15 @@ export interface KpiSubmission {
   final_esms_score: number | null
   final_core_score: number | null
   final_total_score: number | null
+  /**
+   * A last day passed (0153): not_submitted = scored 0; not_scored = the
+   * team member's own score with full core values. Undone if SW Admin
+   * moves the day later.
+   */
+  deadline_outcome?: DeadlineOutcome | null
 }
+
+export type DeadlineOutcome = 'not_submitted' | 'not_scored'
 
 export interface KpiSubmissionItem extends KpiRowDefinition {
   id: string

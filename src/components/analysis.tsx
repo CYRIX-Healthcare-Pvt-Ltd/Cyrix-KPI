@@ -266,7 +266,7 @@ export function ActionRequired({
   expanded,
   cta,
 }: {
-  eyebrow?: string
+  eyebrow?: ReactNode
   title: string
   body?: ReactNode
   /** Where the button goes. */

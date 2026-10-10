@@ -12,8 +12,10 @@ import { useReveal } from '@/lib/useReveal'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
-  useSaveMonthlyTarget, useMonthClose, useScoreQueryState,
+  useSaveMonthlyTarget, useMonthClose, useScoreQueryState, useTatPolicy,
 } from '@/lib/queries'
+import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
+import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel } from '@/lib/fy'
 import { BANDS } from '@/lib/bands'
 import {
@@ -113,7 +115,14 @@ export default function ScoreSubmission() {
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
-  const editable = submission?.status === 'submitted' || submission?.status === 'scored'
+  const { data: policy } = useTatPolicy()
+  // The last days (0153). A first score is refused after the manager's;
+  // a month already scored can still be revised while it is open.
+  const period = submission?.period_month ?? ''
+  const pastScoreDay = !!submission && isPastLastDay(period, 'manager', policy)
+  const pastSubmitDay = !!submission && isPastLastDay(period, 'tm', policy)
+  const firstScoreLate = submission?.status === 'submitted' && pastScoreDay
+  const editable = (submission?.status === 'submitted' && !pastScoreDay) || submission?.status === 'scored'
 
   useEffect(() => {
     if (!data?.submission) return
@@ -452,6 +461,22 @@ export default function ScoreSubmission() {
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+
+      {(firstScoreLate || submission.deadline_outcome === 'not_scored') && (
+        <Alert kind="error" title={`The last day to score ${monthLabel(period)} was ${lastDayLabel(period, 'manager', policy)}`}>
+          {data.employee.full_name.split(' ')[0]}'s own job role score counts, with full marks for core values.
+        </Alert>
+      )}
+      {submission.deadline_outcome === 'not_submitted' && (
+        <Alert kind="error" title={`The last day to submit ${monthLabel(period)} was ${lastDayLabel(period, 'tm', policy)}`}>
+          {data.employee.full_name.split(' ')[0]} did not submit it, so the month is scored 0.
+        </Alert>
+      )}
+      {submission.status === 'submitted' && !pastScoreDay && lastDayLabel(period, 'manager', policy) && (
+        <Alert kind="warning" title={<TimeLeft period={period} side="manager" policy={policy} />}>
+          Last day {lastDayLabel(period, 'manager', policy)}. Not scored by then, {data.employee.full_name.split(' ')[0]}'s own job role score counts, with full marks for core values.
+        </Alert>
+      )}
 
       {/* Arrived from the Queries screen. The manager came here to change
           a figure somebody asked about, so the way back has to be on the
@@ -1077,13 +1102,16 @@ export default function ScoreSubmission() {
             {/* One question at a time: sending it back and asking for it
                 to be deleted are different answers to the same month, and
                 both forms open at once read as if both were going. */}
-            <button
-              onClick={() => { setShowReturn(v => !v); setShowDelete(false) }}
-              disabled={busy}
-              className="btn-secondary"
-            >
-              <Undo2 className="h-4 w-4" /> Send back
-            </button>
+            {/* Sent back after the team member's last day, it could never come back. */}
+            {!pastSubmitDay && (
+              <button
+                onClick={() => { setShowReturn(v => !v); setShowDelete(false) }}
+                disabled={busy}
+                className="btn-secondary"
+              >
+                <Undo2 className="h-4 w-4" /> Send back
+              </button>
+            )}
             {/* Wrongly submitted months are deleted, not corrected — but
                 only with both the manager's and HR's approval. */}
             {openDeletion ? (
