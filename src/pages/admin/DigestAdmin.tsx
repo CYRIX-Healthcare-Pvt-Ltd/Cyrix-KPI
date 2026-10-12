@@ -111,7 +111,9 @@ export default function DigestAdmin() {
         p_meet_link: d.kind === 'meeting' ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
       })
       if (error) throw new Error(friendlyError(error))
-      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: d.until || null })
+      // A poll ends when it closes and a vacancy on its Apply by (0178): no Show until for them.
+      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy'
+      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
       if (d.kind === 'vacancy') {
         const { error: ve } = await supabase.rpc('digest_set_vacancy', {
@@ -295,12 +297,12 @@ export default function DigestAdmin() {
           </div>
         </div>
 
-        <div className="max-w-xs">
+        {d.kind !== 'poll' && d.kind !== 'vacancy' && <div className="max-w-xs">
           <label className="label" htmlFor="dg-until">Show until · optional</label>
           <input id="dg-until" type="date" className="input" value={d.until}
             min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
             onChange={e => set({ until: e.target.value })} />
-        </div>
+        </div>}
 
         <button className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate() }}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -368,7 +370,7 @@ export default function DigestAdmin() {
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.show_until ?? '' })
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
