@@ -47,6 +47,12 @@ export default function ChangePassword() {
    * behaviour and turns itself on the moment HR adds their address.
    */
   const onRecord = (employee?.work_email ?? '').trim()
+  /** "ke***@cyrix.in": the first two letters, then stars, then the domain. */
+  const maskEmail = (e: string) => {
+    const [user, domain] = e.split('@')
+    if (!user || !domain) return ''
+    return `${user.slice(0, Math.min(2, user.length - 1) || 1)}***@${domain}`
+  }
   const verify = !forced && onRecord !== ''
 
   const emailProblem = emailFeedback(email, touched)
@@ -136,7 +142,9 @@ export default function ChangePassword() {
                 onBlur={() => setTouched(true)}
                 disabled={sent}
                 autoComplete="email"
-                placeholder={`you@${OFFICIAL_DOMAIN}`}
+                // Their own address with the middle hidden (the user, 12 Oct): a hint at
+                // which mailbox, without handing it to whoever is at the keyboard.
+                placeholder={maskEmail(onRecord) || `you@${OFFICIAL_DOMAIN}`}
                 aria-invalid={!!emailProblem}
                 aria-describedby="official-email-hint"
                 required

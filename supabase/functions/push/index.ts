@@ -183,8 +183,14 @@ Deno.serve(async req => {
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
     const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy' }
-    const title = (KIND[post.kind] ?? 'Cyrix Digest') + ' · ' + post.title
-    const body = post.kind === 'meeting'
+    // The meeting link arriving after the meeting was announced (0180): a short second notice.
+    const linkAdded = input.link_added === true && post.kind === 'meeting' && !!post.meet_link
+    const title = linkAdded
+      ? 'Meeting link added · ' + post.title
+      : (KIND[post.kind] ?? 'Cyrix Digest') + ' · ' + post.title
+    const body = linkAdded
+      ? `${when} · Join from Cyrix Digest.`
+      : post.kind === 'meeting'
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
       : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
@@ -228,7 +234,8 @@ Deno.serve(async req => {
       }
     }
     const t = devicesOn
-      ? await deliver(db, people, { title, body, url: '/kpi/', tag: 'msg-' + (row?.id ?? '') })
+      // The portal, not KPI (the user, 12 Oct: a test message "was not kpi related" but opened KPI).
+      ? await deliver(db, people, { title, body, url: '/', tag: 'msg-' + (row?.id ?? '') })
       : { people: people.length, devices: 0, delivered: 0, failed: 0 }
     if (row) await db.from('push_messages').update(t).eq('id', row.id)
     return json(t)

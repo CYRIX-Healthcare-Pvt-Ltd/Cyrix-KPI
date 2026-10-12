@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
+import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -56,6 +57,10 @@ interface Row {
 interface Draft {
   id: string | null; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   date: string; minutes: number; link: string; place: string
+  /** The link is often not known when the meeting is announced (the user, 12 Oct): ticked, it is asked for. */
+  hasLink: boolean
+  /** Whether the saved post already had one, so adding it later can tell everybody. */
+  hadLink: boolean
   /** A poll (0167): its options, single or multiple choice, and when it closes. */
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
@@ -63,7 +68,7 @@ interface Draft {
   /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
   until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -86,6 +91,12 @@ export default function DigestAdmin() {
   const [d, setD] = useState<Draft>(EMPTY)
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  // Which desk this is, for "posted by" in the preview.
+  const { data: desk } = useQuery({
+    queryKey: ['digest', 'desk'],
+    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | null) ?? 'hr',
+  })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
   const [q, setQ] = useState('')
@@ -109,7 +120,7 @@ export default function DigestAdmin() {
         p_id: d.id, p_kind: d.kind, p_title: d.title, p_body: d.body, p_image_url: d.image_url ?? '', p_color: d.color,
         p_meet_at: d.kind === 'meeting' && d.date ? new Date(d.date).toISOString() : null,
         p_meet_minutes: d.kind === 'meeting' ? d.minutes : null,
-        p_meet_link: d.kind === 'meeting' ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
+        p_meet_link: d.kind === 'meeting' && d.hasLink ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
       })
       if (error) throw new Error(friendlyError(error))
       // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
@@ -129,13 +140,16 @@ export default function DigestAdmin() {
         })
         if (pe) throw new Error(friendlyError(pe))
       }
-      if (!isNew) return { isNew, people: 0 }
-      // A new post tells everybody; an edit does not.
-      const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id } })
-      return { isNew, people: (sent as { people?: number } | null)?.people ?? 0 }
+      // The meeting link arriving after the meeting was announced tells everybody (0180).
+      const linkAdded = !isNew && d.kind === 'meeting' && d.hasLink && !d.hadLink
+      if (!isNew && !linkAdded) return { isNew, people: 0 }
+      // A new post tells everybody; an edit does not, unless it brings the meeting link.
+      const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id, link_added: linkAdded } })
+      return { isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
     },
     onSuccess: r => {
-      setDone(r.isNew ? `Posted. ${r.people} people were notified.` : 'Saved.')
+      setDone(r.isNew ? `Posted. ${r.people} people were notified.`
+        : 'linkAdded' in r && r.linkAdded ? `Saved. ${r.people} people were told the meeting link is ready.` : 'Saved.')
       setD(EMPTY)
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
     },
@@ -174,9 +188,23 @@ export default function DigestAdmin() {
   if (d.kind === 'meeting') {
     if (!d.date) missing.push('Date and time')
     if (!(d.minutes >= 5 && d.minutes <= 600)) missing.push('Duration')
-    if (!/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
+    if (d.hasLink && !/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
   }
   const ready = missing.length === 0
+
+  const previewPost: PreviewPost = {
+    kind: d.kind, title: d.title.trim() || (d.kind === 'poll' ? 'Your question' : 'Your title'), body: d.body,
+    image_url: d.image_url, color: d.color,
+    meet_at: d.kind === 'meeting' ? (d.date ? new Date(d.date).toISOString() : new Date(Date.now() + 864e5).toISOString()) : null,
+    meet_minutes: d.kind === 'meeting' ? d.minutes : null,
+    meet_link: d.kind === 'meeting' && d.hasLink && d.link.trim() ? d.link.trim() : null,
+    meet_place: d.kind === 'meeting' ? d.place.trim() || null : null,
+    posted_as: desk ?? 'hr', author: null, created_at: new Date().toISOString(),
+    likes: 0, liked: false, comments: 0,
+    vac_location: d.kind === 'vacancy' ? d.vloc.trim() || null : null,
+    apply_by: d.kind === 'vacancy' ? d.vby || null : null,
+    apply_link: d.kind === 'vacancy' ? d.vlink.trim() || null : null,
+  }
 
   return (
     <div className="space-y-5">
@@ -275,8 +303,17 @@ export default function DigestAdmin() {
               <DurationPicker id="dg-min" value={d.minutes} onChange={minutes => set({ minutes })} />
             </div>
             <div>
-              <label className="label" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+              <label className="flex items-center gap-2 py-1 text-sm font-medium text-ink-800">
+                <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={d.hasLink}
+                  onChange={e => set({ hasLink: e.target.checked })} />
+                Add meeting link
+              </label>
+              {d.hasLink && (
+                <>
+                  <label className="label mt-2" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+                  <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+                </>
+              )}
             </div>
             <div>
               <label className="label" htmlFor="dg-place">Where</label>
@@ -326,10 +363,20 @@ export default function DigestAdmin() {
             onChange={e => set({ until: e.target.value })} />
         </div>}
 
+        <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate() }}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           {ready ? (d.id ? 'Save changes' : 'Post to everyone') : `Fill in ${missing.join(', ')}`}
         </button>
+        <button type="button" className="btn-secondary" onClick={() => setPreviewing(true)}>
+          <Eye className="h-4 w-4" /> Preview
+        </button>
+        </div>
+        {previewing && (
+          <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
+            closes={d.kind === 'poll' && d.closes ? new Date(d.closes).toISOString() : null}
+            onClose={() => setPreviewing(false)} />
+        )}
       </div>
 
       {!!rows?.length && (
@@ -391,7 +438,7 @@ export default function DigestAdmin() {
                     ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
                     : []
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
-                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '',
+                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link,
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
