@@ -152,9 +152,30 @@ export default function DigestAdmin() {
     setUploading(true)
     try { set({ image_url: await upload(f) }) } catch (e) { setDone(null); alert((e as Error).message) } finally { setUploading(false) }
   }
-  const ready = d.title.trim() && (LIKABLE.has(d.kind)
-    || (d.kind === 'poll' && d.options.filter(o => o.trim()).length >= 2)
-    || (d.kind === 'meeting' && d.date && /^https:\/\//.test(d.link.trim())))
+  /*
+    What a post cannot go out without, by kind (the user, 12 Oct: "make necessary fields
+    mandatory before posting, example duration, date, link"). Named as the labels are,
+    so the button can say what is left.
+  */
+  const missing: string[] = []
+  const has = (v: string) => v.trim() !== ''
+  if (!has(d.title)) missing.push(d.kind === 'poll' ? 'Question' : d.kind === 'vacancy' ? 'Job post' : 'Title')
+  if (LIKABLE.has(d.kind) && !has(d.body)) missing.push('Description')
+  if (d.kind === 'vacancy') {
+    if (!has(d.vloc)) missing.push('Location')
+    if (!d.vby) missing.push('Apply by')
+    if (!has(d.vlink)) missing.push('How to apply')
+  }
+  if (d.kind === 'poll') {
+    if (d.options.filter(o => o.trim()).length < 2) missing.push('two options')
+    if (!d.closes) missing.push('Closes')
+  }
+  if (d.kind === 'meeting') {
+    if (!d.date) missing.push('Date and time')
+    if (!(d.minutes >= 5 && d.minutes <= 600)) missing.push('Duration')
+    if (!/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
+  }
+  const ready = missing.length === 0
 
   return (
     <div className="space-y-5">
@@ -184,12 +205,12 @@ export default function DigestAdmin() {
         </div>
 
         <div>
-          <label className="label" htmlFor="dg-title">{d.kind === 'poll' ? 'Question' : d.kind === 'vacancy' ? 'Job post' : 'Title'}</label>
+          <label className="label" htmlFor="dg-title">{d.kind === 'poll' ? 'Question' : d.kind === 'vacancy' ? 'Job post' : 'Title'} <span className="text-cyrixRed-600" aria-hidden>*</span></label>
           <input id="dg-title" className="input" maxLength={120} value={d.title} onChange={e => set({ title: e.target.value })}
             placeholder={({ meeting: 'Quarterly town hall', poll: 'Which day suits the team lunch?', vacancy: 'Biomedical Engineer', alert: 'Office closed tomorrow', notice: 'Holiday list for 2027', announcement: 'New branch opens in Madurai', news: 'Diwali celebration at all offices' } as Record<Kind, string>)[d.kind]} />
         </div>
         <div>
-          <label className="label" htmlFor="dg-body">Description</label>
+          <label className="label" htmlFor="dg-body">Description{LIKABLE.has(d.kind) && <> <span className="text-cyrixRed-600" aria-hidden>*</span></>}</label>
           <textarea id="dg-body" className="input min-h-[110px]" maxLength={4000} value={d.body} onChange={e => set({ body: e.target.value })}
             placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : d.kind === 'vacancy' ? 'Two years in equipment repair; field travel' : 'Lunch, rangoli and prizes on 30 Oct'} />
         </div>
@@ -197,15 +218,15 @@ export default function DigestAdmin() {
         {d.kind === 'vacancy' && (
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label className="label" htmlFor="dg-vloc">Location</label>
+              <label className="label" htmlFor="dg-vloc">Location <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-vloc" className="input" value={d.vloc} onChange={e => set({ vloc: e.target.value })} placeholder="Kochi" />
             </div>
             <div>
-              <label className="label" htmlFor="dg-vby">Apply by</label>
+              <label className="label" htmlFor="dg-vby">Apply by <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-vby" type="date" className="input" value={d.vby} onChange={e => set({ vby: e.target.value })} />
             </div>
             <div>
-              <label className="label" htmlFor="dg-vlink">How to apply</label>
+              <label className="label" htmlFor="dg-vlink">How to apply <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
             </div>
           </div>
@@ -213,7 +234,7 @@ export default function DigestAdmin() {
 
         {d.kind === 'poll' && (
           <div className="space-y-3">
-            <span className="label">Options</span>
+            <span className="label">Options <span className="text-cyrixRed-600" aria-hidden>*</span></span>
             {d.options.map((o, i) => (
               <div key={i} className="flex items-center gap-2">
                 <input className="input" maxLength={120} value={o} placeholder={`Option ${i + 1}`}
@@ -234,7 +255,7 @@ export default function DigestAdmin() {
                 Multiple answers
               </label>
               <div>
-                <label className="label" htmlFor="dg-closes">Closes</label>
+                <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
                 <input id="dg-closes" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
               </div>
             </div>
@@ -244,17 +265,30 @@ export default function DigestAdmin() {
         {d.kind === 'meeting' && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="dg-at">Date and time</label>
+              <label className="label" htmlFor="dg-at">Date and time <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-at" type="datetime-local" className="input" value={d.date} onChange={e => set({ date: e.target.value })} />
             </div>
             <div>
-              <label className="label" htmlFor="dg-min">Duration</label>
-              <select id="dg-min" className="input" value={d.minutes} onChange={e => set({ minutes: Number(e.target.value) })}>
-                {[15, 30, 45, 60, 90, 120, 180].map(m => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} hr`}</option>)}
-              </select>
+              <label className="label" htmlFor="dg-min">Duration <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              {/* The usual lengths a tap away, and any other in minutes (the user, 12 Oct:
+                  "i cannot select 20 mins, and dropdown not good"). */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[15, 20, 30, 45, 60, 90, 120].map(m => (
+                  <button key={m} type="button" onClick={() => set({ minutes: m })}
+                    className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
+                      d.minutes === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
+                    {m < 60 ? `${m} min` : `${m / 60} hr`}
+                  </button>
+                ))}
+                <span className="relative w-24">
+                  <input id="dg-min" type="number" inputMode="numeric" min={5} max={600} step={5} className="input !py-1.5 !pr-10"
+                    value={d.minutes || ''} onChange={e => set({ minutes: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                  <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-400">min</span>
+                </span>
+              </div>
             </div>
             <div>
-              <label className="label" htmlFor="dg-link">Meeting link</label>
+              <label className="label" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
             </div>
             <div>
@@ -307,7 +341,7 @@ export default function DigestAdmin() {
 
         <button className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate() }}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {d.id ? 'Save changes' : 'Post to everyone'}
+          {ready ? (d.id ? 'Save changes' : 'Post to everyone') : `Fill in ${missing.join(', ')}`}
         </button>
       </div>
 
