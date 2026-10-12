@@ -196,7 +196,7 @@ Deno.serve(async req => {
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
-    const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy', form: 'Form' }
+    const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy', form: 'Form', video: 'Video' }
     // The meeting link arriving after the meeting was announced (0180): a short second notice.
     const linkAdded = input.link_added === true && post.kind === 'meeting' && !!post.meet_link
     const title = linkAdded

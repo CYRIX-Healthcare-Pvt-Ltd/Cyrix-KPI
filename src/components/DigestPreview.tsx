@@ -15,6 +15,8 @@ export interface PreviewPost {
   posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string
   likes: number; liked: boolean; comments: number
   vac_location: string | null; apply_by: string | null; apply_link: string | null
+  /** Minutes before the start that Join opens, and a Video post's YouTube id (0185). */
+  join_early: number; video_id: string | null
 }
 
 /** The portal: the same site in production; its dev server locally (the KPI one is a different origin). */

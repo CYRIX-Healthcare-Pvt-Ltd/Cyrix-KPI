@@ -7,7 +7,7 @@ import DigestAccess from '@/components/DigestAccess'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -19,16 +19,27 @@ import { Alert } from '@/components/ui'
  * post shows its likes and comments, and a meeting shows who clicked Join,
  * how often, first and last.
  */
-type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form'
+type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form' | 'video'
 /** Every kind, its word and its icon (0170; the user: "announcement, alerts, notice, vacancy"). */
 const KINDS: Array<[Kind, string, typeof Newspaper]> = [
   ['news', 'News', Newspaper], ['announcement', 'Announcement', Megaphone], ['alert', 'Alert', TriangleAlert],
   ['notice', 'Notice', Pin], ['vacancy', 'Vacancy', Briefcase], ['meeting', 'Meeting', Video], ['poll', 'Poll', BarChart3],
-  ['form', 'Form', ClipboardList],
+  ['form', 'Form', ClipboardList], ['video', 'Video', PlayCircle],
 ]
 const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
 /** The kinds that are like news: words, a picture, likes. */
-const LIKABLE = new Set<Kind>(['news', 'announcement', 'alert', 'notice', 'vacancy'])
+const LIKABLE = new Set<Kind>(['news', 'announcement', 'alert', 'notice', 'vacancy', 'video'])
+/**
+ * A YouTube video's id from any of its links — youtu.be/…, watch?v=…, shorts/…, embed/…, live/… —
+ * or null (0185; the user, 13 Oct: "we are posting videos in YouTube, so I need to put the link in digest").
+ */
+export const youTubeId = (url: string): string | null => {
+  const u = url.trim()
+  const m = u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/|v\/))([A-Za-z0-9_-]{11})/)
+  return m ? m[1] : /^[A-Za-z0-9_-]{11}$/.test(u) ? u : null
+}
+/** Minutes before a meeting that Join opens (0185; the user: "if I want to keep 30 mins before then I can customise it"). */
+const JOIN_EARLY = [5, 10, 15, 30, 45, 60]
 /** A named colour, or any colour as #rrggbb (0168; the user: "need more colours picker also"). */
 type Hue = string
 const HUES: Array<[Hue, string, string]> = [
@@ -59,6 +70,8 @@ interface Row {
   editors: string[]
   /** How many people opened it (0184). */
   opened: number
+  /** Minutes before the start that Join opens, and a Video post's YouTube id (0185). */
+  join_early: number; video_id: string | null
   vac_location: string | null; apply_by: string | null; apply_link: string | null
   /** The last day it is on the portal home (0177); null stays. */
   show_until: string | null
@@ -76,6 +89,10 @@ interface Draft {
   questions: Question[]
   /** Already out to people (0182): publishing it again is an edit, and a link added to it is news. */
   wasPublished: boolean
+  /** Minutes before the start that Join opens (0185). */
+  joinEarly: number
+  /** A Video post's YouTube link, as pasted (0185). */
+  video: string
   /** A poll (0167): its options, single or multiple choice, and when it closes. */
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
@@ -83,7 +100,7 @@ interface Draft {
   /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
   until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -150,6 +167,14 @@ export default function DigestAdmin() {
           p_id: id, p_location: d.vloc, p_apply_by: d.vby || null, p_apply_link: d.vlink,
         })
         if (ve) throw new Error(friendlyError(ve))
+      }
+      if (d.kind === 'meeting') {
+        const { error: je } = await supabase.rpc('digest_set_join_early', { p_id: id, p_minutes: d.joinEarly })
+        if (je) throw new Error(friendlyError(je))
+      }
+      if (d.kind === 'video') {
+        const { error: ye } = await supabase.rpc('digest_set_video', { p_id: id, p_video_id: youTubeId(d.video) })
+        if (ye) throw new Error(friendlyError(ye))
       }
       if (d.kind === 'form') {
         const { error: fe } = await supabase.rpc('digest_set_form', {
@@ -222,6 +247,7 @@ export default function DigestAdmin() {
     if (d.options.filter(o => o.trim()).length < 2) missing.push('two options')
     if (!d.closes) missing.push('Closes')
   }
+  if (d.kind === 'video' && !youTubeId(d.video)) missing.push('YouTube link')
   if (d.kind === 'form') {
     if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
     if (d.questions.some(q => (q.qtype === 'one' || q.qtype === 'many') && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
@@ -246,6 +272,7 @@ export default function DigestAdmin() {
     vac_location: d.kind === 'vacancy' ? d.vloc.trim() || null : null,
     apply_by: d.kind === 'vacancy' ? d.vby || null : null,
     apply_link: d.kind === 'vacancy' ? d.vlink.trim() || null : null,
+    join_early: d.joinEarly, video_id: d.kind === 'video' ? youTubeId(d.video) : null,
   }
 
   return (
@@ -300,6 +327,18 @@ export default function DigestAdmin() {
               <label className="label" htmlFor="dg-vlink">How to apply <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
             </div>
+          </div>
+        )}
+
+        {d.kind === 'video' && (
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <div>
+              <label className="label" htmlFor="dg-video">YouTube link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-video" className="input" value={d.video} onChange={e => set({ video: e.target.value })} placeholder="https://youtu.be/…" />
+            </div>
+            {youTubeId(d.video) && (
+              <img src={`https://i.ytimg.com/vi/${youTubeId(d.video)}/hqdefault.jpg`} alt="" className="aspect-video w-full rounded-lg object-cover" />
+            )}
           </div>
         )}
 
@@ -364,6 +403,16 @@ export default function DigestAdmin() {
                 <>
                   <label className="label mt-2" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
                   <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+                  <span className="label mt-3">Join opens</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {JOIN_EARLY.map(m => (
+                      <button key={m} type="button" onClick={() => set({ joinEarly: m })}
+                        className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
+                          d.joinEarly === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
+                        {m < 60 ? `${m} min` : '1 hr'} before
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
@@ -506,7 +555,7 @@ export default function DigestAdmin() {
                     : []
                   setDraftSaved(false)
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
-                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at,
+                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
                     questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
@@ -536,8 +585,10 @@ type Person = {
   liked_at: string | null; comments: number; joins: number; joined_at: string | null; voted: string | null
   /** A form (0181): when they sent it, and their answers by question id. */
   answered_at: string | null; answers: Record<string, string | string[]> | null
+  /** A video (0185): the most of it they watched, its length, and when they started. */
+  watched_seconds: number | null; video_seconds: number | null; watched_at: string | null
 }
-type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered'
+type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
 function Details({ row }: { row: Row }) {
   const qc = useQueryClient()
@@ -590,6 +641,7 @@ function Details({ row }: { row: Row }) {
     joined: p => p.joins > 0, not_joined: p => p.joins === 0,
     voted: p => !!p.voted, not_voted: p => !p.voted,
     answered: p => !!p.answered_at, not_answered: p => !p.answered_at,
+    watched: p => (p.watched_seconds ?? 0) > 0, not_watched: p => !p.watched_seconds,
   }
   const tiles: Array<[Lens, string, number]> = [
     ['opened', 'Opened', all.filter(test.opened).length],
@@ -598,6 +650,7 @@ function Details({ row }: { row: Row }) {
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join', all.filter(test.joined).length] as [Lens, string, number]] : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
     ...(row.kind === 'form' ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
+    ...(row.kind === 'video' ? [['watched', 'Watched', all.filter(test.watched).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
     ['opened', 'Opened'], ['not_opened', 'Not opened'],
@@ -606,10 +659,14 @@ function Details({ row }: { row: Row }) {
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted'], ['not_voted', 'Not voted']] as Array<[Lens, string]> : []),
     ...(row.kind === 'form' ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
+    ...(row.kind === 'video' ? [['watched', 'Watched'], ['not_watched', 'Not watched']] as Array<[Lens, string]> : []),
   ]
   const f = find.trim().toLowerCase()
   const list = all.filter(test[lens]).filter(p => !f || `${p.full_name} ${p.ecode} ${p.department ?? ''} ${p.function_name ?? ''}`.toLowerCase().includes(f))
   // One sheet with everybody, a Yes/No for each thing, to filter in Excel (the user, 10 Oct).
+  /** How much of the video they watched, as a whole percent, or blank. */
+  const pct = (p: Person) => (p.watched_seconds && p.video_seconds ? `${Math.min(100, Math.round((p.watched_seconds / p.video_seconds) * 100))}%` : '')
+  const mins = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const download = () => {
     const yn = (b: boolean) => (b ? 'Yes' : 'No')
     const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Times opened',
@@ -617,7 +674,8 @@ function Details({ row }: { row: Row }) {
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
-      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : [])]
+      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
+      ...(row.kind === 'video' ? ['Watched', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.opens,
@@ -626,7 +684,9 @@ function Details({ row }: { row: Row }) {
       ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
       ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
       ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
-        ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : [])])]
+        ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
+      ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
+        p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
     a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)}.csv`
@@ -674,7 +734,7 @@ function Details({ row }: { row: Row }) {
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <th className="px-3 py-2">Name</th><th className="px-3 py-2">E-code</th><th className="px-3 py-2">Department</th>
               <th className="px-3 py-2">Opened</th>
-              {LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : row.kind === 'form' ? <th className="px-3 py-2">Answered</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
+              {row.kind === 'video' ? <th className="px-3 py-2">Watched</th> : LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : row.kind === 'form' ? <th className="px-3 py-2">Answered</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -684,7 +744,9 @@ function Details({ row }: { row: Row }) {
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmt(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
-                {LIKABLE.has(row.kind)
+                {row.kind === 'video'
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.watched_seconds ? `${mins(p.watched_seconds)}${p.video_seconds ? ` of ${mins(p.video_seconds)} · ${pct(p)}` : ''}` : '—'}</td>
+                  : LIKABLE.has(row.kind)
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmt(p.liked_at) : '—'}</td>
                   : row.kind === 'poll'
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
