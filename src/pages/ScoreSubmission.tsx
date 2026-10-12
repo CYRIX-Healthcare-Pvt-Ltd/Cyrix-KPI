@@ -312,7 +312,9 @@ export default function ScoreSubmission() {
    * ESMS is scored against a fixed target of 100 and is not where a
    * manager and a team member differ. The job role is.
    */
-  const cutGap = selfJob - mgrJob
+  // Only once every figure is in (the user, 12 Oct): with the boxes starting empty,
+  // a half-filled form is not a lower score, just an unfinished one.
+  const cutGap = figuresIncomplete ? 0 : selfJob - mgrJob
   const needsCutReason = cutGap > SCORE_CUT_POINTS && !cutReason.trim()
 
   const save = async () => {
