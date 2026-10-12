@@ -3,13 +3,14 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
   Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
+import CyraAccess from '@/pages/admin/CyraAccess'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
 import MissingLogins from '@/components/MissingLogins'
@@ -2391,6 +2392,8 @@ const ADMIN_TABS = [
   // Who works in Revive Lab, in which TRCs, doing what — the same table
   // the module's own admins edit from inside it.
   { id: 'revive', label: 'Revive Lab', short: 'Revive', icon: Wrench, render: () => <ReviveLabAccess /> },
+  // Review and Admin inside CYRA for each person who holds it (0174).
+  { id: 'cyra', label: 'CYRA', short: 'CYRA', icon: Stethoscope, render: () => <CyraAccess /> },
   // Admin vs director inside Pulse, for people already granted the tile
   // above. Pulse's own data lives outside this database (SQL Server on
   // cyrix-svc01), so this tab calls Pulse's own admin API rather than a

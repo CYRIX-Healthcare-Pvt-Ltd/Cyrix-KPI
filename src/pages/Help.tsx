@@ -506,6 +506,7 @@ export default function Help() {
             { what: t('sw.p4.what'), how: t('sw.p4.how'), to: '/admin/logins', cta: 'Open logins' },
             { what: t('sw.p5.what'), how: t('sw.p5.how'), to: '/admin/logins', cta: 'Open SW Admin' },
             { what: t('sw.p6.what'), how: t('sw.p6.how'), to: '/admin/logins', cta: 'Open SW Admin' },
+            { what: t('sw.p7.what'), how: t('sw.p7.how'), to: '/admin/logins', cta: 'Open SW Admin' },
           ]}
         />
       )}

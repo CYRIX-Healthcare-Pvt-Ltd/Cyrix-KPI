@@ -283,6 +283,7 @@ const ALIASES: Record<string, string[]> = {
             'edit employee', 'change email', 'work email'],
   'sw.p5': ['software questions', 'support tab', 'software desk', 'answer questions'],
   'sw.p6': ['revive lab', 'revive', 'bemmp', 'delete ticket', 'route card'],
+  'sw.p7': ['cyra', 'cyra review', 'cyra admin', 'reviewer'],
   'ask.p13': ['video', 'videos', 'demo', 'demo video', 'tutorial', 'walkthrough'],
   // A manager correcting somebody else's row before approving it. The
   // answer says so; the heading does not, so the words never matched.
