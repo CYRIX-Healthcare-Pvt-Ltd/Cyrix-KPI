@@ -182,7 +182,7 @@ Deno.serve(async req => {
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
-    const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy' }
+    const KIND: Record<string, string> = { meeting: 'Meeting', poll: 'Poll', announcement: 'Announcement', alert: 'Alert', notice: 'Notice', vacancy: 'Vacancy', form: 'Form' }
     // The meeting link arriving after the meeting was announced (0180): a short second notice.
     const linkAdded = input.link_added === true && post.kind === 'meeting' && !!post.meet_link
     const title = linkAdded
@@ -193,6 +193,7 @@ Deno.serve(async req => {
       : post.kind === 'meeting'
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
       : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'
+      : post.kind === 'form' ? 'Fill it in, in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const { data: me } = await user.rpc('current_employee_id')
     const { data: all } = await db.from('employees').select('id').eq('is_active', true)

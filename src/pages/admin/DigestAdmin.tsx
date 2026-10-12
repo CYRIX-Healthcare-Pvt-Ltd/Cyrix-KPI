@@ -2,10 +2,11 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
+import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -17,11 +18,12 @@ import { Alert } from '@/components/ui'
  * post shows its likes and comments, and a meeting shows who clicked Join,
  * how often, first and last.
  */
-type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll'
+type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form'
 /** Every kind, its word and its icon (0170; the user: "announcement, alerts, notice, vacancy"). */
 const KINDS: Array<[Kind, string, typeof Newspaper]> = [
   ['news', 'News', Newspaper], ['announcement', 'Announcement', Megaphone], ['alert', 'Alert', TriangleAlert],
   ['notice', 'Notice', Pin], ['vacancy', 'Vacancy', Briefcase], ['meeting', 'Meeting', Video], ['poll', 'Poll', BarChart3],
+  ['form', 'Form', ClipboardList],
 ]
 const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
 /** The kinds that are like news: words, a picture, likes. */
@@ -61,6 +63,8 @@ interface Draft {
   hasLink: boolean
   /** Whether the saved post already had one, so adding it later can tell everybody. */
   hadLink: boolean
+  /** A form's questions (0181). Its closing time is `closes`, as a poll's is. */
+  questions: Question[]
   /** A poll (0167): its options, single or multiple choice, and when it closes. */
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
@@ -68,7 +72,7 @@ interface Draft {
   /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
   until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -125,7 +129,7 @@ export default function DigestAdmin() {
       if (error) throw new Error(friendlyError(error))
       // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
       // no Show until for them.
-      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting'
+      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || d.kind === 'form'
       const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
       if (d.kind === 'vacancy') {
@@ -134,22 +138,30 @@ export default function DigestAdmin() {
         })
         if (ve) throw new Error(friendlyError(ve))
       }
+      if (d.kind === 'form') {
+        const { error: fe } = await supabase.rpc('digest_set_form', {
+          p_id: id,
+          p_questions: d.questions.map(q => ({ ...q, label: q.label.trim(), options: q.options.map(o => o.trim()).filter(Boolean) })),
+          p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
+        })
+        if (fe) throw new Error(friendlyError(fe))
+      }
       if (d.kind === 'poll') {
         const { error: pe } = await supabase.rpc('digest_set_poll', {
           p_id: id, p_options: d.options, p_closes_at: d.closes ? new Date(d.closes).toISOString() : null, p_multi: d.multi,
         })
         if (pe) throw new Error(friendlyError(pe))
       }
-      // The meeting link arriving after the meeting was announced tells everybody (0180).
+      // The meeting link arriving after the meeting was announced says so (0180).
       const linkAdded = !isNew && d.kind === 'meeting' && d.hasLink && !d.hadLink
-      if (!isNew && !linkAdded) return { isNew, people: 0 }
-      // A new post tells everybody; an edit does not, unless it brings the meeting link.
+      // A new post tells everybody, and so does an edit, in the same words (the user, 12 Oct:
+      // "for editing also notification should go", "updated title not needed").
       const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id, link_added: linkAdded } })
       return { isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
     },
     onSuccess: r => {
       setDone(r.isNew ? `Posted. ${r.people} people were notified.`
-        : 'linkAdded' in r && r.linkAdded ? `Saved. ${r.people} people were told the meeting link is ready.` : 'Saved.')
+        : r.linkAdded ? `Saved. ${r.people} people were told the meeting link is ready.` : `Saved. ${r.people} people were notified.`)
       setD(EMPTY)
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
     },
@@ -183,6 +195,11 @@ export default function DigestAdmin() {
   }
   if (d.kind === 'poll') {
     if (d.options.filter(o => o.trim()).length < 2) missing.push('two options')
+    if (!d.closes) missing.push('Closes')
+  }
+  if (d.kind === 'form') {
+    if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
+    if (d.questions.some(q => (q.qtype === 'one' || q.qtype === 'many') && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
     if (!d.closes) missing.push('Closes')
   }
   if (d.kind === 'meeting') {
@@ -257,6 +274,16 @@ export default function DigestAdmin() {
             <div>
               <label className="label" htmlFor="dg-vlink">How to apply <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
+            </div>
+          </div>
+        )}
+
+        {d.kind === 'form' && (
+          <div className="space-y-3">
+            <FormBuilder questions={d.questions} onChange={questions => set({ questions })} />
+            <div className="max-w-xs">
+              <label className="label" htmlFor="dg-fcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-fcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
             </div>
           </div>
         )}
@@ -356,7 +383,7 @@ export default function DigestAdmin() {
           </div>
         </div>
 
-        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && <div className="max-w-xs">
+        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && <div className="max-w-xs">
           <label className="label" htmlFor="dg-until">Show until · optional</label>
           <input id="dg-until" type="date" className="input" value={d.until}
             min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
@@ -374,7 +401,8 @@ export default function DigestAdmin() {
         </div>
         {previewing && (
           <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
-            closes={d.kind === 'poll' && d.closes ? new Date(d.closes).toISOString() : null}
+            closes={(d.kind === 'poll' || d.kind === 'form') && d.closes ? new Date(d.closes).toISOString() : null}
+            questions={d.kind === 'form' ? d.questions : []}
             onClose={() => setPreviewing(false)} />
         )}
       </div>
@@ -434,13 +462,17 @@ export default function DigestAdmin() {
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
                 </span>
                 {r.mine && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
+                  const form = r.kind === 'form'
+                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null }> | null) ?? []
+                    : []
                   const poll = r.kind === 'poll'
                     ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
                     : []
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link,
-                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' ? '' : r.show_until ?? '' })
+                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
+                    questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
@@ -465,8 +497,10 @@ type Person = {
   ecode: string; full_name: string; department: string | null; function_name: string | null
   seen_at: string | null; opened_at: string | null; opens: number
   liked_at: string | null; comments: number; joins: number; joined_at: string | null; voted: string | null
+  /** A form (0181): when they sent it, and their answers by question id. */
+  answered_at: string | null; answers: Record<string, string | string[]> | null
 }
-type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted'
+type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered'
 
 function Details({ row }: { row: Row }) {
   const qc = useQueryClient()
@@ -479,6 +513,12 @@ function Details({ row }: { row: Row }) {
       if (error) throw new Error(friendlyError(error))
       return data as Person[]
     },
+  })
+  // A form's questions, for its columns.
+  const { data: questions = [] } = useQuery({
+    queryKey: ['digest_form_q', row.id],
+    enabled: row.kind === 'form',
+    queryFn: async () => ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string }>,
   })
   const { data: comments } = useQuery({
     queryKey: ['digest_comments', row.id],
@@ -498,6 +538,7 @@ function Details({ row }: { row: Row }) {
     liked: p => !!p.liked_at, not_liked: p => !p.liked_at, commented: p => p.comments > 0,
     joined: p => p.joins > 0, not_joined: p => p.joins === 0,
     voted: p => !!p.voted, not_voted: p => !p.voted,
+    answered: p => !!p.answered_at, not_answered: p => !p.answered_at,
   }
   const tiles: Array<[Lens, string, number]> = [
     ['opened', 'Opened', all.filter(test.opened).length],
@@ -505,6 +546,7 @@ function Details({ row }: { row: Row }) {
     ['commented', 'Commented', all.filter(test.commented).length],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join', all.filter(test.joined).length] as [Lens, string, number]] : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
+    ...(row.kind === 'form' ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
     ['opened', 'Opened'], ['not_opened', 'Not opened'],
@@ -512,6 +554,7 @@ function Details({ row }: { row: Row }) {
     ['commented', 'Commented'],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted'], ['not_voted', 'Not voted']] as Array<[Lens, string]> : []),
+    ...(row.kind === 'form' ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
   ]
   const f = find.trim().toLowerCase()
   const list = all.filter(test[lens]).filter(p => !f || `${p.full_name} ${p.ecode} ${p.department ?? ''} ${p.function_name ?? ''}`.toLowerCase().includes(f))
@@ -522,14 +565,17 @@ function Details({ row }: { row: Row }) {
       ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
-      ...(row.kind === 'poll' ? ['Voted', 'Answer'] : [])]
+      ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
+      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.opens,
       ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
       ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
-      ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : [])])]
+      ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
+      ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
+        ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : [])])]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
     a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)}.csv`
@@ -572,7 +618,7 @@ function Details({ row }: { row: Row }) {
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <th className="px-3 py-2">Name</th><th className="px-3 py-2">E-code</th><th className="px-3 py-2">Department</th>
               <th className="px-3 py-2">Opened</th>
-              {LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
+              {LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : row.kind === 'form' ? <th className="px-3 py-2">Answered</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -586,6 +632,8 @@ function Details({ row }: { row: Row }) {
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmt(p.liked_at) : '—'}</td>
                   : row.kind === 'poll'
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
+                  : row.kind === 'form'
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmt(p.answered_at) : '—'}</td>
                   : <td className="px-3 py-1.5 text-right tabular-nums">{p.joins || '—'}</td>}
               </tr>
             ))}
