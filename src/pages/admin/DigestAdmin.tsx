@@ -508,10 +508,16 @@ function Details({ row }: { row: Row }) {
   const [find, setFind] = useState('')
   const { data: people } = useQuery({
     queryKey: ['digest_people', row.id],
+    // A thousand at a time: there are more than 1,000 people, and one request returns at most
+    // that many (the user, 12 Oct: "Out of 1000 people", and Tincy, past the cut, was missing).
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('digest_post_people', { p_id: row.id })
-      if (error) throw new Error(friendlyError(error))
-      return data as Person[]
+      const out: Person[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.rpc('digest_post_people', { p_id: row.id }).order('full_name').order('ecode').range(from, from + 999)
+        if (error) throw new Error(friendlyError(error))
+        out.push(...((data ?? []) as Person[]))
+        if (!data || data.length < 1000) return out
+      }
     },
     // Fresh every time it is opened, and every minute while it stays open (the user, 12 Oct:
     // somebody who opened the post after the panel first loaded was missing from it).

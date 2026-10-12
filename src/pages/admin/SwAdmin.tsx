@@ -2479,7 +2479,19 @@ export default function SwAdmin() {
     ? ADMIN_TABS.filter(t => t.id !== 'digest' || isItAdmin)
     : ADMIN_TABS.filter(t => t.id === 'logins' || ((t.id === 'support' || t.id === 'digest') && isItAdmin))
   const deskHere = isSwAdmin ? 'software' : 'it'
-  const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]['id']>('logins')
+  // The open tab is in the address, so a reload stays on it (the user, 12 Oct: "on reload im
+  // going to logins tab").
+  type TabId = (typeof ADMIN_TABS)[number]['id']
+  const [tab, setTabState] = useState<TabId>(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    return (ADMIN_TABS.some(x => x.id === t) ? t : 'logins') as TabId
+  })
+  const setTab = (t: TabId) => {
+    setTabState(t)
+    const u = new URL(window.location.href)
+    u.searchParams.set('tab', t)
+    window.history.replaceState(window.history.state, '', u)
+  }
   const active = TABS.find(t => t.id === tab) ?? TABS[0]
 
   /*

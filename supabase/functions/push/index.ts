@@ -41,6 +41,21 @@ type Payload = { title: string; body: string; url: string; tag?: string }
 type Tally = { people: number; devices: number; delivered: number; failed: number }
 
 /** Every device of these people, sent the same payload, twenty at a time. */
+/**
+ * Every active employee's id. The API hands back at most 1,000 rows a request, and there
+ * are more people than that (the user, 12 Oct: a Digest post's "everyone" stopped at 1,000),
+ * so it is read a thousand at a time.
+ */
+async function everyone(db: ReturnType<typeof admin>): Promise<string[]> {
+  const out: string[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from('employees').select('id').eq('is_active', true).order('id').range(from, from + 999)
+    if (error) throw new Error(error.message)
+    out.push(...((data ?? []) as Array<{ id: string }>).map(r => r.id))
+    if (!data || data.length < 1000) return out
+  }
+}
+
 async function deliver(db: ReturnType<typeof admin>, ids: string[], p: Payload): Promise<Tally> {
   const tally: Tally = { people: ids.length, devices: 0, delivered: 0, failed: 0 }
   const subs: Array<{ id: string; endpoint: string; p256dh: string; auth: string }> = []
@@ -132,8 +147,7 @@ Deno.serve(async req => {
           url: '/', target: { kind: 'reminder', side: 'meeting' }, dedupe_key: 'digest-reminder:' + m.id,
         }).select('id').single()
         if (dup || !claim) continue
-        const { data: all } = await db.from('employees').select('id').eq('is_active', true)
-        const t = await deliver(db, ((all ?? []) as Array<{ id: string }>).map(r => r.id),
+        const t = await deliver(db, await everyone(db),
           { title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`, url: '/', tag: 'digest-' + m.id })
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
@@ -196,8 +210,7 @@ Deno.serve(async req => {
       : post.kind === 'form' ? 'Fill it in, in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const { data: me } = await user.rpc('current_employee_id')
-    const { data: all } = await db.from('employees').select('id').eq('is_active', true)
-    const people = ((all ?? []) as Array<{ id: string }>).map(r => r.id)
+    const people = await everyone(db)
     const { data: row } = await db.from('push_messages').insert({
       kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
     }).select('id').single()
@@ -221,10 +234,15 @@ Deno.serve(async req => {
     const as = input.as === 'sw' ? 'sw' : 'hr'
     const { data: ok } = await user.rpc('push_desk_ok', { p_as: as })
     if (!ok) return json({ error: as === 'sw' ? 'Only SW Admin can send from here' : 'Only HR Admin can send from here' }, 403)
-    const { data: ids, error } = await user.rpc('push_audience', { p_target: input.target })
-    if (error) return json({ error: error.message }, 403)
+    // A thousand at a time, as `everyone` reads them: "Everyone" is more than 1,000 people.
+    const people: string[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data: ids, error } = await user.rpc('push_audience', { p_target: input.target }).order('employee_id').range(from, from + 999)
+      if (error) return json({ error: error.message }, 403)
+      people.push(...((ids ?? []) as Array<{ employee_id: string }>).map(r => r.employee_id))
+      if (!ids || ids.length < 1000) break
+    }
     const { data: me } = await user.rpc('current_employee_id')
-    const people = ((ids ?? []) as Array<{ employee_id: string }>).map(r => r.employee_id)
     const { data: row } = await db.from('push_messages').insert({
       kind: 'manual', title, body, url: '/', target: input.target, sent_by: me ?? null, sent_as: as,
     }).select('id').single()

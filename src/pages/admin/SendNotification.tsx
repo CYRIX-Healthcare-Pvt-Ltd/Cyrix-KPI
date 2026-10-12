@@ -122,9 +122,14 @@ function SendForm({ desk }: { desk: Desk; onSent: () => void }) {
     enabled: ready && showWho,
     queryKey: ['push_people', ...key],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('push_audience_people', { p_target: target })
-      if (error) throw new Error(friendlyError(error))
-      return data as Person[]
+      // A thousand at a time: "Everyone" is more than one request's 1,000 rows.
+      const out: Person[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.rpc('push_audience_people', { p_target: target }).order('ecode').range(from, from + 999)
+        if (error) throw new Error(friendlyError(error))
+        out.push(...((data ?? []) as Person[]))
+        if (!data || data.length < 1000) return out
+      }
     },
   })
 
@@ -259,9 +264,13 @@ function History({ desk }: { desk: Desk }) {
     enabled: !!open,
     queryKey: ['push_recipients', open],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('push_recipients', { p_message: open })
-      if (error) throw new Error(friendlyError(error))
-      return data as Person[]
+      const out: Person[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.rpc('push_recipients', { p_message: open }).order('ecode').range(from, from + 999)
+        if (error) throw new Error(friendlyError(error))
+        out.push(...((data ?? []) as Person[]))
+        if (!data || data.length < 1000) return out
+      }
     },
   })
 
