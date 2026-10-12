@@ -513,7 +513,15 @@ function Details({ row }: { row: Row }) {
       if (error) throw new Error(friendlyError(error))
       return data as Person[]
     },
+    // Fresh every time it is opened, and every minute while it stays open (the user, 12 Oct:
+    // somebody who opened the post after the panel first loaded was missing from it).
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 60_000,
   })
+  // The names only when asked for (the user, 12 Oct: "need expand only, if 1000 persons
+  // clicked the 1000 rows will be there"): the counts above say how many.
+  const [showList, setShowList] = useState(false)
   // A form's questions, for its columns.
   const { data: questions = [] } = useQuery({
     queryKey: ['digest_form_q', row.id],
@@ -610,9 +618,13 @@ function Details({ row }: { row: Row }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
           <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code or department" />
         </div>
+        <button type="button" className="btn-secondary" onClick={() => setShowList(v => !v)}>
+          {showList ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {showList ? 'Hide names' : `Show names · ${list.length}`}
+        </button>
         <button type="button" className="btn-secondary" onClick={download} disabled={!all.length}>Download all</button>
       </div>
-      <div className="max-h-80 overflow-auto rounded-lg border border-ink-200 bg-surface">
+      {showList && <div className="max-h-80 overflow-auto rounded-lg border border-ink-200 bg-surface">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -641,7 +653,7 @@ function Details({ row }: { row: Row }) {
         </table>
         {list.length > 300 && <p className="px-3 py-2 text-xs text-ink-500">Showing 300 of {list.length}. Download all for everybody.</p>}
         {!list.length && <p className="px-3 py-3 text-sm text-ink-500">Nobody.</p>}
-      </div>
+      </div>}
 
       <div>
         <p className="mb-2 text-sm font-semibold text-ink-800">Comments · {comments?.length ?? 0}</p>
