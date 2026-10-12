@@ -101,7 +101,8 @@ Deno.serve(async req => {
   // user: "when disabled means only device notification, not in app").
   const { data: on } = await db.rpc('push_is_enabled')
   const devicesOn = on !== false
-  if (!devicesOn && input.action !== 'send' && input.action !== 'digest') return json({ off: true })
+  // Reminders still reach the bell with devices off (0175), like a sent message.
+  if (!devicesOn && input.action !== 'send' && input.action !== 'digest' && input.action !== 'reminders') return json({ off: true })
 
   // ---- the timers ----
   if (input.action === 'bell' || input.action === 'reminders') {
@@ -153,8 +154,16 @@ Deno.serve(async req => {
         target: { kind: 'reminder', side }, dedupe_key: `reminder:${side}:${today}`,
       }).select('id').single()
       if (dup) { out[side] = 'already sent'; continue }
+      const people = [...new Set(mine.map(r => r.employee_id))]
+      // Into everyone's in-app bell (0175; the user, 12 Oct: on the last day 62 of 64 heard nothing,
+      // because only people with device notifications on were told).
+      for (let i = 0; i < people.length; i += 500) {
+        await db.from('push_inbox').insert(people.slice(i, i + 500).map(employee_id => ({ message_id: claim!.id, employee_id })))
+      }
       // Same words for everyone on a side; the link is per month and the same too.
-      const t = await deliver(db, mine.map(r => r.employee_id), { title: mine[0].title, body: mine[0].body, url: mine[0].url, tag: 'reminder-' + side })
+      const t = devicesOn
+        ? await deliver(db, people, { title: mine[0].title, body: mine[0].body, url: mine[0].url, tag: 'reminder-' + side })
+        : { people: people.length, devices: 0, delivered: 0, failed: 0 }
       await db.from('push_messages').update(t).eq('id', claim!.id)
       out[side] = t
     }
