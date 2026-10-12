@@ -184,6 +184,20 @@ Deno.serve(async req => {
     return json(out)
   }
 
+  // ---- a draft sent as a test (0187): only to the people it was sent to, on their devices ----
+  if (input.action === 'digest_test') {
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    })
+    const { data: ok } = await user.rpc('digest_can_edit', { p_id: String(input.post_id ?? '') })
+    if (!ok) return json({ error: 'Only a desk that can edit it' }, 403)
+    const { data: post } = await db.from('digest_posts').select('id, title, testers').eq('id', String(input.post_id ?? '')).maybeSingle()
+    if (!post) return json({ error: 'That post is not there' }, 404)
+    const t = await deliver(db, (post.testers ?? []) as string[],
+      { title: 'Test · ' + post.title, body: 'Only you can see this test in Cyrix Digest.', url: '/', tag: 'digest-test-' + post.id })
+    return json(t)
+  }
+
   // ---- a Cyrix Digest post, from HR or IT (0163): into everybody's bell, and their devices ----
   if (input.action === 'digest') {
     const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {

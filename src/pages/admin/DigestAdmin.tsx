@@ -4,10 +4,11 @@ import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
 import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
 import DigestAccess from '@/components/DigestAccess'
+import MultiPick from '@/components/MultiPick'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -124,6 +125,32 @@ export default function DigestAdmin() {
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  /*
+    A draft sent as a test to a few people first (0187; the user, 13 Oct: "they want to test the
+    link, whether it is opening or not … select the participants entering name or ecode").
+  */
+  const [testing, setTesting] = useState(false)
+  const [testers, setTesters] = useState<string[]>([])
+  const { data: people = [] } = useQuery({
+    queryKey: ['digest_people'],
+    enabled: testing,
+    staleTime: 10 * 60_000,
+    queryFn: async () => ((await supabase.rpc('digest_people_options')).data ?? []) as Array<{ ecode: string; name: string }>,
+  })
+  const sendTest = useMutation({
+    mutationFn: async () => {
+      // Saved as a draft first: a test is only ever of a draft.
+      const r = await save.mutateAsync(false)
+      const { data: n, error } = await supabase.rpc('digest_set_testers', { p_id: r.id, p_ecodes: testers })
+      if (error) throw new Error(friendlyError(error))
+      await supabase.functions.invoke('push', { body: { action: 'digest_test', post_id: r.id } })
+      return n as number
+    },
+    onSuccess: n => {
+      setDone(`Test sent to ${n} ${n === 1 ? 'person' : 'people'}. Only they can see it, marked Test, and Join works for them at once. Publish when it is right.`)
+      setTesting(false)
+    },
+  })
   // Which desk this is, for "posted by" in the preview.
   const { data: desk } = useQuery({
     queryKey: ['digest', 'desk'],
@@ -477,7 +504,25 @@ export default function DigestAdmin() {
         <button type="button" className="btn-secondary" onClick={() => setPreviewing(true)}>
           <Eye className="h-4 w-4" /> Preview
         </button>
+        <button type="button" className="btn-secondary" disabled={!ready} onClick={() => setTesting(v => !v)}>
+          <FlaskConical className="h-4 w-4" /> Send test
+        </button>
         </div>
+        {testing && (
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-ink-200 bg-ink-50/60 p-3">
+            <div className="min-w-[16rem] flex-1">
+              <label className="label" htmlFor="dg-testers">Send a test to</label>
+              <MultiPick id="dg-testers" value={testers} onChange={setTesters} placeholder="Name or E-code"
+                options={people.map(m => ({ value: m.ecode, label: m.name, hint: m.ecode }))} />
+            </div>
+            <button type="button" className="btn-primary" disabled={!testers.length || sendTest.isPending || save.isPending}
+              onClick={() => { setDone(null); sendTest.mutate() }}>
+              {sendTest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send test{testers.length ? ` to ${testers.length}` : ''}
+            </button>
+            {sendTest.error && <p className="w-full text-sm text-cyrixRed-600">{(sendTest.error as Error).message}</p>}
+          </div>
+        )}
         {previewing && (
           <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
             closes={(d.kind === 'poll' || d.kind === 'form') && d.closes ? new Date(d.closes).toISOString() : null}
