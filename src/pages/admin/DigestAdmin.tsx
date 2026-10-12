@@ -3,10 +3,11 @@ import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
 import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
+import DigestAccess from '@/components/DigestAccess'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -52,9 +53,15 @@ interface Row {
   posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
+  /** This desk may edit it: it posted it, or the poster shared it (0183). */
+  can_edit: boolean
+  /** The other desks the poster let edit it. */
+  editors: string[]
   vac_location: string | null; apply_by: string | null; apply_link: string | null
   /** The last day it is on the portal home (0177); null stays. */
   show_until: string | null
+  /** When it went out; null while it is a draft (0182). */
+  published_at: string | null
 }
 interface Draft {
   id: string | null; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
@@ -65,6 +72,8 @@ interface Draft {
   hadLink: boolean
   /** A form's questions (0181). Its closing time is `closes`, as a poll's is. */
   questions: Question[]
+  /** Already out to people (0182): publishing it again is an edit, and a link added to it is news. */
+  wasPublished: boolean
   /** A poll (0167): its options, single or multiple choice, and when it closes. */
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
@@ -72,7 +81,7 @@ interface Draft {
   /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
   until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -106,7 +115,9 @@ export default function DigestAdmin() {
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const set = (p: Partial<Draft>) => setD(x => ({ ...x, ...p }))
+  /** Saved as a draft and not touched since: Save draft waits for the next change (the user, 12 Oct). */
+  const [draftSaved, setDraftSaved] = useState(false)
+  const set = (p: Partial<Draft>) => { setDraftSaved(false); setD(x => ({ ...x, ...p })) }
 
   const { data: rows } = useQuery({
     queryKey: ['digest_admin'],
@@ -118,7 +129,7 @@ export default function DigestAdmin() {
   })
 
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (publish: boolean) => {
       const isNew = !d.id
       const { data: id, error } = await supabase.rpc('digest_save', {
         p_id: d.id, p_kind: d.kind, p_title: d.title, p_body: d.body, p_image_url: d.image_url ?? '', p_color: d.color,
@@ -152,18 +163,30 @@ export default function DigestAdmin() {
         })
         if (pe) throw new Error(friendlyError(pe))
       }
-      // The meeting link arriving after the meeting was announced says so (0180).
-      const linkAdded = !isNew && d.kind === 'meeting' && d.hasLink && !d.hadLink
-      // A new post tells everybody, and so does an edit, in the same words (the user, 12 Oct:
-      // "for editing also notification should go", "updated title not needed").
+      // Draft or out (0182; the user, 12 Oct: "if clicked draft, it should be saved but not to be
+      // sent to users", "save draft no notification should go").
+      const { error: se } = await supabase.rpc('digest_set_published', { p_id: id, p_published: publish })
+      if (se) throw new Error(friendlyError(se))
+      if (!publish) return { publish, id: id as string, isNew, linkAdded: false, people: 0 }
+      // The meeting link arriving after the meeting went out says so (0180).
+      const linkAdded = d.wasPublished && d.kind === 'meeting' && d.hasLink && !d.hadLink
+      // Publishing tells everybody, a new post or an edit alike, in the same words (the user,
+      // 12 Oct: "for editing also notification should go", "updated title not needed").
       const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id, link_added: linkAdded } })
-      return { isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
+      return { publish, id: id as string, isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
     },
     onSuccess: r => {
-      setDone(r.isNew ? `Posted. ${r.people} people were notified.`
-        : r.linkAdded ? `Saved. ${r.people} people were told the meeting link is ready.` : `Saved. ${r.people} people were notified.`)
-      setD(EMPTY)
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
+      if (!r.publish) {
+        // Still open to carry on with; the next save is the same post, not a new one.
+        setDone('Draft saved. Nobody has been told, and it is not on the home page.')
+        setD(x => ({ ...x, id: r.id, wasPublished: false, hadLink: x.hasLink }))
+        setDraftSaved(true)
+        return
+      }
+      setDone(r.linkAdded ? `Published. ${r.people} people were told the meeting link is ready.` : `Published. ${r.people} people were notified.`)
+      setD(EMPTY)
+      setDraftSaved(false)
     },
   })
   const remove = useMutation({
@@ -244,7 +267,7 @@ export default function DigestAdmin() {
             </button>
           ))}
           {d.id && (
-            <button type="button" onClick={() => setD(EMPTY)} className="ml-auto inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-800">
+            <button type="button" onClick={() => { setD(EMPTY); setDraftSaved(false) }} className="ml-auto inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-800">
               <X className="h-4 w-4" /> Stop editing
             </button>
           )}
@@ -391,9 +414,14 @@ export default function DigestAdmin() {
         </div>}
 
         <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate() }}>
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {ready ? (d.id ? 'Save changes' : 'Post to everyone') : `Fill in ${missing.join(', ')}`}
+        <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}
+          onClick={() => { setDone(null); save.mutate(false) }}>
+          {save.isPending && save.variables === false ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          {draftSaved ? 'Draft saved' : 'Save draft'}
+        </button>
+        <button type="button" className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate(true) }}>
+          {save.isPending && save.variables === true ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {ready ? 'Publish' : `Fill in ${missing.join(', ')}`}
         </button>
         <button type="button" className="btn-secondary" onClick={() => setPreviewing(true)}>
           <Eye className="h-4 w-4" /> Preview
@@ -446,9 +474,14 @@ export default function DigestAdmin() {
                     {!r.image_url && (() => { const I = kindOf(r.kind)[2]; return <I className="h-4 w-4" /> })()}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-ink-900">{r.title}</span>
+                    <span className="block truncate text-sm font-medium text-ink-900">
+                      {!r.published_at && <span className="badge mr-1.5 bg-amber-100 text-amber-800">Draft</span>}
+                      {r.title}
+                    </span>
                     <span className="block text-xs text-ink-500">
                       {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
+                      {!r.mine && <span className="ml-1.5 font-medium text-violet-700">· Shared with you</span>}
+                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => (x === 'it' ? 'IT' : x === 'mkt' ? 'Marketing' : 'HR')).join(', ')}</span>}
                       {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
                         ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                         // A meeting already says its date.
@@ -461,15 +494,16 @@ export default function DigestAdmin() {
                   <span className="inline-flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {r.comments}</span>
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
                 </span>
-                {r.mine && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
+                {r.can_edit && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
                   const form = r.kind === 'form'
                     ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null }> | null) ?? []
                     : []
                   const poll = r.kind === 'poll'
                     ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
                     : []
+                  setDraftSaved(false)
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
-                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link,
+                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at,
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
                     questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
@@ -598,6 +632,7 @@ function Details({ row }: { row: Row }) {
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
+      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt'} mine={row.mine} editors={row.editors ?? []} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
