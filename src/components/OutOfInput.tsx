@@ -3,8 +3,10 @@
  * inside the box, so the result is read in the target's terms rather than
  * the score's. Nothing when there is no target to be out of.
  */
-export default function OutOfInput({ id, target, value, disabled, onChange }: {
+export default function OutOfInput({ id, target, value, disabled, onChange, className = '' }: {
   id: string
+  /** Extra classes for the box: the manager's own figure is emphasised while it is empty. */
+  className?: string
   target: string
   value: string
   disabled?: boolean
@@ -16,7 +18,7 @@ export default function OutOfInput({ id, target, value, disabled, onChange }: {
       <input
         id={id}
         type="number" inputMode="decimal" step="any"
-        className="input"
+        className={`input ${className}`}
         style={of ? { paddingRight: `${1.25 + of.length * 0.5}rem` } : undefined}
         disabled={disabled}
         value={value}

@@ -127,11 +127,16 @@ export default function ScoreSubmission() {
   useEffect(() => {
     if (!data?.submission) return
     setAchieved(Object.fromEntries(
-      // Pre-fill with the TM's figures so the manager only changes what they disagree with.
-      data.items.map(i => [
-        i.id,
-        (i.manager_achieved ?? i.self_achieved)?.toString() ?? '',
-      ]),
+      /*
+        The manager's own figure, or nothing (the user, 13 Oct: "the manager
+        field should be emphasised and it should be blank").
+
+        It used to open on the team member's figures so the manager only
+        changed what they disagreed with — which let a month be scored by
+        pressing Submit without reading a row. Their figure is still beside
+        it, under their name; this box is the manager's to fill.
+      */
+      data.items.map(i => [i.id, i.manager_achieved?.toString() ?? '']),
     ))
     setTargets(Object.fromEntries(
       data.items.map(i => [i.id, i.target_value?.toString() ?? '']),
@@ -285,6 +290,10 @@ export default function ScoreSubmission() {
 
   /** Anything on the core-values block that stops this being submitted. */
   const coreIncomplete = unratedCore > 0 || missingWhy > 0
+
+  /** Rows still waiting for the manager's own figure: it starts empty, and every row needs one. */
+  const blankFigures = items.filter(i => i.section !== 'core_values' && (achieved[i.id] ?? '').trim() === '')
+  const figuresIncomplete = blankFigures.length > 0
 
   /**
    * How far below their own assessment this lands, live as the manager
@@ -661,7 +670,7 @@ export default function ScoreSubmission() {
                 </div>
 
                 <div>
-                  <label className="label text-xs" htmlFor={`mgr-${item.id}`}>
+                  <label className="label text-xs !text-ink-900" htmlFor={`mgr-${item.id}`}>
                     My figure
                   </label>
                   {/* In the target's terms, as the team member's own box now is. */}
@@ -669,6 +678,10 @@ export default function ScoreSubmission() {
                     id={`mgr-${item.id}`}
                     target={targets[item.id] ?? ''}
                     disabled={!editable}
+                    // The one box on the row that is the manager's to fill: marked until it is.
+                    className={editable && (achieved[item.id] ?? '').trim() === ''
+                      ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
+                      : 'border-ink-400 font-semibold'}
                     value={achieved[item.id] ?? ''}
                     onChange={v => setAchieved({ ...achieved, [item.id]: v })}
                   />
@@ -956,7 +969,33 @@ export default function ScoreSubmission() {
                   without "and here is the 20% you have not scored" is
                   half an answer.
                 */
-                coreIncomplete ? (
+                figuresIncomplete ? (
+                  <div className="card w-full space-y-3 border-amber-300 bg-amber-50/50 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-ink-900">
+                        {blankFigures.length} row{blankFigures.length === 1 ? '' : 's'} still
+                        {blankFigures.length === 1 ? ' needs' : ' need'} your figure
+                      </p>
+                      <p className="mt-0.5 text-sm text-ink-600">
+                        {data?.employee.full_name.split(' ')[0]}'s figure is beside each one; yours is the score.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById(`mgr-${blankFigures[0].id}`)
+                        el?.focus({ preventScroll: true })
+                        el?.scrollIntoView({
+                          block: 'center',
+                          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                        })
+                      }}
+                      className="btn-primary"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                      Fill them now
+                    </button>
+                  </div>
+                ) : coreIncomplete ? (
                   <div className="card w-full space-y-3 border-amber-300 bg-amber-50/50 p-4">
                     {/* One panel for both, because they are one job —
                         finishing the core values — and two stacked
@@ -1070,14 +1109,18 @@ export default function ScoreSubmission() {
                   // month that is already scored is edited through here,
                   // and clearing a rating drops the core-values figure
                   // without anything on screen saying so.
-                  disabled={busy || coreIncomplete}
-                  title={coreIncomplete
+                  disabled={busy || coreIncomplete || figuresIncomplete}
+                  title={figuresIncomplete
+                    ? 'Every row needs your figure'
+                    : coreIncomplete
                     ? 'Every core value needs a rating, and a low one needs a reason'
                     : undefined}
                   className="btn-primary"
                 >
                   {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  {unratedCore > 0
+                  {figuresIncomplete
+                    ? `Enter ${blankFigures.length} more figure${blankFigures.length === 1 ? '' : 's'}`
+                    : unratedCore > 0
                     ? `Rate ${unratedCore} more core value${unratedCore === 1 ? '' : 's'}`
                     : missingWhy > 0
                       ? `Give a reason for ${missingWhy} low rating${missingWhy === 1 ? '' : 's'}`
