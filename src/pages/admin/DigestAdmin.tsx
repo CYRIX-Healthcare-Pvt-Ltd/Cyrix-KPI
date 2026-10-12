@@ -57,6 +57,8 @@ interface Row {
   can_edit: boolean
   /** The other desks the poster let edit it. */
   editors: string[]
+  /** How many people opened it (0184). */
+  opened: number
   vac_location: string | null; apply_by: string | null; apply_link: string | null
   /** The last day it is on the portal home (0177); null stays. */
   show_until: string | null
@@ -493,6 +495,7 @@ export default function DigestAdmin() {
                   {LIKABLE.has(r.kind) && <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {r.likes}</span>}
                   <span className="inline-flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {r.comments}</span>
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
+                  <span className="inline-flex items-center gap-1" title="Opened"><Eye className="h-3.5 w-3.5" /> {r.opened ?? 0}</span>
                 </span>
                 {r.can_edit && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
                   const form = r.kind === 'form'
