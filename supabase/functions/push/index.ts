@@ -194,11 +194,8 @@ Deno.serve(async req => {
     const { data: row } = await db.from('push_messages').insert({
       kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
     }).select('id').single()
-    if (row) {
-      for (let i = 0; i < people.length; i += 500) {
-        await db.from('push_inbox').insert(people.slice(i, i + 500).map(employee_id => ({ message_id: row.id, employee_id })))
-      }
-    }
+    // Not into the in-app bell (0176; the user, 12 Oct: "keep digest out of kpi bell"):
+    // the post is on the portal home, and goes to devices.
     const t = devicesOn ? await deliver(db, people, { title, body, url: '/', tag: 'digest-' + post.id }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
     if (row) await db.from('push_messages').update(t).eq('id', row.id)
     return json(t)
