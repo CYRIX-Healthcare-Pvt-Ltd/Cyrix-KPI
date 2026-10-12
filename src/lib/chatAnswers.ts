@@ -158,10 +158,6 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
       if (r?.team != null && r.teamOf != null) {
         parts.push(r.teamOf > 1 ? t('rank.team', { rank: r.team, of: r.teamOf }) : t('rank.alone'))
       }
-      // A manager's standing, when they have one — said after their own.
-      if (r?.mgr != null && r.mgrOf != null && r.mgrOf > 1) {
-        parts.push(t('stand.mgrrank', { rank: r.mgr, of: r.mgrOf }))
-      }
       return parts.length ? parts.join(' ') : t('rank.none')
     }
 

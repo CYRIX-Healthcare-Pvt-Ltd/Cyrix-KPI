@@ -123,13 +123,6 @@ export function standingLines(ctx: StandingContext): StandingLine[] {
         toLabel: 'My Team',
       })
     }
-    if (team.rank !== null && team.of !== null && team.of > 1) {
-      out.push({
-        // No link: no screen shows a manager's own standing.
-        key: 'stand.mgrrank',
-        vars: { rank: team.rank, of: team.of },
-      })
-    }
     if (team.average !== null) {
       out.push({
         key: 'stand.mgrteam',

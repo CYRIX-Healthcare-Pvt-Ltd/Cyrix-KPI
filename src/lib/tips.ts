@@ -78,7 +78,6 @@ export const TIPS: Tip[] = [
   { key: 'tip.drill', to: '/team', toLabel: 'My Team', when: manager },
   { key: 'tip.approveall', to: '/approvals', toLabel: 'Approvals', when: manager },
   { key: 'tip.export', to: '/team', toLabel: 'My Team', when: manager },
-  { key: 'tip.mgrrank', to: null, toLabel: '', when: manager },
 ]
 
 /** The ones that apply to this person, in order. */

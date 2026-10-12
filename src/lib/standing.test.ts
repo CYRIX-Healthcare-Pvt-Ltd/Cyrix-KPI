@@ -37,8 +37,8 @@ describe('what Cyra says about where you stand', () => {
       ...standingLines({ ...member, lever: null }).map(l => l.key),
     ])
     // Every branch, or this test is only checking the ones it happened
-    // to reach.
-    expect(keys.size).toBe(10)
+    // to reach. (Nine since the ranking among managers went, 12 Oct.)
+    expect(keys.size).toBe(9)
     for (const key of keys) {
       const phrase = CHAT[key]
       expect(phrase, `${key} has no text at all`).toBeDefined()
@@ -55,10 +55,9 @@ describe('what Cyra says about where you stand', () => {
     })
     expect(lines[0].key).toBe('stand.mgrlowest')
     expect(lines[0].to).toBe('/team/e2')
-    // Their own rank is still offered, after the team.
+    // Their own rank is still offered, after the team; never a ranking among managers.
     expect(lines.map(l => l.key)).toContain('stand.ranklever')
-    expect(lines.findIndex(l => l.key === 'stand.ranklever'))
-      .toBeGreaterThan(lines.findIndex(l => l.key === 'stand.mgrrank'))
+    expect(lines.map(l => l.key)).not.toContain('stand.mgrrank')
   })
 
   it('names nobody when the lowest person is doing fine', () => {
@@ -114,12 +113,6 @@ describe('what Cyra says about where you stand', () => {
     expect(standingLines({ ...member, rank: 5, lever: null })[0].key).toBe('stand.rank')
     expect(standingLines({ ...member, rank: 1, of: 3, lever: null })[0].key).toBe('stand.ranktop')
     expect(standingLines({ ...member, rank: 2, of: 3, lever: null })[0].key).toBe('stand.rank')
-  })
-
-  it('does not send a manager to a screen for their standing, because none shows it', () => {
-    const line = standingLines({ ...member, team: team() }).find(l => l.key === 'stand.mgrrank')
-    expect(line).toBeDefined()
-    expect(line!.to).toBeUndefined()
   })
 
   it('states the position plainly when there is no lever to offer', () => {

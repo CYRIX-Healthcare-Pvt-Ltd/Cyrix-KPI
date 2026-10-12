@@ -501,7 +501,6 @@ export default function ChatBot() {
     if (systemAccount) return null
     const avoid = [
       ...(standing && /^stand\.rank/.test(standing.key) ? ['tip.rank'] : []),
-      ...(standing?.key === 'stand.mgrrank' ? ['tip.mgrrank'] : []),
     ]
     return pickTip({
       isManager,

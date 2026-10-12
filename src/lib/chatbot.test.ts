@@ -400,7 +400,7 @@ describe('where somebody stands', () => {
     }
   })
 
-  it('says the team rank the profile shows, and a manager’s standing after it', async () => {
+  it('says the team rank the profile shows, and never a ranking among managers', async () => {
     const { answerFact } = await import('./chatAnswers')
     const base = { lang: 'en' as const, fy: '2026-27', firstName: 'Asha', me: { full_name: 'Asha', ecode: 'E1' }, history: [] }
     const rank = (r: { team: number | null; teamOf: number | null; mgr: number | null; mgrOf: number | null } | null) =>
@@ -408,8 +408,7 @@ describe('where somebody stands', () => {
 
     expect(rank({ team: 2, teamOf: 17, mgr: null, mgrOf: null })).toContain('2 of 17 in your team')
     expect(rank({ team: 2, teamOf: 17, mgr: null, mgrOf: null })).not.toMatch(/Cyrix/)
-    const manager = rank({ team: 3, teamOf: 9, mgr: 5, mgrOf: 40 })
-    expect(manager.indexOf('3 of 9 in your team')).toBeLessThan(manager.indexOf('Among managers you are 5 of 40'))
+    expect(rank({ team: 3, teamOf: 9, mgr: 5, mgrOf: 40 })).not.toMatch(/Among managers/)
     expect(rank({ team: 1, teamOf: 1, mgr: null, mgrOf: null })).toMatch(/only person/)
     expect(rank(null)).toMatch(/do not have a rank yet/)
   })

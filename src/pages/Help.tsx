@@ -468,7 +468,6 @@ export default function Help() {
             // one, and how their own position is worked out.
             { what: t('team.p15.what'), how: t('team.p15.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p16.what'), how: t('team.p16.how'), to: '/team', cta: 'Open my team' },
-            { what: t('team.p17.what'), how: t('team.p17.how') },
             { what: t('team.p18.what'), how: t('team.p18.how'), to: '/approvals', cta: 'Open approvals' },
           ]}
         />
