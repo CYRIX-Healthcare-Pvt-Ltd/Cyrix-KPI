@@ -95,6 +95,15 @@ export default function Shell() {
    */
   const navRef = useRef<HTMLElement>(null)
   const [navMore, setNavMore] = useState({ left: false, right: false })
+  /*
+    Icons when the names do not fit (the user, 12 Oct, of HR's bar: "hidden tabs for HR admin,
+    need to do something to see the tabs as full"). Every tab stays on screen; the one you are
+    on keeps its name, the rest show theirs on hover. `navNeeds` is the width the bar took with
+    every name showing, so it comes back to names as soon as the window has that room.
+  */
+  const [navCompact, setNavCompact] = useState(false)
+  const navCompactRef = useRef(false)
+  const navNeeds = useRef(0)
 
   useEffect(() => {
     const el = navRef.current
@@ -104,6 +113,17 @@ export default function Shell() {
       // exactly report one stray pixel of overflow, and an arrow that
       // scrolls nowhere is worse than no arrow.
       const max = el.scrollWidth - el.clientWidth
+      if (!navCompactRef.current && max > 1) {
+        navNeeds.current = el.scrollWidth
+        navCompactRef.current = true
+        setNavCompact(true)
+        return
+      }
+      if (navCompactRef.current && el.clientWidth >= navNeeds.current) {
+        navCompactRef.current = false
+        setNavCompact(false)
+        return
+      }
       setNavMore({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 })
     }
     measure()
@@ -115,7 +135,7 @@ export default function Shell() {
       ro.disconnect()
     }
     // The tabs themselves change with the role, which changes the width.
-  }, [pathname, isManager, isHrAdmin, isSwAdmin])
+  }, [pathname, isManager, isHrAdmin, isSwAdmin, navCompact])
 
   /** About two tabs at a time — far enough to be worth a press. */
   const nudgeNav = (direction: 1 | -1) =>
@@ -323,11 +343,17 @@ export default function Shell() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className="nav-link"
+                className={({ isActive }) => clsx('nav-link', navCompact && !isActive && '!px-2.5')}
+                title={navCompact ? item.label : undefined}
+                aria-label={item.label}
               >
-                <item.icon className={clsx('h-4 w-4', NAV_TINT[item.to])} />
-                {item.label}
-                <Badge count={item.badge} />
+                {({ isActive }) => (
+                  <>
+                    <item.icon className={clsx('h-4 w-4', NAV_TINT[item.to])} />
+                    {(!navCompact || isActive) && item.label}
+                    <Badge count={item.badge} />
+                  </>
+                )}
               </NavLink>
             ))}
 
@@ -340,9 +366,9 @@ export default function Shell() {
                 there is nothing here to leave, and Modules beside a single
                 tab reads as a second module rather than the way out. */}
             {items.length > 1 && (
-              <a href="/" className="nav-link" title="All Cyrix modules">
+              <a href="/" className={clsx('nav-link', navCompact && '!px-2.5')} title="All Cyrix modules" aria-label="All Cyrix modules">
                 <Grid2x2 className="h-4 w-4 text-ink-400" />
-                Modules
+                {!navCompact && 'Modules'}
               </a>
             )}
           </nav>
