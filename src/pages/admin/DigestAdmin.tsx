@@ -111,8 +111,9 @@ export default function DigestAdmin() {
         p_meet_link: d.kind === 'meeting' ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
       })
       if (error) throw new Error(friendlyError(error))
-      // A poll ends when it closes and a vacancy on its Apply by (0178): no Show until for them.
-      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy'
+      // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
+      // no Show until for them.
+      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting'
       const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
       if (d.kind === 'vacancy') {
@@ -297,7 +298,7 @@ export default function DigestAdmin() {
           </div>
         </div>
 
-        {d.kind !== 'poll' && d.kind !== 'vacancy' && <div className="max-w-xs">
+        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && <div className="max-w-xs">
           <label className="label" htmlFor="dg-until">Show until · optional</label>
           <input id="dg-until" type="date" className="input" value={d.until}
             min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
@@ -354,7 +355,8 @@ export default function DigestAdmin() {
                       {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
                       {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
                         ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                        : <span className="ml-1.5">· Until {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>)}
+                        // A meeting already says its date.
+                        : r.kind !== 'meeting' && <span className="ml-1.5">· Until {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>)}
                     </span>
                   </span>
                 </button>
@@ -370,7 +372,7 @@ export default function DigestAdmin() {
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' ? '' : r.show_until ?? '' })
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
