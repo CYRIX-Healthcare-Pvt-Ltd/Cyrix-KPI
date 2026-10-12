@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import clsx from 'clsx'
+import DurationPicker from '@/components/DurationPicker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
@@ -270,22 +271,8 @@ export default function DigestAdmin() {
             </div>
             <div>
               <label className="label" htmlFor="dg-min">Duration <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              {/* The usual lengths a tap away, and any other in minutes (the user, 12 Oct:
-                  "i cannot select 20 mins, and dropdown not good"). */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[15, 20, 30, 45, 60, 90, 120].map(m => (
-                  <button key={m} type="button" onClick={() => set({ minutes: m })}
-                    className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
-                      d.minutes === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
-                    {m < 60 ? `${m} min` : `${m / 60} hr`}
-                  </button>
-                ))}
-                <span className="relative w-24">
-                  <input id="dg-min" type="number" inputMode="numeric" min={5} max={600} step={5} className="input !py-1.5 !pr-10"
-                    value={d.minutes || ''} onChange={e => set({ minutes: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
-                  <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-400">min</span>
-                </span>
-              </div>
+              {/* Hours and minutes from two columns (the user, 12 Oct: "how can i select 1 hr 20 mins?"). */}
+              <DurationPicker id="dg-min" value={d.minutes} onChange={minutes => set({ minutes })} />
             </div>
             <div>
               <label className="label" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
