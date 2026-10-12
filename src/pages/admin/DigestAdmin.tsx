@@ -49,6 +49,8 @@ interface Row {
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
   vac_location: string | null; apply_by: string | null; apply_link: string | null
+  /** The last day it is on the portal home (0177); null stays. */
+  show_until: string | null
 }
 interface Draft {
   id: string | null; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
@@ -57,8 +59,10 @@ interface Draft {
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
   vloc: string; vby: string; vlink: string
+  /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
+  until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -107,6 +111,8 @@ export default function DigestAdmin() {
         p_meet_link: d.kind === 'meeting' ? d.link : null, p_meet_place: d.kind === 'meeting' ? d.place : null,
       })
       if (error) throw new Error(friendlyError(error))
+      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: d.until || null })
+      if (ue) throw new Error(friendlyError(ue))
       if (d.kind === 'vacancy') {
         const { error: ve } = await supabase.rpc('digest_set_vacancy', {
           p_id: id, p_location: d.vloc, p_apply_by: d.vby || null, p_apply_link: d.vlink,
@@ -289,6 +295,13 @@ export default function DigestAdmin() {
           </div>
         </div>
 
+        <div className="max-w-xs">
+          <label className="label" htmlFor="dg-until">Show until · optional</label>
+          <input id="dg-until" type="date" className="input" value={d.until}
+            min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
+            onChange={e => set({ until: e.target.value })} />
+        </div>
+
         <button className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate() }}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           {d.id ? 'Save changes' : 'Post to everyone'}
@@ -337,6 +350,9 @@ export default function DigestAdmin() {
                     <span className="block truncate text-sm font-medium text-ink-900">{r.title}</span>
                     <span className="block text-xs text-ink-500">
                       {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
+                      {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
+                        ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                        : <span className="ml-1.5">· Until {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>)}
                     </span>
                   </span>
                 </button>
@@ -352,7 +368,7 @@ export default function DigestAdmin() {
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : '',
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '' })
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
