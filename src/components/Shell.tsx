@@ -550,7 +550,7 @@ export default function Shell() {
           to the profile page, and on 7 Oct out of KPI altogether: the
           whole platform installs as one app, from the icon in the
           portal's top bar. */}
-      <ChatBot />
+      {!(isHrAdmin || isSwAdmin || isItAdmin || isMktAdmin) && <ChatBot />}
       <StartMonthPrompt />
     </div>
   )
