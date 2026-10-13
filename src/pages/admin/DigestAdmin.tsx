@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { htmlToMd } from '@/lib/htmlToMd'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
@@ -337,6 +338,7 @@ export default function DigestAdmin() {
         <div>
           <label className="label" htmlFor="dg-body">Description{LIKABLE.has(d.kind) && <> <span className="text-cyrixRed-600" aria-hidden>*</span></>}</label>
           <textarea id="dg-body" className="input min-h-[110px]" maxLength={4000} value={d.body} onChange={e => set({ body: e.target.value })}
+            onPaste={e => { const h = e.clipboardData.getData('text/html'); if (!h) return; e.preventDefault(); const t = e.currentTarget, md = htmlToMd(h), v = t.value.slice(0, t.selectionStart) + md + t.value.slice(t.selectionEnd); set({ body: v.slice(0, 4000) }) }}
             placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : d.kind === 'vacancy' ? 'Two years in equipment repair; field travel' : 'Lunch, rangoli and prizes on 30 Oct'} />
         </div>
 
