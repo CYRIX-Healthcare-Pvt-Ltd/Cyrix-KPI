@@ -598,6 +598,8 @@ export default function DigestAdmin() {
                   const poll = r.kind === 'poll'
                     ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
                     : []
+                  const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
+                  setTesters(tested); setTesting(tested.length > 0)
                   setDraftSaved(false)
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
