@@ -7,8 +7,9 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { exportReporteesZip } from '@/lib/exportReportees'
 import {
-  useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar,
+  useTeamMonth, useTeamSubmissions, useRemovalAction, useRemoveAvatar, useRemovalRequests,
   useSettleDueMonths, useOpenQueryMonths, useTeamSubtree, currentFy,
 } from '@/lib/queries'
 import { monthLabel, currentReportingMonth } from '@/lib/fy'
@@ -73,6 +74,9 @@ export default function Team() {
   */
   const month = currentReportingMonth()
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
+  // A removal already asked for shows on the person, so the manager need not ask HR (the user, 14 Oct).
+  const { data: pendingRemovals } = useRemovalRequests('pending')
+  const removalAsked = new Map((pendingRemovals ?? []).map(r => [r.request.employee_id, r.request.created_at]))
   const [peek, setPeek] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusKey>('all')
   /** Whose team is being looked into, null when nobody's. */
@@ -80,6 +84,9 @@ export default function Team() {
   const [askScope, setAskScope] = useState(false)
   const [photoFor, setPhotoFor] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Export to Excel: the summary as before, or one workbook per reportee in a zip (the user, 14 Oct).
+  const [exportKind, setExportKind] = useState<'summary' | 'zip'>('summary')
+  const [exportMenu, setExportMenu] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /*
     Seeded from the navigation, so a manager who has just scored somebody
@@ -268,9 +275,23 @@ export default function Team() {
    * refused. That one goes through the function that checks ancestry and
    * returns the whole line (migration 0083).
    */
-  const download = async (scope: 'direct' | 'deep') => {
+  const download = async (scope: 'direct' | 'deep', kind: 'summary' | 'zip' = exportKind) => {
     setBusy(true); setError(null); setAskScope(false)
     try {
+      if (kind === 'zip') {
+        let people: Employee[] = team
+        if (scope === 'deep') {
+          const { data, error: rpcError } = await supabase.rpc('team_subtree_scores', { p_fy: fy, p_root: null, p_deep: true })
+          if (rpcError) throw new Error(rpcError.message)
+          const seen = new Map<string, Employee>()
+          for (const raw of (data ?? []) as Array<Record<string, unknown> & { employee_id: string }>) {
+            if (!seen.has(raw.employee_id)) seen.set(raw.employee_id, { id: raw.employee_id, ecode: raw.ecode, full_name: raw.full_name } as Employee)
+          }
+          people = [...seen.values()]
+        }
+        await exportReporteesZip(people, fy, `Cyra-KPI-reportees-${fy}.zip`)
+        return
+      }
       if (scope === 'direct') {
         const byEmp = new Map<string, typeof allSubs>()
         for (const s of allSubs ?? []) {
@@ -443,14 +464,31 @@ export default function Team() {
         {/* Only asks when the two answers differ. A manager whose reports
             manage nobody would be answering a question with one possible
             answer. */}
-        <button
-          onClick={() => (wholeLine > team.length ? setAskScope(true) : download('direct'))}
-          className="btn-excel col-span-2 sm:col-span-1"
-          disabled={busy}
-        >
-          {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-          Export to Excel
-        </button>
+        <div className="relative col-span-2 sm:col-span-1">
+          <button
+            onClick={() => setExportMenu(v => !v)}
+            className="btn-excel w-full"
+            disabled={busy}
+            aria-expanded={exportMenu}
+          >
+            {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            Export to Excel
+          </button>
+          {exportMenu && (
+            <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-lg" role="menu">
+              {([['summary', 'Summary report'], ['zip', 'Reportee-wise (zip)']] as const).map(([k, label]) => (
+                <button key={k} type="button" role="menuitem" className="block w-full px-4 py-2.5 text-left text-sm text-ink-800 hover:bg-ink-100"
+                  onClick={() => {
+                    setExportMenu(false); setExportKind(k)
+                    if (wholeLine > team.length) setAskScope(true)
+                    else void download('direct', k)
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
@@ -775,6 +813,11 @@ export default function Team() {
                   )}
                 </div>
 
+                {removalAsked.has(member.id) ? (
+                  <span className="badge shrink-0 bg-cyrixRed-50 text-cyrixRed-700" title="Waiting for HR">
+                    <UserMinus className="h-3.5 w-3.5" /> Removal requested · {new Date(removalAsked.get(member.id)!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </span>
+                ) : (
                 <button
                   onClick={() => setRemoving({ id: member.id, name: member.full_name })}
                   className="shrink-0 rounded-lg p-2 text-ink-300 hover:bg-cyrixRed-50 hover:text-cyrixRed-700"
@@ -783,6 +826,7 @@ export default function Team() {
                 >
                   <UserMinus className="h-4 w-4" />
                 </button>
+                )}
               </div>
             </div>
           )

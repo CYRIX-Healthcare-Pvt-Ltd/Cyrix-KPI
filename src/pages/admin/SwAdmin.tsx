@@ -11,6 +11,7 @@ import DigestAdmin from './DigestAdmin'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import CyraAccess from '@/pages/admin/CyraAccess'
+import { DigestHistory } from '@/pages/admin/DigestAdmin'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
 import MissingLogins from '@/components/MissingLogins'
@@ -93,6 +94,14 @@ function LoginsTab() {
   const setDeviceCheck = useMutation({
     mutationFn: async (a: { id: string; on: boolean }) => {
       const { error } = await supabase.rpc('set_device_check', { p_employee_id: a.id, p_on: a.on })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['device_check_off'] }),
+  })
+  // Everyone at once (0192; the user, 14 Oct).
+  const setDeviceCheckAll = useMutation({
+    mutationFn: async (on: boolean) => {
+      const { error } = await supabase.rpc('set_device_check_all', { p_on: on })
       if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['device_check_off'] }),
@@ -522,6 +531,13 @@ function LoginsTab() {
           />
           Include inactive
         </label>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-ink-700">Device check for all</span>
+          <button type="button" className="btn-secondary" disabled={setDeviceCheckAll.isPending}
+            onClick={() => { if (confirm('Switch the device check ON for everyone?')) setDeviceCheckAll.mutate(true) }}>On</button>
+          <button type="button" className="btn-secondary" disabled={setDeviceCheckAll.isPending}
+            onClick={() => { if (confirm('Switch the device check OFF for everyone?')) setDeviceCheckAll.mutate(false) }}>Off</button>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -2392,8 +2408,10 @@ const ADMIN_TABS = [
   // Who works in Revive Lab, in which TRCs, doing what — the same table
   // the module's own admins edit from inside it.
   { id: 'revive', label: 'Revive Lab', short: 'Revive', icon: Wrench, render: () => <ReviveLabAccess /> },
+  // Every Digest post from IT, HR and Marketing, deleted ones kept as history (0191).
+  { id: 'digest-history', label: 'Digest', short: 'Digest', icon: Newspaper, render: () => <DigestHistory /> },
   // Review and Admin inside CYRA for each person who holds it (0174).
-  { id: 'cyra', label: 'CYRA', short: 'CYRA', icon: Stethoscope, render: () => <CyraAccess /> },
+  { id: 'cyra', label: 'Cyra Assist', short: 'Assist', icon: Stethoscope, render: () => <CyraAccess /> },
   // Admin vs director inside Pulse, for people already granted the tile
   // above. Pulse's own data lives outside this database (SQL Server on
   // cyrix-svc01), so this tab calls Pulse's own admin API rather than a

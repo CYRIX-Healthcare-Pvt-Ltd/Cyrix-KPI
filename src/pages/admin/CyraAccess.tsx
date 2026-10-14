@@ -64,12 +64,12 @@ export default function CyraAccess() {
     : rows), [rows, needle])
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner className="h-6 w-6 text-ink-400" /></div>
-  if (error) return <Alert kind="error">{error instanceof Error ? error.message : 'Could not load CYRA access.'}</Alert>
+  if (error) return <Alert kind="error">{error instanceof Error ? error.message : 'Could not load Cyra Assist access.'}</Alert>
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="People with CYRA" value={rows.length} />
+        <StatTile label="People with Cyra Assist" value={rows.length} />
         <StatTile label="Review" value={rows.filter(r => r.review).length} />
         <StatTile label="Admin" value={rows.filter(r => r.admin).length} />
       </div>
@@ -79,7 +79,7 @@ export default function CyraAccess() {
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-200 bg-ink-50 px-3 py-2">
           <h3 className="flex items-center gap-2 px-1 text-sm font-semibold text-ink-800">
-            <Stethoscope className="h-4 w-4 text-ink-400" /> CYRA
+            <Stethoscope className="h-4 w-4 text-ink-400" /> Cyra Assist
           </h3>
           <label className="relative ml-auto w-full sm:w-56">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
@@ -89,7 +89,7 @@ export default function CyraAccess() {
 
         {shown.length === 0 ? (
           <div className="p-4">
-            <EmptyState icon={Stethoscope} title={q ? 'Nobody matches that' : 'Nobody has CYRA yet'} />
+            <EmptyState icon={Stethoscope} title={q ? 'Nobody matches that' : 'Nobody has Cyra Assist yet'} />
           </div>
         ) : (
           <div className="overflow-x-auto">

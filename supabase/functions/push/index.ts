@@ -148,7 +148,7 @@ Deno.serve(async req => {
         }).select('id').single()
         if (dup || !claim) continue
         const t = await deliver(db, await everyone(db),
-          { title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`, url: '/', tag: 'digest-' + m.id })
+          { title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`, url: '/?post=' + m.id, tag: 'digest-' + m.id })
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
       return json(total)
@@ -194,7 +194,7 @@ Deno.serve(async req => {
     const { data: post } = await db.from('digest_posts').select('id, title, testers').eq('id', String(input.post_id ?? '')).maybeSingle()
     if (!post) return json({ error: 'That post is not there' }, 404)
     const t = await deliver(db, (post.testers ?? []) as string[],
-      { title: 'Test · ' + post.title, body: 'Only you can see this test in Cyrix Digest.', url: '/', tag: 'digest-test-' + post.id })
+      { title: 'Test · ' + post.title, body: 'Only you can see this test in Cyrix Digest.', url: '/?post=' + post.id, tag: 'digest-test-' + post.id })
     return json(t)
   }
 
@@ -230,7 +230,7 @@ Deno.serve(async req => {
     }).select('id').single()
     // Not into the in-app bell (0176; the user, 12 Oct: "keep digest out of kpi bell"):
     // the post is on the portal home, and goes to devices.
-    const t = devicesOn ? await deliver(db, people, { title, body, url: '/', tag: 'digest-' + post.id }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
+    const t = devicesOn ? await deliver(db, people, { title, body, url: '/?post=' + post.id, tag: 'digest-' + post.id }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
     if (row) await db.from('push_messages').update(t).eq('id', row.id)
     return json(t)
   }

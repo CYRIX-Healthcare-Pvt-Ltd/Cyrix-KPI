@@ -639,7 +639,7 @@ type Person = {
 }
 type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
-function Details({ row }: { row: Row }) {
+function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
   const [find, setFind] = useState('')
@@ -819,10 +819,82 @@ function Details({ row }: { row: Row }) {
                 <p className="text-ink-900"><span className="font-medium">{c.author}</span> <span className="text-xs text-ink-500">{c.ecode} · {fmt(c.created_at)}</span></p>
                 <p className="text-ink-700">{c.body}</p>
               </div>
-              <button type="button" className="btn-icon text-ink-400 hover:text-cyrixRed-600" title="Delete comment" onClick={() => void del(c.id)}><Trash2 className="h-4 w-4" /></button>
+              {!readOnly && <button type="button" className="btn-icon text-ink-400 hover:text-cyrixRed-600" title="Delete comment" onClick={() => void del(c.id)}><Trash2 className="h-4 w-4" /></button>}
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/*
+  SW Admin's Digest tab (0191; the user, 14 Oct): every post from IT, HR and Marketing, drafts and
+  deleted ones too, so a post a desk deletes stays here as history. Read only; Details as the desks see it.
+*/
+interface SwRow {
+  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt'; author: string | null
+  created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
+  meet_at: string | null; likes: number; comments: number; opened: number; joined: number
+}
+const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing' } as const
+
+export function DigestHistory() {
+  const [find, setFind] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const { data: rows = [], isLoading, error } = useQuery({
+    queryKey: ['digest_sw_list'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('digest_sw_list')
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as SwRow[]
+    },
+  })
+  const q = find.trim().toLowerCase()
+  const shown = q ? rows.filter(r => [r.title, r.body, r.author, DESK_WORD[r.posted_as], kindOf(r.kind)[1], r.deleted_by]
+    .some(x => x?.toLowerCase().includes(q))) : rows
+  const when = (t: string) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+        <input className="input pl-9" placeholder="Title, words, desk or person" value={find} onChange={e => setFind(e.target.value)} aria-label="Search posts" />
+      </div>
+      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-ink-400" />}
+      {error && <p className="text-sm text-cyrixRed-600">{(error as Error).message}</p>}
+      <div className="space-y-2">
+        {shown.map(r => {
+          const [, word, Icon] = kindOf(r.kind)
+          return (
+            <div key={r.id} className={clsx('card p-3', r.deleted_at && 'opacity-80')}>
+              <button type="button" className="flex w-full items-center gap-3 text-left" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
+                {open === r.id ? <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />}
+                <Icon className="h-5 w-5 shrink-0 text-ink-500" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {r.deleted_at ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Deleted</span>
+                      : !r.published_at ? <span className="badge bg-amber-100 text-amber-800">Draft</span>
+                      : <span className="badge bg-emerald-50 text-emerald-700">Live</span>}
+                    <span className="truncate font-medium text-ink-900">{r.title}</span>
+                  </div>
+                  <p className="text-xs text-ink-500">
+                    {word} · {DESK_WORD[r.posted_as]}{r.author ? ` · ${r.author}` : ''} · {when(r.created_at)}
+                    {r.deleted_at && ` · Deleted ${when(r.deleted_at)}${r.deleted_by ? ` by ${r.deleted_by}` : ''}`}
+                  </p>
+                </div>
+                <span className="hidden shrink-0 gap-3 text-xs tabular-nums text-ink-500 sm:flex">
+                  <span title="Opened"><Eye className="mr-1 inline h-3.5 w-3.5" />{r.opened}</span>
+                  <span title="Likes"><Heart className="mr-1 inline h-3.5 w-3.5" />{r.likes}</span>
+                  <span title="Comments"><MessageCircle className="mr-1 inline h-3.5 w-3.5" />{r.comments}</span>
+                  {r.kind === 'meeting' && <span title="Joined"><Video className="mr-1 inline h-3.5 w-3.5" />{r.joined}</span>}
+                </span>
+              </button>
+              {open === r.id && <div className="mt-3"><Details readOnly row={{ ...r, mine: false, editors: [] } as unknown as Row} /></div>}
+            </div>
+          )
+        })}
+        {!isLoading && !shown.length && <p className="text-sm text-ink-500">No posts</p>}
       </div>
     </div>
   )
