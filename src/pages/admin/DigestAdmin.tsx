@@ -41,7 +41,8 @@ export const youTubeId = (url: string): string | null => {
   return m ? m[1] : /^[A-Za-z0-9_-]{11}$/.test(u) ? u : null
 }
 /** Minutes before a meeting that Join opens (0185; the user: "if I want to keep 30 mins before then I can customise it"). */
-const JOIN_EARLY = [5, 10, 15, 30, 45, 60]
+// 525600 (a year) is "Anytime": the link shows as soon as the meeting is posted (0194).
+const JOIN_EARLY = [5, 10, 15, 30, 45, 60, 525600]
 /** A named colour, or any colour as #rrggbb (0168; the user: "need more colours picker also"). */
 type Hue = string
 const HUES: Array<[Hue, string, string]> = [
@@ -438,7 +439,7 @@ export default function DigestAdmin() {
                       <button key={m} type="button" onClick={() => set({ joinEarly: m })}
                         className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
                           d.joinEarly === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
-                        {m < 60 ? `${m} min` : '1 hr'} before
+                        {m >= 525600 ? 'Anytime' : m < 60 ? `${m} min before` : '1 hr before'}
                       </button>
                     ))}
                   </div>
