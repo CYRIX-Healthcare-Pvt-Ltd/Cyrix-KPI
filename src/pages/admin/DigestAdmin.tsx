@@ -643,6 +643,7 @@ type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joi
 function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
+  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>(null)
   const [find, setFind] = useState('')
   const { data: people } = useQuery({
     queryKey: ['digest_people', row.id],
@@ -778,17 +779,45 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
         </button>
         <button type="button" className="btn-secondary" onClick={download} disabled={!all.length}>Download all</button>
       </div>
-      {showList && <div className="max-h-80 overflow-auto rounded-lg border border-ink-200 bg-surface">
+      {showList && (() => {
+        // Every column sorts (the user, 15 Oct): click once for A–Z / earliest / fewest, again to reverse.
+        const lastKey = row.kind === 'video' ? 'watched' : LIKABLE.has(row.kind) ? 'liked' : row.kind === 'poll' ? 'voted' : row.kind === 'form' ? 'answered' : 'joins'
+        const val = (p: Person, k: string): string | number => {
+          switch (k) {
+            case 'name': return p.full_name.toLowerCase()
+            case 'ecode': return p.ecode.toLowerCase()
+            case 'dept': return (p.department ?? '').toLowerCase()
+            case 'opened': return p.opened_at ?? ''
+            case 'watched': return p.watched_seconds ?? 0
+            case 'liked': return p.liked_at ?? ''
+            case 'voted': return (p.voted ?? '').toLowerCase()
+            case 'answered': return p.answered_at ?? ''
+            default: return p.joins ?? 0
+          }
+        }
+        const rows = sort ? [...list].sort((a, b) => {
+          const x = val(a, sort.key), y = val(b, sort.key)
+          return (x < y ? -1 : x > y ? 1 : 0) * (sort.asc ? 1 : -1)
+        }) : list
+        const Th = ({ k, label, right }: { k: string; label: string; right?: boolean }) => (
+          <th className={clsx('px-3 py-2', right && 'text-right')}>
+            <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-ink-900"
+              onClick={() => setSort(s => s?.key === k ? { key: k, asc: !s.asc } : { key: k, asc: true })}>
+              {label}<span className="text-[10px]">{sort?.key === k ? (sort.asc ? '▲' : '▼') : '↕'}</span>
+            </button>
+          </th>
+        )
+        return <div className="max-h-80 overflow-auto rounded-lg border border-ink-200 bg-surface">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-              <th className="px-3 py-2">Name</th><th className="px-3 py-2">E-code</th><th className="px-3 py-2">Department</th>
-              <th className="px-3 py-2">Opened</th>
-              {row.kind === 'video' ? <th className="px-3 py-2">Watched</th> : LIKABLE.has(row.kind) ? <th className="px-3 py-2">Liked</th> : row.kind === 'poll' ? <th className="px-3 py-2">Answer</th> : row.kind === 'form' ? <th className="px-3 py-2">Answered</th> : <th className="px-3 py-2 text-right">Join clicks</th>}
+              <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
+              <Th k="opened" label="Opened" />
+              <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
-            {list.slice(0, 300).map(p => (
+            {rows.slice(0, 300).map(p => (
               <tr key={p.ecode}>
                 <td className="px-3 py-1.5 text-ink-900">{p.full_name}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
@@ -809,7 +838,8 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
         </table>
         {list.length > 300 && <p className="px-3 py-2 text-xs text-ink-500">Showing 300 of {list.length}. Download all for everybody.</p>}
         {!list.length && <p className="px-3 py-3 text-sm text-ink-500">Nobody.</p>}
-      </div>}
+      </div>
+      })()}
 
       <div>
         <p className="mb-2 text-sm font-semibold text-ink-800">Comments · {comments?.length ?? 0}</p>
