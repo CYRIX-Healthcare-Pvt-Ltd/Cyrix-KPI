@@ -476,7 +476,7 @@ export default function Team() {
           </button>
           {exportMenu && (
             <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-lg" role="menu">
-              {([['summary', 'Summary report'], ['zip', 'Reportee-wise (zip)']] as const).map(([k, label]) => (
+              {([['summary', 'Summary report'], ['zip', "Team members' KPIs (zip)"]] as const).map(([k, label]) => (
                 <button key={k} type="button" role="menuitem" className="block w-full px-4 py-2.5 text-left text-sm text-ink-800 hover:bg-ink-100"
                   onClick={() => {
                     setExportMenu(false); setExportKind(k)
