@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
-  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper,
+  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
@@ -86,7 +86,7 @@ function LoginsTab() {
   const { data: deviceOff } = useQuery({
     queryKey: ['device_check_off'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('device_check_off_list')
+      const { data, error } = await supabase.rpc('device_check_off_ids')
       if (error) throw new Error(error.message)
       return new Set((data as string[] | null) ?? [])
     },
@@ -111,6 +111,8 @@ function LoginsTab() {
   const moduleNames = (modules ?? []).map(m => m.name).join(', ') || 'KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab'
   const { data: grants } = useModuleGrants(true)
   const setModule = useSetModuleAccess()
+  // Whose modules are being chosen in the pop-up (the user, 15 Oct: the chips made every row tall).
+  const [moduleFor, setModuleFor] = useState<{ id: string; name: string } | null>(null)
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   // The same option as HR Employees, off by default for the same reason:
@@ -388,7 +390,7 @@ function LoginsTab() {
           <p className="mt-1">
             Everybody has <strong>KPI</strong> — everybody is appraised — and{' '}
             <strong>My Task</strong>, where they keep their tasks. The rest
-            are handed out here: click a name in the Modules column to give or
+            are handed out here: click the box in the Modules column to give or
             take away the tile. It changes what a person is{' '}
             <em>offered</em> on the portal, not what they are permitted to do
             once inside — each module still checks that for itself.
@@ -402,6 +404,32 @@ function LoginsTab() {
 
       {notice && <Alert kind="success">{notice}</Alert>}
       {resetError && <Alert kind="error">{resetError}</Alert>}
+
+      {moduleFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setModuleFor(null) }}>
+          <div className="card w-full max-w-sm p-4" role="dialog" aria-modal="true" aria-label={`Modules for ${moduleFor.name}`}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="font-medium text-ink-900">Modules · {moduleFor.name}</p>
+              <button type="button" className="btn-icon" onClick={() => setModuleFor(null)} aria-label="Close"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-1">
+              {(modules ?? []).map(m => {
+                const on = grants?.has(`${moduleFor.id}:${m.code}`) ?? false
+                return (
+                  <label key={m.code} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-ink-800 hover:bg-ink-100">
+                    <input type="checkbox" className="h-4 w-4 rounded border-ink-300" checked={on} disabled={setModule.isPending}
+                      onChange={() => setModule.mutate({ employeeId: moduleFor.id, module: m.code, granted: !on })} />
+                    {m.name}
+                  </label>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button type="button" className="btn-primary" onClick={() => setModuleFor(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirming && (
         <div className="card space-y-3 border-cyrixRed-200 p-4">
@@ -594,35 +622,20 @@ function LoginsTab() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(modules ?? []).map(m => {
-                        const on = grants?.has(`${r.employee_id}:${m.code}`) ?? false
-                        return (
-                          <button
-                            key={m.code}
-                            onClick={() => setModule.mutate({
-                              employeeId: r.employee_id, module: m.code, granted: !on,
-                            })}
-                            disabled={setModule.isPending || itOnly}
-                            // Named rather than ticked: a row of bare
-                            // checkboxes needs a header to decode, and this
-                            // table is already seven columns wide.
-                            title={on
-                              ? `Remove ${m.name} from ${r.full_name}`
-                              : `Give ${r.full_name} access to ${m.name}`}
-                            aria-pressed={on}
-                            className={clsx(
-                              'badge cursor-pointer transition-colors disabled:opacity-50',
-                              on
-                                ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
-                                : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
-                            )}
-                          >
-                            {m.name}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    {(() => {
+                      const held = (modules ?? []).filter(m => grants?.has(`${r.employee_id}:${m.code}`))
+                      return (
+                        <button type="button" disabled={itOnly}
+                          onClick={() => setModuleFor({ id: r.employee_id, name: r.full_name })}
+                          title={held.map(m => m.name).join(', ') || 'No modules'}
+                          className="flex w-44 items-center gap-2 rounded-lg border border-ink-200 px-2.5 py-1.5 text-left text-xs text-ink-700 hover:border-ink-400 disabled:opacity-50">
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className="font-semibold text-ink-900">{held.length}</span> · {held.map(m => m.name).join(', ') || 'None'}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                        </button>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
