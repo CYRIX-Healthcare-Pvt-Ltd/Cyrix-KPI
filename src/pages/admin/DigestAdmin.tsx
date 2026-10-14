@@ -106,6 +106,8 @@ interface Draft {
 const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+// On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
+const fmtAmPm = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/(am|pm)/i, m => m.toUpperCase())
 
 /** A photo, made no bigger than it needs to be, into the public digest bucket. */
 async function upload(file: File): Promise<string> {
@@ -632,6 +634,8 @@ export default function DigestAdmin() {
 type Person = {
   ecode: string; full_name: string; department: string | null; function_name: string | null
   seen_at: string | null; opened_at: string | null; opens: number
+  /** The latest time they opened it (0200); opened_at is the first. */
+  last_opened: string | null
   liked_at: string | null; comments: number; joins: number; joined_at: string | null; voted: string | null
   /** A form (0181): when they sent it, and their answers by question id. */
   answered_at: string | null; answers: Record<string, string | string[]> | null
@@ -720,7 +724,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const mins = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const download = () => {
     const yn = (b: boolean) => (b ? 'Yes' : 'No')
-    const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Times opened',
+    const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Last opened', 'Times opened',
       ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
@@ -729,7 +733,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       ...(row.kind === 'video' ? ['Watched', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
-      yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.opens,
+      yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
       ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
       ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
@@ -788,6 +792,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
             case 'ecode': return p.ecode.toLowerCase()
             case 'dept': return (p.department ?? '').toLowerCase()
             case 'opened': return p.opened_at ?? ''
+            case 'last': return p.last_opened ?? ''
             case 'watched': return p.watched_seconds ?? 0
             case 'liked': return p.liked_at ?? ''
             case 'voted': return (p.voted ?? '').toLowerCase()
@@ -812,7 +817,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
-              <Th k="opened" label="Opened" />
+              <Th k="opened" label="First opened" /><Th k="last" label="Last opened" />
               <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
             </tr>
           </thead>
@@ -822,15 +827,16 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                 <td className="px-3 py-1.5 text-ink-900">{p.full_name}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmt(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmtAmPm(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.last_opened && p.opens > 1 ? fmtAmPm(p.last_opened) : '—'}</td>
                 {row.kind === 'video'
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.watched_seconds ? `${mins(p.watched_seconds)}${p.video_seconds ? ` of ${mins(p.video_seconds)} · ${pct(p)}` : ''}` : '—'}</td>
                   : LIKABLE.has(row.kind)
-                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmt(p.liked_at) : '—'}</td>
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.liked_at ? fmtAmPm(p.liked_at) : '—'}</td>
                   : row.kind === 'poll'
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
                   : row.kind === 'form'
-                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmt(p.answered_at) : '—'}</td>
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmtAmPm(p.answered_at) : '—'}</td>
                   : <td className="px-3 py-1.5 text-right tabular-nums">{p.joins || '—'}</td>}
               </tr>
             ))}
