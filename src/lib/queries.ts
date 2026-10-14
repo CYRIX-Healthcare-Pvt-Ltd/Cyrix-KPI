@@ -1082,12 +1082,22 @@ export function useTeamSubmissions(employeeIds: string[] | undefined, fy: string
   return useQuery({
     enabled: !!employeeIds?.length,
     queryKey: ['team_submissions', employeeIds, fy],
-    queryFn: () =>
-      unwrap<KpiSubmission[]>(
-        supabase.from('kpi_submissions').select('*')
-          .in('employee_id', employeeIds!).eq('financial_year', fy)
-          .order('period_month'),
-      ),
+    // In pages, 200 people at a time: a large team's year passes the API's 1,000-row cap (15 Oct).
+    queryFn: async () => {
+      const out: KpiSubmission[] = []
+      for (let i = 0; i < employeeIds!.length; i += 200) {
+        for (let from = 0; ; from += 1000) {
+          const rows = await unwrap<KpiSubmission[]>(
+            supabase.from('kpi_submissions').select('*')
+              .in('employee_id', employeeIds!.slice(i, i + 200)).eq('financial_year', fy)
+              .order('period_month').order('id').range(from, from + 999),
+          )
+          out.push(...rows)
+          if (rows.length < 1000) break
+        }
+      }
+      return out.sort((a, b) => a.period_month.localeCompare(b.period_month))
+    },
   })
 }
 

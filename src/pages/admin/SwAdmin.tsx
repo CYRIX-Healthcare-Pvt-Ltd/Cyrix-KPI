@@ -106,6 +106,17 @@ function LoginsTab() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['device_check_off'] }),
   })
+  // Installed app and notifications, per person (0197; the user, 15 Oct).
+  const { data: appStatus } = useQuery({
+    queryKey: ['app_status_ids'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('app_status_ids')
+      if (error) throw new Error(error.message)
+      const d = (data ?? {}) as { installed?: string[]; push?: string[] }
+      return { installed: new Set(d.installed ?? []), push: new Set(d.push ?? []) }
+    },
+  })
   const { data: modules } = useAppModules()
   // "KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab" — whatever the modules are now.
   const moduleNames = (modules ?? []).map(m => m.name).join(', ') || 'KPI, Spare Mapping, BEMMP Dashboard, Pulse, Revive Lab'
@@ -521,12 +532,12 @@ function LoginsTab() {
           sub="password is their ecode"
         />
         <StatTile
-          label="Set their own"
-          value={counts['Set their own password'] ?? 0}
-        />
-        <StatTile
           label="No login issued"
           value={counts['No login issued'] ?? 0}
+        />
+        <StatTile
+          label="Notifications on"
+          value={appStatus?.push.size ?? 0}
         />
       </div>
 
@@ -574,7 +585,6 @@ function LoginsTab() {
             <thead>
               <tr className="border-b border-ink-200 bg-ink-50 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-2.5">Employee</th>
-                <th className="px-4 py-2.5">Login</th>
                 <th className="px-4 py-2.5">Manager</th>
                 <th className="px-4 py-2.5">State</th>
                 {/* Which tiles this person is offered on app.cyrix.in.
@@ -610,9 +620,6 @@ function LoginsTab() {
                       </p>
                     </button>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-ink-600">
-                    {r.login_email ?? '—'}
-                  </td>
                   <td className="px-4 py-3 text-xs text-ink-600">
                     {r.manager_name ?? '—'}
                   </td>
@@ -642,6 +649,14 @@ function LoginsTab() {
                   {!itOnly && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1.5">
+                      {r.has_login && appStatus && (
+                        <span className="flex items-center gap-1 self-center pr-1">
+                          <span className={clsx('badge whitespace-nowrap', appStatus.push.has(r.employee_id) ? 'bg-amber-100 text-amber-800' : 'bg-ink-100 text-ink-400')}
+                            title={appStatus.push.has(r.employee_id) ? 'Notifications on, on at least one device' : 'Notifications not turned on'}>
+                            <BellRing className="h-3 w-3" /> {appStatus.push.has(r.employee_id) ? 'On' : 'Off'}
+                          </span>
+                        </span>
+                      )}
                       {r.has_login && (
                         <label
                           className="inline-flex cursor-pointer items-center gap-1.5 self-center whitespace-nowrap pr-1 text-xs text-ink-600"

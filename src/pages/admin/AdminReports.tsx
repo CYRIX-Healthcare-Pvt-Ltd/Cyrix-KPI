@@ -61,14 +61,21 @@ export default function AdminReports() {
       }
 
       const subs: Awaited<ReturnType<typeof fetchSubs>> = []
+      // Paged: 500 people x 6 months is 3,000 rows and the API stops at 1,000, which left most
+      // people's months blank (the user, 15 Oct: E1427).
       async function fetchSubs(ids: string[]) {
-        const { data, error: e } = await supabase.from('kpi_submissions').select('*')
-          .in('employee_id', ids).eq('financial_year', fy)
-        if (e) throw new Error(friendlyError(e))
-        return data ?? []
+        const out = []
+        for (let from = 0; ; from += 1000) {
+          const { data, error: e } = await supabase.from('kpi_submissions').select('*')
+            .in('employee_id', ids).eq('financial_year', fy).order('id').range(from, from + 999)
+          if (e) throw new Error(friendlyError(e))
+          out.push(...(data ?? []))
+          if ((data ?? []).length < 1000) break
+        }
+        return out
       }
-      for (let i = 0; i < scopedIds.length; i += 500) {
-        subs.push(...(await fetchSubs(scopedIds.slice(i, i + 500))))
+      for (let i = 0; i < scopedIds.length; i += 200) {
+        subs.push(...(await fetchSubs(scopedIds.slice(i, i + 200))))
       }
 
       const byEmp = new Map<string, typeof subs>()
