@@ -113,8 +113,8 @@ function LoginsTab() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc('app_status_ids')
       if (error) throw new Error(error.message)
-      const d = (data ?? {}) as { installed?: string[]; push?: string[] }
-      return { installed: new Set(d.installed ?? []), push: new Set(d.push ?? []) }
+      const d = (data ?? {}) as { push?: string[] }
+      return { push: new Set(d.push ?? []) }
     },
   })
   const { data: modules } = useAppModules()
