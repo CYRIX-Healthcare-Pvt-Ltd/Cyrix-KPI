@@ -39,6 +39,8 @@ interface LoginStatusRow {
   employee_id: string
   /** Official email (0206), shown to IT Admin. */
   work_email?: string | null
+  /** When they were first added (0207); an upload updates, never re-adds. */
+  added_at?: string | null
   ecode: string
   full_name: string
   designation: string | null
@@ -128,6 +130,15 @@ function LoginsTab() {
   const [moduleFor, setModuleFor] = useState<{ id: string; name: string } | null>(null)
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
+  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>(null)
+  const Th = ({ k, label, right }: { k: string; label: string; right?: boolean }) => (
+    <th className={clsx('px-4 py-2.5', right && 'text-right')}>
+      <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-ink-900"
+        onClick={() => setSort(s => (s?.key === k ? { key: k, asc: !s.asc } : { key: k, asc: true }))}>
+        {label}<span className="text-[10px]">{sort?.key === k ? (sort.asc ? '▲' : '▼') : '↕'}</span>
+      </button>
+    </th>
+  )
   // Employees by default; test and admin logins on request (0203; the user, 15 Oct).
   const [kind, setKind] = useState<'employee' | 'test' | 'admin' | 'all'>('employee')
   const { data: typeOf } = useAccountTypes()
@@ -200,8 +211,28 @@ function LoginsTab() {
       and the sort is stable: inside each group the ecode order the query
       returned is untouched.
     */
-    return q ? [...rows].sort((a, b) => Number(isSelf(b)) - Number(isSelf(a))) : rows
-  }, [data, search, stateFilter, includeInactive, kind, typeOf])
+    const ordered = q ? [...rows].sort((a, b) => Number(isSelf(b)) - Number(isSelf(a))) : rows
+    if (!sort) return ordered
+    // A column heading clicked (the user, 15 Oct): that order instead, blanks last.
+    const val = (r: LoginStatusRow): string => {
+      switch (sort.key) {
+        case 'name': return r.full_name.toLowerCase()
+        case 'email': return (r.work_email ?? '').toLowerCase()
+        case 'manager': return (r.manager_name ?? '').toLowerCase()
+        case 'role': return typeOf ? typeOf(r.employee_id) : 'employee'
+        case 'modules': return String((modules ?? []).filter(m => grants?.has(`${r.employee_id}:${m.code}`)).length).padStart(3, '0')
+        case 'added': return r.added_at ?? ''
+        case 'signin': return r.last_sign_in_at ?? ''
+        default: return r.password_changed_at ?? ''
+      }
+    }
+    return [...ordered].sort((a, b) => {
+      const x = val(a), y = val(b)
+      if (!x && y) return 1
+      if (x && !y) return -1
+      return (x < y ? -1 : x > y ? 1 : 0) * (sort.asc ? 1 : -1)
+    })
+  }, [data, search, stateFilter, includeInactive, kind, typeOf, sort, modules, grants])
 
   // The tiles count what the list is showing: the people here now, or
   // everybody once "Include inactive" is ticked.
@@ -279,7 +310,8 @@ function LoginsTab() {
   if (isLoading) return <PageLoader label="Loading login records…" />
   if (error) return <Alert kind="error">{(error as Error).message}</Alert>
 
-  const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('en-GB') : '—')
+  // Day, month, year and the time with AM/PM (the user, 15 Oct).
+  const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/(am|pm)/i, m => m.toUpperCase()) : '—')
 
   return (
     <div className="space-y-5">
@@ -322,6 +354,7 @@ function LoginsTab() {
                 Designation: r.designation ?? '', Department: r.department ?? '',
                 Manager: r.manager_name ?? '', 'Login email': r.login_email ?? '',
                 'Login state': r.login_state, Active: r.is_active ? 'Yes' : 'No',
+                'Added': r.added_at ?? '',
                 'Last signed in': r.last_sign_in_at ?? '',
                 'Password changed': r.password_changed_at ?? '',
               })),
@@ -604,16 +637,17 @@ function LoginsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ink-200 bg-ink-50 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-                <th className="px-4 py-2.5">Employee</th>
-                {itOnly && <th className="px-4 py-2.5">Official email</th>}
-                <th className="px-4 py-2.5">Manager</th>
-                <th className="px-4 py-2.5">Role</th>
+                <Th k="name" label="Employee" />
+                {itOnly && <Th k="email" label="Official email" />}
+                <Th k="manager" label="Manager" />
+                <Th k="role" label="Role" />
                 {/* Which tiles this person is offered on app.cyrix.in.
                     Everybody starts with KPI because everybody is
                     appraised; the rest are handed out here. */}
-                {!itOnly && <th className="px-4 py-2.5">Modules</th>}
-                <th className="px-4 py-2.5">Last sign-in</th>
-                <th className="px-4 py-2.5">Password changed</th>
+                {!itOnly && <Th k="modules" label="Modules" />}
+                <Th k="added" label="Added" />
+                <Th k="signin" label="Last sign-in" />
+                <Th k="password" label="Password changed" />
                 {!itOnly && <th className="px-4 py-2.5 text-right">Actions</th>}
               </tr>
             </thead>
@@ -676,6 +710,7 @@ function LoginsTab() {
                       )
                     })()}
                   </td>}
+                  <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.added_at ?? null)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
                   {!itOnly && (
