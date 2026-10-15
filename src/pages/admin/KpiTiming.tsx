@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { Timer, Save, CalendarClock } from 'lucide-react'
 import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
@@ -33,6 +35,7 @@ export default function KpiTiming() {
   const { data: policy, isLoading, error } = useTatPolicy()
   const { data: closingDay } = useMonthClose()
   const save = useSaveTatPolicy()
+  const qc = useQueryClient()
   const setClose = useSetMonthClose()
 
   const [tm, setTm] = useState('3')
@@ -50,6 +53,28 @@ export default function KpiTiming() {
 
   // undefined = still loading, null = deliberately off.
   const closeDay = closingDay === undefined ? null : closingDay
+
+  /*
+    The last-day rules on or off (the user, 15 Oct). Off empties deadlines_from, which the database
+    and every screen already read as "no last days": no zero for a month not sent in, no automatic
+    scoring, no countdown banners, and Send back is always offered. The month they applied from is
+    kept in deadlines_from_saved and comes back when they are switched on again.
+  */
+  const rulesOn = !!policy?.deadlines_from
+  const toggleRules = async (on: boolean) => {
+    if (!policy) return
+    setNotice(null); setFailed(null)
+    try {
+      const { error } = await supabase.rpc('set_kpi_last_days', { p_on: on })
+      if (error) throw new Error(error.message)
+      await qc.invalidateQueries({ queryKey: ['tat_policy'] })
+      setNotice(on
+        ? 'Last days are on again: a month not sent in by the team member last day counts as zero, and one not scored by the manager last day takes the team member\'s own score.'
+        : 'Last days are off: nothing is scored automatically, and managers can send any submitted month back.')
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : 'Could not save that.')
+    }
+  }
 
   const saveDay = async (day: number | null) => {
     setNotice(null); setFailed(null)
@@ -117,6 +142,11 @@ export default function KpiTiming() {
       {failed && <Alert kind="error">{failed}</Alert>}
 
       <div className="card space-y-5 p-5">
+        <label className="flex cursor-pointer items-center gap-3">
+          <input type="checkbox" className="h-5 w-5 rounded border-ink-300" checked={rulesOn}
+            disabled={save.isPending} onChange={e => void toggleRules(e.target.checked)} />
+          <span className="font-medium text-ink-900">Last days {rulesOn ? 'on' : 'off'}</span>
+        </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="tm-days">

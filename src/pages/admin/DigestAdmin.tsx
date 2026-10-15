@@ -643,6 +643,8 @@ type Person = {
   answered_at: string | null; answers: Record<string, string | string[]> | null
   /** A video (0185): the most of it they watched, its length, and when they started. */
   watched_seconds: number | null; video_seconds: number | null; watched_at: string | null
+  /** Their reporting manager (0211). */
+  manager_name: string | null; manager_ecode: string | null
 }
 type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
@@ -738,17 +740,20 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   /** How much of the video they watched, as a whole percent, or blank. */
   const pct = (p: Person) => (p.watched_seconds && p.video_seconds ? `${Math.min(100, Math.round((p.watched_seconds / p.video_seconds) * 100))}%` : '')
   const mins = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+  // Watch time as h:mm:ss, and everyone's together in hours (the user, 15 Oct).
+  const hms = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(Math.round(sec % 60)).padStart(2, '0')}`
+  const totalWatch = all.reduce((t, p) => t + (p.watched_seconds ?? 0), 0)
   const download = () => {
     const yn = (b: boolean) => (b ? 'Yes' : 'No')
-    const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Last opened', 'Times opened',
+    const head = ['E-code', 'Name', 'Department', 'Function', 'Reporting manager', 'Manager E-code', 'Opened', 'First opened', 'Last opened', 'Times opened',
       ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First joined', 'Last joined'] : []),
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
       ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
-      ...(row.kind === 'video' ? ['Watched', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
+      ...(row.kind === 'video' ? ['Watched', 'Watch time (h:mm:ss)', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
     const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name,
+    const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
       ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
@@ -756,7 +761,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
       ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
         ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
-      ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
+      ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? hms(p.watched_seconds) : '', p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
         p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
@@ -777,7 +782,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
           </button>
         ))}
       </div>
-      <p className="text-xs text-ink-500">Out of {all.length} people.</p>
+      <p className="text-xs text-ink-500">Out of {all.length} people.{row.kind === 'video' && totalWatch > 0 && <> Watched in all: <strong className="text-ink-800">{Math.floor(totalWatch / 3600)} h {Math.round((totalWatch % 3600) / 60)} min</strong>.</>}</p>
 
       <div className="flex flex-wrap items-center gap-2">
         {lenses.map(([k, label]) => (
