@@ -636,6 +636,8 @@ type Person = {
   seen_at: string | null; opened_at: string | null; opens: number
   /** The latest time they opened it (0200); opened_at is the first. */
   last_opened: string | null
+  /** The latest Join click (0209); joined_at is the first. */
+  last_joined: string | null
   liked_at: string | null; comments: number; joins: number; joined_at: string | null; voted: string | null
   /** A form (0181): when they sent it, and their answers by question id. */
   answered_at: string | null; answers: Record<string, string | string[]> | null
@@ -741,7 +743,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     const head = ['E-code', 'Name', 'Department', 'Function', 'Opened', 'First opened', 'Last opened', 'Times opened',
       ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
       'Commented', 'Comments',
-      ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First join'] : []),
+      ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First joined', 'Last joined'] : []),
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
       ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
       ...(row.kind === 'video' ? ['Watched', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
@@ -750,7 +752,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
       ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
-      ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : ''] : []),
+      ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : '', p.last_joined ? fmt(p.last_joined) : ''] : []),
       ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
       ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
         ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
@@ -811,6 +813,8 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
             case 'liked': return p.liked_at ?? ''
             case 'voted': return (p.voted ?? '').toLowerCase()
             case 'answered': return p.answered_at ?? ''
+            case 'firstjoin': return p.joined_at ?? ''
+            case 'lastjoin': return p.last_joined ?? ''
             default: return p.joins ?? 0
           }
         }
@@ -833,6 +837,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
               <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
               <Th k="opened" label="First opened" /><Th k="last" label="Last opened" />
               <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
+              {lastKey === 'joins' && <><Th k="firstjoin" label="First joined" /><Th k="lastjoin" label="Last joined" /></>}
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -852,6 +857,10 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                   : row.kind === 'form'
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmtAmPm(p.answered_at) : '—'}</td>
                   : <td className="px-3 py-1.5 text-right tabular-nums">{p.joins || '—'}</td>}
+                {lastKey === 'joins' && <>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.joined_at ? fmtAmPm(p.joined_at) : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.last_joined && p.joins > 1 ? fmtAmPm(p.last_joined) : '—'}</td>
+                </>}
               </tr>
             ))}
           </tbody>
