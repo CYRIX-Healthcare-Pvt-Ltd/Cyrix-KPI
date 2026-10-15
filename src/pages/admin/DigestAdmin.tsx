@@ -679,8 +679,22 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   })
   const { data: comments } = useQuery({
     queryKey: ['digest_comments', row.id],
-    queryFn: async () => (await supabase.rpc('digest_comments_for', { p_id: row.id })).data as Array<{ id: string; author: string; ecode: string; body: string; created_at: string }>,
+    queryFn: async () => (await supabase.rpc('digest_comments_for', { p_id: row.id })).data as Array<{ id: string; author: string; ecode: string; body: string; created_at: string; reply: string | null; reply_desk: string | null; reply_at: string | null; can_reply: boolean }>,
   })
+  // The desk's reply to a comment (0202; the user, 15 Oct), sent to whoever wrote it.
+  const [replying, setReplying] = useState<{ id: string; text: string } | null>(null)
+  const [replyBusy, setReplyBusy] = useState(false)
+  const saveReply = async () => {
+    if (!replying) return
+    setReplyBusy(true)
+    try {
+      const { error } = await supabase.rpc('digest_reply_comment', { p_comment: replying.id, p_body: replying.text })
+      if (error) throw new Error(friendlyError(error))
+      if (replying.text.trim()) await supabase.functions.invoke('push', { body: { action: 'digest_reply', comment_id: replying.id } })
+      setReplying(null)
+      qc.invalidateQueries({ queryKey: ['digest_comments', row.id] })
+    } finally { setReplyBusy(false) }
+  }
   const del = async (id: string) => {
     await supabase.rpc('digest_delete_comment', { p_id: id })
     qc.invalidateQueries({ queryKey: ['digest_comments', row.id] })
@@ -855,6 +869,28 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
               <div className="min-w-0 flex-1 text-sm">
                 <p className="text-ink-900"><span className="font-medium">{c.author}</span> <span className="text-xs text-ink-500">{c.ecode} · {fmt(c.created_at)}</span></p>
                 <p className="text-ink-700">{c.body}</p>
+                {c.reply && replying?.id !== c.id && (
+                  <div className="mt-1.5 rounded-lg border-l-2 border-violet-500 bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
+                    <p className="text-xs font-semibold text-violet-700">{({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Reply'}{c.reply_at ? <span className="font-normal text-ink-500"> · {fmtAmPm(c.reply_at)}</span> : null}</p>
+                    <p className="text-ink-800">{c.reply}</p>
+                  </div>
+                )}
+                {replying?.id === c.id ? (
+                  <div className="mt-1.5 flex flex-col gap-1.5">
+                    <textarea className="input min-h-[60px]" autoFocus maxLength={1000} value={replying.text}
+                      onChange={e => setReplying({ id: c.id, text: e.target.value })} placeholder="Your reply" />
+                    <div className="flex gap-1.5">
+                      <button type="button" className="btn-primary" disabled={replyBusy} onClick={() => void saveReply()}>
+                        {replyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {replying.text.trim() ? 'Send reply' : 'Remove reply'}
+                      </button>
+                      <button type="button" className="btn-secondary" onClick={() => setReplying(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : !readOnly && c.can_reply && (
+                  <button type="button" className="mt-1 text-xs font-medium text-violet-700 hover:underline" onClick={() => setReplying({ id: c.id, text: c.reply ?? '' })}>
+                    {c.reply ? 'Edit reply' : 'Reply'}
+                  </button>
+                )}
               </div>
               {!readOnly && <button type="button" className="btn-icon text-ink-400 hover:text-cyrixRed-600" title="Delete comment" onClick={() => void del(c.id)}><Trash2 className="h-4 w-4" /></button>}
             </div>

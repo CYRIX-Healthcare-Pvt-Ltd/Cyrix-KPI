@@ -270,6 +270,25 @@ Deno.serve(async req => {
     return json(t)
   }
 
+  // ---- the posting desk replied to a comment (0202): to whoever wrote the comment ----
+  if (input.action === 'digest_reply') {
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    })
+    const { data: c } = await db.from('digest_comments').select('id, post_id, employee_id, reply, reply_desk').eq('id', String(input.comment_id ?? '')).maybeSingle()
+    if (!c || !c.reply) return json({ skipped: true })
+    const { data: ok } = await user.rpc('digest_can_edit', { p_id: c.post_id })
+    if (!ok) return json({ error: 'Only a desk that can edit it' }, 403)
+    const { data: post } = await db.from('digest_posts').select('id, title').eq('id', c.post_id).maybeSingle()
+    const desk = ({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Cyrix Digest'
+    const t = await deliver(db, [c.employee_id], {
+      title: `${desk} replied · ${post?.title ?? 'Cyrix Digest'}`,
+      body: String(c.reply).slice(0, 180),
+      url: '/?post=' + c.post_id, tag: 'digest-reply-' + c.id,
+    })
+    return json(t)
+  }
+
   // ---- a Cyrix Digest post, from HR or IT (0163): into everybody's bell, and their devices ----
   if (input.action === 'digest') {
     const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
