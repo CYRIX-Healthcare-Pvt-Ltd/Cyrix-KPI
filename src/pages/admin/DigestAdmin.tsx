@@ -918,6 +918,8 @@ interface SwRow {
   id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt'; author: string | null
   created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
   meet_at: string | null; likes: number; comments: number; opened: number; joined: number
+  /** Over: a meeting that ended, a form or poll that closed, a post past its last day (0210). */
+  ended?: boolean
 }
 const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing' } as const
 
@@ -957,6 +959,7 @@ export function DigestHistory() {
                   <div className="flex flex-wrap items-center gap-2">
                     {r.deleted_at ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Deleted</span>
                       : !r.published_at ? <span className="badge bg-amber-100 text-amber-800">Draft</span>
+                      : r.ended ? <span className="badge bg-ink-100 text-ink-600">Ended</span>
                       : <span className="badge bg-emerald-50 text-emerald-700">Live</span>}
                     <span className="truncate font-medium text-ink-900">{r.title}</span>
                   </div>
