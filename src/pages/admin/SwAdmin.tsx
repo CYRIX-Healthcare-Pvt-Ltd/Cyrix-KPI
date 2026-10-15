@@ -25,7 +25,7 @@ import SupportDeskQueue from '@/components/SupportDeskQueue'
 import SpareWarehouses from './SpareWarehouses'
 import {
   useOtpSender, useSaveOtpSender,
-  useAppModules, useModuleGrants, useSetModuleAccess, useOpenTicketCount,
+  useAppModules, useModuleGrants, useSetModuleAccess, useOpenTicketCount, useAccountTypes,
 } from '@/lib/queries'
 import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
@@ -37,6 +37,8 @@ import KpiEdit from './KpiEdit'
 
 interface LoginStatusRow {
   employee_id: string
+  /** Official email (0206), shown to IT Admin. */
+  work_email?: string | null
   ecode: string
   full_name: string
   designation: string | null
@@ -126,6 +128,17 @@ function LoginsTab() {
   const [moduleFor, setModuleFor] = useState<{ id: string; name: string } | null>(null)
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
+  // Employees by default; test and admin logins on request (0203; the user, 15 Oct).
+  const [kind, setKind] = useState<'employee' | 'test' | 'admin' | 'all'>('employee')
+  const { data: typeOf } = useAccountTypes()
+  const kindOk = (id: string) => kind === 'all' || (typeOf ? typeOf(id) : 'employee') === kind
+  const setType = useMutation({
+    mutationFn: async (a: { id: string; type: string }) => {
+      const { error } = await supabase.rpc('set_account_type', { p_employee_id: a.id, p_type: a.type })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['non_employee_ids'] }),
+  })
   // The same option as HR Employees, off by default for the same reason:
   // the list is the people here now, and 51 of the 55 who are not were
   // switched off by one payroll upload.
@@ -168,6 +181,7 @@ function LoginsTab() {
       r.full_name.toLowerCase().includes(q) ||
       (r.login_email ?? '').toLowerCase().includes(q)
     const rows = data.filter(r => {
+      if (!kindOk(r.employee_id)) return false
       if (!includeInactive && !r.is_active) return false
       if (stateFilter !== 'all' && r.login_state !== stateFilter) return false
       if (!q) return true
@@ -187,13 +201,13 @@ function LoginsTab() {
       returned is untouched.
     */
     return q ? [...rows].sort((a, b) => Number(isSelf(b)) - Number(isSelf(a))) : rows
-  }, [data, search, stateFilter, includeInactive])
+  }, [data, search, stateFilter, includeInactive, kind, typeOf])
 
   // The tiles count what the list is showing: the people here now, or
   // everybody once "Include inactive" is ticked.
   const inScope = useMemo(
-    () => (data ?? []).filter(r => includeInactive || r.is_active),
-    [data, includeInactive],
+    () => (data ?? []).filter(r => (includeInactive || r.is_active) && kindOk(r.employee_id)),
+    [data, includeInactive, kind, typeOf],
   )
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
@@ -551,6 +565,12 @@ function LoginsTab() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <select className="input w-auto" value={kind} onChange={e => setKind(e.target.value as typeof kind)} aria-label="Account type">
+          <option value="employee">Employees</option>
+          <option value="test">Test IDs</option>
+          <option value="admin">Admin IDs</option>
+          <option value="all">All accounts</option>
+        </select>
         <select
           className="input w-auto"
           value={stateFilter}
@@ -585,12 +605,13 @@ function LoginsTab() {
             <thead>
               <tr className="border-b border-ink-200 bg-ink-50 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-2.5">Employee</th>
+                {itOnly && <th className="px-4 py-2.5">Official email</th>}
                 <th className="px-4 py-2.5">Manager</th>
-                <th className="px-4 py-2.5">State</th>
+                <th className="px-4 py-2.5">Role</th>
                 {/* Which tiles this person is offered on app.cyrix.in.
                     Everybody starts with KPI because everybody is
                     appraised; the rest are handed out here. */}
-                <th className="px-4 py-2.5">Modules</th>
+                {!itOnly && <th className="px-4 py-2.5">Modules</th>}
                 <th className="px-4 py-2.5">Last sign-in</th>
                 <th className="px-4 py-2.5">Password changed</th>
                 {!itOnly && <th className="px-4 py-2.5 text-right">Actions</th>}
@@ -620,15 +641,26 @@ function LoginsTab() {
                       </p>
                     </button>
                   </td>
+                  {itOnly && <td className="px-4 py-3 text-xs text-ink-600">{r.work_email ?? '—'}</td>}
                   <td className="px-4 py-3 text-xs text-ink-600">
                     {r.manager_name ?? '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`badge ${STATE_STYLE[r.login_state] ?? 'bg-ink-100 text-ink-600'}`}>
-                      {r.login_state}
-                    </span>
+                    {/* Employee, test or admin login (0203; the user, 15 Oct), in place of the state badge. */}
+                    <select aria-label={`Role of ${r.full_name}`}
+                      // Admin red, test yellow, employee green (the user, 15 Oct).
+                      className={clsx('input !w-auto !py-1.5 text-xs font-semibold', ({ admin: '!border-red-300 !bg-red-100 !text-red-800', test: '!border-amber-300 !bg-amber-100 !text-amber-800', employee: '!border-emerald-300 !bg-emerald-100 !text-emerald-800' } as const)[typeOf ? typeOf(r.employee_id) : 'employee'])}
+                      title={r.login_state}
+                      value={typeOf ? typeOf(r.employee_id) : 'employee'}
+                      disabled={!typeOf || setType.isPending || itOnly}
+                      onChange={e => setType.mutate({ id: r.employee_id, type: e.target.value })}>
+                      <option value="employee">Employee</option>
+                      <option value="test">Test</option>
+                      <option value="admin">Admin</option>
+                    </select>
                   </td>
-                  <td className="px-4 py-3">
+                  {/* Not for IT Admin (the user, 15 Oct). */}
+                  {!itOnly && <td className="px-4 py-3">
                     {(() => {
                       const held = (modules ?? []).filter(m => grants?.has(`${r.employee_id}:${m.code}`))
                       return (
@@ -643,7 +675,7 @@ function LoginsTab() {
                         </button>
                       )
                     })()}
-                  </td>
+                  </td>}
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.last_sign_in_at)}</td>
                   <td className="px-4 py-3 text-xs text-ink-500">{fmt(r.password_changed_at)}</td>
                   {!itOnly && (

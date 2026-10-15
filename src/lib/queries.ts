@@ -1104,6 +1104,13 @@ export function useTeamSubmissions(employeeIds: string[] | undefined, fy: string
 // ---------------------------------------------------------------------
 // HR admin
 // ---------------------------------------------------------------------
+/** HR reports count employees only: test and admin logins are left out (0203; the user, 15 Oct). */
+async function onlyEmployees<T extends { employee_id: string }>(rows: T[]): Promise<T[]> {
+  const { data } = await supabase.rpc('non_employee_ids')
+  const not = (data ?? {}) as Record<string, string>
+  return rows.filter(r => !not[r.employee_id])
+}
+
 export function useOrgKpiStatus(enabled: boolean, fy: string) {
   return useQuery({
     enabled,
@@ -1127,7 +1134,7 @@ export function useOrgKpiStatus(enabled: boolean, fy: string) {
         all.push(...page)
         if (page.length < 1000) break
       }
-      return all
+      return onlyEmployees(all)
     },
   })
 }
@@ -1157,7 +1164,7 @@ export function useOrgKpiStatusAll(enabled: boolean, fy: string) {
         all.push(...page)
         if (page.length < 1000) break
       }
-      return all
+      return onlyEmployees(all)
     },
   })
 }
@@ -2279,6 +2286,24 @@ export function useAppModules() {
  * people who do have access, which is the kind of wrong that gets acted
  * on.
  */
+/**
+ * Accounts that are not employees (0203): test logins and the *_ADMIN logins, by id. Everyone
+ * else is an employee. Reports and lists leave them out unless asked (the user, 15 Oct).
+ */
+export type AccountType = 'employee' | 'test' | 'admin'
+export function useAccountTypes() {
+  return useQuery({
+    queryKey: ['non_employee_ids'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('non_employee_ids')
+      if (error) throw new Error(error.message)
+      const m = new Map<string, AccountType>(Object.entries((data ?? {}) as Record<string, AccountType>))
+      return (id: string): AccountType => m.get(id) ?? 'employee'
+    },
+  })
+}
+
 export function useModuleGrants(enabled: boolean) {
   return useQuery({
     enabled,
