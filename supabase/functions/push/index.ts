@@ -56,6 +56,63 @@ async function everyone(db: ReturnType<typeof admin>): Promise<string[]> {
   }
 }
 
+/**
+ * Every active person's device, each with words carrying their own first name (the user, 15 Oct:
+ * "hey Kevin, today is the townhall meeting"). Names and devices are read in pages past 1,000.
+ */
+async function deliverNamed(db: ReturnType<typeof admin>, make: (first: string) => Payload): Promise<Tally> {
+  const first = new Map<string, string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from('employees').select('id, full_name').eq('is_active', true).order('id').range(from, from + 999)
+    if (error) throw new Error(error.message)
+    for (const e of (data ?? []) as Array<{ id: string; full_name: string | null }>) {
+      const w = (e.full_name ?? '').trim().split(/\s+/)[0] ?? ''
+      first.set(e.id, w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '')
+    }
+    if (!data || data.length < 1000) break
+  }
+  const subs: Array<{ id: string; employee_id: string; endpoint: string; p256dh: string; auth: string }> = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from('push_subscriptions').select('id, employee_id, endpoint, p256dh, auth').order('id').range(from, from + 999)
+    if (error) throw new Error(error.message)
+    subs.push(...((data ?? []) as typeof subs).filter(s => first.has(s.employee_id)))
+    if (!data || data.length < 1000) break
+  }
+  const tally: Tally = { people: first.size, devices: subs.length, delivered: 0, failed: 0 }
+  const gone: string[] = [], ok: string[] = []
+  for (let i = 0; i < subs.length; i += 20) {
+    await Promise.all(subs.slice(i, i + 20).map(async s => {
+      const p = make(first.get(s.employee_id) ?? '')
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(p),
+          { TTL: 12 * 3600, urgency: 'high', topic: p.tag?.slice(0, 32) })
+        ok.push(s.id); tally.delivered++
+      } catch (e) {
+        const code = (e as { statusCode?: number }).statusCode
+        if (code === 404 || code === 410) gone.push(s.id)
+        tally.failed++
+      }
+    }))
+  }
+  if (gone.length) await db.from('push_subscriptions').delete().in('id', gone)
+  if (ok.length) await db.from('push_subscriptions').update({ last_sent_at: new Date().toISOString(), failures: 0 }).in('id', ok)
+  return tally
+}
+
+/** The two meeting reminders' words, in one place. */
+const hi = (first: string) => (first ? `Hi ${first}, ` : 'Hi, ')
+const meetAt = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }).toUpperCase()
+const morningWords = (m: { id: string; title: string; meet_at: string; meet_place: string | null }) => (first: string): Payload => ({
+  title: 'Today · ' + m.title,
+  body: `${hi(first)}today is the ${m.title} at ${meetAt(m.meet_at)}${m.meet_place ? ' on ' + m.meet_place : ''}. Please do join.`,
+  url: '/?post=' + m.id, tag: 'digest-' + m.id,
+})
+const joinWords = (m: { id: string; title: string; meet_at: string; meet_place: string | null }) => (first: string): Payload => ({
+  title: 'Join now · ' + m.title,
+  body: `${hi(first)}the meeting starts at ${meetAt(m.meet_at)}. Join is open now, tap to join.`,
+  url: '/?post=' + m.id, tag: 'digest-' + m.id,
+})
+
 async function deliver(db: ReturnType<typeof admin>, ids: string[], p: Payload): Promise<Tally> {
   const tally: Tally = { people: ids.length, devices: 0, delivered: 0, failed: 0 }
   const subs: Array<{ id: string; endpoint: string; p256dh: string; auth: string }> = []
@@ -142,16 +199,31 @@ Deno.serve(async req => {
       const { data: soon } = await db.rpc('digest_meetings_due')
       for (const m of (soon ?? []) as Array<{ id: string; title: string; meet_at: string; meet_place: string | null }>) {
         const at = new Date(m.meet_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+        const words = joinWords(m)('')
         const { data: claim, error: dup } = await db.from('push_messages').insert({
-          kind: 'reminder', title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`,
+          kind: 'reminder', title: words.title, body: `The meeting starts at ${at}. Join is open now.`,
           url: '/', target: { kind: 'reminder', side: 'meeting' }, dedupe_key: 'digest-reminder:' + m.id,
         }).select('id').single()
         if (dup || !claim) continue
-        const t = await deliver(db, await everyone(db),
-          { title: 'Starting soon · ' + m.title, body: `At ${at}${m.meet_place ? ' · ' + m.meet_place : ''}. Join from Cyrix Digest.`, url: '/?post=' + m.id, tag: 'digest-' + m.id })
+        // With each person's name (the user, 15 Oct).
+        const t = await deliverNamed(db, joinWords(m))
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
       return json(total)
+    }
+
+    // The meeting-day morning reminder (0201), with the 09:30 run: a meeting today that was posted
+    // before today. One posted today gets only the Join reminder.
+    const { data: today_meetings } = await db.rpc('digest_meetings_today')
+    for (const m of (today_meetings ?? []) as Array<{ id: string; title: string; meet_at: string; meet_place: string | null }>) {
+      const words = morningWords(m)('')
+      const { data: claim, error: dup } = await db.from('push_messages').insert({
+        kind: 'reminder', title: words.title, body: words.body,
+        url: '/', target: { kind: 'reminder', side: 'meeting-day' }, dedupe_key: 'digest-morning:' + m.id,
+      }).select('id').single()
+      if (dup || !claim) continue
+      const t = devicesOn ? await deliverNamed(db, morningWords(m)) : { people: 0, devices: 0, delivered: 0, failed: 0 }
+      await db.from('push_messages').update(t).eq('id', claim.id)
     }
 
     const { data, error } = await db.rpc('push_reminders_due')
