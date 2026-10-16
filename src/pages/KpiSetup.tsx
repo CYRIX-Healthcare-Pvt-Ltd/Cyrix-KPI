@@ -588,6 +588,10 @@ export default function KpiSetup() {
                     <p className="text-sm leading-relaxed text-ink-600">
                       <strong className="text-ink-900">Core values:</strong> each month you rate every core value yourself, with a comment on each. Your manager also rates them, and your manager's rating is what counts.
                     </p>
+                    {/* The user, 16 Oct: agree it with the reporting manager first. */}
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                      Confirm with your reporting manager before ticking this. They can also change it when they approve your KPI.
+                    </p>
                   </div>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">

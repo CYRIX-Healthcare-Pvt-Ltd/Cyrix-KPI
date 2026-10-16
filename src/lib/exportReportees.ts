@@ -65,48 +65,68 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
       const sheet = (wsName: string, list: typeof rows extends Map<string, infer V> ? V[] : never, withTotals: boolean) => {
         const head1: (string | null)[] = [`${person.ecode} · ${person.full_name}`, null, null, null]
         const head2: (string | null)[] = ['Section', 'KRA', 'KPI', 'Weightage %']
-        for (const m of months) { head1.push(monthLabel(m), null, null, null); head2.push('Target', 'Achieved', 'Achievement %', 'Score') }
+        for (const m of months) { head1.push(monthLabel(m), null, null, null, null); head2.push('Target', 'Achieved', 'Achievement %', 'Score', 'Actual score') }
         const body = list.map(({ def, byMonth }) => {
           const line: (string | number | null)[] = [SECTION[def.section] ?? def.section, def.kra, def.kpi_description ?? '', r2(def.weightage)]
           for (const m of months) {
             const it = byMonth.get(m)
             const target = it?.target_value ?? null
             const achieved = it ? it.manager_achieved ?? it.self_achieved : null
-            const pct = target && achieved !== null ? r2((achieved / target) * 100) : null
-            line.push(r2(target), r2(achieved), pct, r2(it ? it.final_score ?? it.manager_score ?? it.self_score : null))
+            /*
+              Achievement the right way round (the user, 16 Oct): on a Lower is better row, coming in under
+              the target is the achievement, so it is target / achieved; 112.3 against 100 is 89%, not 112%.
+              Actual score, after the score, is that share of the weightage with no cap: 200 against a target of 100 on a 40% row
+              is 80%, beside the score, which stops at the row's 40.
+            */
+            const lower = String(it?.scoring_rule ?? def.scoring_rule).startsWith('lower')
+            const pct = target && achieved !== null
+              ? r2(lower ? (achieved > 0 ? (target / achieved) * 100 : 100) : (achieved / target) * 100)
+              : null
+            const score = r2(it ? it.final_score ?? it.manager_score ?? it.self_score : null)
+            // No achievement to scale (a target of 0, say): the score itself.
+            const actual = pct !== null ? r2((pct * Number(it?.weightage ?? def.weightage)) / 100) : score
+            line.push(r2(target), r2(achieved), pct, score, actual)
           }
           return line
         })
         const totals: (string | number | null)[][] = []
         if (withTotals) {
           const bySub = new Map(mine.map(s => [s.period_month, s]))
-          const line = (label: string, pick: (s: KpiSubmission) => number | null) => {
+          // Each total row also adds up its rows' Actual score (the user, 16 Oct); Total adds them all.
+          const line = (label: string, pick: (s: KpiSubmission) => number | null, section?: string) => {
             const l: (string | number | null)[] = [label, null, null, null]
-            for (const m of months) { const s = bySub.get(m)!; l.push(null, null, null, r2(pick(s))) }
+            months.forEach((m, k) => {
+              const s = bySub.get(m)!
+              const col = 4 + k * 5 + 4
+              const rows = body.filter(b => !section || b[0] === section)
+              const sum = rows.reduce((t, b) => t + (typeof b[col] === 'number' ? (b[col] as number) : 0), 0)
+              l.push(null, null, null, r2(pick(s)), rows.length ? r2(sum) : null)
+            })
             totals.push(l)
           }
           totals.push([])
-          line('Job role %', s => s.final_job_role_score ?? s.mgr_job_role_score ?? s.self_job_role_score)
-          if (mine.some(s => (s.final_esms_score ?? s.self_esms_score) !== null)) line('ESMS %', s => s.final_esms_score ?? s.mgr_esms_score ?? s.self_esms_score)
-          line('Core values %', s => s.final_core_score ?? s.mgr_core_score ?? s.self_core_score)
+          line('Job role %', s => s.final_job_role_score ?? s.mgr_job_role_score ?? s.self_job_role_score, 'Job role')
+          if (mine.some(s => (s.final_esms_score ?? s.self_esms_score) !== null)) line('ESMS %', s => s.final_esms_score ?? s.mgr_esms_score ?? s.self_esms_score, 'ESMS')
+          line('Core values %', s => s.final_core_score ?? s.mgr_core_score ?? s.self_core_score, 'Core values')
           line('Total', s => s.final_total_score ?? s.mgr_total_score ?? s.self_total_score)
         }
         const ws = wb.addWorksheet(wsName, { views: [{ state: 'frozen', xSplit: 4, ySplit: 2 }] })
-        const last = 4 + months.length * 4
+        const last = 4 + months.length * 5
         const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
         const thin = { style: 'thin' as const, color: { argb: 'FF000000' } }
         const grid = { top: thin, left: thin, bottom: thin, right: thin }
         ws.addRow(head1); ws.addRow(head2)
         ws.mergeCells(1, 1, 1, 4)
-        months.forEach((_, i) => ws.mergeCells(1, 5 + i * 4, 1, 8 + i * 4))
+        months.forEach((_, i) => ws.mergeCells(1, 5 + i * 5, 1, 9 + i * 5))
         // Title and month bands: the year's months alternate two blues so each block reads as one.
         for (let c = 1; c <= last; c++) {
-          const band = c <= 4 ? 'FF1E293B' : Math.floor((c - 5) / 4) % 2 ? 'FF2563EB' : 'FF1D4ED8'
+          const band = c <= 4 ? 'FF1E293B' : Math.floor((c - 5) / 5) % 2 ? 'FF2563EB' : 'FF1D4ED8'
           const top = ws.getCell(1, c)
           top.fill = fill(band); top.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: c <= 4 ? 12 : 11 }
           top.alignment = { horizontal: c <= 4 ? 'left' : 'center', vertical: 'middle' }; top.border = grid
           const sub = ws.getCell(2, c)
-          sub.fill = fill('FFDBEAFE'); sub.font = { bold: true, color: { argb: 'FF1E3A8A' } }
+          // Actual score's heading a shade darker, so it reads apart from Score (the user, 16 Oct).
+          sub.fill = fill(c > 4 && (c - 5) % 5 === 4 ? 'FFBFDBFE' : 'FFDBEAFE'); sub.font = { bold: true, color: { argb: 'FF1E3A8A' } }
           sub.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; sub.border = grid
         }
         ws.getRow(1).height = 22; ws.getRow(2).height = 30
@@ -117,7 +137,9 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
             cell.border = grid
             cell.alignment = { vertical: 'middle', wrapText: c <= 3, horizontal: c <= 3 ? 'left' : 'center' }
             if (i % 2) cell.fill = fill('FFF8FAFC')
-            if (c > 4 && (c - 5) % 4 === 2 && typeof cell.value === 'number') {
+            // Score and Actual score to two places, as on screen (the user, 16 Oct).
+            if (c > 4 && (c - 5) % 5 >= 3 && typeof cell.value === 'number') cell.numFmt = '0.00'
+            if (c > 4 && (c - 5) % 5 === 2 && typeof cell.value === 'number') {
               cell.numFmt = '0.0"%"'
               // Achievement: green at target, amber close, red well short.
               cell.font = { bold: true, color: { argb: cell.value >= 100 ? 'FF15803D' : cell.value >= 75 ? 'FFB45309' : 'FFB91C1C' } }
@@ -132,6 +154,7 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
             if (c > last) return
             cell.font = { bold: true }
             cell.fill = fill(isTotal ? 'FFDCFCE7' : 'FFF1F5F9')
+            if (c > 4 && typeof cell.value === 'number') cell.numFmt = '0.00'
             cell.border = grid
             cell.alignment = { vertical: 'middle', horizontal: c <= 4 ? 'left' : 'center' }
           })
@@ -139,7 +162,7 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
         }
         // Calibri 10 throughout (the user, 14 Oct).
         ws.eachRow({ includeEmpty: true }, r => r.eachCell({ includeEmpty: true }, cell => { cell.font = { ...cell.font, name: 'Calibri', size: 10 } }))
-        ws.columns = [{ width: 13 }, { width: 30 }, { width: 46 }, { width: 12 }, ...months.flatMap(() => [{ width: 10 }, { width: 11 }, { width: 14 }, { width: 9 }])]
+        ws.columns = [{ width: 13 }, { width: 30 }, { width: 46 }, { width: 12 }, ...months.flatMap(() => [{ width: 10 }, { width: 11 }, { width: 14 }, { width: 9 }, { width: 11 }])]
       }
       const all = [...rows.entries()]
       sheet('KPI', all.filter(([k]) => first.has(k)).map(([, v]) => v), true)

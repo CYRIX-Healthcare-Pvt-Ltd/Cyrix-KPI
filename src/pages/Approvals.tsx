@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   usePendingApprovals, useAssignmentAction, useEditAssignmentItem, useSetKpiStart, useFirstAssessedMonth,
   useScoringRules, useVisibleTemplates, useTemplateFromAssignment, currentFy,
+  useCoreValues,
 } from '@/lib/queries'
 import { freeName } from '@/lib/templates'
 import { useReveal } from '@/lib/useReveal'
@@ -768,6 +769,7 @@ function ApprovalCard({
                     right move for anything the team member should rethink.
                   </Alert>
                 )}
+                <CoreValueOptions assignmentId={assignmentId} who={name.split(' ')[0]} editing={editing} />
 
                 {!rejecting ? (
                   <div className="flex flex-wrap gap-2">
@@ -831,6 +833,81 @@ function ApprovalCard({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/*
+  Core values on the KPI being approved (0214; the user, 16 Oct): whether the team member rates
+  their own, and with that ticked, each core value's weight, adding up to the core values share.
+  Read only until the manager presses Edit; saved with its own button.
+*/
+function CoreValueOptions({ assignmentId, who, editing }: { assignmentId: string; who: string; editing: boolean }) {
+  const qc = useQueryClient()
+  const { data: coreValues } = useCoreValues()
+  const { data: a } = useQuery({
+    queryKey: ['core_options', assignmentId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('kpi_assignments')
+        .select('core_self_rating, core_value_weights, core_values_weight').eq('id', assignmentId).maybeSingle()
+      if (error) throw new Error(friendlyError(error))
+      return data as { core_self_rating: boolean; core_value_weights: Record<string, number> | null; core_values_weight: number | string } | null
+    },
+  })
+  const [self, setSelf] = useState<boolean | null>(null)
+  const [w, setW] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  if (!a) return null
+  const on = self ?? a.core_self_rating
+  const share = Number(a.core_values_weight)
+  const list = coreValues ?? []
+  const val = (id: string) => w[id] ?? (a.core_value_weights?.[id] != null ? String(a.core_value_weights[id]) : String(Math.round((share / Math.max(1, list.length)) * 100) / 100))
+  const total = Math.round(list.reduce((t, cv) => t + (Number(val(cv.id)) || 0), 0) * 100) / 100
+  const save = async () => {
+    setBusy(true); setMsg(null)
+    const weights = on ? Object.fromEntries(list.map(cv => [cv.id, Number(val(cv.id)) || 0])) : null
+    const { error } = await supabase.rpc('set_core_value_options', { p_assignment_id: assignmentId, p_self: on, p_weights: weights })
+    setBusy(false)
+    if (error) { setMsg(friendlyError(error)); return }
+    setSelf(null); setW({})
+    await qc.invalidateQueries({ queryKey: ['core_options', assignmentId] })
+    setMsg('Saved.')
+  }
+  if (!editing) {
+    return a.core_self_rating
+      ? <p className="text-sm text-violet-800"><strong>{who} rates their own core values</strong> each month, with a comment on each.</p>
+      : null
+  }
+  return (
+    <div className="space-y-2 rounded-xl border-2 border-violet-300 p-3">
+      <label className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold text-violet-800">
+        <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={on} onChange={e => setSelf(e.target.checked)} />
+        {who} rates their own core values too
+      </label>
+      {on && (
+        <>
+          <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200">
+            {list.map(cv => (
+              <li key={cv.id} className="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">
+                <span className="text-ink-900">{cv.name}</span>
+                <span className="flex items-center gap-1">
+                  <input type="number" min={0} step="0.5" className="input w-20 text-right" aria-label={`Weight of ${cv.name}`}
+                    value={val(cv.id)} onChange={e => setW({ ...w, [cv.id]: e.target.value })} />
+                  <span className="text-ink-500">%</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className={`text-xs ${Math.abs(total - share) < 0.01 ? 'text-ink-500' : 'text-cyrixRed-700'}`}>{total}% of {share}%</p>
+        </>
+      )}
+      <div className="flex items-center gap-2">
+        <button type="button" className="btn-secondary" disabled={busy || (on && Math.abs(total - share) >= 0.01)} onClick={() => void save()}>
+          {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />} Save core values
+        </button>
+        {msg && <span className="text-sm text-ink-600">{msg}</span>}
+      </div>
     </div>
   )
 }
