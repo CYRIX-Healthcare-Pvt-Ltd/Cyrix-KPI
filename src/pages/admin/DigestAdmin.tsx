@@ -781,8 +781,24 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
             <p className="text-lg font-semibold tabular-nums text-ink-900">{v}<span className="ml-1 text-xs font-normal text-ink-500">{Math.round((v / n) * 100)}%</span></p>
           </button>
         ))}
+        {/* Watch time as a tile of its own (the user, 16 Oct: "where is it?"): everyone's together,
+            and on average for each person who watched. */}
+        {row.kind === 'video' && (() => {
+          // Like the other tiles: the figure, then a share: here how much of the video, on average.
+          const seen = all.filter(p => (p.watched_seconds ?? 0) > 0 && (p.video_seconds ?? 0) > 0)
+          const avgPct = seen.length ? Math.round((seen.reduce((t, p) => t + Math.min(1, p.watched_seconds! / p.video_seconds!), 0) / seen.length) * 100) : null
+          const hm = (sec: number) => `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min`
+          return (
+            <div className="rounded-xl border border-ink-200 bg-surface px-3 py-2">
+              <p className="text-xs text-ink-500">Watch time</p>
+              <p className="text-lg font-semibold tabular-nums text-ink-900">{hm(totalWatch)}
+                {avgPct !== null && <span className="ml-1 text-xs font-normal text-ink-500" title="How much of the video people watched, on average">{avgPct}%</span>}
+              </p>
+            </div>
+          )
+        })()}
       </div>
-      <p className="text-xs text-ink-500">Out of {all.length} people.{row.kind === 'video' && totalWatch > 0 && <> Watched in all: <strong className="text-ink-800">{Math.floor(totalWatch / 3600)} h {Math.round((totalWatch % 3600) / 60)} min</strong>.</>}</p>
+      <p className="text-xs text-ink-500">Out of {all.length} people.</p>
 
       <div className="flex flex-wrap items-center gap-2">
         {lenses.map(([k, label]) => (
