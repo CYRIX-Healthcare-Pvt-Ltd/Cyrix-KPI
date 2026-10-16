@@ -830,6 +830,8 @@ export function useSaveCoreRatings() {
         if (args.role === 'manager' && u.remarks !== undefined) {
           patch.manager_remarks = u.remarks
         }
+        // The team member's comment on their own rating (0214).
+        if (args.role === 'self' && u.remarks !== undefined) patch.self_remarks = u.remarks
         const { error } = await supabase
           .from('core_value_ratings').update(patch).eq('id', u.id)
         if (error) throw new Error(friendlyError(error))

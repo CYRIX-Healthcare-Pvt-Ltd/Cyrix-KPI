@@ -12,7 +12,7 @@ import KpiStatusNote from '@/components/KpiStatusNote'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
-  useSubmission, useOpenSubmission, useSaveItemValues,
+  useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
   useScoreQueries, useUseAlternate, useTatPolicy, currentFy, type QueryPointInput,
@@ -21,7 +21,7 @@ import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
-  calcKpiScore, averageCoreValueRatings, type ScoringRule, type RuleParams,
+  calcKpiScore, averageCoreValueRatings, RATING_SCALE, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
@@ -40,6 +40,15 @@ export default function MonthlySubmission() {
   const { data: coreValues } = useCoreValues()
   const openSub = useOpenSubmission()
   const saveItems = useSaveItemValues()
+  /*
+    Rating their own core values, on a KPI that asks for it (0214; the user, 16 Oct): a rating and
+    a required comment on each, saved with the month. The manager's rating is what counts.
+  */
+  const saveCore = useSaveCoreRatings()
+  const coreSelf = !!assignmentData?.assignment?.core_self_rating
+  const [selfCore, setSelfCore] = useState<Record<string, { rating: string; remarks: string }>>({})
+  const selfOf = (r: { id: string; self_rating: string | null; self_remarks?: string | null }) =>
+    selfCore[r.id] ?? { rating: r.self_rating ?? '', remarks: r.self_remarks ?? '' }
   const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
@@ -238,8 +247,17 @@ export default function MonthlySubmission() {
             remarks: (notes[i.id] ?? '').trim() || null,
           })),
       })
+      if (coreSelf && editable) {
+        await saveCore.mutateAsync({
+          role: 'self',
+          updates: (data?.ratings ?? []).map(r => {
+            const v = selfOf(r)
+            return { id: r.id, rating: v.rating || null, remarks: v.remarks.trim() || null }
+          }),
+        })
+      }
       /*
-        Core values are no longer self-rated, so nothing is written for
+        Otherwise core values are not self-rated, so nothing is written for
         them here. The rows still exist and the manager still fills them;
         what has gone is the employee's copy of the judgement, which
         stopped counting when the manager's figure became the score.
@@ -725,7 +743,25 @@ export default function MonthlySubmission() {
                   vanishes from the employee's copy makes the 80/20 stop
                   adding up on the one screen where it should be plainest.
                 */}
-                {!isScored && (
+                {!isScored && coreSelf && (() => {
+                  const v = selfOf(rating)
+                  const set = (patch: Partial<{ rating: string; remarks: string }>) =>
+                    setSelfCore(s => ({ ...s, [rating.id]: { ...v, ...patch } }))
+                  return (
+                    <div className="mt-2 space-y-2 sm:mt-0 sm:w-72">
+                      <select className="input" aria-label={`Your rating for ${def?.name ?? 'this core value'}`}
+                        disabled={!editable} value={v.rating} onChange={e => set({ rating: e.target.value })}>
+                        <option value="">Your rating…</option>
+                        {RATING_SCALE.map(r => <option key={r.label} value={r.label}>{r.label}</option>)}
+                      </select>
+                      <textarea rows={2} className={`input text-sm ${editable && v.rating && !v.remarks.trim() ? 'border-amber-400' : ''}`}
+                        aria-label={`Your comment on ${def?.name ?? 'this core value'}`}
+                        disabled={!editable} value={v.remarks} onChange={e => set({ remarks: e.target.value })}
+                        placeholder="Your comment (required)" />
+                    </div>
+                  )
+                })()}
+                {!isScored && !coreSelf && (
                   <div className="mt-2 sm:mt-0 sm:w-48">
                     <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-500">
                       Your manager rates this

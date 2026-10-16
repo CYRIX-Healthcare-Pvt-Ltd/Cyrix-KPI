@@ -341,6 +341,21 @@ export const HELP: Record<string, Phrase> = {
     ta: 'ஒவ்வொரு வரிசைக்கும் அவர்கள் தங்கள் எண்ணை நிரப்புவார்கள், Core Values-ஐயும் அவர்களே மதிப்பிடுவார்கள். அவர்களின் மதிப்பெண்ணே உங்கள் இறுதி மதிப்பெண். அடுத்த மாதத்தின் {mgrDays}ஆம் தேதி வரை அவர்களுக்கு அவகாசம் உள்ளது; அதற்குள் மதிப்பிடாவிட்டால், உங்கள் சொந்த job role மதிப்பெண்ணும் Core Values-க்கு முழு மதிப்பெண்ணும் கணக்கிடப்படும். பிறகு நிலை Manager reviewed எனக் காட்டும்.',
   },
   // Which way a row should go (the user, 16 Oct: "how can we know this is lower is better or higher is better?").
+  // Rating your own core values, on a KPI that asks for it (0214; the user, 16 Oct).
+  's2.coreself.what': {
+    en: 'Do I rate my own core values?',
+    ml: 'എന്റെ core values ഞാൻ തന്നെ റേറ്റ് ചെയ്യണോ?',
+    hi: 'क्या मुझे अपने core values खुद रेट करने हैं?',
+    te: 'నా core values నేనే రేట్ చేయాలా?',
+    ta: 'என் core values ஐ நானே மதிப்பிட வேண்டுமா?',
+  },
+  's2.coreself.how': {
+    en: 'Only if your KPI says so: it is ticked when the KPI is set, as "I rate my own core values too". Then each month you choose a rating for every core value and write a comment on each before you can submit. Your manager also rates them and can add a comment; your manager\'s rating is what counts. If your manager does not score by their last day, your own rating is used for core values.',
+    ml: 'നിങ്ങളുടെ KPI അങ്ങനെ പറയുന്നുണ്ടെങ്കിൽ മാത്രം: KPI സജ്ജമാക്കുമ്പോൾ "I rate my own core values too" ടിക്ക് ചെയ്തിരിക്കും. അപ്പോൾ ഓരോ മാസവും ഓരോ core value-നും ഒരു റേറ്റിംഗും ഒരു കമന്റും നൽകിയാലേ സമർപ്പിക്കാനാകൂ. നിങ്ങളുടെ മാനേജരും റേറ്റ് ചെയ്യും, കമന്റ് ചേർക്കാം; മാനേജരുടെ റേറ്റിംഗാണ് കണക്കാക്കുന്നത്. മാനേജർ അവസാന ദിവസത്തിനകം സ്കോർ ചെയ്തില്ലെങ്കിൽ core values-ന് നിങ്ങളുടെ റേറ്റിംഗ് ഉപയോഗിക്കും.',
+    hi: 'केवल तब, जब आपका KPI ऐसा कहे: KPI सेट करते समय "I rate my own core values too" टिक किया जाता है। तब हर महीने आपको हर core value के लिए रेटिंग चुननी होगी और हर एक पर टिप्पणी लिखनी होगी, तभी आप सबमिट कर पाएँगे। आपका मैनेजर भी रेट करता है और टिप्पणी जोड़ सकता है; मैनेजर की रेटिंग ही गिनी जाती है। अगर मैनेजर अपनी आखिरी तारीख तक स्कोर नहीं करता, तो core values के लिए आपकी अपनी रेटिंग ली जाती है।',
+    te: 'మీ KPI అలా చెబితేనే: KPI సెట్ చేసేటప్పుడు "I rate my own core values too" టిక్ చేస్తారు. అప్పుడు ప్రతి నెల ప్రతి core value కి రేటింగ్ ఎంచుకుని, ప్రతిదానిపై కామెంట్ రాసిన తర్వాతే సమర్పించగలరు. మీ మేనేజర్ కూడా రేట్ చేస్తారు, కామెంట్ జోడించవచ్చు; మేనేజర్ రేటింగే లెక్కలోకి వస్తుంది. మేనేజర్ చివరి రోజులోగా స్కోర్ చేయకపోతే, core values కి మీ రేటింగ్ వాడతారు.',
+    ta: 'உங்கள் KPI அப்படிச் சொன்னால் மட்டும்: KPI அமைக்கும்போது "I rate my own core values too" டிக் செய்யப்படும். அப்போது ஒவ்வொரு மாதமும் ஒவ்வொரு core value க்கும் ஒரு மதிப்பீட்டைத் தேர்ந்தெடுத்து, ஒவ்வொன்றிலும் கருத்து எழுதிய பிறகே சமர்ப்பிக்க முடியும். உங்கள் மேலாளரும் மதிப்பிடுவார், கருத்து சேர்க்கலாம்; மேலாளரின் மதிப்பீடே கணக்கில் கொள்ளப்படும். மேலாளர் கடைசி நாளுக்குள் மதிப்பெண் அளிக்கவில்லை என்றால், core values க்கு உங்கள் மதிப்பீடு பயன்படுத்தப்படும்.',
+  },
   's2.dir.what': {
     en: 'Is a row higher is better or lower is better?',
     ml: 'ഒരു വരി Higher is better ആണോ Lower is better ആണോ?',

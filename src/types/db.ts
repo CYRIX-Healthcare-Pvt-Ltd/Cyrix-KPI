@@ -256,6 +256,10 @@ export interface KpiAssignment {
    * a KPI with no start month is chased from April.
    */
   starts_from: string | null
+  /** The team member rates their own core values too (0214). */
+  core_self_rating?: boolean
+  /** Each core value weight, by id, adding up to core_values_weight; null = equal (0214). */
+  core_value_weights?: Record<string, number> | null
   submitted_at: string | null
   submitted_by: string | null
   approved_at: string | null
@@ -358,6 +362,8 @@ export interface CoreValueRating {
   submission_id: string
   core_value_id: string
   self_rating: string | null
+  /** The team member's comment on their own rating, required when they rate (0214). */
+  self_remarks?: string | null
   manager_rating: string | null
   manager_remarks: string | null
 }

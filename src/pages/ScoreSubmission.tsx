@@ -8,6 +8,7 @@ import {
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
 import { supabase } from '@/lib/supabase'
+import { useQuery } from '@tanstack/react-query'
 import { useReveal } from '@/lib/useReveal'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings,
@@ -86,6 +87,19 @@ export default function ScoreSubmission() {
   const [ratings, setRatings] = useState<Record<string, string>>({})
   /** Why a low core value was given, keyed by rating row. */
   const [coreWhy, setCoreWhy] = useState<Record<string, string>>({})
+  /*
+    A KPI where the team member rates their own core values (0214): the manager sees that rating
+    and its comment on each row, and may add a comment of their own on any rating, not only the
+    low ones. The manager's rating is what counts.
+  */
+  const { data: coreSelf = false } = useQuery({
+    queryKey: ['core_self', data?.submission.assignment_id],
+    enabled: !!data?.submission.assignment_id,
+    queryFn: async () => {
+      const { data: a } = await supabase.from('kpi_assignments').select('core_self_rating').eq('id', data!.submission.assignment_id).maybeSingle()
+      return !!(a as { core_self_rating?: boolean } | null)?.core_self_rating
+    },
+  })
   const [remarks, setRemarks] = useState('')
   const [cutReason, setCutReason] = useState('')
   /** Submit asks once first — the manager's figure is now the score. */
@@ -349,7 +363,7 @@ export default function ScoreSubmission() {
           // Cleared when the rating rises back out of the range that
           // asked for it, so last version's explanation is not left
           // attached to a rating it no longer describes.
-          remarks: needsWhy(ratings[r.id]) ? (coreWhy[r.id]?.trim() || null) : null,
+          remarks: needsWhy(ratings[r.id]) || coreSelf ? (coreWhy[r.id]?.trim() || null) : null,
         })),
       })
       if (submission && remarks !== (submission.manager_remarks ?? '')) {
@@ -773,6 +787,26 @@ export default function ScoreSubmission() {
                   <p className="font-medium text-ink-900">{def?.name}</p>
                   {def?.description && (
                     <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
+                  )}
+                  {rating.self_rating && (
+                    <div className="mt-2 space-y-1">
+                      <span className="badge bg-sky-100 text-sky-800">
+                        {data?.employee.full_name.split(' ')[0]} rated: {rating.self_rating}
+                      </span>
+                      {rating.self_remarks && (
+                        <p className="text-sm italic text-ink-600">“{rating.self_remarks}”</p>
+                      )}
+                    </div>
+                  )}
+                  {editable && coreSelf && !needsWhy(ratings[rating.id]) && (
+                    <textarea
+                      rows={2}
+                      className="input mt-2 text-sm"
+                      aria-label={`Your comment on ${def?.name ?? 'this core value'}`}
+                      value={coreWhy[rating.id] ?? ''}
+                      onChange={e => setCoreWhy({ ...coreWhy, [rating.id]: e.target.value })}
+                      placeholder="Your comment (optional)"
+                    />
                   )}
                   {/*
                     Why, on the two lowest ratings.

@@ -5,6 +5,7 @@ import {
   Search,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import {
   useMyAssignment, useSaveAssignmentRows, useAssignmentAction, useSetKpiStart, useFirstAssessedMonth,
   useScoringRules, useVisibleTemplates, useTemplateItems, useCoreValues, currentFy,
@@ -59,6 +60,14 @@ export default function KpiSetup() {
   const [esmsChoice, setEsmsChoice] = useState<boolean | null>(null)
   // Ticking ESMS asks first: it is a manager-level parameter (the user, 25 Sep).
   const [askEsms, setAskEsms] = useState(false)
+  /*
+    Team member rates their own core values (0214; the user, 16 Oct). Like ESMS, ticking it asks
+    first; with both ticked the one pop-up asks both questions. Each core value's weight can be set
+    here too, adding up to the core values share; none set, they are equal.
+  */
+  const [coreSelfChoice, setCoreSelfChoice] = useState<boolean | null>(null)
+  const [askCore, setAskCore] = useState(false)
+  const [weightDraft, setWeightDraft] = useState<Record<string, string> | null>(null)
   const [startChoice, setStartChoice] = useState<string | null>(null)
   /** Which template these rows came from, for the record on the assignment. */
   const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null)
@@ -86,6 +95,14 @@ export default function KpiSetup() {
   // Its position in the year is exactly how many months it skips.
   const skippedMonths = Math.max(0, fyMonths(fy).indexOf(startMonth))
   const coreWeight = esms ? REMAINDER_TOTAL - ESMS_WEIGHT : REMAINDER_TOTAL
+  const coreSelf = coreSelfChoice ?? !!assignment?.core_self_rating
+  const cvList = coreValues ?? []
+  // Saved weights, else an equal split of the core values share.
+  const savedWeights = (assignment?.core_value_weights ?? null) as Record<string, number> | null
+  const weightOf = (id: string): string => weightDraft?.[id]
+    ?? (savedWeights?.[id] != null && Object.values(savedWeights).reduce((a, b) => a + b, 0) === coreWeight
+      ? String(savedWeights[id]) : cvList.length ? String(Math.round((coreWeight / cvList.length) * 100) / 100) : '0')
+  const weightTotal = Math.round(cvList.reduce((t, cv) => t + (Number(weightOf(cv.id)) || 0), 0) * 100) / 100
 
   // Only job role rows are editable; core values are filtered out entirely.
   const working: Draft[] = useMemo(() => {
@@ -119,6 +136,7 @@ export default function KpiSetup() {
     }))
     .filter((x): x is { row: Draft; why: string } => x.why !== null)
   const valid =
+    (!coreSelf || Math.abs(weightTotal - coreWeight) < 0.01) &&
     jobTotal === JOB_ROLE_TOTAL &&
     working.length > 0 &&
     working.every(r => r.kra.trim() !== '') &&
@@ -238,6 +256,11 @@ export default function KpiSetup() {
       // creates. Validation refuses to submit without it, so a draft
       // saved here is already answerable.
       await setStart.mutateAsync({ assignmentId: id, month: startMonth })
+      // The core value choices (0214), on the assignment the save created.
+      // Weights only with self-rating ticked (the user, 16 Oct); unticked, all equal as before.
+      const weights = coreSelf ? Object.fromEntries(cvList.map(cv => [cv.id, Number(weightOf(cv.id)) || 0])) : null
+      const { error: cvErr } = await supabase.rpc('set_core_value_options', { p_assignment_id: id, p_self: coreSelf, p_weights: weights })
+      if (cvErr) throw new Error(cvErr.message)
       return id
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')
@@ -251,7 +274,7 @@ export default function KpiSetup() {
       setNotice('Saved as a draft. Nothing has been sent to your manager yet.')
       // Back to reading from the saved assignment, all three of them, so
       // what is on screen is what is in the database.
-      setRows(null); setEsmsChoice(null); setStartChoice(null)
+      setRows(null); setEsmsChoice(null); setStartChoice(null); setCoreSelfChoice(null); setWeightDraft(null)
     }
   }
 
@@ -545,6 +568,36 @@ export default function KpiSetup() {
             20%. Letting someone type the numbers only creates ways for
             them not to add up.
           */}
+          {askCore && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
+              role="alertdialog" aria-modal="true" aria-labelledby="core-title" onClick={() => setAskCore(false)}>
+              <div className="animate-pop-in w-full max-w-md rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <AlertTriangle className="h-5 w-5 text-amber-700" />
+                  </span>
+                  <div className="min-w-0 space-y-3">
+                    <h2 id="core-title" className="text-lg font-semibold text-ink-900">
+                      {esms ? 'Check two things' : 'Rating your own core values'}
+                    </h2>
+                    {esms && (
+                      <p className="text-sm leading-relaxed text-ink-600">
+                        <strong className="text-ink-900">ESMS:</strong> tick it only if you are at manager level and ESMS is part of your role. It takes {ESMS_WEIGHT}% out of core values.
+                      </p>
+                    )}
+                    <p className="text-sm leading-relaxed text-ink-600">
+                      <strong className="text-ink-900">Core values:</strong> each month you rate every core value yourself, with a comment on each. Your manager also rates them, and your manager's rating is what counts.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => setAskCore(false)} autoFocus>Cancel</button>
+                  <button type="button" className="btn-primary" onClick={() => { setCoreSelfChoice(true); setAskCore(false) }}>Confirm</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {askEsms && (
             <div
               className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
@@ -569,6 +622,11 @@ export default function KpiSetup() {
                       Tick it only if you are at manager level and ESMS is part of your role.
                       It takes {ESMS_WEIGHT}% out of core values.
                     </p>
+                    {coreSelf && (
+                      <p className="mt-2 text-sm leading-relaxed text-ink-600">
+                        <strong className="text-ink-900">Core values:</strong> you also rate every core value yourself each month, with a comment. Your manager's rating is what counts.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
@@ -592,6 +650,46 @@ export default function KpiSetup() {
               <span className="badge bg-ink-100 text-ink-600">Standard, added for you</span>
             </div>
 
+            {/* Highlighted so it is not missed (the user, 16 Oct). */}
+            <label className={`m-3 flex cursor-pointer items-start gap-3 rounded-xl border-2 px-4 py-3 transition-colors ${coreSelf ? 'border-violet-500 bg-violet-50' : 'border-violet-300 bg-violet-50/40 hover:border-violet-500'}`}>
+              <input
+                type="checkbox"
+                checked={coreSelf}
+                onChange={e => { if (e.target.checked) setAskCore(true); else setCoreSelfChoice(false) }}
+                className="mt-0.5 h-5 w-5 shrink-0 rounded border-violet-400 accent-violet-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-violet-800">I rate my own core values too</span>
+                <span className="mt-0.5 block text-xs text-ink-500">
+                  Each month, a rating and a comment on every core value. Your manager's rating is what counts.
+                </span>
+              </span>
+            </label>
+
+            <div className="border-b border-ink-100 px-4 py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-sm font-medium text-ink-900">Alignment To Core Values</p>
+                <span className={`badge shrink-0 ${!coreSelf || Math.abs(weightTotal - coreWeight) < 0.01 ? 'bg-ink-100 text-ink-700' : 'bg-cyrixRed-100 text-cyrixRed-800'}`}>
+                  {coreSelf ? `${weightTotal}% of ${coreWeight}%` : `${coreWeight}%`}
+                </span>
+              </div>
+              <ul className="mt-2 divide-y divide-ink-100">
+                {cvList.map(cv => (
+                  <li key={cv.id} className="flex items-center justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-sm text-ink-900">{cv.name}</span>
+                      {cv.description && <span className="block text-xs text-ink-500">{cv.description}</span>}
+                    </span>
+                    {coreSelf && <span className="flex shrink-0 items-center gap-1">
+                      <input type="number" min={0} max={coreWeight} step="0.5" className="input w-20 text-right" aria-label={`Weight of ${cv.name}`}
+                        value={weightOf(cv.id)}
+                        onChange={e => setWeightDraft(d => ({ ...Object.fromEntries(cvList.map(c => [c.id, weightOf(c.id)])), ...d, [cv.id]: e.target.value }))} />
+                      <span className="text-sm text-ink-500">%</span>
+                    </span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
             <label className="flex cursor-pointer items-start gap-3 border-b border-ink-100 px-4 py-3 hover:bg-ink-50">
               <input
                 type="checkbox"
@@ -625,20 +723,6 @@ export default function KpiSetup() {
               </div>
             )}
 
-            <div className="flex items-baseline justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-900">Alignment To Core Values</p>
-                <p className="mt-0.5 text-xs text-ink-500">
-                  Rated each month against the five company core values.
-                </p>
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {(coreValues ?? []).map(cv => (
-                    <li key={cv.id} className="badge bg-ink-100 text-ink-700">{cv.name}</li>
-                  ))}
-                </ul>
-              </div>
-              <span className="badge shrink-0 bg-ink-100 text-ink-700">{coreWeight}%</span>
-            </div>
           </div>
 
           {!valid && (
@@ -653,6 +737,7 @@ export default function KpiSetup() {
                   </li>
                 )}
                 {working.some(r => !r.kra.trim()) && <li>Every row needs a KRA name.</li>}
+                {coreSelf && Math.abs(weightTotal - coreWeight) >= 0.01 && <li>Core value weights total {weightTotal}%, they must total {coreWeight}%.</li>}
                 {inert.map(({ row, why }) => (
                   <li key={row._key}>
                     “{row.kra.trim() || 'Untitled row'}” {why}, so it cannot change

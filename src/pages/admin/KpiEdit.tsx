@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import clsx from 'clsx'
 import { Plus, Save, Search } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
-import { useScoringRules, type TemplateReach } from '@/lib/queries'
+import { useScoringRules, useCoreValues, type TemplateReach } from '@/lib/queries'
 import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import ReachChoice, { ReachConfirm } from '@/components/ReachChoice'
@@ -52,6 +52,15 @@ export default function KpiEdit() {
   const [reach, setReach] = useState<TemplateReach>('forward')
   // ESMS on or off (0147; the user, 8 Oct: "enable or disable esms also").
   const [esms, setEsms] = useState(false)
+  /*
+    Team member rates their own core values (0214; the user, 16 Oct), set here for a KPI already
+    approved, which the person cannot edit. With it ticked, each core value's weight, adding up to
+    the core values share; unticked, they are equal.
+  */
+  const { data: coreValues } = useCoreValues()
+  const [coreSelf, setCoreSelf] = useState(false)
+  const [coreTotal, setCoreTotal] = useState(20)
+  const [weights, setWeights] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +73,14 @@ export default function KpiEdit() {
     setFound(f)
     setRows(f.items.map(fromItem))
     setEsms(!!f.assignment?.esms)
+    if (f.assignment) {
+      const { data: a } = await supabase.from('kpi_assignments')
+        .select('core_self_rating, core_value_weights, core_values_weight').eq('id', f.assignment.id).maybeSingle()
+      const row = a as { core_self_rating?: boolean; core_value_weights?: Record<string, number> | null; core_values_weight?: number | string } | null
+      setCoreSelf(!!row?.core_self_rating)
+      setCoreTotal(Number(row?.core_values_weight ?? 20))
+      setWeights(Object.fromEntries(Object.entries(row?.core_value_weights ?? {}).map(([k, v]) => [k, String(v)])))
+    }
     return f
   }
 
@@ -95,6 +112,15 @@ export default function KpiEdit() {
         p_esms: esms === found.assignment.esms ? null : esms,
       })
       if (err) throw new Error(friendlyError(err))
+      // ESMS changes the core values share, so read it again before checking the weights.
+      const { data: a } = await supabase.from('kpi_assignments').select('core_values_weight').eq('id', found.assignment.id).maybeSingle()
+      const share = Number((a as { core_values_weight?: number | string } | null)?.core_values_weight ?? coreTotal)
+      const list = coreValues ?? []
+      const w = coreSelf
+        ? Object.fromEntries(list.map(cv => [cv.id, weights[cv.id] !== undefined && weights[cv.id] !== '' ? Number(weights[cv.id]) : Math.round((share / list.length) * 100) / 100]))
+        : null
+      const { error: cvErr } = await supabase.rpc('set_core_value_options', { p_assignment_id: found.assignment.id, p_self: coreSelf, p_weights: w })
+      if (cvErr) throw new Error(friendlyError(cvErr))
       const months = Number((data as { months: number }).months ?? 0)
       // Saved is done: the editor closes, the line saying so stays (the user, 8 Oct).
       setFound(null); setRows([]); setCode('')
@@ -170,6 +196,26 @@ export default function KpiEdit() {
           </div>
 
           <div className="card space-y-3 p-4">
+            <label className={`flex w-fit cursor-pointer items-center gap-2.5 rounded-lg border-2 px-3 py-2 text-sm font-semibold ${coreSelf ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-violet-300 text-violet-800 hover:border-violet-500'}`}>
+              <input type="checkbox" className="accent-violet-600" checked={coreSelf}
+                onChange={e => { if (!e.target.checked || confirm(`${found?.employee.full_name ?? 'This person'} will rate every core value each month, with a comment on each. The manager's rating is what counts. Turn it on?`)) setCoreSelf(e.target.checked) }} />
+              Team member rates core values
+            </label>
+            {coreSelf && (
+              <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200">
+                {(coreValues ?? []).map(cv => (
+                  <li key={cv.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <span className="text-ink-900">{cv.name}</span>
+                    <span className="flex items-center gap-1">
+                      <input type="number" min={0} step="0.5" className="input w-20 text-right" aria-label={`Weight of ${cv.name}`}
+                        placeholder={String(Math.round((coreTotal / Math.max(1, (coreValues ?? []).length)) * 100) / 100)}
+                        value={weights[cv.id] ?? ''} onChange={e => setWeights({ ...weights, [cv.id]: e.target.value })} />
+                      <span className="text-ink-500">%</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <label className="flex w-fit cursor-pointer items-center gap-2.5 rounded-lg border border-ink-200 px-3 py-2 text-sm font-medium text-ink-900 hover:bg-ink-50">
               <input type="checkbox" checked={esms} onChange={e => setEsms(e.target.checked)} />
               ESMS <span className="font-normal text-ink-500">— {ESMS_WEIGHT}%</span>
