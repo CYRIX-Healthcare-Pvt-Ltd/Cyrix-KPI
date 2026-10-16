@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { ArrowUpToLine, ChevronsUp, TrendingDown } from 'lucide-react'
-import { ruleTraits, type ScoringRule, type RuleParams, type TraitTone } from '@/lib/scoring'
+import { ArrowUpToLine, ChevronsUp, TrendingDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ruleTraits, ruleDirection, type ScoringRule, type RuleParams, type TraitTone } from '@/lib/scoring'
 
 /**
  * What this row can do to a score, in colour.
@@ -24,6 +24,9 @@ const TONE: Record<TraitTone, { chip: string; icon: typeof ArrowUpToLine }> = {
   capped:  { chip: 'bg-ink-100 text-ink-600',            icon: ArrowUpToLine },
   bonus:   { chip: 'bg-emerald-100 text-emerald-800',    icon: ChevronsUp },
   penalty: { chip: 'bg-cyrixRed-100 text-cyrixRed-800',  icon: TrendingDown },
+  // Which way is good (16 Oct): blue and violet, neither a gain nor a loss.
+  higher:  { chip: 'bg-sky-100 text-sky-800',            icon: ArrowUp },
+  lower:   { chip: 'bg-violet-100 text-violet-800',      icon: ArrowDown },
 }
 
 export default function RuleTraits({
@@ -34,7 +37,8 @@ export default function RuleTraits({
   params?: RuleParams
   className?: string
 }) {
-  const traits = ruleTraits(rule, weightage, params ?? {})
+  const dir = ruleDirection(rule)
+  const traits = [...(dir ? [dir] : []), ...ruleTraits(rule, weightage, params ?? {})]
   if (traits.length === 0) return null
 
   return (

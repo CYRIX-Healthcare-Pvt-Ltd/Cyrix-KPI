@@ -231,7 +231,7 @@ export function calcKpiScore(
  * Never more than two marks. The ceiling and the floor are the whole
  * story, and a row of chips is as unreadable as the sentence it replaced.
  */
-export type TraitTone = 'capped' | 'bonus' | 'penalty'
+export type TraitTone = 'capped' | 'bonus' | 'penalty' | 'higher' | 'lower'
 
 export interface RuleTrait {
   tone: TraitTone
@@ -355,6 +355,18 @@ export function ruleTraits(
     default:
       return [capped]
   }
+}
+
+/**
+ * Which way is good (the user, 16 Oct: "how can we know this is lower is better or higher is
+ * better?"), shown before the row's own marks. Banded, yes/no and rating rows have no direction.
+ */
+export function ruleDirection(rule: ScoringRule): RuleTrait | null {
+  if (rule === 'higher_capped' || rule === 'higher_uncapped')
+    return { tone: 'higher', label: 'Higher is better', detail: 'A bigger figure scores more: at or above the target earns the row in full.' }
+  if (rule === 'lower_penalty' || rule === 'lower_linear')
+    return { tone: 'lower', label: 'Lower is better', detail: 'A smaller figure scores more: at or under the target earns the row in full.' }
+  return null
 }
 
 /** Excellent=100 … Poor=20, matching the template's nested IF chain. */

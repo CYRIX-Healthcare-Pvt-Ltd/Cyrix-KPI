@@ -374,6 +374,7 @@ export default function Help() {
               { what: t('s2.p3.what'), how: t('s2.p3.how', { tmDays }) },
               { what: t('s2.p4.what'), how: t('s2.p4.how', { mgrDays }) },
               { what: t('s2.p5.what'), how: t('s2.p5.how') },
+              { what: t('s2.dir.what'), how: t('s2.dir.how') },
               {
                 what: t(closingDay === null ? 's2.p6.what.open' : 's2.p6.what.day'),
                 how: t(closingDay === null ? 's2.p6.how.open' : 's2.p6.how.day',

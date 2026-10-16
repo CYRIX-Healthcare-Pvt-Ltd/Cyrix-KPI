@@ -340,6 +340,21 @@ export const HELP: Record<string, Phrase> = {
     te: 'ప్రతి వరుసకూ వారు తమ సొంత సంఖ్యను నమోదు చేస్తారు, Core Values కూడా వారే రేట్ చేస్తారు. వారి స్కోరే మీ తుది స్కోరు. తర్వాతి నెల {mgrDays}వ తేదీ వరకు వారికి సమయం ఉంది; అప్పటిలోగా స్కోర్ చేయకపోతే, మీ సొంత job role స్కోరు, Core Values కి పూర్తి మార్కులు లెక్కించబడతాయి. తర్వాత స్థితి Manager reviewed అని చూపిస్తుంది.',
     ta: 'ஒவ்வொரு வரிசைக்கும் அவர்கள் தங்கள் எண்ணை நிரப்புவார்கள், Core Values-ஐயும் அவர்களே மதிப்பிடுவார்கள். அவர்களின் மதிப்பெண்ணே உங்கள் இறுதி மதிப்பெண். அடுத்த மாதத்தின் {mgrDays}ஆம் தேதி வரை அவர்களுக்கு அவகாசம் உள்ளது; அதற்குள் மதிப்பிடாவிட்டால், உங்கள் சொந்த job role மதிப்பெண்ணும் Core Values-க்கு முழு மதிப்பெண்ணும் கணக்கிடப்படும். பிறகு நிலை Manager reviewed எனக் காட்டும்.',
   },
+  // Which way a row should go (the user, 16 Oct: "how can we know this is lower is better or higher is better?").
+  's2.dir.what': {
+    en: 'Is a row higher is better or lower is better?',
+    ml: 'ഒരു വരി Higher is better ആണോ Lower is better ആണോ?',
+    hi: 'कोई पंक्ति Higher is better है या Lower is better?',
+    te: 'ఒక వరుస Higher is better నా లేదా Lower is better నా?',
+    ta: 'ஒரு வரி Higher is better ஆ அல்லது Lower is better ஆ?',
+  },
+  's2.dir.how': {
+    en: 'Each row says it beside its weightage: Higher is better means a bigger figure scores more, as for sales or calls closed; Lower is better means a smaller figure scores more, as for cost or days taken. At or past the target the row earns its full weightage.',
+    ml: 'ഓരോ വരിയിലും weightage-ന് അരികിൽ അത് എഴുതിയിട്ടുണ്ട്: Higher is better എന്നാൽ വലിയ സംഖ്യയ്ക്ക് കൂടുതൽ സ്കോർ, വിൽപ്പനയോ ക്ലോസ് ചെയ്ത കോളുകളോ പോലെ; Lower is better എന്നാൽ ചെറിയ സംഖ്യയ്ക്ക് കൂടുതൽ സ്കോർ, ചെലവോ എടുത്ത ദിവസങ്ങളോ പോലെ. ടാർഗറ്റിലെത്തിയാൽ ആ വരിക്ക് മുഴുവൻ weightage ലഭിക്കും.',
+    hi: 'हर पंक्ति पर उसके weightage के पास यह लिखा होता है: Higher is better का मतलब है बड़ा आँकड़ा ज़्यादा स्कोर करता है, जैसे बिक्री या बंद की गई कॉल; Lower is better का मतलब है छोटा आँकड़ा ज़्यादा स्कोर करता है, जैसे लागत या लगे दिन। टारगेट तक पहुँचने पर पंक्ति को पूरा weightage मिलता है।',
+    te: 'ప్రతి వరుసలో దాని weightage పక్కన ఇది ఉంటుంది: Higher is better అంటే పెద్ద సంఖ్యకు ఎక్కువ స్కోరు, అమ్మకాలు లేదా మూసిన కాల్స్ లాగా; Lower is better అంటే చిన్న సంఖ్యకు ఎక్కువ స్కోరు, ఖర్చు లేదా పట్టిన రోజుల లాగా. టార్గెట్ చేరితే ఆ వరుసకు పూర్తి weightage వస్తుంది.',
+    ta: 'ஒவ்வொரு வரியிலும் அதன் weightage அருகில் இது இருக்கும்: Higher is better என்றால் பெரிய எண்ணுக்கு அதிக மதிப்பெண், விற்பனை அல்லது முடித்த அழைப்புகள் போல; Lower is better என்றால் சிறிய எண்ணுக்கு அதிக மதிப்பெண், செலவு அல்லது எடுத்த நாட்கள் போல. இலக்கை எட்டினால் அந்த வரிக்கு முழு weightage கிடைக்கும்.',
+  },
   's2.p5.what': {
     en: 'If their score is a lot lower than yours',
     ml: 'അവരുടെ സ്കോർ നിങ്ങളുടേതിനെക്കാൾ വളരെ കുറവാണെങ്കിൽ',
@@ -1515,11 +1530,11 @@ export const HELP: Record<string, Phrase> = {
     ta: 'ஒப்புதல் அளிக்கும்போது மதிப்பீட்டு முறை நிறத்துடன் தெரியும்',
   },
   'team.p18.how': {
-    en: 'Green stops at the weightage. Darker green can go past it. Amber can cost the row its own marks. Red can take marks off the rest of the month. Look twice at the red ones.',
-    ml: 'പച്ച weightage-ൽ നിർത്തും. കടും പച്ച അതിനപ്പുറം പോകാം. ആമ്പർ ആ വരിയുടെ സ്വന്തം മാർക്ക് നഷ്ടപ്പെടുത്താം. ചുവപ്പ് ആ മാസത്തിന്റെ ബാക്കി മാർക്കിൽ നിന്നും കുറയ്ക്കാം. ചുവപ്പുള്ളവ രണ്ടു തവണ നോക്കുക.',
-    hi: 'हरा weightage पर रुकता है। गहरा हरा उससे आगे जा सकता है। एम्बर उस पंक्ति के अपने अंक ले सकता है। लाल महीने के बाकी अंकों से भी काट सकता है। लाल वालों को दो बार देखें।',
-    te: 'ఆకుపచ్చ weightage వద్ద ఆగుతుంది. ముదురు ఆకుపచ్చ దాటి వెళ్లగలదు. అంబర్ ఆ వరుస సొంత మార్కులను కోల్పోగలదు. ఎరుపు ఆ నెల మిగతా మార్కుల నుండి కూడా తీసివేయగలదు. ఎరుపు వాటిని రెండుసార్లు చూడండి.',
-    ta: 'பச்சை weightage இல் நிற்கும். அடர் பச்சை அதைத் தாண்டிச் செல்லும். அம்பர் அந்த வரியின் சொந்த மதிப்பெண்களை இழக்கச் செய்யும். சிவப்பு அந்த மாதத்தின் மீதி மதிப்பெண்களிலிருந்தும் குறைக்கும். சிவப்பானவற்றை இரண்டு முறை பாருங்கள்.',
+    en: 'Every row also says Higher is better or Lower is better, so you know which way the figure should go. Green stops at the weightage. Darker green can go past it. Amber can cost the row its own marks. Red can take marks off the rest of the month. Look twice at the red ones.',
+    ml: 'ഓരോ വരിയിലും Higher is better അല്ലെങ്കിൽ Lower is better എന്നും കാണാം, അതിനാൽ സംഖ്യ ഏത് ദിശയിൽ പോകണമെന്ന് അറിയാം. പച്ച weightage-ൽ നിർത്തും. കടും പച്ച അതിനപ്പുറം പോകാം. ആമ്പർ ആ വരിയുടെ സ്വന്തം മാർക്ക് നഷ്ടപ്പെടുത്താം. ചുവപ്പ് ആ മാസത്തിന്റെ ബാക്കി മാർക്കിൽ നിന്നും കുറയ്ക്കാം. ചുവപ്പുള്ളവ രണ്ടു തവണ നോക്കുക.',
+    hi: 'हर पंक्ति पर Higher is better या Lower is better भी लिखा होता है, ताकि पता रहे कि आँकड़ा किस दिशा में जाना चाहिए। हरा weightage पर रुकता है। गहरा हरा उससे आगे जा सकता है। एम्बर उस पंक्ति के अपने अंक ले सकता है। लाल महीने के बाकी अंकों से भी काट सकता है। लाल वालों को दो बार देखें।',
+    te: 'ప్రతి వరుసలో Higher is better లేదా Lower is better అని కూడా ఉంటుంది, కాబట్టి సంఖ్య ఏ వైపు వెళ్లాలో తెలుస్తుంది. ఆకుపచ్చ weightage వద్ద ఆగుతుంది. ముదురు ఆకుపచ్చ దాటి వెళ్లగలదు. అంబర్ ఆ వరుస సొంత మార్కులను కోల్పోగలదు. ఎరుపు ఆ నెల మిగతా మార్కుల నుండి కూడా తీసివేయగలదు. ఎరుపు వాటిని రెండుసార్లు చూడండి.',
+    ta: 'ஒவ்வொரு வரியிலும் Higher is better அல்லது Lower is better என்றும் இருக்கும், எனவே எண் எந்தப் பக்கம் போக வேண்டும் என்பது தெரியும். பச்சை weightage இல் நிற்கும். அடர் பச்சை அதைத் தாண்டிச் செல்லும். அம்பர் அந்த வரியின் சொந்த மதிப்பெண்களை இழக்கச் செய்யும். சிவப்பு அந்த மாதத்தின் மீதி மதிப்பெண்களிலிருந்தும் குறைக்கும். சிவப்பானவற்றை இரண்டு முறை பாருங்கள்.',
   },
   'team.p19.what': {
     en: 'Hand a template to people directly',
