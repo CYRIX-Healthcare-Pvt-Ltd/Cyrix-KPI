@@ -307,7 +307,12 @@ Deno.serve(async req => {
     const title = linkAdded
       ? 'Meeting link added · ' + post.title
       : (KIND[post.kind] ?? 'Cyrix Digest') + ' · ' + post.title
-    const body = linkAdded
+    // Sent again from the desk's Send notification (the user, 17 Oct): its own second line, when typed.
+    const subtitle = String(input.subtitle ?? '').trim().slice(0, 140)
+    const resend = typeof input.subtitle === 'string'
+    if (resend && !post.published_at) return json({ error: 'Publish it first' }, 400)
+    const body = subtitle ? subtitle
+      : linkAdded
       ? `${when} · Join from Cyrix Digest.`
       : post.kind === 'meeting'
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
@@ -321,7 +326,9 @@ Deno.serve(async req => {
     }).select('id').single()
     // Not into the in-app bell (0176; the user, 12 Oct: "keep digest out of kpi bell"):
     // the post is on the portal home, and goes to devices.
-    const t = devicesOn ? await deliver(db, people, { title, body, url: '/?post=' + post.id, tag: 'digest-' + post.id }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
+    // A resend gets its own tag, so it shows again rather than quietly replacing the first.
+    const tag = 'digest-' + post.id + (resend ? '-' + Date.now() : '')
+    const t = devicesOn ? await deliver(db, people, { title, body, url: '/?post=' + post.id, tag }) : { people: people.length, devices: 0, delivered: 0, failed: 0 }
     if (row) await db.from('push_messages').update(t).eq('id', row.id)
     return json(t)
   }

@@ -9,7 +9,7 @@ import MultiPick from '@/components/MultiPick'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -80,9 +80,13 @@ interface Row {
   show_until: string | null
   /** When it went out; null while it is a draft (0182). */
   published_at: string | null
+  /** A PDF on the post, and its file name (0215). */
+  pdf_url: string | null; pdf_name: string | null
 }
 interface Draft {
   id: string | null; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
+  /** A PDF on the post (0215; the user, 17 Oct): its links open from the browser's viewer. */
+  pdf_url: string | null; pdf_name: string | null
   date: string; minutes: number; link: string; place: string
   /** The link is often not known when the meeting is announced (the user, 12 Oct): ticked, it is asked for. */
   hasLink: boolean
@@ -103,7 +107,7 @@ interface Draft {
   /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
   until: string
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
@@ -123,12 +127,35 @@ async function upload(file: File): Promise<string> {
   return supabase.storage.from('digest').getPublicUrl(path).data.publicUrl
 }
 
+/*
+  A file, as it is, into the public digest bucket (0215; the user, 17 Oct: "add file, all file
+  supporting"). Documents, sheets, slides, text and pictures, up to 20 MB; never a web page or a
+  program, since the bucket is open to anybody with the link.
+*/
+const FILE_TYPES: Record<string, string> = {
+  pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv', txt: 'text/plain', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', zip: 'application/zip',
+}
+async function uploadFile(file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() ?? '').toLowerCase()
+  const type = FILE_TYPES[ext]
+  if (!type) throw new Error('Choose a PDF, Word, Excel, PowerPoint, text, picture or zip file')
+  if (file.size > 20 * 1024 * 1024) throw new Error('That file is over 20 MB')
+  const path = `${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from('digest').upload(path, file, { contentType: type, cacheControl: '31536000' })
+  if (error) throw new Error(friendlyError(error))
+  return supabase.storage.from('digest').getPublicUrl(path).data.publicUrl
+}
+
 export default function DigestAdmin() {
   const qc = useQueryClient()
   const [d, setD] = useState<Draft>(EMPTY)
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [notify, setNotify] = useState<Row | null>(null)
   /*
     A draft sent as a test to a few people first (0187; the user, 13 Oct: "they want to test the
     link, whether it is opening or not … select the participants entering name or ecode").
@@ -191,6 +218,8 @@ export default function DigestAdmin() {
       // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
       // no Show until for them.
       const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || d.kind === 'form'
+      const { error: pe0 } = await supabase.rpc('digest_set_pdf', { p_id: id, p_url: d.pdf_url ?? '', p_name: d.pdf_name ?? '' })
+      if (pe0) throw new Error(friendlyError(pe0))
       const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
       if (d.kind === 'vacancy') {
@@ -255,6 +284,12 @@ export default function DigestAdmin() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['digest_admin'] }),
   })
 
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const pickPdf = async (f: File | undefined) => {
+    if (!f) return
+    setPdfBusy(true)
+    try { set({ pdf_url: await uploadFile(f), pdf_name: f.name }) } catch (e) { alert((e as Error).message) } finally { setPdfBusy(false) }
+  }
   const pick = async (f: File | undefined) => {
     if (!f) return
     setUploading(true)
@@ -487,6 +522,22 @@ export default function DigestAdmin() {
               {d.image_url && <button type="button" onClick={() => set({ image_url: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>}
             </div>
           </div>
+          <div>
+            <span className="label">File</span>
+            <div className="flex items-center gap-3">
+              <label className="btn-secondary cursor-pointer !px-3 !py-2 text-sm">
+                {pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {d.pdf_url ? 'Change' : 'Add file'}
+                <input type="file" accept={Object.keys(FILE_TYPES).map(x => '.' + x).join(',')} className="hidden" onChange={e => void pickPdf(e.target.files?.[0])} />
+              </label>
+              {d.pdf_url && (
+                <>
+                  <a href={d.pdf_url} target="_blank" rel="noreferrer" className="max-w-[12rem] truncate text-sm text-violet-700 hover:underline">{d.pdf_name ?? 'File'}</a>
+                  <button type="button" onClick={() => set({ pdf_url: null, pdf_name: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && <div className="max-w-xs">
@@ -606,13 +657,14 @@ export default function DigestAdmin() {
                   const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
                   setTesters(tested); setTesting(tested.length > 0)
                   setDraftSaved(false)
-                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, color: r.color,
+                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
                     questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
+                {r.can_edit && r.published_at && <button type="button" title="Send notification" className="btn-icon" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
                   onClick={() => { if (confirm(`Delete "${r.title}" from Cyrix Digest?`)) remove.mutate(r.id) }}><Trash2 className="h-4 w-4" /></button>}
               </div>
@@ -621,6 +673,50 @@ export default function DigestAdmin() {
           ))}
         </div>
       )}
+      {notify && <NotifyDialog row={notify} onClose={() => setNotify(null)} />}
+    </div>
+  )
+}
+
+/*
+  A push notification for a post already out (the user, 17 Oct): the post's heading as it is, and
+  an optional second line of the desk's own. Sent to everybody's devices.
+*/
+function NotifyDialog({ row, onClose }: { row: Row; onClose: () => void }) {
+  const [sub, setSub] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const send = async () => {
+    setBusy(true); setErr(null)
+    const { data, error } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: row.id, subtitle: sub.trim() } })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    setSent(`Sent. ${(data as { people?: number } | null)?.people ?? 0} people were notified.`)
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div className="card w-full max-w-md space-y-4 p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink-900"><BellRing className="h-4 w-4" /> Send notification</h3>
+        <div>
+          <span className="label">Heading</span>
+          <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-800">{row.title}</p>
+        </div>
+        <div>
+          <label className="label" htmlFor="dg-sub">Sub heading · optional</label>
+          <input id="dg-sub" className="input" maxLength={140} value={sub} disabled={!!sent} onChange={e => setSub(e.target.value)} placeholder="Starts at 4 PM, join on time" />
+        </div>
+        {err && <p className="text-sm text-cyrixRed-700">{err}</p>}
+        {sent && <p className="text-sm text-emerald-700">{sent}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>{sent ? 'Close' : 'Cancel'}</button>
+          {!sent && (
+            <button type="button" className="btn-primary" disabled={busy} onClick={() => void send()}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} Send to everyone
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
