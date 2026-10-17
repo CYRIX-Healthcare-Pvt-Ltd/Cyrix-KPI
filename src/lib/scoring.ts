@@ -397,6 +397,25 @@ export function averageCoreValueRatings(
 }
 
 /**
+ * The core-value ratings rolled into 0-100 with each value's own weight, when the KPI splits them (0214):
+ * the sum of points x weight over the sum of the weights. Without weights, the plain average.
+ */
+export function weightedCoreValueRatings(
+  ratings: Array<{ core_value_id: string; label: string | null | undefined }>,
+  weights: Record<string, number> | null | undefined,
+): number | null {
+  if (!weights) return averageCoreValueRatings(ratings.map(r => r.label))
+  let sum = 0, w = 0
+  for (const r of ratings) {
+    const p = ratingToPoints(r.label)
+    if (p === null) continue
+    const k = Number(weights[r.core_value_id] ?? 0)
+    sum += p * k; w += k
+  }
+  return w > 0 ? round4(sum / w) : null
+}
+
+/**
  * How self and manager scores blend.
  *
  * The manager's figure alone, which is what migration 0095 made it and

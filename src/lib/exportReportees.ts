@@ -1,5 +1,6 @@
-import type { Employee, KpiSubmission, KpiSubmissionItem } from '@/types/db'
+import type { CoreValueDefinition, CoreValueRating, Employee, KpiAssignment, KpiSubmission, KpiSubmissionItem } from '@/types/db'
 import { supabase } from './supabase'
+import { ratingToPoints } from './scoring'
 import { monthLabel } from './fy'
 
 /*
@@ -42,6 +43,43 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
 
   const itemsBySub = new Map<string, KpiSubmissionItem[]>()
   for (const it of items) itemsBySub.set(it.submission_id, [...(itemsBySub.get(it.submission_id) ?? []), it])
+
+  /*
+    A KPI that splits its core values (0214) gets one row per core value instead of the single core
+    values row (the user, 17 Oct): its weight, the rating as points out of 100 (target 100), and the
+    score that rating earns of the weight. The manager's rating once scored, the team member's before.
+  */
+  const assignmentIds = [...new Set(subs.map(s => s.assignment_id))]
+  const splits = await inChunks<Pick<KpiAssignment, 'id' | 'core_self_rating' | 'core_value_weights'>>(assignmentIds, (part, from) =>
+    supabase.from('kpi_assignments').select('id, core_self_rating, core_value_weights').in('id', part).range(from, from + 999))
+  const weightsOf = new Map(splits.filter(a => a.core_self_rating && a.core_value_weights).map(a => [a.id, a.core_value_weights!]))
+  const splitSubs = subs.filter(s => weightsOf.has(s.assignment_id))
+  if (splitSubs.length) {
+    const { data: defs, error: defError } = await supabase.from('core_value_definitions').select('*').eq('is_active', true).order('sort_order')
+    if (defError) throw new Error(defError.message)
+    const ratings = await inChunks<CoreValueRating>(splitSubs.map(s => s.id), (part, from) =>
+      supabase.from('core_value_ratings').select('*').in('submission_id', part).range(from, from + 999))
+    for (const s of splitSubs) {
+      const weights = weightsOf.get(s.assignment_id)!
+      const own = itemsBySub.get(s.id) ?? []
+      const core = own.find(i => i.section === 'core_values')
+      const at = (core?.sort_order ?? 9000)
+      const rows = ((defs ?? []) as CoreValueDefinition[]).map((cv, n) => {
+        const r = ratings.find(x => x.submission_id === s.id && x.core_value_id === cv.id)
+        const self = ratingToPoints(r?.self_rating), mgr = ratingToPoints(r?.manager_rating)
+        const w = Number(weights[cv.id] ?? 0)
+        const pts = mgr ?? self
+        return {
+          ...(core ?? {}), id: `${s.id}-${cv.id}`, submission_id: s.id, section: 'core_values',
+          kra: cv.name, kpi_description: cv.description ?? '', weightage: w, scoring_rule: 'rating_scale',
+          target_value: 100, self_achieved: self, manager_achieved: mgr,
+          final_score: pts === null ? null : (pts * w) / 100, manager_score: null, self_score: null,
+          sort_order: at + n / 100,
+        } as unknown as KpiSubmissionItem
+      })
+      itemsBySub.set(s.id, [...own.filter(i => i.section !== 'core_values'), ...rows].sort((a, b) => a.sort_order - b.sort_order))
+    }
+  }
 
   const files: Record<string, Uint8Array> = {}
   for (const person of people) {

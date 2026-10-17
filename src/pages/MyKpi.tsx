@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Pencil, FileSpreadsheet, PencilRuler, Shuffle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  useMyAssignment, useScoringRules, useOpenRequestFor, useRequestAction, currentFy,
+  useMyAssignment, useScoringRules, useOpenRequestFor, useRequestAction, currentFy, useCoreValues,
 } from '@/lib/queries'
 import {
   Alert, PageLoader, StatusBadge, EmptyState, Spinner,
@@ -19,6 +19,7 @@ export default function MyKpi() {
   const fy = currentFy()
   const { data, isLoading } = useMyAssignment(employee?.id, fy)
   const { data: rules } = useScoringRules()
+  const { data: coreValues } = useCoreValues()
 
   const assignmentId = data?.assignment?.id
   const { data: openRevision } = useOpenRequestFor('revision', assignmentId)
@@ -40,6 +41,8 @@ export default function MyKpi() {
 
   const sectionTotal = (s: Section) =>
     items.filter(i => i.section === s).reduce((a, b) => a + b.weightage, 0)
+  // Each core value's own weight, when the KPI splits them (0214; the user, 17 Oct).
+  const coreWeights = assignment.core_self_rating ? assignment.core_value_weights ?? null : null
 
   return (
     <div className="space-y-5">
@@ -118,10 +121,40 @@ export default function MyKpi() {
               <span className="font-normal text-ink-500">{' '}— {weight}%</span>
             </h3>
             <span className="badge bg-ink-100 text-ink-600">
-              {sectionTotal(section)}%
+              {section === 'core_values' && coreWeights ? weight : sectionTotal(section)}%
             </span>
           </div>
 
+          {section === 'core_values' && coreWeights ? (
+          <div className="divide-y divide-ink-100">
+            {(coreValues ?? []).map((cv, i) => {
+              const w = Number(coreWeights[cv.id] ?? 0)
+              return (
+                <div key={cv.id} className="p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <span
+                      className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 border-violet-700 text-xs font-bold text-violet-700"
+                      aria-hidden
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-ink-900">{cv.name}</p>
+                      {cv.description && <p className="mt-0.5 text-sm text-ink-500">{cv.description}</p>}
+                    </div>
+                    <span className="badge shrink-0 bg-ink-100 text-ink-900">{w}%</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <RuleTraits rule="rating_scale" weightage={w} />
+                    <p className="text-xs text-ink-400">
+                      {rules?.find(r => r.code === 'rating_scale')?.label ?? 'rating_scale'}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          ) : (
           <div className="divide-y divide-ink-100">
             {items.filter(i => i.section === section).map((item, i) => (
               <div key={item.id} className="p-4">
@@ -197,6 +230,7 @@ export default function MyKpi() {
               </div>
             ))}
           </div>
+          )}
         </div>
       ))}
     </div>

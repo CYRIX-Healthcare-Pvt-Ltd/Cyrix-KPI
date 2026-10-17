@@ -21,7 +21,7 @@ import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
-  calcKpiScore, averageCoreValueRatings, RATING_SCALE, type ScoringRule, type RuleParams,
+  calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
@@ -46,6 +46,7 @@ export default function MonthlySubmission() {
   */
   const saveCore = useSaveCoreRatings()
   const coreSelf = !!assignmentData?.assignment?.core_self_rating
+  const coreWeights = coreSelf ? assignmentData?.assignment?.core_value_weights ?? null : null
   const [selfCore, setSelfCore] = useState<Record<string, { rating: string; remarks: string }>>({})
   const selfOf = (r: { id: string; self_rating: string | null; self_remarks?: string | null }) =>
     selfCore[r.id] ?? { rating: r.self_rating ?? '', remarks: r.self_remarks ?? '' }
@@ -97,8 +98,8 @@ export default function MonthlySubmission() {
     should read as blank rather than as nought out of twenty.
   */
   const coreRolled = useMemo(
-    () => averageCoreValueRatings((data?.ratings ?? []).map(r => r.manager_rating)),
-    [data],
+    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => ({ core_value_id: r.core_value_id, label: r.manager_rating })), coreWeights),
+    [data, coreWeights],
   )
 
   const liveScore = (item: KpiSubmissionItem) => {
@@ -189,8 +190,22 @@ export default function MonthlySubmission() {
     This is the figure the manager's own screen already shows them
     against, and it is the one a score query is really about.
   */
-  const selfTotal = jobTotal + esmsTotal
-  const selfWeight = jobWeight + esmsWeight
+  /*
+    On a KPI where the team member rates their own core values (0214), those are theirs too, so the
+    core values earned from their own ratings join their assessment, out of 100 (the user, 17 Oct).
+    Each value earns its rating's share of its own weight: Very Good on a 10% value is 8.
+  */
+  const earnedOf = (coreValueId: string, label: string | null | undefined) => {
+    const pts = ratingToPoints(label)
+    const w = coreWeights?.[coreValueId] ?? coreWeight / Math.max(1, sortedRatings.length)
+    return pts === null ? null : (pts * Number(w)) / 100
+  }
+  const selfCoreEarned = sortedRatings.map(r => earnedOf(r.core_value_id, selfOf(r).rating))
+  const selfCoreTotal = coreSelf && selfCoreEarned.some(e => e !== null)
+    ? Math.round(selfCoreEarned.reduce<number>((t, e) => t + (e ?? 0), 0) * 100) / 100
+    : null
+  const selfTotal = jobTotal + esmsTotal + (coreSelf ? selfCoreTotal ?? 0 : 0)
+  const selfWeight = jobWeight + esmsWeight + (coreSelf ? coreWeight : 0)
 
   // What each row could measure instead, keyed by the KPI row it came
   // from. Read off the assignment rather than the month, because the
@@ -444,9 +459,13 @@ export default function MonthlySubmission() {
           label="Core values"
           value={isScored
             ? coreTotal.toFixed(2)
+            : coreSelf && selfCoreTotal !== null
+            ? selfCoreTotal.toFixed(2)
             : <span className="text-2xl font-semibold text-ink-300">—</span>}
           sub={isScored
             ? `your manager's rating, out of ${coreWeight}`
+            : coreSelf
+            ? `your rating, out of ${coreWeight}`
             : 'Your manager rates these'}
         />
         {/* The bands this person fills in, and nothing else. It said "My
@@ -456,9 +475,7 @@ export default function MonthlySubmission() {
         <StatTile
           label={editable ? 'My assessment so far' : 'My assessment'}
           value={<ScorePill value={selfTotal} outOf={selfWeight} size="lg" />}
-          sub={hasEsms
-            ? `job role and ESMS, out of ${selfWeight}`
-            : `job role, out of ${selfWeight}`}
+          sub={`${[ 'job role', hasEsms && 'ESMS', coreSelf && 'core values'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}, out of ${selfWeight}`}
           tone="brand"
         />
       </div>
@@ -678,12 +695,27 @@ export default function MonthlySubmission() {
           <div className="flex items-center gap-3 text-xs text-ink-500">
             {isScored ? (
               <>
+                {/* Their own total beside the manager's, when they rate core values too (the user, 17 Oct). */}
+                {coreSelf && (
+                  <>
+                    <span>Mine</span>
+                    <ScorePill value={selfCoreTotal} outOf={coreWeight} size="sm" />
+                  </>
+                )}
                 <span>
                   Manager {coreRolled === null ? '—' : `${coreRolled.toFixed(0)}/100`}
                 </span>
                 <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
               </>
-            ) : (
+            ) : coreWeights ? (() => {
+              // The section's total from the team member's own ratings, as Job Role shows its own (the user, 17 Oct).
+              const earned = sortedRatings.map(r => {
+                const pts = ratingToPoints(selfOf(r).rating)
+                return pts === null ? null : (pts * Number(coreWeights[r.core_value_id] ?? 0)) / 100
+              })
+              const total = earned.some(e => e !== null) ? Math.round(earned.reduce<number>((t, e) => t + (e ?? 0), 0) * 100) / 100 : null
+              return <ScorePill value={total} outOf={coreWeight} size="sm" />
+            })() : (
               <span>Rated by your manager</span>
             )}
           </div>
@@ -691,7 +723,7 @@ export default function MonthlySubmission() {
 
         {/* Header row so the two assessments read as columns once scored. */}
         {/* One column, not two. There is no "my rating" any more. */}
-        {isScored && (
+        {isScored && !coreWeights && (
           <div className="hidden border-b border-ink-100 bg-ink-50/60 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-400 sm:flex sm:gap-4">
             <span className="flex-1">Core value</span>
             <span className="w-40 text-center">Manager's rating</span>
@@ -720,9 +752,86 @@ export default function MonthlySubmission() {
             return (
               <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-ink-900">{def?.name ?? 'Core value'}</p>
+                  <p className="font-medium text-ink-900">
+                    {def?.name ?? 'Core value'}
+                    {/* This core value's own weight, when the KPI splits them (the user, 17 Oct). */}
+                    {coreWeights?.[rating.core_value_id] != null && (
+                      <span className="badge ml-2 bg-ink-100 align-middle text-ink-900">{Number(coreWeights[rating.core_value_id])}%</span>
+                    )}
+                  </p>
                   {def?.description && (
                     <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
+                  )}
+                  {/*
+                    What the rating earns of the value's weight, as job role rows show it: Very Good on a
+                    10% value is 8 / 10. The manager's rating once scored, the team member's own before
+                    (the user, 17 Oct).
+                  */}
+                  {coreWeights?.[rating.core_value_id] != null && (() => {
+                    const w = Number(coreWeights[rating.core_value_id])
+                    const earned = (label: string | null | undefined) => {
+                      const pts = ratingToPoints(label)
+                      return pts === null ? null : Math.round(pts * w) / 100
+                    }
+                    const mine = isScored ? rating.self_rating : selfOf(rating).rating
+                    // Once scored, My score and Manager side by side, as job role rows show them (the user, 17 Oct).
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-x-8 gap-y-2">
+                        <div>
+                          <span className="label text-xs">My score</span>
+                          <ScorePill value={earned(mine)} outOf={w} />
+                          <span className="ml-1.5 text-xs text-ink-400">/ {w}</span>
+                          {isScored && <p className="mt-1 text-xs text-ink-500">{mine ?? 'Not rated'}</p>}
+                        </div>
+                        {isScored && (
+                          <div>
+                            <span className="label text-xs">Manager</span>
+                            <ScorePill value={earned(rating.manager_rating)} outOf={w} />
+                            <span className="ml-1.5 text-xs text-ink-400">/ {w}</span>
+                            {/* Raised or reduced against their own, green or red, as job role rows say it (the user, 17 Oct). */}
+                            {(() => {
+                              const a = earned(rating.self_rating), b = earned(rating.manager_rating)
+                              const diff = a !== null && b !== null ? Math.round((b - a) * 100) / 100 : 0
+                              return (
+                                <p className="mt-1 text-xs text-ink-500">
+                                  {diff !== 0 && (
+                                    <span className={clsx('mr-1.5 font-medium', diff < 0 ? 'text-cyrixRed-700' : 'text-emerald-700')}>
+                                      {diff < 0 ? '▼ Reduced' : '▲ Raised'} by {Math.abs(diff).toFixed(2)} ·
+                                    </span>
+                                  )}
+                                  {rating.manager_rating ?? 'Not rated'}
+                                </p>
+                              )
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  {/* Once scored, both sides of a self-rated value: the two ratings and the two comments. */}
+                  {isScored && coreSelf && (
+                    <div className="mt-2 space-y-1.5 text-sm">
+                      {!coreWeights && (
+                        <p>
+                          <span className="text-ink-500">You: </span>
+                          <span className="font-medium text-ink-900">{rating.self_rating ?? 'Not rated'}</span>
+                          <span className="text-ink-500"> · Manager: </span>
+                          <span className="font-medium text-ink-900">{rating.manager_rating ?? 'Not rated'}</span>
+                        </p>
+                      )}
+                      {rating.self_remarks && (
+                        <p className="rounded-lg bg-ink-50 px-3 py-2 text-ink-700">
+                          <span className="block text-xs text-ink-400">Your comment</span>
+                          {rating.self_remarks}
+                        </p>
+                      )}
+                      {rating.manager_remarks && (
+                        <p className="rounded-lg bg-violet-50 px-3 py-2 text-ink-700">
+                          <span className="block text-xs text-violet-700">Manager's comment</span>
+                          {rating.manager_remarks}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -757,7 +866,7 @@ export default function MonthlySubmission() {
                       <textarea rows={2} className={`input text-sm ${editable && v.rating && !v.remarks.trim() ? 'border-amber-400' : ''}`}
                         aria-label={`Your comment on ${def?.name ?? 'this core value'}`}
                         disabled={!editable} value={v.remarks} onChange={e => set({ remarks: e.target.value })}
-                        placeholder="Your comment (required)" />
+                        placeholder={`Briefly, what you did for ${def?.name ?? 'this core value'}`} />
                     </div>
                   )
                 })()}
@@ -782,7 +891,7 @@ export default function MonthlySubmission() {
                   the difference, which is the pair of facts the row is
                   actually reporting.
                 */}
-                {isScored && (
+                {isScored && !coreWeights && (
                   <div className="mt-2 sm:mt-0 sm:w-40">
                     <p className="mb-1 text-xs text-ink-400 sm:hidden">Manager's rating</p>
                     <div

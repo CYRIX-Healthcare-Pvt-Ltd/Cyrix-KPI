@@ -20,7 +20,7 @@ import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel } from '@/lib/fy'
 import { BANDS } from '@/lib/bands'
 import {
-  calcKpiScore, averageCoreValueRatings, ratingToPoints, RATING_SCALE,
+  calcKpiScore, weightedCoreValueRatings, ratingToPoints, RATING_SCALE,
   SCORE_CUT_POINTS, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
@@ -92,14 +92,18 @@ export default function ScoreSubmission() {
     and its comment on each row, and may add a comment of their own on any rating, not only the
     low ones. The manager's rating is what counts.
   */
-  const { data: coreSelf = false } = useQuery({
+  const { data: coreOpts } = useQuery({
     queryKey: ['core_self', data?.submission.assignment_id],
     enabled: !!data?.submission.assignment_id,
     queryFn: async () => {
-      const { data: a } = await supabase.from('kpi_assignments').select('core_self_rating').eq('id', data!.submission.assignment_id).maybeSingle()
-      return !!(a as { core_self_rating?: boolean } | null)?.core_self_rating
+      const { data: a } = await supabase.from('kpi_assignments').select('core_self_rating, core_value_weights').eq('id', data!.submission.assignment_id).maybeSingle()
+      const row = a as { core_self_rating?: boolean; core_value_weights?: Record<string, number> | null } | null
+      return { self: !!row?.core_self_rating, weights: row?.core_self_rating ? row.core_value_weights ?? null : null }
     },
   })
+  const coreSelf = coreOpts?.self ?? false
+  // Each core value's own weight, when the KPI splits them (the user, 17 Oct).
+  const coreWeights = coreOpts?.weights ?? null
   const [remarks, setRemarks] = useState('')
   const [cutReason, setCutReason] = useState('')
   /** Submit asks once first — the manager's figure is now the score. */
@@ -185,8 +189,8 @@ export default function ScoreSubmission() {
   }
 
   const coreAverage = useMemo(
-    () => averageCoreValueRatings((data?.ratings ?? []).map(r => ratings[r.id] || null)),
-    [ratings, data],
+    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => ({ core_value_id: r.core_value_id, label: ratings[r.id] || null })), coreWeights),
+    [ratings, data, coreWeights],
   )
 
   const mgrScore = (item: KpiSubmissionItem) => {
@@ -780,19 +784,42 @@ export default function ScoreSubmission() {
                 key={rating.id}
                 className={clsx(
                   'p-4 sm:flex sm:items-center sm:gap-4',
-                  needsRating && 'bg-amber-50/60',
                 )}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-ink-900">{def?.name}</p>
+                  <p className="font-medium text-ink-900">
+                    {def?.name}
+                    {coreWeights?.[rating.core_value_id] != null && (
+                      <span className="badge ml-2 bg-ink-100 align-middle text-ink-900">{Number(coreWeights[rating.core_value_id])}%</span>
+                    )}
+                  </p>
                   {def?.description && (
                     <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
                   )}
+                  {/* What the manager's rating earns of the value's weight: Very Good on 10% is 8 / 10 (the user, 17 Oct). */}
+                  {coreWeights?.[rating.core_value_id] != null && (() => {
+                    const w = Number(coreWeights[rating.core_value_id])
+                    const pts = ratingToPoints(ratings[rating.id] ?? null)
+                    return (
+                      <div className="mt-2">
+                        <span className="label text-xs">Score</span>
+                        <ScorePill value={pts === null ? null : Math.round(pts * w) / 100} outOf={w} />
+                        <span className="ml-1.5 text-xs text-ink-400">/ {w}</span>
+                      </div>
+                    )
+                  })()}
                   {rating.self_rating && (
                     <div className="mt-2 space-y-1">
-                      <span className="badge bg-sky-100 text-sky-800">
-                        {data?.employee.full_name.split(' ')[0]} rated: {rating.self_rating}
-                      </span>
+                      {/* As job role rows say it (the user, 17 Oct): "Kevin claimed", their rating and what it earns. */}
+                      <label className="label text-xs">{data?.employee.full_name.split(' ')[0] ?? 'They'} claimed</label>
+                      <p className="inline-block rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
+                        {rating.self_rating}
+                        {coreWeights?.[rating.core_value_id] != null && (() => {
+                          const pts = ratingToPoints(rating.self_rating)
+                          const w = Number(coreWeights[rating.core_value_id])
+                          return pts === null ? null : <span className="ml-2 text-xs text-ink-400">= {((pts * w) / 100).toFixed(2)}</span>
+                        })()}
+                      </p>
                       {rating.self_remarks && (
                         <p className="text-sm italic text-ink-600">“{rating.self_remarks}”</p>
                       )}
