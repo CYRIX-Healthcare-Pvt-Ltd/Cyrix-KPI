@@ -155,7 +155,7 @@ export default function DigestAdmin() {
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
-  const [notify, setNotify] = useState<Row | null>(null)
+  const [notify, setNotify] = useState<Pick<Row, 'id' | 'title'> | null>(null)
   /*
     A draft sent as a test to a few people first (0187; the user, 13 Oct: "they want to test the
     link, whether it is opening or not … select the participants entering name or ecode").
@@ -510,31 +510,28 @@ export default function DigestAdmin() {
               </label>
             </div>
           </div>
+          {/*
+            One button for a photo or a file (the user, 17 Oct): a picture becomes the post's photo,
+            anything else (PDF, Word, Excel...) is attached to open from the post.
+          */}
           <div>
-            <span className="label">Photo</span>
-            <div className="flex items-center gap-3">
+            <span className="label">Photo or file</span>
+            <div className="flex flex-wrap items-center gap-3">
               <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg" style={{ background: d.image_url ? `center/cover url(${d.image_url})` : grad(d.color) }} />
               <label className="btn-secondary cursor-pointer !px-3 !py-2 text-sm">
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                {d.image_url ? 'Change' : 'Add photo'}
-                <input type="file" accept="image/*" className="hidden" onChange={e => void pick(e.target.files?.[0])} />
+                {uploading || pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                Add file
+                <input type="file" accept={'image/*,' + Object.keys(FILE_TYPES).map(x => '.' + x).join(',')} className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f?.type.startsWith('image/')) void pick(f); else void pickPdf(f) }} />
               </label>
-              {d.image_url && <button type="button" onClick={() => set({ image_url: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>}
-            </div>
-          </div>
-          <div>
-            <span className="label">File</span>
-            <div className="flex items-center gap-3">
-              <label className="btn-secondary cursor-pointer !px-3 !py-2 text-sm">
-                {pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                {d.pdf_url ? 'Change' : 'Add file'}
-                <input type="file" accept={Object.keys(FILE_TYPES).map(x => '.' + x).join(',')} className="hidden" onChange={e => void pickPdf(e.target.files?.[0])} />
-              </label>
+              {d.image_url && <button type="button" onClick={() => set({ image_url: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove photo</button>}
               {d.pdf_url && (
-                <>
-                  <a href={d.pdf_url} target="_blank" rel="noreferrer" className="max-w-[12rem] truncate text-sm text-violet-700 hover:underline">{d.pdf_name ?? 'File'}</a>
+                <span className="inline-flex items-center gap-2">
+                  <a href={d.pdf_url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 truncate text-sm text-violet-700 hover:underline">
+                    <FileText className="h-4 w-4 shrink-0" /> {d.pdf_name ?? 'File'}
+                  </a>
                   <button type="button" onClick={() => set({ pdf_url: null, pdf_name: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>
-                </>
+                </span>
               )}
             </div>
           </div>
@@ -563,6 +560,11 @@ export default function DigestAdmin() {
         <button type="button" className="btn-secondary" disabled={!ready} onClick={() => setTesting(v => !v)}>
           <FlaskConical className="h-4 w-4" /> Send test
         </button>
+        {d.id && d.wasPublished && (
+          <button type="button" className="btn-secondary" onClick={() => setNotify({ id: d.id!, title: d.title })}>
+            <BellRing className="h-4 w-4 text-amber-500" /> Send notification
+          </button>
+        )}
         </div>
         {testing && (
           <div className="flex flex-wrap items-end gap-2 rounded-xl border border-ink-200 bg-ink-50/60 p-3">
@@ -664,7 +666,7 @@ export default function DigestAdmin() {
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
-                {r.can_edit && r.published_at && <button type="button" title="Send notification" className="btn-icon" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
+                {r.can_edit && r.published_at && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
                   onClick={() => { if (confirm(`Delete "${r.title}" from Cyrix Digest?`)) remove.mutate(r.id) }}><Trash2 className="h-4 w-4" /></button>}
               </div>
@@ -682,7 +684,7 @@ export default function DigestAdmin() {
   A push notification for a post already out (the user, 17 Oct): the post's heading as it is, and
   an optional second line of the desk's own. Sent to everybody's devices.
 */
-function NotifyDialog({ row, onClose }: { row: Row; onClose: () => void }) {
+function NotifyDialog({ row, onClose }: { row: Pick<Row, 'id' | 'title'>; onClose: () => void }) {
   const [sub, setSub] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
@@ -697,7 +699,7 @@ function NotifyDialog({ row, onClose }: { row: Row; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div className="card w-full max-w-md space-y-4 p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="flex items-center gap-2 text-base font-semibold text-ink-900"><BellRing className="h-4 w-4" /> Send notification</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink-900"><BellRing className="h-4 w-4 text-amber-500" /> Send notification</h3>
         <div>
           <span className="label">Heading</span>
           <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-800">{row.title}</p>
