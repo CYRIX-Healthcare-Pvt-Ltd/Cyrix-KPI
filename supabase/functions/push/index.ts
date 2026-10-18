@@ -113,6 +113,29 @@ const joinWords = (m: { id: string; title: string; meet_at: string; meet_place: 
   url: '/?post=' + m.id, tag: 'digest-' + m.id,
 })
 
+/*
+  Travel Expense (te_0027): a claim's messages — sent back, an amount changed — already in the bell of
+  the people they are for, to their phones and computers, opening the claim. Each is taken once, by
+  whoever marks it first: the app right after the step, or the 5-minute round if that missed it.
+*/
+async function sendTravel(db: ReturnType<typeof admin>, by?: string): Promise<Tally> {
+  const total: Tally = { people: 0, devices: 0, delivered: 0, failed: 0 }
+  let q = db.from('push_messages').select('id, title, body, url').eq('kind', 'travel').is('devices', null)
+    .gt('created_at', new Date(Date.now() - 86_400_000).toISOString()).order('created_at').limit(200)
+  if (by) q = q.eq('sent_by', by)
+  const { data } = await q
+  for (const m of (data ?? []) as Array<{ id: string; title: string; body: string; url: string }>) {
+    const { data: took } = await db.from('push_messages').update({ devices: 0 }).eq('id', m.id).is('devices', null).select('id')
+    if (!took?.length) continue
+    const { data: to } = await db.from('push_inbox').select('employee_id').eq('message_id', m.id)
+    const ids = ((to ?? []) as Array<{ employee_id: string }>).map(x => x.employee_id)
+    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: 'travel-' + m.id })
+    await db.from('push_messages').update(t).eq('id', m.id)
+    total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
+  }
+  return total
+}
+
 async function deliver(db: ReturnType<typeof admin>, ids: string[], p: Payload): Promise<Tally> {
   const tally: Tally = { people: ids.length, devices: 0, delivered: 0, failed: 0 }
   const subs: Array<{ id: string; endpoint: string; p256dh: string; auth: string }> = []
@@ -209,6 +232,8 @@ Deno.serve(async req => {
         const t = await deliverNamed(db, joinWords(m))
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
+      const travel = await sendTravel(db)
+      total.people += travel.people; total.devices += travel.devices; total.delivered += travel.delivered; total.failed += travel.failed
       return json(total)
     }
 
@@ -254,6 +279,17 @@ Deno.serve(async req => {
       out[side] = t
     }
     return json(out)
+  }
+
+  // ---- Travel Expense (te_0027): the messages this person's step just made ----
+  if (input.action === 'travel') {
+    const auth = req.headers.get('Authorization') ?? ''
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: auth } },
+    })
+    const { data: me } = await user.rpc('current_employee_id')
+    if (!me) return json({ error: 'Not allowed' }, 403)
+    return json(await sendTravel(db, me as string))
   }
 
   // ---- a draft sent as a test (0187): only to the people it was sent to, on their devices ----
