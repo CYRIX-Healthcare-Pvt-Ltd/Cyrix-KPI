@@ -33,6 +33,7 @@ import EditEmployee from '@/components/EditEmployee'
 import { useAuth } from '@/contexts/AuthContext'
 import KpiTiming from './KpiTiming'
 import BulkKpi from './BulkKpi'
+import KpiReport from './KpiReport'
 import KpiEdit from './KpiEdit'
 
 interface LoginStatusRow {
@@ -1120,16 +1121,18 @@ export function BulkAssign<T>({
  * not come for.
  */
 function KpiTab() {
-  const [view, setView] = useState<'timing' | 'bulk' | 'edit'>('timing')
+  const [view, setView] = useState<'timing' | 'bulk' | 'edit' | 'report'>('timing')
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-1 rounded-lg bg-ink-100 p-1 sm:w-fit">
+      <div className="flex gap-1 overflow-x-auto rounded-lg bg-ink-100 p-1 sm:w-fit">
         {([
           { key: 'timing' as const, label: 'Timing' },
           { key: 'bulk' as const, label: 'Bulk assign' },
           // One person's KPI, found by E-code (the user, 8 Oct).
           { key: 'edit' as const, label: 'Edit a KPI' },
+          // The KPI report, as HR has it under Reports (the user, 19 Oct; 0216 lets SW Admin read every KPI).
+          { key: 'report' as const, label: 'KPI report' },
         ]).map(t => (
           <button
             key={t.key}
@@ -1145,7 +1148,7 @@ function KpiTab() {
         ))}
       </div>
 
-      {view === 'timing' ? <KpiTiming /> : view === 'bulk' ? <BulkKpi /> : <KpiEdit />}
+      {view === 'timing' ? <KpiTiming /> : view === 'bulk' ? <BulkKpi /> : view === 'edit' ? <KpiEdit /> : <KpiReport />}
     </div>
   )
 }
