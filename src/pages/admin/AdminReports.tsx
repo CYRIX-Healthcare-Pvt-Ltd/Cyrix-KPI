@@ -139,9 +139,9 @@ export default function AdminReports() {
           <div>
             <h3 className="font-semibold text-ink-900">Month-by-month score export</h3>
             <p className="mt-1 text-sm text-ink-500">
-              One row per employee: code, name, designation and department, then a merged
-              block per month showing Job Role %, Core Value % and Total, with the yearly
-              average at the end. Unscored months are left blank rather than counted as zero.
+              One row per employee, then a block per month: Job Role %, Job Role Actual (no cap),
+              Core Value %, Total and Total Actual. Each quarter's average follows its last month,
+              and the annual average comes at the end. Unscored months are left blank, not zero.
             </p>
           </div>
 
