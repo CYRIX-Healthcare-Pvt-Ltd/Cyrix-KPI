@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import clsx from 'clsx'
-import { Plus, Save, Search } from 'lucide-react'
+import { Plus, RotateCcw, Save, Search } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { useScoringRules, useCoreValues, type TemplateReach } from '@/lib/queries'
 import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
+import { monthLabel } from '@/lib/fy'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import ReachChoice, { ReachConfirm } from '@/components/ReachChoice'
 import { Alert, Spinner } from '@/components/ui'
@@ -16,6 +17,8 @@ interface Found {
   assignment: { id: string; status: string; job_role_weight: number | string | null; esms: boolean; template: string | null } | null
   items: KpiTemplateItem[]
   months: Record<string, number>
+  /** Each month of the KPI, for moving one or all back to draft (0217). */
+  month_list?: Array<{ month: string; status: string; last_day_passed: boolean }>
 }
 
 const MONTH_WORD: Record<string, string> = {
@@ -65,6 +68,12 @@ export default function KpiEdit() {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /*
+    Back to draft (0217; the user, 19 Oct: "draft, select month or full month … emp before submitting
+    stage"): their own figures stay, the manager's scores for those months go.
+  */
+  const [mode, setMode] = useState<'edit' | 'draft'>('edit')
+  const [picked, setPicked] = useState<string[]>([])
 
   const load = async (ecode: string) => {
     const { data, error: err } = await supabase.rpc('admin_kpi_for', { p_ecode: ecode })
@@ -73,6 +82,7 @@ export default function KpiEdit() {
     setFound(f)
     setRows(f.items.map(fromItem))
     setEsms(!!f.assignment?.esms)
+    setPicked([])
     if (f.assignment) {
       const { data: a } = await supabase.from('kpi_assignments')
         .select('core_self_rating, core_value_weights, core_values_weight').eq('id', f.assignment.id).maybeSingle()
@@ -134,6 +144,29 @@ export default function KpiEdit() {
 
   const monthLine = found && Object.entries(found.months).map(([s, n]) => `${n} ${MONTH_WORD[s] ?? s}`).join(' · ')
 
+  // A month already a draft, or past its last day to submit, cannot be chosen.
+  const movable = (found?.month_list ?? []).filter(m => m.status !== 'draft' && !m.last_day_passed).map(m => m.month)
+  const allPicked = movable.length > 0 && movable.every(m => picked.includes(m))
+  const toDraft = async () => {
+    if (!found?.assignment || picked.length === 0) return
+    const names = picked.slice().sort().map(monthLabel).join(', ')
+    if (!confirm(`Move ${names} of ${found.employee.full_name} back to draft? Their own figures stay; the manager's scores for ${picked.length === 1 ? 'this month' : 'these months'} are cleared.`)) return
+    setError(null); setNotice(null); setBusy(true)
+    try {
+      const { data, error: err } = await supabase.rpc('admin_kpi_to_draft', {
+        p_assignment_id: found.assignment.id, p_months: allPicked ? null : picked,
+      })
+      if (err) throw new Error(friendlyError(err))
+      const list = ((data as { list?: string[] }).list ?? []).join(', ')
+      await load(found.employee.ecode)
+      setNotice(`${list || names} of ${found.employee.full_name} moved back to draft.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not move that month back to draft.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <form onSubmit={find} className="flex flex-wrap items-end gap-2">
@@ -165,6 +198,52 @@ export default function KpiEdit() {
       )}
 
       {found?.assignment && (
+        <div className="flex w-fit gap-1 rounded-lg bg-ink-100 p-1">
+          {([['edit', 'Edit KPI'], ['draft', 'Back to draft']] as const).map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setMode(k)} aria-current={mode === k ? 'page' : undefined}
+              className={clsx('whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                mode === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {found?.assignment && mode === 'draft' && (
+        <div className="card space-y-3 p-4">
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={movable.length === 0} onClick={() => setPicked(allPicked ? [] : movable)}
+              className={clsx('rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40',
+                allPicked ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-ink-200 text-ink-900 hover:bg-ink-50')}>
+              All months
+            </button>
+            {(found.month_list ?? []).map(m => {
+              const can = movable.includes(m.month), on = picked.includes(m.month)
+              return (
+                <button key={m.month} type="button" disabled={!can} aria-pressed={on}
+                  title={m.last_day_passed && m.status !== 'draft' ? 'The last day to submit has passed' : undefined}
+                  onClick={() => setPicked(on ? picked.filter(x => x !== m.month) : [...picked, m.month])}
+                  className={clsx('rounded-lg border px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50',
+                    on ? 'border-violet-500 bg-violet-50' : 'border-ink-200 hover:bg-ink-50')}>
+                  <span className="block text-sm font-semibold text-ink-900">{monthLabel(m.month)}</span>
+                  <span className="block text-xs text-ink-500">{m.last_day_passed && m.status !== 'draft' ? 'last day passed' : MONTH_WORD[m.status] ?? m.status}</span>
+                </button>
+              )
+            })}
+          </div>
+          {(found.month_list ?? []).length === 0 && <p className="text-sm text-ink-500">No months yet.</p>}
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => void toDraft()} disabled={busy || picked.length === 0} className="btn-primary">
+              {busy ? <Spinner className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />} Move to draft
+            </button>
+            <button onClick={() => { setFound(null); setRows([]); setCode(''); setError(null); setNotice(null) }} disabled={busy} className="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {found?.assignment && mode === 'edit' && (
         <>
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
