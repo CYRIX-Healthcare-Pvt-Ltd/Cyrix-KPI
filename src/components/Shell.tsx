@@ -277,7 +277,7 @@ export default function Shell() {
             is a seventh of the logo's height, so a bar that fits only a
             24px mark can only ever render it as a smudge — the height is
             what buys the second line, not the crop. */}
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:h-16">
+        <div className="flex h-14 items-center gap-3 px-4 sm:h-16">
           <button
             className="btn-icon lg:hidden"
             onClick={() => setMenuOpen(v => !v)}
