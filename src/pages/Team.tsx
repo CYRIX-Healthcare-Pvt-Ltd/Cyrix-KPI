@@ -265,14 +265,18 @@ export default function Team() {
    * already here, so this costs one pass over rows the page has.
    */
   const teamAvgById = useMemo(() => teamAverages(subtree ?? []), [subtree])
-  /** Everyone below who has a team of their own — with this manager, the third file (the user, 22 Oct). */
-  const managersBelow = useMemo(() => (subtree ?? []).filter(r => r.direct_reports > 0), [subtree])
+  /**
+   * This manager's direct reports and every manager in the line below — someone with a team of their own, or
+   * whose designation says Manager though nobody reports to them in KPI (the user, 22 Oct: E165, a Project
+   * Technical Manager under Mohandas, was missing; "merge it, my direct reports + all managers is enough").
+   */
+  const teamAndManagers = useMemo(() => (subtree ?? []).filter(r => r.depth === 1 || r.direct_reports > 0 || /manager/i.test(r.designation ?? '')), [subtree])
 
   /**
-   * The file, for one of three audiences.
+   * The file, for one of two audiences once the line goes deeper than one rung.
    *
-   * 'managers' is this manager and every manager in the line below (the user, 22 Oct: "all managers under
-   * Mohandas and himself"): the whole line's figures, kept to those who manage people, with their own.
+   * 'managers' is this manager, their direct reports and every manager in the line below (the user, 22 Oct:
+   * "all managers under Mohandas and himself"): the whole line's figures, kept to those, with their own.
    *
    * 'direct' is built from what this page already holds. 'deep' cannot
    * be: the row policy on submissions is a single hop, so reading the
@@ -288,9 +292,9 @@ export default function Team() {
         if (scope === 'managers') {
           people = [
             ...(employee ? [employee] : []),
-            ...managersBelow.filter(r => r.employee_id !== employee?.id).map(r => ({ id: r.employee_id, ecode: r.ecode, full_name: r.full_name } as Employee)),
+            ...teamAndManagers.filter(r => r.employee_id !== employee?.id).map(r => ({ id: r.employee_id, ecode: r.ecode, full_name: r.full_name } as Employee)),
           ]
-          await exportReporteesZip(people, fy, `Cyra-KPI-managers-${fy}.zip`)
+          await exportReporteesZip(people, fy, `Cyra-KPI-team-and-managers-${fy}.zip`)
           return
         }
         if (scope === 'deep') {
@@ -345,7 +349,7 @@ export default function Team() {
           if (raw.period_month) entry.submissions.push(raw as unknown as KpiSubmission)
         }
         if (scope === 'managers') {
-          const keep = new Set(managersBelow.map(r => r.employee_id))
+          const keep = new Set(teamAndManagers.map(r => r.employee_id))
           const rows = [...grouped.values()].filter(x => keep.has(x.employee.id) && x.employee.id !== employee?.id)
           // This manager's own months first: their own row is theirs to read.
           if (employee) {
@@ -353,7 +357,7 @@ export default function Team() {
             if (mineError) throw new Error(mineError.message)
             rows.unshift({ employee, submissions: (mine ?? []) as KpiSubmission[] })
           }
-          await exportKpiScores(rows, fy, `Cyrix-KPI-managers-${fy}.xlsx`)
+          await exportKpiScores(rows, fy, `Cyrix-KPI-team-and-managers-${fy}.xlsx`)
           return
         }
         await exportKpiScores([...grouped.values()], fy, `Cyrix-KPI-whole-team-${fy}.xlsx`)
@@ -902,28 +906,15 @@ export default function Team() {
             </div>
 
             <button
-              onClick={() => download('direct')}
-              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-ink-400 hover:bg-ink-50"
-            >
-              <p className="font-medium text-ink-900">
-                My direct reports
-                <span className="ml-2 tabular-nums text-ink-500">{team.length}</span>
-              </p>
-              <p className="mt-0.5 text-xs text-ink-500">
-                The {team.length} people on this screen.
-              </p>
-            </button>
-
-            <button
               onClick={() => download('managers')}
               className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-ink-400 hover:bg-ink-50"
             >
               <p className="font-medium text-ink-900">
-                All managers
-                <span className="ml-2 tabular-nums text-ink-500">{managersBelow.filter(r => r.employee_id !== employee?.id).length + 1}</span>
+                My team and all managers
+                <span className="ml-2 tabular-nums text-ink-500">{teamAndManagers.filter(r => r.employee_id !== employee?.id).length + 1}</span>
               </p>
               <p className="mt-0.5 text-xs text-ink-500">
-                You and every manager under you.
+                You, your {team.length} direct reports and every manager under you.
               </p>
             </button>
 
