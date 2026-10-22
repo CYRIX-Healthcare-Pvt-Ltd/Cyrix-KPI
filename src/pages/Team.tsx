@@ -265,9 +265,14 @@ export default function Team() {
    * already here, so this costs one pass over rows the page has.
    */
   const teamAvgById = useMemo(() => teamAverages(subtree ?? []), [subtree])
+  /** Everyone below who has a team of their own — with this manager, the third file (the user, 22 Oct). */
+  const managersBelow = useMemo(() => (subtree ?? []).filter(r => r.direct_reports > 0), [subtree])
 
   /**
-   * The file, for one of two audiences.
+   * The file, for one of three audiences.
+   *
+   * 'managers' is this manager and every manager in the line below (the user, 22 Oct: "all managers under
+   * Mohandas and himself"): the whole line's figures, kept to those who manage people, with their own.
    *
    * 'direct' is built from what this page already holds. 'deep' cannot
    * be: the row policy on submissions is a single hop, so reading the
@@ -275,11 +280,19 @@ export default function Team() {
    * refused. That one goes through the function that checks ancestry and
    * returns the whole line (migration 0083).
    */
-  const download = async (scope: 'direct' | 'deep', kind: 'summary' | 'zip' = exportKind) => {
+  const download = async (scope: 'direct' | 'deep' | 'managers', kind: 'summary' | 'zip' = exportKind) => {
     setBusy(true); setError(null); setAskScope(false)
     try {
       if (kind === 'zip') {
         let people: Employee[] = team
+        if (scope === 'managers') {
+          people = [
+            ...(employee ? [employee] : []),
+            ...managersBelow.filter(r => r.employee_id !== employee?.id).map(r => ({ id: r.employee_id, ecode: r.ecode, full_name: r.full_name } as Employee)),
+          ]
+          await exportReporteesZip(people, fy, `Cyra-KPI-managers-${fy}.zip`)
+          return
+        }
         if (scope === 'deep') {
           const { data, error: rpcError } = await supabase.rpc('team_subtree_scores', { p_fy: fy, p_root: null, p_deep: true })
           if (rpcError) throw new Error(rpcError.message)
@@ -330,6 +343,18 @@ export default function Team() {
           // null month — they belong in the file as an empty row rather
           // than being left out of their own division's export.
           if (raw.period_month) entry.submissions.push(raw as unknown as KpiSubmission)
+        }
+        if (scope === 'managers') {
+          const keep = new Set(managersBelow.map(r => r.employee_id))
+          const rows = [...grouped.values()].filter(x => keep.has(x.employee.id) && x.employee.id !== employee?.id)
+          // This manager's own months first: their own row is theirs to read.
+          if (employee) {
+            const { data: mine, error: mineError } = await supabase.from('kpi_submissions').select('*').eq('employee_id', employee.id).eq('financial_year', fy)
+            if (mineError) throw new Error(mineError.message)
+            rows.unshift({ employee, submissions: (mine ?? []) as KpiSubmission[] })
+          }
+          await exportKpiScores(rows, fy, `Cyrix-KPI-managers-${fy}.xlsx`)
+          return
         }
         await exportKpiScores([...grouped.values()], fy, `Cyrix-KPI-whole-team-${fy}.xlsx`)
       }
@@ -886,6 +911,19 @@ export default function Team() {
               </p>
               <p className="mt-0.5 text-xs text-ink-500">
                 The {team.length} people on this screen.
+              </p>
+            </button>
+
+            <button
+              onClick={() => download('managers')}
+              className="w-full rounded-xl border border-ink-200 p-4 text-left hover:border-ink-400 hover:bg-ink-50"
+            >
+              <p className="font-medium text-ink-900">
+                All managers
+                <span className="ml-2 tabular-nums text-ink-500">{managersBelow.filter(r => r.employee_id !== employee?.id).length + 1}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink-500">
+                You and every manager under you.
               </p>
             </button>
 

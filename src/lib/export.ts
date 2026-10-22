@@ -14,7 +14,8 @@ import { openFyMonths, monthLabel } from './fy'
  * "like we did in the team member wise report"). Actual is each job-role KPI's achievement times its
  * weightage with no cap — 200 against a target of 100 on a 40% row is 80, beside the score that stops
  * at 40 — added up; Total Actual is that plus ESMS's actual and the core values. After each quarter's
- * last month its average, and the year's at the end.
+ * last month its average, and the year's at the end. Beside Job Role Actual, Job Role Achievement %:
+ * that actual out of the 80 Job Role is marked on (the user, 22 Oct: "job role ach % out of 80, ie actual / 80").
  *
  * Averages are over scored months only — averaging in an unscored month as zero would quietly drag
  * everyone down. An ESMS column joins each block only when somebody in this export carries ESMS.
@@ -28,6 +29,9 @@ export interface ExportRow {
 }
 
 const SCORED = new Set(['scored', 'finalized'])
+/** What Job Role is marked out of: the 80 of the 80 / 20 split with Core Values. */
+const JOB_ROLE_OUT_OF = 80
+const ACH = 'Job Role Achievement %'
 type Item = Pick<KpiSubmissionItem, 'submission_id' | 'section' | 'weightage' | 'scoring_rule' | 'target_value'
   | 'manager_achieved' | 'self_achieved' | 'final_score' | 'manager_score' | 'self_score'>
 
@@ -77,10 +81,11 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
 
   const withEsms = rows.some(r => r.submissions.some(s => s.final_esms_score !== null || s.self_esms_score !== null))
   const subHead = withEsms
-    ? ['Job Role %', 'Job Role Actual', 'ESMS %', 'Core Value %', 'Total', 'Total Actual']
-    : ['Job Role %', 'Job Role Actual', 'Core Value %', 'Total', 'Total Actual']
+    ? ['Job Role %', 'Job Role Actual', ACH, 'ESMS %', 'Core Value %', 'Total', 'Total Actual']
+    : ['Job Role %', 'Job Role Actual', ACH, 'Core Value %', 'Total', 'Total Actual']
   const W = subHead.length
   const isActual = (k: number) => subHead[k].endsWith('Actual')
+  const isAch = (k: number) => subHead[k] === ACH
 
   // Each scored month's actual job role and ESMS, from its KPI rows.
   const scored = rows.flatMap(r => r.submissions.filter(s => SCORED.has(s.status)))
@@ -109,14 +114,16 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
       const jobActual = a?.hasJob ? a.job : job
       const esmsActual = a?.hasEsms ? a.esms : es
       const totalActual = jobActual === null && total === null ? null : (jobActual ?? 0) + (esmsActual ?? 0) + (core ?? 0)
-      perMonth.set(m, withEsms ? [job, jobActual, es, core, total, totalActual] : [job, jobActual, core, total, totalActual])
+      const ach = jobActual === null ? null : jobActual / JOB_ROLE_OUT_OF
+      perMonth.set(m, withEsms ? [job, jobActual, ach, es, core, total, totalActual] : [job, jobActual, ach, core, total, totalActual])
     }
     const mean = (ms: string[]) => Array.from({ length: W }, (_, k) => {
       const v = ms.map(m => perMonth.get(m)![k]).filter((x): x is number => x !== null && x !== undefined)
       return v.length ? v.reduce((t, x) => t + x, 0) / v.length : null
     })
     const cells = blocks.flatMap(b => b.kind === 'month' ? perMonth.get(b.month)! : b.kind === 'quarter' ? mean(b.months) : mean(months))
-    return [employee.ecode, employee.full_name, employee.designation ?? '', employee.department ?? '', ...cells.map(num)]
+    // The achievement is a share, kept to four places so 0.988 shows as 99% rather than rounding first.
+    return [employee.ecode, employee.full_name, employee.designation ?? '', employee.department ?? '', ...cells.map((v, i) => (isAch(i % W) ? share(v) : num(v)))]
   })
 
   // ---- the sheet ----
@@ -152,7 +159,7 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
     top.alignment = { horizontal: 'center', vertical: 'middle' }
     top.border = grid
     if (at) {
-      sub.fill = fill(isActual(at.k) ? look[at.b].headActual : look[at.b].head)
+      sub.fill = fill(isAch(at.k) ? 'FFFDE68A' : isActual(at.k) ? look[at.b].headActual : look[at.b].head)
       sub.font = { bold: true, color: { argb: look[at.b].ink } }
       sub.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
     }
@@ -168,11 +175,11 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
       cell.alignment = { vertical: 'middle', horizontal: c <= 4 ? 'left' : 'center' }
       if (at && look[at.b].cell) { cell.fill = fill(look[at.b].cell!); cell.font = { bold: true } }
       else if (i % 2) cell.fill = fill('FFF8FAFC')
-      if (at && typeof cell.value === 'number') cell.numFmt = '0.00'
+      if (at && typeof cell.value === 'number') cell.numFmt = isAch(at.k) ? '0%' : '0.00'
     })
   })
   ws.eachRow({ includeEmpty: true }, r => r.eachCell({ includeEmpty: true }, cell => { cell.font = { ...cell.font, name: 'Calibri', size: 10 } }))
-  ws.columns = [{ width: 10 }, { width: 26 }, { width: 22 }, { width: 16 }, ...blocks.flatMap(() => subHead.map(h => ({ width: h.endsWith('Actual') ? 12 : 11 })))]
+  ws.columns = [{ width: 10 }, { width: 26 }, { width: 22 }, { width: 16 }, ...blocks.flatMap(() => subHead.map(h => ({ width: h === ACH ? 13 : h.endsWith('Actual') ? 12 : 11 })))]
 
   const buf = await wb.xlsx.writeBuffer()
   const a = document.createElement('a')
@@ -185,6 +192,8 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
 /** Blank cells rather than zeros, so an unscored month reads as unscored. */
 const num = (v: number | null | undefined) =>
   v === null || v === undefined ? null : Math.round(v * 100) / 100
+const share = (v: number | null | undefined) =>
+  v === null || v === undefined ? null : Math.round(v * 10000) / 10000
 
 /**
  * Flat export of the whole organisation's KPI status, for HR.
