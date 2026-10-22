@@ -1,6 +1,7 @@
-import type { CoreValueDefinition, CoreValueRating, Employee, KpiAssignment, KpiSubmission, KpiSubmissionItem } from '@/types/db'
+import type { CoreValueDefinition, Employee, KpiSubmission, KpiSubmissionItem } from '@/types/db'
 import { supabase } from './supabase'
 import { ratingToPoints } from './scoring'
+import { exportData } from './export'
 import { monthLabel } from './fy'
 
 /*
@@ -14,32 +15,16 @@ const SECTION = { job_role: 'Job role', esms: 'ESMS', core_values: 'Core values'
 const key = (i: KpiRowDefinitionLike) => `${i.section}|${i.kra.trim().toLowerCase()}|${(i.kpi_description ?? '').trim().toLowerCase()}`
 type KpiRowDefinitionLike = Pick<KpiSubmissionItem, 'section' | 'kra' | 'kpi_description'>
 
-async function inChunks<T>(ids: string[], fetch: (part: string[], from: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) {
-  const out: T[] = []
-  for (let i = 0; i < ids.length; i += 100) {
-    const part = ids.slice(i, i + 100)
-    // Paged past PostgREST's 1,000-row cap.
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await fetch(part, from)
-      if (error) throw new Error(error.message)
-      out.push(...(data ?? []))
-      if ((data ?? []).length < 1000) break
-    }
-  }
-  return out
-}
-
 const r2 = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.round(v * 100) / 100)
 
 export async function exportReporteesZip(people: Employee[], fy: string, filename: string) {
   // ExcelJS, not SheetJS: the community SheetJS writes no colours or borders (the user, 14 Oct: "good format").
   const [{ default: ExcelJS }, { zipSync }] = await Promise.all([import('exceljs'), import('fflate')])
-  const subs = await inChunks<KpiSubmission>(people.map(p => p.id), (part, from) =>
-    supabase.from('kpi_submissions').select('*').in('employee_id', part).eq('financial_year', fy)
-      .order('period_month').range(from, from + 999))
-  const items = await inChunks<KpiSubmissionItem>(subs.map(s => s.id), (part, from) =>
-    supabase.from('kpi_submission_items').select('*').in('submission_id', part)
-      .order('sort_order').range(from, from + 999))
+  // Through kpi_export_data (0218), which reaches the whole line: a table read stops at direct reports and
+  // left everyone further down with an empty workbook (the user, 22 Oct).
+  const data = await exportData(people.map(p => p.id), fy)
+  const subs = data.submissions
+  const items = data.items
 
   const itemsBySub = new Map<string, KpiSubmissionItem[]>()
   for (const it of items) itemsBySub.set(it.submission_id, [...(itemsBySub.get(it.submission_id) ?? []), it])
@@ -50,15 +35,13 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
     score that rating earns of the weight. The manager's rating once scored, the team member's before.
   */
   const assignmentIds = [...new Set(subs.map(s => s.assignment_id))]
-  const splits = await inChunks<Pick<KpiAssignment, 'id' | 'core_self_rating' | 'core_value_weights'>>(assignmentIds, (part, from) =>
-    supabase.from('kpi_assignments').select('id, core_self_rating, core_value_weights').in('id', part).range(from, from + 999))
+  const splits = data.assignments.filter(a => assignmentIds.includes(a.id))
   const weightsOf = new Map(splits.filter(a => a.core_self_rating && a.core_value_weights).map(a => [a.id, a.core_value_weights!]))
   const splitSubs = subs.filter(s => weightsOf.has(s.assignment_id))
   if (splitSubs.length) {
     const { data: defs, error: defError } = await supabase.from('core_value_definitions').select('*').eq('is_active', true).order('sort_order')
     if (defError) throw new Error(defError.message)
-    const ratings = await inChunks<CoreValueRating>(splitSubs.map(s => s.id), (part, from) =>
-      supabase.from('core_value_ratings').select('*').in('submission_id', part).range(from, from + 999))
+    const ratings = data.ratings
     for (const s of splitSubs) {
       const weights = weightsOf.get(s.assignment_id)!
       const own = itemsBySub.get(s.id) ?? []

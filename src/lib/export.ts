@@ -1,4 +1,4 @@
-import type { Employee, KpiSubmission, KpiSubmissionItem } from '@/types/db'
+import type { CoreValueRating, Employee, KpiAssignment, KpiSubmission, KpiSubmissionItem } from '@/types/db'
 import { supabase } from './supabase'
 import { openFyMonths, monthLabel } from './fy'
 
@@ -46,19 +46,24 @@ function actualOf(it: Item): number | null {
   return (pct * Number(it.weightage)) / 100
 }
 
-/** The scored months' KPI rows, a hundred months at a time and paged past the 1,000-row cap. */
-async function itemsOf(subIds: string[]): Promise<Item[]> {
-  const out: Item[] = []
-  for (let i = 0; i < subIds.length; i += 100) {
-    const part = subIds.slice(i, i + 100)
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase.from('kpi_submission_items')
-        .select('submission_id, section, weightage, scoring_rule, target_value, manager_achieved, self_achieved, final_score, manager_score, self_score')
-        .in('submission_id', part).order('submission_id').order('sort_order').range(from, from + 999)
-      if (error) throw new Error(error.message)
-      out.push(...((data ?? []) as Item[]))
-      if ((data ?? []).length < 1000) break
-    }
+export interface ExportData {
+  submissions: KpiSubmission[]
+  items: KpiSubmissionItem[]
+  assignments: Array<Pick<KpiAssignment, 'id' | 'core_self_rating' | 'core_value_weights'>>
+  ratings: CoreValueRating[]
+}
+/**
+ * The year's submissions, KPI rows, core value weights and ratings of these people, through kpi_export_data
+ * (0218): it reaches the whole line below the caller, where a table read stops at their direct reports. Forty
+ * people a call, so one answer stays a few megabytes even for a division.
+ */
+export async function exportData(people: string[], fy: string): Promise<ExportData> {
+  const out: ExportData = { submissions: [], items: [], assignments: [], ratings: [] }
+  for (let i = 0; i < people.length; i += 40) {
+    const { data, error } = await supabase.rpc('kpi_export_data', { p_people: people.slice(i, i + 40), p_fy: fy })
+    if (error) throw new Error(error.message)
+    const d = data as ExportData
+    out.submissions.push(...d.submissions); out.items.push(...d.items); out.assignments.push(...d.assignments); out.ratings.push(...d.ratings)
   }
   return out
 }
@@ -87,16 +92,19 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
   const isActual = (k: number) => subHead[k].endsWith('Actual')
   const isAch = (k: number) => subHead[k] === ACH
 
-  // Each scored month's actual job role and ESMS, from its KPI rows.
-  const scored = rows.flatMap(r => r.submissions.filter(s => SCORED.has(s.status)))
-  const items = await itemsOf(scored.map(s => s.id))
+  // Each month's actual job role and ESMS, from its KPI rows, by person and month: the whole-line scores
+  // the page passes in carry no submission id (0218).
+  const data = await exportData(rows.map(r => r.employee.id), fy)
+  const monthOf = new Map(data.submissions.map(s => [s.id, `${s.employee_id}|${s.period_month}`]))
   const actual = new Map<string, { job: number; esms: number; hasJob: boolean; hasEsms: boolean }>()
-  for (const it of items) {
+  for (const it of data.items as Item[]) {
     if (it.section !== 'job_role' && it.section !== 'esms') continue
-    const a = actual.get(it.submission_id) ?? { job: 0, esms: 0, hasJob: false, hasEsms: false }
+    const at = monthOf.get(it.submission_id)
+    if (!at) continue
+    const a = actual.get(at) ?? { job: 0, esms: 0, hasJob: false, hasEsms: false }
     const v = actualOf(it) ?? 0
     if (it.section === 'job_role') { a.job += v; a.hasJob = true } else { a.esms += v; a.hasEsms = true }
-    actual.set(it.submission_id, a)
+    actual.set(at, a)
   }
 
   // ---- the figures: one line of numbers per person, a block per month, quarter and year ----
@@ -110,7 +118,7 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
       const es = s.final_esms_score ?? s.self_esms_score
       const core = s.final_core_score ?? s.self_core_score
       const total = s.final_total_score ?? s.self_total_score
-      const a = actual.get(s.id)
+      const a = actual.get(`${employee.id}|${m}`)
       const jobActual = a?.hasJob ? a.job : job
       const esmsActual = a?.hasEsms ? a.esms : es
       const totalActual = jobActual === null && total === null ? null : (jobActual ?? 0) + (esmsActual ?? 0) + (core ?? 0)
