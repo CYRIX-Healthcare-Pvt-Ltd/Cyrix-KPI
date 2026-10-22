@@ -353,6 +353,8 @@ function LoginsTab() {
               filtered.map(r => ({
                 Ecode: r.ecode, Name: r.full_name,
                 Designation: r.designation ?? '', Department: r.department ?? '',
+                // The contract — KLBEMP, RJBEMP, Care 360 — to filter by (the user, 22 Oct).
+                Function: r.function_name ?? '',
                 Manager: r.manager_name ?? '', 'Login email': r.login_email ?? '',
                 'Login state': r.login_state, Active: r.is_active ? 'Yes' : 'No',
                 'Added': r.added_at ?? '',
