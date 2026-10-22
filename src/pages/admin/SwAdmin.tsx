@@ -358,6 +358,9 @@ function LoginsTab() {
                 'Added': r.added_at ?? '',
                 'Last signed in': r.last_sign_in_at ?? '',
                 'Password changed': r.password_changed_at ?? '',
+                // A column a module, Yes where the person has it (the user, 22 Oct: "need to know for each
+                // emp what all modules assigned"). Not in IT Admin's view, which shows no modules.
+                ...(itOnly ? {} : Object.fromEntries((modules ?? []).map(m => [m.name, grants?.has(`${r.employee_id}:${m.code}`) ? 'Yes' : '']))),
               })),
               'Cyrix-login-status.xlsx', 'Login status',
             )}
