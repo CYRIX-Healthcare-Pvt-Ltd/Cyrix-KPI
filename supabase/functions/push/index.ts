@@ -213,6 +213,11 @@ Deno.serve(async req => {
           ? { title: `${plural(r.n, 'Revive Lab ticket')} waiting for you`, body: r.detail ?? '', url: '/revive/', tag: 'bell-revive' }
           : r.kind === 'revive_team'
           ? { title: 'Revive Lab · your team', body: r.detail ?? `${plural(r.n, 'ticket')} raised in your team`, url: '/revive/', tag: 'bell-revive-team' }
+          // My Task (0220): what the manager did on the person's tasks; to the manager, the progress on what they assigned.
+          : r.kind === 'tasks'
+          ? { title: r.n === 1 ? 'My Task · an update for you' : `My Task · ${r.n} tasks with updates`, body: r.detail ?? '', url: '/tasks/my-task', tag: 'bell-tasks' }
+          : r.kind === 'tasks_team'
+          ? { title: r.n === 1 ? 'My Team Task · an update' : `My Team Task · ${r.n} tasks with updates`, body: r.detail ?? '', url: '/tasks/team', tag: 'bell-tasks-team' }
           : BELL[r.kind] ? { title: BELL[r.kind].title(r.n), body: BELL[r.kind].body, url: '/kpi' + BELL[r.kind].href, tag: 'bell-' + r.kind } : null
         if (!p) continue
         const t = await deliver(db, [r.employee_id], p)
