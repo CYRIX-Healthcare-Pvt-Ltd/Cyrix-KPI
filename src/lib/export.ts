@@ -7,9 +7,10 @@ import { openFyMonths, monthLabel } from './fy'
  *
  * Layout, matching the shape people already read in the annual sheet:
  *
- *   | Ecode | Name | Designation | Department | Apr-26 | May-26 | Jun-26 | Q1 Avg | Jul-26 | … | Annual Avg |
+ *   | Ecode | Name | Designation | Department | Reporting Manager | Apr-26 | May-26 | Jun-26 | Q1 Avg | Jul-26 | … | Annual Avg |
  *
- * Each month is a merged block: Job Role %, Job Role Actual, Core Value %, Total, Total Actual
+ * Each month is a merged block: Job Role, Job Role Actual, Core Value, Total, Total Actual — scores, not
+ * percentages, so no % in their names (the user, 24 Oct); Job Role Achievement % is the one share
  * (the user, 19 Oct: "quarter wise average also, and actual job role score and actual total score",
  * "like we did in the team member wise report"). Actual is each job-role KPI's achievement times its
  * weightage with no cap — 200 against a target of 100 on a 40% row is 80, beside the score that stops
@@ -29,6 +30,8 @@ export interface ExportRow {
 }
 
 const SCORED = new Set(['scored', 'finalized'])
+/** The person's columns before the months: Ecode, Name, Designation, Department, Reporting Manager. */
+const FIXED = 5
 /** What Job Role is marked out of: the 80 of the 80 / 20 split with Core Values. */
 const JOB_ROLE_OUT_OF = 80
 const ACH = 'Job Role Achievement %'
@@ -51,6 +54,8 @@ export interface ExportData {
   items: KpiSubmissionItem[]
   assignments: Array<Pick<KpiAssignment, 'id' | 'core_self_rating' | 'core_value_weights'>>
   ratings: CoreValueRating[]
+  /** Each person's reporting manager (0219; the user, 24 Oct). */
+  managers: Array<{ employee_id: string; name: string | null; ecode: string | null }>
 }
 /**
  * The year's submissions, KPI rows, core value weights and ratings of these people, through kpi_export_data
@@ -58,12 +63,12 @@ export interface ExportData {
  * people a call, so one answer stays a few megabytes even for a division.
  */
 export async function exportData(people: string[], fy: string): Promise<ExportData> {
-  const out: ExportData = { submissions: [], items: [], assignments: [], ratings: [] }
+  const out: ExportData = { submissions: [], items: [], assignments: [], ratings: [], managers: [] }
   for (let i = 0; i < people.length; i += 40) {
     const { data, error } = await supabase.rpc('kpi_export_data', { p_people: people.slice(i, i + 40), p_fy: fy })
     if (error) throw new Error(error.message)
     const d = data as ExportData
-    out.submissions.push(...d.submissions); out.items.push(...d.items); out.assignments.push(...d.assignments); out.ratings.push(...d.ratings)
+    out.submissions.push(...d.submissions); out.items.push(...d.items); out.assignments.push(...d.assignments); out.ratings.push(...d.ratings); out.managers.push(...(d.managers ?? []))
   }
   return out
 }
@@ -86,8 +91,8 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
 
   const withEsms = rows.some(r => r.submissions.some(s => s.final_esms_score !== null || s.self_esms_score !== null))
   const subHead = withEsms
-    ? ['Job Role %', 'Job Role Actual', ACH, 'ESMS %', 'Core Value %', 'Total', 'Total Actual']
-    : ['Job Role %', 'Job Role Actual', ACH, 'Core Value %', 'Total', 'Total Actual']
+    ? ['Job Role', 'Job Role Actual', ACH, 'ESMS', 'Core Value', 'Total', 'Total Actual']
+    : ['Job Role', 'Job Role Actual', ACH, 'Core Value', 'Total', 'Total Actual']
   const W = subHead.length
   const isActual = (k: number) => subHead[k].endsWith('Actual')
   const isAch = (k: number) => subHead[k] === ACH
@@ -96,6 +101,7 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
   // the page passes in carry no submission id (0218).
   const data = await exportData(rows.map(r => r.employee.id), fy)
   const monthOf = new Map(data.submissions.map(s => [s.id, `${s.employee_id}|${s.period_month}`]))
+  const managerOf = new Map(data.managers.map(m => [m.employee_id, m.name ?? '']))
   const actual = new Map<string, { job: number; esms: number; hasJob: boolean; hasEsms: boolean }>()
   for (const it of data.items as Item[]) {
     if (it.section !== 'job_role' && it.section !== 'esms') continue
@@ -131,26 +137,26 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
     })
     const cells = blocks.flatMap(b => b.kind === 'month' ? perMonth.get(b.month)! : b.kind === 'quarter' ? mean(b.months) : mean(months))
     // The achievement is a share, kept to four places so 0.988 shows as 99% rather than rounding first.
-    return [employee.ecode, employee.full_name, employee.designation ?? '', employee.department ?? '', ...cells.map((v, i) => (isAch(i % W) ? share(v) : num(v)))]
+    return [employee.ecode, employee.full_name, employee.designation ?? '', employee.department ?? '', managerOf.get(employee.id) ?? '', ...cells.map((v, i) => (isAch(i % W) ? share(v) : num(v)))]
   })
 
   // ---- the sheet ----
   const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet(`KPI ${fy}`, { views: [{ state: 'frozen', xSplit: 4, ySplit: 2 }] })
-  const head1: (string | null)[] = ['Ecode', 'Name', 'Designation', 'Department']
-  const head2: (string | null)[] = [null, null, null, null]
+  const ws = wb.addWorksheet(`KPI ${fy}`, { views: [{ state: 'frozen', xSplit: FIXED, ySplit: 2 }] })
+  const head1: (string | null)[] = ['Ecode', 'Name', 'Designation', 'Department', 'Reporting Manager']
+  const head2: (string | null)[] = Array(FIXED).fill(null)
   for (const b of blocks) {
     head1.push(b.kind === 'month' ? monthLabel(b.month) : b.kind === 'quarter' ? b.label : 'Annual Avg', ...Array(W - 1).fill(null))
     head2.push(...subHead)
   }
   ws.addRow(head1); ws.addRow(head2)
-  for (let c = 1; c <= 4; c++) ws.mergeCells(1, c, 2, c)
-  blocks.forEach((_, i) => ws.mergeCells(1, 5 + i * W, 1, 4 + (i + 1) * W))
+  for (let c = 1; c <= FIXED; c++) ws.mergeCells(1, c, 2, c)
+  blocks.forEach((_, i) => ws.mergeCells(1, FIXED + 1 + i * W, 1, FIXED + (i + 1) * W))
 
   const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
   const thin = { style: 'thin' as const, color: { argb: 'FF94A3B8' } }
   const grid = { top: thin, left: thin, bottom: thin, right: thin }
-  const last = 4 + blocks.length * W
+  const last = FIXED + blocks.length * W
   // Months in alternating blues, each quarter's average in teal, the year's in green; an Actual heading a shade darker.
   let monthNo = 0
   const look = blocks.map(b => b.kind === 'month'
@@ -158,7 +164,7 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
     : b.kind === 'quarter'
       ? { band: 'FF0F766E', head: 'FFCCFBF1', headActual: 'FF99F6E4', cell: 'FFF0FDFA', ink: 'FF134E4A' }
       : { band: 'FF15803D', head: 'FFDCFCE7', headActual: 'FFBBF7D0', cell: 'FFF0FDF4', ink: 'FF14532D' })
-  const blockOf = (c: number) => (c <= 4 ? null : { b: Math.floor((c - 5) / W), k: (c - 5) % W })
+  const blockOf = (c: number) => (c <= FIXED ? null : { b: Math.floor((c - FIXED - 1) / W), k: (c - FIXED - 1) % W })
   for (let c = 1; c <= last; c++) {
     const at = blockOf(c)
     const top = ws.getCell(1, c), sub = ws.getCell(2, c)
@@ -180,14 +186,14 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
       if (c > last) return
       const at = blockOf(c)
       cell.border = grid
-      cell.alignment = { vertical: 'middle', horizontal: c <= 4 ? 'left' : 'center' }
+      cell.alignment = { vertical: 'middle', horizontal: c <= FIXED ? 'left' : 'center' }
       if (at && look[at.b].cell) { cell.fill = fill(look[at.b].cell!); cell.font = { bold: true } }
       else if (i % 2) cell.fill = fill('FFF8FAFC')
       if (at && typeof cell.value === 'number') cell.numFmt = isAch(at.k) ? '0%' : '0.00'
     })
   })
   ws.eachRow({ includeEmpty: true }, r => r.eachCell({ includeEmpty: true }, cell => { cell.font = { ...cell.font, name: 'Calibri', size: 10 } }))
-  ws.columns = [{ width: 10 }, { width: 26 }, { width: 22 }, { width: 16 }, ...blocks.flatMap(() => subHead.map(h => ({ width: h === ACH ? 13 : h.endsWith('Actual') ? 12 : 11 })))]
+  ws.columns = [{ width: 10 }, { width: 26 }, { width: 22 }, { width: 16 }, { width: 24 }, ...blocks.flatMap(() => subHead.map(h => ({ width: h === ACH ? 13 : h.endsWith('Actual') ? 12 : 11 })))]
 
   const buf = await wb.xlsx.writeBuffer()
   const a = document.createElement('a')
