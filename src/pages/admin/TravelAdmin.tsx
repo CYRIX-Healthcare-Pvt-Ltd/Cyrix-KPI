@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Trash2 } from 'lucide-react'
+import { Camera, Check, Trash2 } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -26,7 +26,7 @@ interface Rule {
 type AdminData = {
   rules: Rule[]
   policy: Record<string, unknown>
-  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean }>
+  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean; photo_needed: boolean }>
   projects: Array<{ id: number; label: string; is_active: boolean }>
   coordinators: Array<{ ecode: string; name: string; coordinator_ecode: string; coordinator: string }>
   desk: Array<{ ecode: string; name: string }>
@@ -49,19 +49,22 @@ const POLICY: Array<[string, string]> = [
 export function TravelAdmin() {
   const qc = useQueryClient()
   const { data, isLoading, error } = useQuery({ queryKey: ['te_admin'], queryFn: () => rpc<AdminData>('te_admin_data') })
-  const [tab, setTab] = useState<typeof TABS[number][0] | 'delete'>('rules')
+  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'delete'>('rules')
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
-  const call = async (fn: string, args: Record<string, unknown>, done = 'Saved.') => {
+  // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
+  const call = async (fn: string, args: Record<string, unknown>, done = 'Saved.', here = false) => {
     setMsg(null); setFail(null)
-    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_admin'] }); setMsg(done) } catch (e) { setFail((e as Error).message) }
+    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_admin'] }); setMsg(done); return null }
+    catch (e) { if (!here) setFail((e as Error).message); return (e as Error).message }
   }
   if (isLoading) return <PageLoader />
   if (error || !data) return <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
-        {[...TABS, ...(data.sw ? [['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
+        {[...TABS.slice(0, 3), ...(data.sw ? [['photos', 'Visit photos'] as const] : []), ...TABS.slice(3), ...(data.sw ? [['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
@@ -72,7 +75,8 @@ export function TravelAdmin() {
           {POLICY.map(([k, l]) => <PolicyField key={k} label={l} value={data.policy[k]} onSave={v => void call('te_set_policy', { p_key: k, p_value: v })} />)}
         </div>
       )}
-      {tab === 'purposes' && <Purposes list={data.purposes} call={call} />}
+      {tab === 'purposes' && <Purposes list={data.purposes} call={call} sw={!!data.sw} />}
+      {tab === 'photos' && data.sw && <VisitPhotoSettings policy={data.policy} purposes={data.purposes} call={call} />}
       {tab === 'projects' && <Projects list={data.projects} call={call} />}
       {tab === 'coord' && <Coordinators list={data.coordinators} call={call} />}
       {tab === 'desk' && <Desk list={data.desk} call={call} />}
@@ -133,16 +137,77 @@ function PolicyField({ label, value, onSave }: { label: string; value: unknown; 
   )
 }
 
-type Call = (fn: string, args: Record<string, unknown>, done?: string) => Promise<void>
-function Purposes({ list, call }: { list: AdminData['purposes']; call: Call }) {
+type Call = (fn: string, args: Record<string, unknown>, done?: string, here?: boolean) => Promise<string | null>
+
+/*
+  Visit photos, SW Admin's alone (Travel te_0082, te_0084; the user, 28 Oct: "sw admin need option to enable and disable
+  this feature", "let sw admin decide it block or send", "i told only sw admin"): on or off, which purposes need a
+  photo, what happens past the Photo not possible limit, the limit, how near, how long pictures stay after payment.
+*/
+function VisitPhotoSettings({ policy, purposes, call }: { policy: Record<string, unknown>; purposes: AdminData['purposes']; call: Call }) {
+  const on = policy.visit_photos === true, after = policy.photo_after === 'send' ? 'send' : 'block'
+  const seg = (active: boolean) => clsx('rounded-lg px-3 py-1.5 text-sm font-semibold', active ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')
+  return (
+    <div className="space-y-3">
+      <div className="card flex items-center gap-3 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700"><Camera className="h-5 w-5" /></span>
+        <p className="min-w-0 flex-1 font-semibold text-ink-900">Visit photos</p>
+        <button type="button" role="switch" aria-checked={on} aria-label="Visit photos on or off" onClick={() => void call('te_set_policy', { p_key: 'visit_photos', p_value: !on }, on ? 'Visit photos are off.' : 'Visit photos are on.')}
+          className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-emerald-600' : 'bg-ink-300')}>
+          <span className={clsx('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+        </button>
+      </div>
+      <div className={clsx('card space-y-4 p-4', !on && 'opacity-60')}>
+        <div>
+          <span className="label">Photo needed for</span>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {purposes.filter(p => p.is_active).map(p => (
+              <button key={p.id} type="button" aria-pressed={p.photo_needed} onClick={() => void call('te_set_purpose_photo', { p_id: p.id, p_on: !p.photo_needed })}
+                className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1', p.photo_needed ? 'bg-rose-600 text-white ring-rose-600' : 'bg-surface text-ink-700 ring-ink-200 hover:bg-ink-50')}>
+                {p.photo_needed && <Check className="h-3.5 w-3.5" />}{p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span className="label">After the Photo not possible limit</span>
+          <div className="mt-1.5 inline-flex rounded-xl bg-ink-100 p-1">
+            <button type="button" className={seg(after === 'block')} onClick={() => void call('te_set_policy', { p_key: 'photo_after', p_value: 'block' })}>Block</button>
+            <button type="button" className={seg(after === 'send')} onClick={() => void call('te_set_policy', { p_key: 'photo_after', p_value: 'send' })}>Send, manager decides</button>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <PolicyField label="Photo not possible a month" value={policy.photo_skips} onSave={v => void call('te_set_policy', { p_key: 'photo_skips', p_value: v })} />
+          <PolicyField label="Photo within, metres" value={policy.photo_near_m} onSave={v => void call('te_set_policy', { p_key: 'photo_near_m', p_value: v })} />
+          <PolicyField label="Keep photos after paid, days" value={policy.photo_keep_days} onSave={v => void call('te_set_policy', { p_key: 'photo_keep_days', p_value: v })} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call; sw: boolean }) {
   const [label, setLabel] = useState('')
+  const [err, setErr] = useState<{ id: number; text: string; n: number } | null>(null)
+  const remove = async (p: AdminData['purposes'][number]) => {
+    if (!confirm(`Delete ${p.label}? It goes from the list of purposes.`)) return
+    const e = await call('te_delete_purpose', { p_id: p.id }, 'Purpose deleted.', true)
+    setErr(e ? x => ({ id: p.id, text: e, n: (x?.n ?? 0) + 1 }) : null)
+  }
   return (
     <div className="card space-y-2 p-4">
       {list.map(p => (
-        <div key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
-          <span className={clsx('min-w-[12rem] font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
+        <div key={p.id} className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className={clsx('min-w-[12rem] font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
+            {/* The ride needs a visit photo (Travel te_0082; the user, 28 Oct: "image mandatory check box"). */}
+            {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.photo_needed} onChange={e => void call('te_set_purpose_photo', { p_id: p.id, p_on: e.target.checked })} /> Photo needed</label>}
+            {/* Gone only while nothing names it; after that In use is unticked instead. */}
+            {sw && <button type="button" className="btn-icon text-cyrixRed-600" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
+          </div>
+          {err?.id === p.id && <Alert key={err.n} kind="error">{err.text}</Alert>}
         </div>
       ))}
       <div className="flex gap-2 pt-2">
