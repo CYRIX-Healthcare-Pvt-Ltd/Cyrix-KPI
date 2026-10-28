@@ -280,7 +280,7 @@ export default function ChatBot() {
   const idleOpening = useMemo<{ key: string; vars: Record<string, string | number> } | null>(() => {
     const names = new Map((coreValues ?? []).map(v => [v.id, v.name]))
     const weakCore = weakestOf(
-      (coreTrend ?? []).map(r => ({ id: r.core_value_id, value: ratingToPoints(r.rating) })),
+      (coreTrend ?? []).map(r => ({ id: r.core_value_id, value: r.points ?? ratingToPoints(r.rating) })),
     )
     // Only worth raising below Good. Asking somebody's plan for a core
     // value they are already scoring 80 on is a question with no answer.

@@ -4,7 +4,7 @@ import { fyForDate } from './fy'
 import { notifyHr } from './notifyHr'
 import type {
   Employee, KpiAssignment, KpiAssignmentItem, KpiSubmission, KpiSubmissionItem,
-  CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
+  CoreValueDefinition, CoreValueRating, CorePartRating, KpiTemplate, KpiTemplateItem,
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, OrgKpiStatusAllRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
@@ -13,6 +13,7 @@ import type {
   KraBenchmarkRow, SupportTicket, SupportDesk, DeskTicket, VisibleTemplate,
 } from '@/types/db'
 import type { TemplateRowInput } from './templates'
+import { corePoints } from './scoring'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
 async function unwrap<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -729,9 +730,9 @@ export function useSubmission(employeeId: string | undefined, month: string) {
       )
       const submission = subs[0] ?? null
       if (!submission) {
-        return { submission: null, items: [] as KpiSubmissionItem[], ratings: [] as CoreValueRating[] }
+        return { submission: null, items: [] as KpiSubmissionItem[], ratings: [] as CoreValueRating[], parts: [] as CorePartRating[] }
       }
-      const [items, ratings] = await Promise.all([
+      const [items, ratings, parts] = await Promise.all([
         unwrap<KpiSubmissionItem[]>(
           supabase.from('kpi_submission_items').select('*')
             .eq('submission_id', submission.id).order('sort_order'),
@@ -740,8 +741,13 @@ export function useSubmission(employeeId: string | undefined, month: string) {
           supabase.from('core_value_ratings').select('*')
             .eq('submission_id', submission.id),
         ),
+        // The parts of each core value, on a KPI that rates them in parts (0225).
+        unwrap<CorePartRating[]>(
+          supabase.from('core_value_part_ratings').select('*')
+            .eq('submission_id', submission.id).order('sort_order'),
+        ),
       ])
-      return { submission, items, ratings }
+      return { submission, items, ratings, parts }
     },
   })
 }
@@ -754,7 +760,7 @@ export function useSubmissionById(submissionId: string | undefined) {
       const submission = await unwrap<KpiSubmission>(
         supabase.from('kpi_submissions').select('*').eq('id', submissionId!).single(),
       )
-      const [items, ratings, employee] = await Promise.all([
+      const [items, ratings, parts, employee] = await Promise.all([
         unwrap<KpiSubmissionItem[]>(
           supabase.from('kpi_submission_items').select('*')
             .eq('submission_id', submissionId!).order('sort_order'),
@@ -762,11 +768,14 @@ export function useSubmissionById(submissionId: string | undefined) {
         unwrap<CoreValueRating[]>(
           supabase.from('core_value_ratings').select('*').eq('submission_id', submissionId!),
         ),
+        unwrap<CorePartRating[]>(
+          supabase.from('core_value_part_ratings').select('*').eq('submission_id', submissionId!).order('sort_order'),
+        ),
         unwrap<Employee>(
           supabase.from('employees').select('*').eq('id', submission.employee_id).single(),
         ),
       ])
-      return { submission, items, ratings, employee }
+      return { submission, items, ratings, parts, employee }
     },
   })
 }
@@ -834,6 +843,28 @@ export function useSaveCoreRatings() {
         if (args.role === 'self' && u.remarks !== undefined) patch.self_remarks = u.remarks
         const { error } = await supabase
           .from('core_value_ratings').update(patch).eq('id', u.id)
+        if (error) throw new Error(friendlyError(error))
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submission'] })
+      qc.invalidateQueries({ queryKey: ['submission_by_id'] })
+    },
+  })
+}
+
+/** The parts of the core values (0225): the team member's rating and learning goal, or the manager's rating. */
+export function useSaveCoreParts() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      role: 'self' | 'manager'
+      updates: Array<{ id: string; rating: string | null; goal?: string | null }>
+    }) => {
+      for (const u of args.updates) {
+        const patch: Record<string, string | null> = args.role === 'self' ? { self_rating: u.rating } : { manager_rating: u.rating }
+        if (args.role === 'self' && u.goal !== undefined) patch.goal = u.goal
+        const { error } = await supabase.from('core_value_part_ratings').update(patch).eq('id', u.id)
         if (error) throw new Error(friendlyError(error))
       }
     },
@@ -2229,7 +2260,7 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
       // submission. The generated types do not describe the join, hence
       // the cast — the shape is asserted by the rows it returns.
       const { data, error } = await supabase.from('core_value_ratings')
-        .select('core_value_id, self_rating, manager_rating,'
+        .select('core_value_id, self_rating, manager_rating, self_points, manager_points,'
               + ' kpi_submissions!inner(period_month, employee_id, financial_year)')
         .eq('kpi_submissions.employee_id', employeeId!)
         .eq('kpi_submissions.financial_year', fy)
@@ -2238,6 +2269,8 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
         core_value_id: string
         self_rating: string | null
         manager_rating: string | null
+        self_points: number | null
+        manager_points: number | null
         kpi_submissions: { period_month: string } | null
       }>
       return rows
@@ -2248,6 +2281,8 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
           // The manager's is the one that counts; theirs is the fallback
           // while a month is still being reviewed.
           rating: r.manager_rating ?? r.self_rating,
+          // A core value rated in parts (0225) has points and no one rating.
+          points: corePoints(r.manager_points, r.manager_rating) ?? corePoints(r.self_points, r.self_rating),
         }))
     },
   })

@@ -6,13 +6,14 @@ import {
   Shuffle,
 } from 'lucide-react'
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
+import { SelfParts, PartsTable, partsAverage, type PartDraft } from '@/components/CoreParts'
 import RuleTraits from '@/components/RuleTraits'
 import OutOfInput from '@/components/OutOfInput'
 import KpiStatusNote from '@/components/KpiStatusNote'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
-  useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings,
+  useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings, useSaveCoreParts,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
   useScoreQueries, useUseAlternate, useTatPolicy, currentFy, type QueryPointInput,
@@ -21,13 +22,13 @@ import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
-  calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, type ScoringRule, type RuleParams,
+  calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, corePoints, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
 import { bandOfRating } from '@/lib/bands'
-import type { KpiSubmissionItem, ScoreQueryState, Alternate } from '@/types/db'
+import type { KpiSubmissionItem, ScoreQueryState, Alternate, CorePartRating } from '@/types/db'
 
 export default function MonthlySubmission() {
   const { month = '' } = useParams()
@@ -50,6 +51,14 @@ export default function MonthlySubmission() {
   const [selfCore, setSelfCore] = useState<Record<string, { rating: string; remarks: string }>>({})
   const selfOf = (r: { id: string; self_rating: string | null; self_remarks?: string | null }) =>
     selfCore[r.id] ?? { rating: r.self_rating ?? '', remarks: r.self_remarks ?? '' }
+  /*
+    Core values in parts (0225; Ajith sir, through the user, 28 Oct): each part rated, the learning goals written
+    each month, one comment per core value. The core value's score is its parts' average.
+  */
+  const saveParts = useSaveCoreParts()
+  const [selfParts, setSelfParts] = useState<Record<string, PartDraft>>({})
+  const partDraft = (p: { id: string; self_rating: string | null; goal: string | null }) =>
+    selfParts[p.id] ?? { rating: p.self_rating ?? '', goal: p.goal ?? '' }
   const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
@@ -97,10 +106,22 @@ export default function MonthlySubmission() {
     null until the month is scored, which is correct: an unrated block
     should read as blank rather than as nought out of twenty.
   */
+  const isScored = submission?.status === 'scored' || submission?.status === 'finalized'
+
   const coreRolled = useMemo(
-    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => ({ core_value_id: r.core_value_id, label: r.manager_rating })), coreWeights),
+    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => ({ core_value_id: r.core_value_id, label: r.manager_rating, points: r.manager_points })), coreWeights),
     [data, coreWeights],
   )
+  const partsOf = useMemo(() => {
+    const m = new Map<string, CorePartRating[]>()
+    for (const p of data?.parts ?? []) m.set(p.rating_id, [...(m.get(p.rating_id) ?? []), p])
+    return m
+  }, [data])
+  // The team member's own points on a core value: its parts' average as typed, or its one rating.
+  const selfPointsOf = (r: { id: string; self_rating: string | null; self_remarks?: string | null }) => {
+    const parts = partsOf.get(r.id)
+    return parts?.length ? partsAverage(parts.map(p => partDraft(p).rating)) : ratingToPoints(selfOf(r).rating)
+  }
 
   const liveScore = (item: KpiSubmissionItem) => {
     const raw = item.section === 'core_values'
@@ -195,12 +216,11 @@ export default function MonthlySubmission() {
     core values earned from their own ratings join their assessment, out of 100 (the user, 17 Oct).
     Each value earns its rating's share of its own weight: Very Good on a 10% value is 8.
   */
-  const earnedOf = (coreValueId: string, label: string | null | undefined) => {
-    const pts = ratingToPoints(label)
+  const earnedOf = (coreValueId: string, pts: number | null) => {
     const w = coreWeights?.[coreValueId] ?? coreWeight / Math.max(1, sortedRatings.length)
     return pts === null ? null : (pts * Number(w)) / 100
   }
-  const selfCoreEarned = sortedRatings.map(r => earnedOf(r.core_value_id, selfOf(r).rating))
+  const selfCoreEarned = sortedRatings.map(r => earnedOf(r.core_value_id, isScored ? corePoints(r.self_points, r.self_rating) : selfPointsOf(r)))
   const selfCoreTotal = coreSelf && selfCoreEarned.some(e => e !== null)
     ? Math.round(selfCoreEarned.reduce<number>((t, e) => t + (e ?? 0), 0) * 100) / 100
     : null
@@ -235,8 +255,6 @@ export default function MonthlySubmission() {
     }] : []),
   ]
 
-  const isScored = submission?.status === 'scored' || submission?.status === 'finalized'
-
   const save = async () => {
     setError(null)
     try {
@@ -270,6 +288,15 @@ export default function MonthlySubmission() {
             return { id: r.id, rating: v.rating || null, remarks: v.remarks.trim() || null }
           }),
         })
+        if (data?.parts.length) {
+          await saveParts.mutateAsync({
+            role: 'self',
+            updates: data.parts.map(p => {
+              const v = partDraft(p)
+              return { id: p.id, rating: v.rating || null, goal: p.is_goal ? v.goal.trim() || null : undefined }
+            }),
+          })
+        }
       }
       /*
         Otherwise core values are not self-rated, so nothing is written for
@@ -710,7 +737,7 @@ export default function MonthlySubmission() {
             ) : coreWeights ? (() => {
               // The section's total from the team member's own ratings, as Job Role shows its own (the user, 17 Oct).
               const earned = sortedRatings.map(r => {
-                const pts = ratingToPoints(selfOf(r).rating)
+                const pts = selfPointsOf(r)
                 return pts === null ? null : (pts * Number(coreWeights[r.core_value_id] ?? 0)) / 100
               })
               const total = earned.some(e => e !== null) ? Math.round(earned.reduce<number>((t, e) => t + (e ?? 0), 0) * 100) / 100 : null
@@ -733,6 +760,7 @@ export default function MonthlySubmission() {
         <div className="divide-y divide-ink-100">
           {sortedRatings.map(rating => {
             const def = coreValues?.find(c => c.id === rating.core_value_id)
+            const parts = partsOf.get(rating.id) ?? []
             /*
               Changed from WHAT, though.
 
@@ -744,7 +772,7 @@ export default function MonthlySubmission() {
               across the whole company and all five months: 53.
             */
             const differs =
-              isScored &&
+              isScored && !parts.length &&
               rating.manager_rating !== null &&
               rating.self_rating !== null &&
               rating.manager_rating !== rating.self_rating
@@ -769,28 +797,28 @@ export default function MonthlySubmission() {
                   */}
                   {coreWeights?.[rating.core_value_id] != null && (() => {
                     const w = Number(coreWeights[rating.core_value_id])
-                    const earned = (label: string | null | undefined) => {
-                      const pts = ratingToPoints(label)
-                      return pts === null ? null : Math.round(pts * w) / 100
-                    }
-                    const mine = isScored ? rating.self_rating : selfOf(rating).rating
+                    const earned = (pts: number | null) => (pts === null ? null : Math.round(pts * w) / 100)
+                    const minePts = isScored ? corePoints(rating.self_points, rating.self_rating) : selfPointsOf(rating)
+                    const mgrPts = corePoints(rating.manager_points, rating.manager_rating)
+                    // In parts, the parts table below says what each was rated.
+                    const mine = parts.length ? null : rating.self_rating
                     // Once scored, My score and Manager side by side, as job role rows show them (the user, 17 Oct).
                     return (
                       <div className="mt-2 flex flex-wrap gap-x-8 gap-y-2">
                         <div>
                           <span className="label text-xs">My score</span>
-                          <ScorePill value={earned(mine)} outOf={w} />
+                          <ScorePill value={earned(minePts)} outOf={w} />
                           <span className="ml-1.5 text-xs text-ink-400">/ {w}</span>
-                          {isScored && <p className="mt-1 text-xs text-ink-500">{mine ?? 'Not rated'}</p>}
+                          {isScored && !parts.length && <p className="mt-1 text-xs text-ink-500">{mine ?? 'Not rated'}</p>}
                         </div>
                         {isScored && (
                           <div>
                             <span className="label text-xs">Manager</span>
-                            <ScorePill value={earned(rating.manager_rating)} outOf={w} />
+                            <ScorePill value={earned(mgrPts)} outOf={w} />
                             <span className="ml-1.5 text-xs text-ink-400">/ {w}</span>
                             {/* Raised or reduced against their own, green or red, as job role rows say it (the user, 17 Oct). */}
                             {(() => {
-                              const a = earned(rating.self_rating), b = earned(rating.manager_rating)
+                              const a = earned(corePoints(rating.self_points, rating.self_rating)), b = earned(mgrPts)
                               const diff = a !== null && b !== null ? Math.round((b - a) * 100) / 100 : 0
                               return (
                                 <p className="mt-1 text-xs text-ink-500">
@@ -799,7 +827,7 @@ export default function MonthlySubmission() {
                                       {diff < 0 ? '▼ Reduced' : '▲ Raised'} by {Math.abs(diff).toFixed(2)} ·
                                     </span>
                                   )}
-                                  {rating.manager_rating ?? 'Not rated'}
+                                  {!parts.length && (rating.manager_rating ?? 'Not rated')}
                                 </p>
                               )
                             })()}
@@ -809,9 +837,25 @@ export default function MonthlySubmission() {
                     )
                   })()}
                   {/* Once scored, both sides of a self-rated value: the two ratings and the two comments. */}
+                  {/* Each part as the team member typed it, rated and averaged as they go. */}
+                  {!isScored && coreSelf && parts.length > 0 && (() => {
+                    const v = selfOf(rating)
+                    return (
+                      <>
+                        <SelfParts parts={parts} draft={partDraft} editable={editable} name={def?.name ?? 'this core value'}
+                          onChange={(p, next) => setSelfParts(s => ({ ...s, [p.id]: next }))} />
+                        <textarea rows={2} className={`input mt-2 text-sm ${editable && !v.remarks.trim() ? 'border-amber-400' : ''}`}
+                          aria-label={`Your comment on ${def?.name ?? 'this core value'}`}
+                          disabled={!editable} value={v.remarks}
+                          onChange={e => setSelfCore(c => ({ ...c, [rating.id]: { ...v, remarks: e.target.value } }))}
+                          placeholder={`Briefly, what you did for ${def?.name ?? 'this core value'}`} />
+                      </>
+                    )
+                  })()}
+                  {isScored && coreSelf && parts.length > 0 && <PartsTable parts={parts} self="You" />}
                   {isScored && coreSelf && (
                     <div className="mt-2 space-y-1.5 text-sm">
-                      {!coreWeights && (
+                      {!coreWeights && !parts.length && (
                         <p>
                           <span className="text-ink-500">You: </span>
                           <span className="font-medium text-ink-900">{rating.self_rating ?? 'Not rated'}</span>
@@ -852,7 +896,7 @@ export default function MonthlySubmission() {
                   vanishes from the employee's copy makes the 80/20 stop
                   adding up on the one screen where it should be plainest.
                 */}
-                {!isScored && coreSelf && (() => {
+                {!isScored && coreSelf && !parts.length && (() => {
                   const v = selfOf(rating)
                   const set = (patch: Partial<{ rating: string; remarks: string }>) =>
                     setSelfCore(s => ({ ...s, [rating.id]: { ...v, ...patch } }))
@@ -891,7 +935,7 @@ export default function MonthlySubmission() {
                   the difference, which is the pair of facts the row is
                   actually reporting.
                 */}
-                {isScored && !coreWeights && (
+                {isScored && !coreWeights && !parts.length && (
                   <div className="mt-2 sm:mt-0 sm:w-40">
                     <p className="mb-1 text-xs text-ink-400 sm:hidden">Manager's rating</p>
                     <div

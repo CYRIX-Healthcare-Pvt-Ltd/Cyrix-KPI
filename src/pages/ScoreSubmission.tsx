@@ -7,11 +7,12 @@ import {
 } from 'lucide-react'
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
+import { ManagerParts, PartsTable, partsAverage } from '@/components/CoreParts'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
 import { useReveal } from '@/lib/useReveal'
 import {
-  useSubmissionById, useSaveItemValues, useSaveCoreRatings,
+  useSubmissionById, useSaveItemValues, useSaveCoreRatings, useSaveCoreParts,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
   useSaveMonthlyTarget, useMonthClose, useScoreQueryState, useTatPolicy,
 } from '@/lib/queries'
@@ -26,7 +27,7 @@ import {
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile,
 } from '@/components/ui'
-import type { KpiSubmissionItem, Section } from '@/types/db'
+import type { KpiSubmissionItem, Section, CorePartRating } from '@/types/db'
 
 /**
  * The blocks a manager enters a number against, in reading order. Core
@@ -45,6 +46,7 @@ export default function ScoreSubmission() {
   const { data: coreValues } = useCoreValues()
   const saveItems = useSaveItemValues()
   const saveRatings = useSaveCoreRatings()
+  const saveParts = useSaveCoreParts()
   const saveTarget = useSaveMonthlyTarget()
   const action = useSubmissionAction()
   const requestAction = useRequestAction()
@@ -87,6 +89,8 @@ export default function ScoreSubmission() {
   const [ratings, setRatings] = useState<Record<string, string>>({})
   /** Why a low core value was given, keyed by rating row. */
   const [coreWhy, setCoreWhy] = useState<Record<string, string>>({})
+  /** The manager's rating of each part of a core value rated in parts (0225), keyed by part row. */
+  const [mgrParts, setMgrParts] = useState<Record<string, string>>({})
   /*
     A KPI where the team member rates their own core values (0214): the manager sees that rating
     and its comment on each row, and may add a comment of their own on any rating, not only the
@@ -178,6 +182,7 @@ export default function ScoreSubmission() {
     setCoreWhy(Object.fromEntries(
       data.ratings.map(r => [r.id, r.manager_remarks ?? '']),
     ))
+    setMgrParts(Object.fromEntries((data.parts ?? []).map(p => [p.id, p.manager_rating ?? ''])))
     setRemarks(data.submission.manager_remarks ?? '')
     setCutReason(data.submission.score_cut_reason ?? '')
   }, [data])
@@ -188,9 +193,39 @@ export default function ScoreSubmission() {
     return t === '' || t === undefined ? item.target_value : Number(t)
   }
 
+  /*
+    A core value rated in parts (0225; Ajith sir, through the user, 28 Oct) scores its parts' average, as the
+    manager rates them; one without, its one rating.
+  */
+  const partsOf = useMemo(() => {
+    const m = new Map<string, CorePartRating[]>()
+    for (const p of data?.parts ?? []) m.set(p.rating_id, [...(m.get(p.rating_id) ?? []), p])
+    return m
+  }, [data])
+  const mgrPointsOf = (r: { id: string }) => {
+    const parts = partsOf.get(r.id)
+    return parts?.length ? partsAverage(parts.map(p => mgrParts[p.id])) : ratingToPoints(ratings[r.id] || null)
+  }
+  const unrated = (r: { id: string }) => {
+    const parts = partsOf.get(r.id)
+    return parts?.length ? parts.some(p => !mgrParts[p.id]) : !ratings[r.id]
+  }
+  /**
+   * A core value low enough to owe an explanation: Satisfactory (40) or below, as a rating or as the average of
+   * its parts. Read off the scale's points rather than the words, because the scale is data and somebody will
+   * eventually reword it.
+   */
+  const lowOf = (r: { id: string }) => {
+    const pts = mgrPointsOf(r)
+    return pts !== null && pts <= 40
+  }
+
   const coreAverage = useMemo(
-    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => ({ core_value_id: r.core_value_id, label: ratings[r.id] || null })), coreWeights),
-    [ratings, data, coreWeights],
+    () => weightedCoreValueRatings((data?.ratings ?? []).map(r => {
+      const parts = partsOf.get(r.id)
+      return { core_value_id: r.core_value_id, label: ratings[r.id] || null, points: parts?.length ? partsAverage(parts.map(p => mgrParts[p.id])) : null }
+    }), coreWeights),
+    [ratings, mgrParts, partsOf, data, coreWeights],
   )
 
   const mgrScore = (item: KpiSubmissionItem) => {
@@ -246,19 +281,6 @@ export default function ScoreSubmission() {
     where: (i: KpiSubmissionItem) => boolean,
   ) => items.filter(where).reduce((a, i) => a + (pick(i) ?? 0), 0)
 
-  /**
-   * A core value low enough to owe an explanation.
-   *
-   * Satisfactory is 40 and Poor is 20 on the rating scale, so this is
-   * the bottom two of the five. Read off the scale rather than compared
-   * against a literal, because the scale is data and somebody will
-   * eventually reword it.
-   */
-  const needsWhy = (label: string | undefined) => {
-    const points = ratingToPoints(label ?? null)
-    return points !== null && points <= 40
-  }
-
   const isJob = (i: KpiSubmissionItem) => i.section === 'job_role'
 
   const selfJob = sumOf(selfScore, isJob)
@@ -292,7 +314,7 @@ export default function ScoreSubmission() {
     the screen never warned about arrives as a raw exception on the one
     button that matters.
   */
-  const unratedCore = (data?.ratings ?? []).filter(r => !ratings[r.id]).length
+  const unratedCore = (data?.ratings ?? []).filter(unrated).length
 
   /**
    * Low ratings still owing an explanation.
@@ -303,7 +325,7 @@ export default function ScoreSubmission() {
    * to them.
    */
   const missingWhy = (data?.ratings ?? []).filter(
-    r => needsWhy(ratings[r.id]) && !coreWhy[r.id]?.trim(),
+    r => lowOf(r) && !coreWhy[r.id]?.trim(),
   ).length
 
   /** Anything on the core-values block that stops this being submitted. */
@@ -367,9 +389,12 @@ export default function ScoreSubmission() {
           // Cleared when the rating rises back out of the range that
           // asked for it, so last version's explanation is not left
           // attached to a rating it no longer describes.
-          remarks: needsWhy(ratings[r.id]) || coreSelf ? (coreWhy[r.id]?.trim() || null) : null,
+          remarks: lowOf(r) || coreSelf ? (coreWhy[r.id]?.trim() || null) : null,
         })),
       })
+      if (data?.parts.length) {
+        await saveParts.mutateAsync({ role: 'manager', updates: data.parts.map(p => ({ id: p.id, rating: mgrParts[p.id] || null })) })
+      }
       if (submission && remarks !== (submission.manager_remarks ?? '')) {
         await supabase.from('kpi_submissions')
           .update({ manager_remarks: remarks }).eq('id', submission.id)
@@ -778,7 +803,9 @@ export default function ScoreSubmission() {
             // The ones still to do, marked where they are. A count at the
             // top says how many; this says which, so finding them is not
             // a matter of reading five dropdowns.
-            const needsRating = editable && !ratings[rating.id]
+            const needsRating = editable && unrated(rating)
+            const parts = partsOf.get(rating.id) ?? []
+            const firstName = data?.employee.full_name.split(' ')[0] ?? 'They'
             return (
               <div
                 key={rating.id}
@@ -799,7 +826,7 @@ export default function ScoreSubmission() {
                   {/* What the manager's rating earns of the value's weight: Very Good on 10% is 8 / 10 (the user, 17 Oct). */}
                   {coreWeights?.[rating.core_value_id] != null && (() => {
                     const w = Number(coreWeights[rating.core_value_id])
-                    const pts = ratingToPoints(ratings[rating.id] ?? null)
+                    const pts = mgrPointsOf(rating)
                     return (
                       <div className="mt-2">
                         <span className="label text-xs">Score</span>
@@ -808,7 +835,15 @@ export default function ScoreSubmission() {
                       </div>
                     )
                   })()}
-                  {rating.self_rating && (
+                  {/* Each part: what the team member gave it, and the manager's own rating. */}
+                  {parts.length > 0 && (editable
+                    ? <ManagerParts parts={parts} rating={p => mgrParts[p.id] ?? ''} editable={editable} firstName={firstName}
+                        onChange={(p, label) => setMgrParts(m => ({ ...m, [p.id]: label }))} />
+                    : <PartsTable parts={parts} self={firstName} />)}
+                  {parts.length > 0 && rating.self_remarks && (
+                    <p className="mt-2 text-sm italic text-ink-600">“{rating.self_remarks}”</p>
+                  )}
+                  {!parts.length && rating.self_rating && (
                     <div className="mt-2 space-y-1">
                       {/* As job role rows say it (the user, 17 Oct): "Kevin claimed", their rating and what it earns. */}
                       <label className="label text-xs">{data?.employee.full_name.split(' ')[0] ?? 'They'} claimed</label>
@@ -825,7 +860,7 @@ export default function ScoreSubmission() {
                       )}
                     </div>
                   )}
-                  {editable && coreSelf && !needsWhy(ratings[rating.id]) && (
+                  {editable && coreSelf && !lowOf(rating) && (
                     <textarea
                       rows={2}
                       className="input mt-2 text-sm"
@@ -850,7 +885,7 @@ export default function ScoreSubmission() {
                     already open by the time the manager wonders whether
                     to explain themselves.
                   */}
-                  {editable && needsWhy(ratings[rating.id]) && (() => {
+                  {editable && lowOf(rating) && (() => {
                     /*
                       The prompt wears the rating's own colour: amber for
                       Satisfactory, red for Poor.
@@ -877,7 +912,7 @@ export default function ScoreSubmission() {
                             tone?.accent ?? 'text-ink-700',
                           )}
                         >
-                          Why {ratings[rating.id]?.toLowerCase()}?{' '}
+                          Why {parts.length ? 'so low' : ratings[rating.id]?.toLowerCase()}?{' '}
                           {data?.employee.full_name.split(' ')[0]} will see this.
                         </label>
                         <textarea
@@ -909,7 +944,7 @@ export default function ScoreSubmission() {
                   one place a manager is trying to concentrate on five
                   judgements.
                 */}
-                <div className="mt-2 flex items-center gap-3 sm:mt-0">
+                {!parts.length && <div className="mt-2 flex items-center gap-3 sm:mt-0">
                   <select
                     id={`core-${rating.id}`}
                     className={clsx(
@@ -928,7 +963,7 @@ export default function ScoreSubmission() {
                       <option key={r.label} value={r.label}>{r.label} ({r.points})</option>
                     ))}
                   </select>
-                </div>
+                </div>}
               </div>
             )
           })}
@@ -1106,7 +1141,7 @@ export default function ScoreSubmission() {
                         // them to the top every time would make the second
                         // pass hunt for the row again.
                         const first = sortedRatings.find(
-                          r => !ratings[r.id] || (needsWhy(ratings[r.id]) && !coreWhy[r.id]?.trim()),
+                          r => unrated(r) || (lowOf(r) && !coreWhy[r.id]?.trim()),
                         )
                         // Focus first and tell the browser not to scroll for
                         // it, then scroll deliberately. Focusing after a

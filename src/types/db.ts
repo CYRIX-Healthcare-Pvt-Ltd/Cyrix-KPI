@@ -366,6 +366,24 @@ export interface CoreValueRating {
   self_remarks?: string | null
   manager_rating: string | null
   manager_remarks: string | null
+  /** The average of its parts' points, when the core value is rated in parts (0225). */
+  self_points?: number | null
+  manager_points?: number | null
+}
+
+/** One part of a core value in a month (0225): rated by both, averaged into the core value. */
+export interface CorePartRating {
+  id: string
+  submission_id: string
+  rating_id: string
+  part_id: string | null
+  label: string
+  /** A learning goal: the team member writes the goal itself each month. */
+  is_goal: boolean
+  sort_order: number
+  goal: string | null
+  self_rating: string | null
+  manager_rating: string | null
 }
 
 export interface AnnualSummary {

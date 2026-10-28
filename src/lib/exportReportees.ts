@@ -1,6 +1,6 @@
 import type { CoreValueDefinition, Employee, KpiSubmission, KpiSubmissionItem } from '@/types/db'
 import { supabase } from './supabase'
-import { ratingToPoints } from './scoring'
+import { corePoints } from './scoring'
 import { exportData } from './export'
 import { monthLabel } from './fy'
 
@@ -49,7 +49,8 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
       const at = (core?.sort_order ?? 9000)
       const rows = ((defs ?? []) as CoreValueDefinition[]).map((cv, n) => {
         const r = ratings.find(x => x.submission_id === s.id && x.core_value_id === cv.id)
-        const self = ratingToPoints(r?.self_rating), mgr = ratingToPoints(r?.manager_rating)
+        // A core value rated in parts (0225) carries its parts' average.
+        const self = corePoints(r?.self_points, r?.self_rating), mgr = corePoints(r?.manager_points, r?.manager_rating)
         const w = Number(weights[cv.id] ?? 0)
         const pts = mgr ?? self
         return {
