@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Camera, Check, Timer, Trash2 } from 'lucide-react'
+import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -227,20 +227,38 @@ function VisitPhotoSettings({ policy, purposes, call }: { policy: Record<string,
   )
 }
 
+/* Purposes, renamed in place too (Travel te_0063; the user, 30 Oct: "need option to edit also if any name correction"). */
 function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call; sw: boolean }) {
   const [label, setLabel] = useState('')
+  const [editing, setEditing] = useState<{ id: number; label: string } | null>(null)
   const [err, setErr] = useState<{ id: number; text: string; n: number } | null>(null)
   const remove = async (p: AdminData['purposes'][number]) => {
     if (!confirm(`Delete ${p.label}? It goes from the list of purposes.`)) return
     const e = await call('te_delete_purpose', { p_id: p.id }, 'Purpose deleted.', true)
     setErr(e ? x => ({ id: p.id, text: e, n: (x?.n ?? 0) + 1 }) : null)
   }
+  const rename = async (p: AdminData['purposes'][number]) => {
+    const e = await call('te_set_purpose', { p_id: p.id, p_label: editing!.label, p_gives_da: p.gives_da, p_active: p.is_active }, 'Renamed.', true)
+    if (e) setErr(x => ({ id: p.id, text: e, n: (x?.n ?? 0) + 1 })); else { setEditing(null); setErr(null) }
+  }
   return (
     <div className="card space-y-2 p-4">
       {list.map(p => (
         <div key={p.id} className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className={clsx('min-w-[12rem] font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
+            {editing?.id === p.id ? (
+              <span className="flex min-w-[12rem] items-center gap-1.5">
+                <input className="input !py-1 max-w-[14rem]" value={editing.label} autoFocus onChange={e => setEditing({ id: p.id, label: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') void rename(p); if (e.key === 'Escape') setEditing(null) }} />
+                <button type="button" className="btn-icon text-green-700" aria-label="Save" title="Save" disabled={!editing.label.trim()} onClick={() => void rename(p)}><Check className="h-4 w-4" /></button>
+                <button type="button" className="btn-icon" aria-label="Cancel" title="Cancel" onClick={() => { setEditing(null); setErr(null) }}><X className="h-4 w-4" /></button>
+              </span>
+            ) : (
+              <span className="flex min-w-[12rem] items-center gap-1">
+                <span className={clsx('font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
+                <button type="button" className="btn-icon" aria-label={`Rename ${p.label}`} title="Rename" onClick={() => { setEditing({ id: p.id, label: p.label }); setErr(null) }}><Pencil className="h-3.5 w-3.5" /></button>
+              </span>
+            )}
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
             {/* The ride needs a visit photo (Travel te_0082; the user, 28 Oct: "image mandatory check box"). */}
