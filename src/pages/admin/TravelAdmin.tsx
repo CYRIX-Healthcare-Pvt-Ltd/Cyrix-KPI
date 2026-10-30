@@ -501,7 +501,7 @@ function DeleteClaim() {
   )
 }
 
-// Places our engineers taught the search, checked here (Travel te_0038, te_0071): the list shared with Travel's admin page.
+// Places our engineers taught the search, put right here (Travel te_0038, te_0071): the list shared with Travel's admin page.
 function LearnedPlaces() {
   return <LearnedPlacesTable call={rpc} confirmRemove={async name => confirm(`Remove ${name}? It is no longer offered when engineers search. Claims that used it keep it.`)} />
 }
