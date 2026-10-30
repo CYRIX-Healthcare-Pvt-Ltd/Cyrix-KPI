@@ -309,7 +309,8 @@ export default function Shell() {
                   No `height`: the class sets it, smaller on a phone where
                   the bar is tighter, and an inline height would beat the
                   class and win in both. */}
-              <Logo className="h-9 sm:h-11" />
+              {/* Its width stated (300 x 92 art): Safari otherwise lays the link out at the picture's own 300 px and the header overflows (Travel 7d697ba, the user's iPhone, 30 Oct). */}
+              <Logo className="h-9 w-[calc(2.25rem*300/92)] sm:h-11 sm:w-[calc(2.75rem*300/92)]" />
             </a>
             {/* No module name beside the mark. It sat between the wordmark
                 and the navigation as a third grey word belonging to
