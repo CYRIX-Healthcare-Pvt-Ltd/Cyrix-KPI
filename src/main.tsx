@@ -3,6 +3,7 @@ import './lib/safeStorage'
 import { startSessionGuard } from '@/lib/sessionGuard'
 import { startIdleSignOut } from '@/lib/idleSignOut'
 import { supabase } from '@/lib/supabase'
+import { startErrorReporting } from '@/lib/reportErrors'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -20,6 +21,8 @@ guardNumberFields()
 // Before render, so nobody sees a flash of the wrong palette, and so a
 // choice made in another module is already in force when this one opens.
 startTheme()
+// Before React mounts, so an error during the first render is caught too (0230).
+startErrorReporting(supabase, 'kpi', __BUILD_SHA__)
 
 const queryClient = new QueryClient({
   defaultOptions: {
