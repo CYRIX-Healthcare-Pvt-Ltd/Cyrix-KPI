@@ -1497,6 +1497,8 @@ const BEMMP_ROLES: { value: string; label: string }[] = [
   { value: 'project_head', label: 'Project head' },
   { value: 'coordinator', label: 'Coordinator' },
   { value: 'purchase', label: 'Purchase' },
+  // Fills the PM checklists; every other role reads them (BEMMP 0014; the user, 31 Oct: "add engineer").
+  { value: 'engineer', label: 'Engineer' },
 ]
 
 /**
@@ -1510,6 +1512,7 @@ const CONTRACTS: { id: string; label: string }[] = [
   { id: 'up', label: 'Uttar Pradesh' },
   // A project of its own in BEMMP, not a contract export (BEMMP 0012; the user, 31 Oct).
   { id: 'mt', label: 'Medtronic' },
+  { id: 'pm', label: 'PM checklist' },
 ]
 
 function BemmpTab() {
