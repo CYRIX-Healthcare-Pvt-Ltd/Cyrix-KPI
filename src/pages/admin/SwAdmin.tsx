@@ -1535,6 +1535,33 @@ function BemmpTab() {
     },
   })
 
+  /*
+   * Only the people given the BEMMP tile (the user, 31 Oct): nobody else has
+   * anything here to set. Under module_grants, so a tile given or taken on
+   * the Logins tab refreshes this list too.
+   */
+  const { data: holders, isLoading: holdersLoading } = useQuery({
+    queryKey: ['module_grants', 'bemmp'],
+    queryFn: async () => {
+      const codes = new Set<string>()
+      for (let from = 0; ; from += 1000) {
+        const page = await supabase
+          .from('employee_modules')
+          .select('employees!inner(ecode)')
+          .eq('module_code', 'bemmp')
+          .order('employee_id')
+          .range(from, from + 999)
+        if (page.error) throw page.error
+        const rows = (page.data ?? []) as unknown as Array<{ employees: { ecode: string } }>
+        rows.forEach(r => codes.add(r.employees.ecode))
+        if (rows.length < 1000) return codes
+      }
+    },
+  })
+  const people = useMemo(
+    () => (data ?? []).filter(r => holders?.has(r.code)),
+    [data, holders])
+
   /** What the published exports say the zones are. */
   const { data: datasets } = useQuery({
     queryKey: ['bemmp_datasets'],
@@ -1580,23 +1607,22 @@ function BemmpTab() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = data ?? []
-    if (!q) return rows
-    return rows.filter(r =>
+    if (!q) return people
+    return people.filter(r =>
       r.code.toLowerCase().includes(q) ||
       (r.full_name ?? '').toLowerCase().includes(q))
-  }, [data, search])
+  }, [people, search])
 
-  const cyraOn = useMemo(() => (data ?? []).filter(r => r.cyra).length, [data])
+  const cyraOn = useMemo(() => people.filter(r => r.cyra).length, [people])
 
-  if (isLoading) return <PageLoader />
+  if (isLoading || holdersLoading) return <PageLoader />
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-ink-900">BEMMP access</h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          {filtered.length} of {data?.length ?? 0} people · Cyra on for {cyraOn}
+          {filtered.length} of {people.length} people · Cyra on for {cyraOn}
         </p>
       </div>
 
