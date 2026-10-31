@@ -202,8 +202,11 @@ Deno.serve(async req => {
   if (!devicesOn && input.action !== 'send' && input.action !== 'digest' && input.action !== 'reminders') return json({ off: true })
 
   // ---- the timers ----
-  if (input.action === 'bell' || input.action === 'reminders') {
+  if (input.action === 'bell' || input.action === 'reminders' || input.action === 'queued') {
     if (req.headers.get('x-push-key') !== Deno.env.get('PUSH_REMINDER_KEY')) return json({ error: 'Not allowed' }, 403)
+
+    // A module or BEMMP project just given (0233): sent the moment it is, not on the next round.
+    if (input.action === 'queued') return json(await sendQueued(db, ['travel', 'ops', 'module']))
 
     if (input.action === 'bell') {
       const { data, error } = await db.rpc('push_bell_due')
