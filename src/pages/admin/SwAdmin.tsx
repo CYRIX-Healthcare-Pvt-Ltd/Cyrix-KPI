@@ -1508,6 +1508,8 @@ const CONTRACTS: { id: string; label: string }[] = [
   { id: 'ap', label: 'Andhra' },
   // The user, 23 Sep: "up also should come".
   { id: 'up', label: 'Uttar Pradesh' },
+  // A project of its own in BEMMP, not a contract export (BEMMP 0012; the user, 31 Oct).
+  { id: 'mt', label: 'Medtronic' },
 ]
 
 function BemmpTab() {

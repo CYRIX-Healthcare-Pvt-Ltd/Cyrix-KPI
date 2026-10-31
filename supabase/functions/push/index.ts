@@ -118,19 +118,20 @@ const joinWords = (m: { id: string; title: string; meet_at: string; meet_place: 
   the people they are for, to their phones and computers, opening the claim. Each is taken once, by
   whoever marks it first: the app right after the step, or the 5-minute round if that missed it.
   Ops alerts (0229) ride the same round: an app down or back up, already in the Ops admins' bells.
+  A new module or BEMMP project (0232) waits in the bell the same way, for the round only.
 */
-async function sendTravel(db: ReturnType<typeof admin>, by?: string): Promise<Tally> {
+async function sendQueued(db: ReturnType<typeof admin>, kinds: string[], by?: string): Promise<Tally> {
   const total: Tally = { people: 0, devices: 0, delivered: 0, failed: 0 }
-  let q = db.from('push_messages').select('id, title, body, url').in('kind', ['travel', 'ops']).is('devices', null)
+  let q = db.from('push_messages').select('id, kind, title, body, url').in('kind', kinds).is('devices', null)
     .gt('created_at', new Date(Date.now() - 86_400_000).toISOString()).order('created_at').limit(200)
   if (by) q = q.eq('sent_by', by)
   const { data } = await q
-  for (const m of (data ?? []) as Array<{ id: string; title: string; body: string; url: string }>) {
+  for (const m of (data ?? []) as Array<{ id: string; kind: string; title: string; body: string; url: string }>) {
     const { data: took } = await db.from('push_messages').update({ devices: 0 }).eq('id', m.id).is('devices', null).select('id')
     if (!took?.length) continue
     const { data: to } = await db.from('push_inbox').select('employee_id').eq('message_id', m.id)
     const ids = ((to ?? []) as Array<{ employee_id: string }>).map(x => x.employee_id)
-    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: 'travel-' + m.id })
+    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: m.kind + '-' + m.id })
     await db.from('push_messages').update(t).eq('id', m.id)
     total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
   }
@@ -238,7 +239,7 @@ Deno.serve(async req => {
         const t = await deliverNamed(db, joinWords(m))
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
-      const travel = await sendTravel(db)
+      const travel = await sendQueued(db, ['travel', 'ops', 'module'])
       total.people += travel.people; total.devices += travel.devices; total.delivered += travel.delivered; total.failed += travel.failed
       return json(total)
     }
@@ -295,7 +296,7 @@ Deno.serve(async req => {
     })
     const { data: me } = await user.rpc('current_employee_id')
     if (!me) return json({ error: 'Not allowed' }, 403)
-    return json(await sendTravel(db, me as string))
+    return json(await sendQueued(db, ['travel', 'ops'], me as string))
   }
 
   // ---- a draft sent as a test (0187): only to the people it was sent to, on their devices ----
