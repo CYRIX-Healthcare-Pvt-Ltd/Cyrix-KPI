@@ -1547,7 +1547,8 @@ function BemmpTab() {
       for (let from = 0; ; from += 1000) {
         const page = await supabase
           .from('employee_modules')
-          .select('employees!inner(ecode)')
+          // Named: employee_modules points at employees twice (the person, and granted_by).
+          .select('employees!employee_modules_employee_id_fkey(ecode)')
           .eq('module_code', 'bemmp')
           .order('employee_id')
           .range(from, from + 999)
