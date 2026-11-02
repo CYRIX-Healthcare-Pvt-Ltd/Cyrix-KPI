@@ -60,14 +60,16 @@ async function everyone(db: ReturnType<typeof admin>): Promise<string[]> {
  * Every active person's device, each with words carrying their own first name (the user, 15 Oct:
  * "hey Kevin, today is the townhall meeting"). Names and devices are read in pages past 1,000.
  */
-async function deliverNamed(db: ReturnType<typeof admin>, make: (first: string) => Payload): Promise<Tally> {
+// `only`: a Digest post sent to chosen people (0242) reaches them alone.
+async function deliverNamed(db: ReturnType<typeof admin>, make: (first: string) => Payload, only?: string[] | null): Promise<Tally> {
+  const keep = only ? new Set(only) : null
   const first = new Map<string, string>()
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db.from('employees').select('id, full_name').eq('is_active', true).order('id').range(from, from + 999)
     if (error) throw new Error(error.message)
     for (const e of (data ?? []) as Array<{ id: string; full_name: string | null }>) {
       const w = (e.full_name ?? '').trim().split(/\s+/)[0] ?? ''
-      first.set(e.id, w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '')
+      if (!keep || keep.has(e.id)) first.set(e.id, w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '')
     }
     if (!data || data.length < 1000) break
   }
@@ -239,7 +241,8 @@ Deno.serve(async req => {
         }).select('id').single()
         if (dup || !claim) continue
         // With each person's name (the user, 15 Oct).
-        const t = await deliverNamed(db, joinWords(m))
+        const { data: a } = await db.from('digest_posts').select('audience_ids').eq('id', m.id).maybeSingle()
+        const t = await deliverNamed(db, joinWords(m), a?.audience_ids ?? null)
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
       const travel = await sendQueued(db, ['travel', 'ops', 'module'])
@@ -257,7 +260,8 @@ Deno.serve(async req => {
         url: '/', target: { kind: 'reminder', side: 'meeting-day' }, dedupe_key: 'digest-morning:' + m.id,
       }).select('id').single()
       if (dup || !claim) continue
-      const t = devicesOn ? await deliverNamed(db, morningWords(m)) : { people: 0, devices: 0, delivered: 0, failed: 0 }
+      const { data: a } = await db.from('digest_posts').select('audience_ids').eq('id', m.id).maybeSingle()
+      const t = devicesOn ? await deliverNamed(db, morningWords(m), a?.audience_ids ?? null) : { people: 0, devices: 0, delivered: 0, failed: 0 }
       await db.from('push_messages').update(t).eq('id', claim.id)
     }
 
@@ -366,7 +370,8 @@ Deno.serve(async req => {
       : post.kind === 'form' ? 'Fill it in, in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const { data: me } = await user.rpc('current_employee_id')
-    const people = await everyone(db)
+    // Sent to chosen people (0242): them alone.
+    const people: string[] = post.audience_ids ?? await everyone(db)
     const { data: row } = await db.from('push_messages').insert({
       kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
     }).select('id').single()

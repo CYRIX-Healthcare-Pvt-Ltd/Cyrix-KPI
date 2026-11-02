@@ -6,6 +6,7 @@ import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
 import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
 import DigestAccess from '@/components/DigestAccess'
 import MultiPick from '@/components/MultiPick'
+import DigestSendTo from '@/components/DigestSendTo'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
@@ -104,10 +105,12 @@ interface Draft {
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
   vloc: string; vby: string; vlink: string
-  /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
+  /** Show until (0177): a date, or 'forever' — required (the user, 2 Nov: "show until mandatory ... date and forever"). */
   until: string
+  /** Send to (0242): everyone, or the chosen functions, teams and people. */
+  to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
@@ -220,8 +223,13 @@ export default function DigestAdmin() {
       const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || d.kind === 'form'
       const { error: pe0 } = await supabase.rpc('digest_set_pdf', { p_id: id, p_url: d.pdf_url ?? '', p_name: d.pdf_name ?? '' })
       if (pe0) throw new Error(friendlyError(pe0))
-      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
+      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd || d.until === 'forever' ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
+      const chosen = d.to === 'chosen'
+      const { error: ae } = await supabase.rpc('digest_set_audience', {
+        p_id: id, p_functions: chosen ? d.fns : [], p_managers: chosen ? d.mgrs : [], p_ecodes: chosen ? d.ecodes : [], p_direct: chosen ? d.direct : [],
+      })
+      if (ae) throw new Error(friendlyError(ae))
       if (d.kind === 'vacancy') {
         const { error: ve } = await supabase.rpc('digest_set_vacancy', {
           p_id: id, p_location: d.vloc, p_apply_by: d.vby || null, p_apply_link: d.vlink,
@@ -324,6 +332,8 @@ export default function DigestAdmin() {
     if (!(d.minutes >= 5 && d.minutes <= 600)) missing.push('Duration')
     if (d.hasLink && !/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
   }
+  if (d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && !d.until) missing.push('Show until')
+  if (d.to === 'chosen' && !d.direct.length && !d.fns.length && !d.mgrs.length && !d.ecodes.length) missing.push('Send to')
   const ready = missing.length === 0
 
   const previewPost: PreviewPost = {
@@ -538,11 +548,24 @@ export default function DigestAdmin() {
         </div>
 
         {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && <div className="max-w-xs">
-          <label className="label" htmlFor="dg-until">Show until · optional</label>
-          <input id="dg-until" type="date" className="input" value={d.until}
+          <span className="label">Show until <span className="text-red-600">*</span></span>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {(['date', 'forever'] as const).map(m => {
+              const on = m === 'forever' ? d.until === 'forever' : d.until !== '' && d.until !== 'forever'
+              return <button key={m} type="button" aria-pressed={on}
+                className={on ? 'btn-primary justify-center' : 'btn-secondary justify-center'}
+                onClick={() => set({ until: m === 'forever' ? 'forever' : on ? d.until : new Date(Date.now() + 330 * 60_000 + 7 * 86_400_000).toISOString().slice(0, 10) })}>
+                {m === 'date' ? 'Date' : 'Forever'}
+              </button>
+            })}
+          </div>
+          {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2" value={d.until}
             min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
-            onChange={e => set({ until: e.target.value })} />
+            onChange={e => set({ until: e.target.value || d.until })} />}
         </div>}
+
+        <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes }}
+          onTo={to => set({ to })} onChange={a => set(a)} />
 
         <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}
@@ -658,12 +681,14 @@ export default function DigestAdmin() {
                     : []
                   const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
                   setTesters(tested); setTesting(tested.length > 0)
+                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[] } | null
                   setDraftSaved(false)
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
                     questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? 'forever',
+                    to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
                 {r.can_edit && r.published_at && !(r.show_until && r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)) && !(r.kind === 'meeting' && r.meet_at && new Date(r.meet_at).getTime() + (r.meet_minutes ?? 60) * 60_000 < Date.now()) && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
