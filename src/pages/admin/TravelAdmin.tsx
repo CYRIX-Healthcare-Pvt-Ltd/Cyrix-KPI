@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
+import TravelReport from './TravelReport'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -11,6 +12,10 @@ const rpc = async <T,>(fn: string, args?: Record<string, unknown>) => {
   if (error) throw new Error(friendlyError(error))
   return data as T
 }
+/** Purposes and expense types read A to Z, "Other" last (the user, 2 Nov), as in Travel. */
+const az = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
+const alphabetical = <T,>(list: readonly T[], label: (x: T) => string): T[] =>
+  [...list].sort((a, b) => Number(label(a) === 'Other') - Number(label(b) === 'Other') || az.compare(label(a), label(b)))
 interface Rule {
   grade: string; da_in_district: number; da_out_district: number; da_out_state: number; da_out_state_stay: number
   hotel_in_single: number; hotel_in_double: number; hotel_out_single: number; hotel_out_double: number
@@ -49,8 +54,13 @@ const POLICY: Array<[string, string]> = [
 
 export function TravelAdmin() {
   const qc = useQueryClient()
-  const { data, isLoading, error } = useQuery({ queryKey: ['te_admin'], queryFn: () => rpc<AdminData>('te_admin_data') })
-  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'delete'>('rules')
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['te_admin'],
+    queryFn: () => rpc<AdminData>('te_admin_data').then(d => ({
+      ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
+    })),
+  })
+  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'reports' | 'delete'>('rules')
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
   // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
@@ -65,7 +75,7 @@ export function TravelAdmin() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
-        {[...TABS.slice(0, 3), ...(data.sw ? [['photos', 'Visit photos'] as const] : []), ...TABS.slice(3), ...(data.sw ? [['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {[...TABS.slice(0, 3), ...(data.sw ? [['photos', 'Visit photos'] as const] : []), ...TABS.slice(3), ...(data.sw ? [['reports', 'Reports'] as const, ['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
@@ -82,6 +92,8 @@ export function TravelAdmin() {
       {tab === 'coord' && <Coordinators list={data.coordinators} call={call} />}
       {tab === 'desk' && <Desk list={data.desk} call={call} />}
       {tab === 'places' && <LearnedPlaces />}
+      {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
+      {tab === 'reports' && data.sw && <TravelReport />}
       {tab === 'delete' && data.sw && <DeleteClaim />}
     </div>
   )
