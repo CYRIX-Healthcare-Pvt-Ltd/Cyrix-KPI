@@ -2627,10 +2627,10 @@ function BuildStamp() {
 export default function SwAdmin() {
   // IT_ADMIN (0151): the Logins tab, and (0152) Support with IT's own queue.
   const { isSwAdmin, isItAdmin } = useAuth()
-  // SW Admin does not post to Cyrix Digest; IT does (0163).
+  // IT posts to Cyrix Digest from its own page now, opened from the portal (the user, 2 Nov).
   const TABS = isSwAdmin
-    ? ADMIN_TABS.filter(t => t.id !== 'digest' || isItAdmin)
-    : ADMIN_TABS.filter(t => t.id === 'logins' || ((t.id === 'support' || t.id === 'digest') && isItAdmin))
+    ? ADMIN_TABS.filter(t => t.id !== 'digest')
+    : ADMIN_TABS.filter(t => t.id === 'logins' || (t.id === 'support' && isItAdmin))
   const deskHere = isSwAdmin ? 'software' : 'it'
   // The open tab is in the address, so a reload stays on it (the user, 12 Oct: "on reload im
   // going to logins tab").

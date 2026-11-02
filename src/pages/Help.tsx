@@ -596,6 +596,7 @@ export default function Help() {
             { what: t('ask.p5.what'), how: t('ask.p5.how'), to: '/history', cta: 'Open assessments' },
             { what: t('ask.p6.what'), how: t('ask.p6.how') },
             { what: t('ask.p7.what'), how: t('ask.p7.how') },
+            { what: t('ask.p14.what'), how: t('ask.p14.how'), to: '/history', cta: 'Open assessments' },
           ] : []),
           { what: t('ask.p8.what'), how: t('ask.p8.how') },
           { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },

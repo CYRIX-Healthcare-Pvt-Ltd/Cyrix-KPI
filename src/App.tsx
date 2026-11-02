@@ -28,7 +28,7 @@ const AdminRequests     = lazyRoute(() => import('@/pages/admin/AdminRequests'))
 const SwAdmin           = lazyRoute(() => import('@/pages/admin/SwAdmin'))
 const KpiTiming         = lazyRoute(() => import('@/pages/admin/KpiTiming'))
 const SendNotification  = lazyRoute(() => import('@/pages/admin/SendNotification'))
-const DigestAdmin       = lazyRoute(() => import('@/pages/admin/DigestAdmin'))
+const DigestDesk        = lazyRoute(() => import('@/pages/DigestDesk'))
 const DeletionRequests  = lazyRoute(() => import('@/pages/DeletionRequests'))
 const ScoreQueries      = lazyRoute(() => import('@/pages/ScoreQueries'))
 const Help              = lazyRoute(() => import('@/pages/Help'))
@@ -107,17 +107,16 @@ function RequireSw({ children }: { children: JSX.Element }) {
   return children
 }
 
-/**
- * HR administers the system rather than being appraised by it, so they
- * land on the admin overview instead of a personal dashboard.
- */
 function HomeRoute() {
-  const { isHrAdmin, isSwAdmin, isItAdmin, isMktAdmin, loading } = useAuth()
+  // Everyone opens on their own month now; a desk is one press away on the switch (the user, 2 Nov).
+  const { employee, isHrAdmin, isSwAdmin, isItAdmin, isMktAdmin, loading } = useAuth()
   if (loading) return <PageLoader />
-  if (isHrAdmin) return <Navigate to="/admin" replace />
-  // Marketing's whole KPI is the Digest tab (0164).
-  if (isMktAdmin && !isSwAdmin && !isItAdmin) return <Navigate to="/admin/digest" replace />
-  if (isSwAdmin || isItAdmin) return <Navigate to="/admin/logins" replace />
+  // A shared desk login is nobody's appraisal, so it still opens on its desk.
+  if ((employee as { account_type?: string } | null)?.account_type === 'admin') {
+    if (isHrAdmin) return <Navigate to="/admin" replace />
+    if (isMktAdmin && !isSwAdmin && !isItAdmin) return <Navigate to="/digest" replace />
+    if (isSwAdmin || isItAdmin) return <Navigate to="/admin/logins" replace />
+  }
   return <Dashboard />
 }
 
@@ -134,6 +133,9 @@ export default function App() {
             </RequireAuth>
           }
         />
+
+        {/* Cyrix Digest's desk: its own page, not a KPI tab, opened from the portal (the user, 2 Nov). */}
+        <Route path="/digest" element={<RequireAuth><RequireDigest><DigestDesk /></RequireDigest></RequireAuth>} />
 
         <Route
           element={
@@ -179,7 +181,8 @@ export default function App() {
           <Route path="admin/timing" element={<RequireSw><KpiTiming /></RequireSw>} />
           {/* HR's own tab; SW Admin has the same page inside Administration (0154). */}
           <Route path="admin/notify" element={<RequireHr><SendNotification /></RequireHr>} />
-          <Route path="admin/digest" element={<RequireDigest><DigestAdmin /></RequireDigest>} />
+          {/* Old links: Digest has its own page now (the user, 2 Nov). */}
+          <Route path="admin/digest" element={<Navigate to="/digest" replace />} />
           {/* The approval chain is the reporting manager and then HR. The
               link was removed from the SW Admin nav, but a nav is not a
               permission — the route has to say so too. */}

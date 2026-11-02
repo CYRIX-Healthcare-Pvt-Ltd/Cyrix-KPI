@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  ArrowLeft, Send, Save, Lock, Trash2, MessageSquare, MessageSquarePlus, Paperclip, CheckCircle2,
+  ArrowLeft, Send, Save, Lock, Trash2, Undo2, MessageSquare, MessageSquarePlus, Paperclip, CheckCircle2,
   Shuffle,
 } from 'lucide-react'
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
@@ -11,7 +11,9 @@ import RuleTraits from '@/components/RuleTraits'
 import OutOfInput from '@/components/OutOfInput'
 import KpiStatusNote from '@/components/KpiStatusNote'
 import { useAuth } from '@/contexts/AuthContext'
-import { supabase } from '@/lib/supabase'
+import { supabase, friendlyError } from '@/lib/supabase'
+import { useQuery } from '@tanstack/react-query'
+import Dialog from '@/components/Dialog'
 import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings, useSaveCoreParts,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
@@ -28,6 +30,7 @@ import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
 import { bandOfRating } from '@/lib/bands'
+import MonthFiles from '@/components/MonthFiles'
 import type { KpiSubmissionItem, ScoreQueryState, Alternate, CorePartRating } from '@/types/db'
 
 export default function MonthlySubmission() {
@@ -72,6 +75,10 @@ export default function MonthlySubmission() {
   const [deleteReason, setDeleteReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Recall (0245): back to a draft while the manager has not started on it (the user, 2 Nov).
+  const [recallOpen, setRecallOpen] = useState(false)
+  const [recalling, setRecalling] = useState(false)
+  const [recallError, setRecallError] = useState('')
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
@@ -80,6 +87,24 @@ export default function MonthlySubmission() {
   const pastLastDay = isPastLastDay(month, 'tm', policy)
   const lastDay = lastDayLabel(month, 'tm', policy)
   const editable = (submission?.status === 'draft' || submission?.status === 'returned') && !pastLastDay
+  // Asked of the database: it knows whether the manager has saved anything on the month.
+  const { data: canRecall = false, refetch: recheckRecall } = useQuery({
+    queryKey: ['kpi_can_recall', submission?.id, submission?.status],
+    enabled: submission?.status === 'submitted',
+    queryFn: async () => !!(await supabase.rpc('kpi_can_recall', { p_submission_id: submission!.id })).data,
+  })
+  const recall = async () => {
+    if (!submission) return
+    setRecalling(true)
+    setRecallError('')
+    const { error } = await supabase.rpc('kpi_recall', { p_submission_id: submission.id })
+    setRecalling(false)
+    if (error) { setRecallError(friendlyError(error)); void recheckRecall(); return }
+    setRecallOpen(false)
+    await refetch()
+    setNotice(`${monthLabel(month)} is back with you as a draft. Submit it again when it is ready.`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const { data: openDeletion } = useOpenRequestFor('deletion', submission?.id)
   const { data: queryState } = useScoreQueryState(submission?.id)
@@ -1016,6 +1041,9 @@ export default function MonthlySubmission() {
         )}
       </div>
 
+      {/* The month's supporting files, for checking and the record (the user, 2 Nov). */}
+      <MonthFiles submissionId={submission.id} editable={editable} />
+
       {editable && (
         <div className="sticky bottom-16 flex flex-wrap gap-2 lg:bottom-0">
           <button onClick={onSubmit} disabled={busy} className="btn-primary">
@@ -1047,6 +1075,19 @@ export default function MonthlySubmission() {
           manager and then HR approving. Available on finalised months too:
           that is precisely when a wrong record needs removing, and HR has
           the final say either way. */}
+      {recallOpen && (
+        <Dialog title={`Recall ${monthLabel(month)}?`} icon={<Undo2 className="h-5 w-5 text-amber-600" />} onClose={() => setRecallOpen(false)}>
+          <p className="text-sm text-ink-600">It comes back to you as a draft and leaves your manager's list until you submit it again.</p>
+          {recallError && <p className="mt-3 text-sm text-cyrixRed-600" role="alert">{recallError}</p>}
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" className="btn-secondary justify-center" onClick={() => setRecallOpen(false)}>Cancel</button>
+            <button type="button" className="btn-primary justify-center !bg-amber-500 hover:!bg-amber-600" disabled={recalling} onClick={() => void recall()}>
+              {recalling ? <Spinner className="h-4 w-4" /> : <Undo2 className="h-4 w-4" />} Recall
+            </button>
+          </div>
+        </Dialog>
+      )}
+
       {!editable && (
         <div className="card p-4">
           {openDeletion ? (
@@ -1076,15 +1117,26 @@ export default function MonthlySubmission() {
                   Submitted this by mistake?
                 </p>
                 <p className="mt-0.5 text-sm text-ink-500">
-                  Ask for it to be removed. Your manager reviews it first, then HR.
+                  {canRecall
+                    ? 'Recall it to change it, until your manager starts scoring. Or ask for it to be removed.'
+                    : 'Ask for it to be removed. Your manager reviews it first, then HR.'}
                 </p>
               </div>
-              <button
-                onClick={() => setShowDelete(true)}
-                className="btn-secondary !text-cyrixRed-700"
-              >
-                <Trash2 className="h-4 w-4" /> Request deletion
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {/* Back to a draft, while the manager has not started on it (the user, 2 Nov):
+                    amber beside the red of deletion. */}
+                {canRecall && (
+                  <button type="button" className="btn-secondary !text-amber-600" onClick={() => { setRecallError(''); setRecallOpen(true) }}>
+                    <Undo2 className="h-4 w-4" /> Recall
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowDelete(true)}
+                  className="btn-secondary !text-cyrixRed-700"
+                >
+                  <Trash2 className="h-4 w-4" /> Request deletion
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
   LogOut, Menu, X, Building2, BarChart3, UserMinus,
-  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight, BellRing, Newspaper,
+  ShieldAlert, Trash2, MessageSquare, Grid2x2, LifeBuoy, ChevronLeft, ChevronRight, BellRing,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { nudgeAdmins } from '@/lib/notifyHr'
@@ -50,7 +50,6 @@ const NAV_TINT: Record<string, string> = {
   '/admin/logins':     'text-cyrixRed-600', // security
   '/admin/timing':     'text-amber-600',    // deadlines
   '/admin/notify':     'text-cyrixRed-600', // to people's phones
-  '/admin/digest':     'text-violet-600',   // company news
 }
 
 interface NavItem {
@@ -66,8 +65,11 @@ interface NavItem {
   queue?: boolean
 }
 
+/** The pages on the My KPI side of an admin's switch; /admin is the desk side. */
+const MINE_PATHS = ['/my-kpi', '/submission', '/history', '/team', '/approvals', '/queries']
+
 export default function Shell() {
-  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, isMktAdmin, signOut } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, signOut } = useAuth()
 
   /*
     Once a day, from whoever is here.
@@ -181,9 +183,47 @@ export default function Shell() {
     queue: true,
   }
 
-  const allItems: NavItem[] = isMktAdmin && !isHrAdmin && !isSwAdmin && !isItAdmin
-    // Marketing posts to Cyrix Digest, and that is all (0164).
-    ? [{ to: '/admin/digest', label: 'Cyrix Digest', icon: Newspaper, end: true }]
+  /*
+    An admin is appraised too (the user, 2 Nov: "salman need to enter kpi also and should have admin
+    access also"), so a desk role adds a switch rather than replacing the personal tabs: My KPI, or
+    the desk. Which side you are on follows the page, so a link into either lands on the right tabs;
+    pages that belong to neither (Profile, Help) keep the side you came from.
+  */
+  // Cyrix Digest is not KPI's: it is posted from its own page, opened from the portal (the user, 2 Nov).
+  const isAdmin = isHrAdmin || isSwAdmin || isItAdmin
+  const deskHome = isHrAdmin ? '/admin' : '/admin/logins'
+  const deskLabel = isHrAdmin ? 'HR admin' : isSwAdmin ? 'SW admin' : 'IT admin'
+  const side = useRef<'mine' | 'desk'>(pathname.startsWith('/admin') ? 'desk' : 'mine')
+  if (pathname.startsWith('/admin')) side.current = 'desk'
+  else if (pathname === '/' || MINE_PATHS.some(p => pathname.startsWith(p))) side.current = 'mine'
+  // A shared desk login (account type admin) is nobody's appraisal: desk only, no switch.
+  const deskOnly = (employee as { account_type?: string } | null)?.account_type === 'admin'
+  const onDesk = isAdmin && (deskOnly || side.current === 'desk')
+
+  const mineItems: NavItem[] = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/my-kpi', label: 'My KPI', icon: ClipboardList },
+    // "History" is where the monthly assessment is actually done, but
+    // the name only described the half of the screen that looks
+    // backwards — so people went looking for somewhere to submit and
+    // did not find it. "Assessments" is the word the app already uses
+    // for this ("You cannot start monthly assessments until…"), and a
+    // calendar tick says months rather than archive.
+    { to: '/history', label: 'Assessments', icon: CalendarCheck },
+    ...(isManager
+      ? [
+          { to: '/team', label: 'My Team', icon: Users, badge: counts?.scoring ?? 0 },
+          {
+            to: '/approvals', label: 'Approvals', icon: CheckSquare,
+            badge: counts?.approvals ?? 0, queue: true,
+          },
+          queries,
+          records,
+        ]
+      : []),
+  ]
+
+  const allItems: NavItem[] = !onDesk ? mineItems
     : (isSwAdmin || isItAdmin) && !isHrAdmin
     // One destination, named for what it opens. It used to be two — Logins
     // and KPI Timing — which put a single module's settings beside the
@@ -217,33 +257,11 @@ export default function Shell() {
         },
         records,
         ...(pushOn ? [{ to: '/admin/notify', label: 'Notify', icon: BellRing }] : []),
-        { to: '/admin/digest', label: 'Digest', icon: Newspaper },
         ...(isSwAdmin
           ? [{ to: '/admin/logins', label: 'Administration', icon: ShieldAlert }]
           : []),
       ]
-    : [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-        { to: '/my-kpi', label: 'My KPI', icon: ClipboardList },
-        // "History" is where the monthly assessment is actually done, but
-        // the name only described the half of the screen that looks
-        // backwards — so people went looking for somewhere to submit and
-        // did not find it. "Assessments" is the word the app already uses
-        // for this ("You cannot start monthly assessments until…"), and a
-        // calendar tick says months rather than archive.
-        { to: '/history', label: 'Assessments', icon: CalendarCheck },
-        ...(isManager
-          ? [
-              { to: '/team', label: 'My Team', icon: Users, badge: counts?.scoring ?? 0 },
-              {
-                to: '/approvals', label: 'Approvals', icon: CheckSquare,
-                badge: counts?.approvals ?? 0, queue: true,
-              },
-              queries,
-              records,
-            ]
-          : []),
-      ]
+    : mineItems
 
   /*
     Six tabs on a 375px screen is five characters each, which is how
@@ -448,6 +466,22 @@ export default function Shell() {
           </div>
         </div>
 
+        {/* My KPI or the desk, one press either way (the user, 2 Nov). */}
+        {isAdmin && !deskOnly && (
+          <div className="border-t border-ink-200 px-4 py-2">
+            <div className="grid max-w-xs grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1" role="group" aria-label="Show">
+              <NavLink to="/" onClick={() => setMenuOpen(false)} aria-current={!onDesk ? 'page' : undefined}
+                className={clsx('rounded-lg py-2 text-center text-sm font-medium', !onDesk ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500')}>
+                My KPI
+              </NavLink>
+              <NavLink to={deskHome} onClick={() => setMenuOpen(false)} aria-current={onDesk ? 'page' : undefined}
+                className={clsx('rounded-lg py-2 text-center text-sm font-medium', onDesk ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500')}>
+                {deskLabel}
+              </NavLink>
+            </div>
+          </div>
+        )}
+
         {menuOpen && (
           <nav className="border-t border-ink-200 bg-surface px-3 py-2 lg:hidden">
             {items.map(item => (
@@ -551,7 +585,7 @@ export default function Shell() {
           to the profile page, and on 7 Oct out of KPI altogether: the
           whole platform installs as one app, from the icon in the
           portal's top bar. */}
-      {!(isHrAdmin || isSwAdmin || isItAdmin || isMktAdmin) && <ChatBot />}
+      {!onDesk && <ChatBot />}
       <StartMonthPrompt />
     </div>
   )

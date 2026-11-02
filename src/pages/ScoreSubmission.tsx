@@ -28,6 +28,7 @@ import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile,
 } from '@/components/ui'
 import type { KpiSubmissionItem, Section, CorePartRating } from '@/types/db'
+import MonthFiles from '@/components/MonthFiles'
 
 /**
  * The blocks a manager enters a number against, in reading order. Core
@@ -574,6 +575,9 @@ export default function ScoreSubmission() {
           <p className="mt-1 text-sm text-ink-700">{submission.employee_remarks}</p>
         </div>
       )}
+
+      {/* What they sent with the month, to check the figures against (0244). */}
+      <MonthFiles submissionId={submission.id} editable={false} title={`${data.employee.full_name.split(' ')[0]}'s files`} />
 
       {/*
         Three figures that were three bare numbers out of 100, which is
