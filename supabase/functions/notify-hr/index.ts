@@ -206,37 +206,54 @@ async function summarise(
 }
 
 /**
- * Who hears about it: the admin who staffs that desk, and — for HR —
- * whoever HR Admin has asked to be copied.
+ * Who hears about it: every active person on that desk, their reporting
+ * managers copied (the user, 2 Nov: "support mail to their id and reporting
+ * managers"), and — for HR — whoever HR Admin has asked to be copied.
+ *
+ * Every holder rather than one: desks are people now (KPI 0246), and the
+ * old shared desk logins are switched off. IT counts only those with
+ * Support ticked (0247).
  */
 async function recipients(
   db: ReturnType<typeof admin>, desk: Desk,
 ): Promise<{ to: string[]; cc: string[] }> {
-  // Two plain reads rather than an embedded join. A join here would be
-  // one row per user_roles match, so a second hr_admin row — or a second
-  // holder of the role — turns maybeSingle() into an error and nobody
-  // gets told anything. Two queries cannot be ambiguous.
-  const { data: role } = await db.from('user_roles')
+  // Plain reads rather than an embedded join, so nothing can be ambiguous.
+  const { data: holders } = await db.from('user_roles')
     .select('employee_id').eq('role', desk === 'sw' ? 'sw_admin' : desk === 'it' ? 'it_admin' : 'hr_admin')
-    .limit(1).maybeSingle()
+  const ids = (holders ?? []).map(h => h.employee_id as string)
 
-  let to = ''
-  if (role?.employee_id) {
-    const { data: emp } = await db.from('employees')
-      .select('work_email').eq('id', role.employee_id).maybeSingle()
-    to = (emp?.work_email ?? '').trim()
+  type Person = { id: string; work_email: string | null; account_type: string | null; reporting_manager_id: string | null }
+  let people: Person[] = []
+  if (ids.length) {
+    const { data } = await db.from('employees')
+      .select('id, work_email, account_type, reporting_manager_id').in('id', ids).eq('is_active', true)
+    people = (data ?? []) as Person[]
+  }
+  if (desk === 'it' && people.length) {
+    const { data } = await db.from('desk_admins').select('employee_id, modules').eq('desk', 'it')
+    const support = new Set((data ?? []).filter(d => (d.modules as string[]).includes('Support')).map(d => d.employee_id as string))
+    people = people.filter(p => p.account_type === 'admin' || support.has(p.id))
   }
 
-  // The copy list is HR's own setting. The software desk has one address
-  // and no list to keep, which is why nothing is read for it here.
-  if (desk !== 'hr') return { to: to ? [to] : [], cc: [] }
+  const email = (a: string | null | undefined) => (a ?? '').trim()
+  const to = [...new Set(people.map(p => email(p.work_email)).filter(a => a.includes('@')))]
 
-  const { data: setting } = await db.from('app_settings')
-    .select('value').eq('key', 'hr_notify_cc').maybeSingle()
-  const raw = setting?.value
-  const cc = Array.isArray(raw) ? raw.filter(a => typeof a === 'string' && a.includes('@')) : []
+  const managerIds = [...new Set(people.filter(p => p.account_type !== 'admin' && p.reporting_manager_id).map(p => p.reporting_manager_id as string))]
+  let cc: string[] = []
+  if (managerIds.length) {
+    const { data } = await db.from('employees').select('work_email').in('id', managerIds).eq('is_active', true)
+    cc = (data ?? []).map(m => email(m.work_email as string | null)).filter(a => a.includes('@'))
+  }
 
-  return { to: to ? [to] : [], cc: cc.filter(a => a !== to) }
+  // The copy list is HR's own setting.
+  if (desk === 'hr') {
+    const { data: setting } = await db.from('app_settings')
+      .select('value').eq('key', 'hr_notify_cc').maybeSingle()
+    const raw = setting?.value
+    if (Array.isArray(raw)) cc.push(...raw.filter(a => typeof a === 'string' && a.includes('@')))
+  }
+
+  return { to, cc: [...new Set(cc)].filter(a => !to.includes(a)) }
 }
 
 const escape = (s: string) =>
