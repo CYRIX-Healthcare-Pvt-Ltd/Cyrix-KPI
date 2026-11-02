@@ -19,6 +19,10 @@ interface AuthState {
   isItAdmin: boolean
   /** MRK_ADMIN: posts to Cyrix Digest, and nothing else (0164). */
   isMktAdmin: boolean
+  /** Desks and the modules ticked for each, set by SW Admin (0246); a shared desk login has all of its desk's. */
+  desks: Record<string, string[]>
+  /** Posts to Cyrix Digest: Digest ticked for HR, IT or Marketing. */
+  canPostDigest: boolean
   directReportCount: number
   /**
    * From the force_password_change setting. False during the testing phase,
@@ -43,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSwAdmin, setIsSwAdmin] = useState(false)
   const [isItAdmin, setIsItAdmin] = useState(false)
   const [isMktAdmin, setIsMktAdmin] = useState(false)
+  const [desks, setDesks] = useState<Record<string, string[]>>({})
   const [forcePasswordChange, setForcePasswordChange] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -54,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSwAdmin(false)
       setIsItAdmin(false)
       setIsMktAdmin(false)
+      setDesks({})
       return
     }
 
@@ -70,10 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSwAdmin(false)
       setIsItAdmin(false)
       setIsMktAdmin(false)
+      setDesks({})
       return
     }
 
-    const [{ count }, { data: roles }, { data: setting }] = await Promise.all([
+    const [{ count }, { data: roles }, { data: setting }, { data: myDesks }] = await Promise.all([
       supabase
         .from('employees')
         .select('id', { count: 'exact', head: true })
@@ -82,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from('user_roles').select('role').eq('employee_id', emp.id),
       supabase.from('app_settings').select('value')
         .eq('key', 'force_password_change').maybeSingle(),
+      supabase.rpc('my_desks'),
     ])
 
     const roleNames = (roles ?? []).map(r => r.role)
@@ -90,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsSwAdmin(roleNames.some(r => ['sw_admin', 'super_admin'].includes(r)))
     setIsItAdmin(roleNames.includes('it_admin'))
     setIsMktAdmin(roleNames.includes('mkt_admin'))
+    setDesks(Object.fromEntries(((myDesks ?? []) as Array<{ desk: string; modules: string[] }>).map(d => [d.desk, d.modules])))
     setForcePasswordChange(setting?.value === true)
   }, [])
 
@@ -178,6 +187,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSwAdmin,
         isItAdmin,
         isMktAdmin,
+        desks,
+        canPostDigest: ['hr', 'it', 'mkt'].some(d => desks[d]?.includes('Digest')),
         directReportCount,
         forcePasswordChange,
         loading,

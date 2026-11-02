@@ -69,7 +69,7 @@ interface NavItem {
 const MINE_PATHS = ['/my-kpi', '/submission', '/history', '/team', '/approvals', '/queries']
 
 export default function Shell() {
-  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, signOut } = useAuth()
+  const { employee, isManager, isHrAdmin, isSwAdmin, isItAdmin, desks, signOut } = useAuth()
 
   /*
     Once a day, from whoever is here.
@@ -191,7 +191,7 @@ export default function Shell() {
   */
   // Cyrix Digest is not KPI's: it is posted from its own page, opened from the portal (the user, 2 Nov).
   const isAdmin = isHrAdmin || isSwAdmin || isItAdmin
-  const deskHome = isHrAdmin ? '/admin' : '/admin/logins'
+  const deskHome = isHrAdmin ? '/admin' : isItAdmin && !isSwAdmin && !desks.it?.includes('Logins') ? '/admin/logins?tab=support' : '/admin/logins'
   const deskLabel = isHrAdmin ? 'HR admin' : isSwAdmin ? 'SW admin' : 'IT admin'
   const side = useRef<'mine' | 'desk'>(pathname.startsWith('/admin') ? 'desk' : 'mine')
   if (pathname.startsWith('/admin')) side.current = 'desk'

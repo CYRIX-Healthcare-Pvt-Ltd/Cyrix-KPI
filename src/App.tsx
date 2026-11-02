@@ -94,9 +94,10 @@ function RequireSwOrIt({ children }: { children: JSX.Element }) {
 
 /** Cyrix Digest: HR, IT and Marketing post (0163, 0164). */
 function RequireDigest({ children }: { children: JSX.Element }) {
-  const { isHrAdmin, isItAdmin, isMktAdmin, loading } = useAuth()
+  // Digest ticked for the person's desk, or a shared desk login (0246).
+  const { canPostDigest, loading } = useAuth()
   if (loading) return <PageLoader />
-  if (!isHrAdmin && !isItAdmin && !isMktAdmin) return <Navigate to="/" replace />
+  if (!canPostDigest) return <Navigate to="/" replace />
   return children
 }
 

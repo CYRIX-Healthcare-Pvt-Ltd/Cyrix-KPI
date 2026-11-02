@@ -2,12 +2,13 @@ import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
+  Search, ShieldAlert, ShieldCheck, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
   Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
+import AdminsTab from './AdminsTab'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import CyraAccess from '@/pages/admin/CyraAccess'
@@ -2531,6 +2532,8 @@ export function SummaryTab() {
 
 const ADMIN_TABS = [
   { id: 'logins', label: 'Logins', short: 'Logins', icon: ShieldAlert, render: () => <LoginsTab /> },
+  // Who holds a desk role, and for which modules (the user, 2 Nov).
+  { id: 'admins', label: 'Admins', short: 'Admins', icon: ShieldCheck, render: () => <AdminsTab /> },
   // Beside Logins because it reads the same rows: one is the list, the
   // other is what the list adds up to.
   { id: 'summary', label: 'Summary Report', short: 'Summary', icon: BarChart3, render: () => <SummaryTab /> },
@@ -2626,11 +2629,13 @@ function BuildStamp() {
  */
 export default function SwAdmin() {
   // IT_ADMIN (0151): the Logins tab, and (0152) Support with IT's own queue.
-  const { isSwAdmin, isItAdmin } = useAuth()
+  const { isSwAdmin, isItAdmin, desks } = useAuth()
   // IT posts to Cyrix Digest from its own page now, opened from the portal (the user, 2 Nov).
   const TABS = isSwAdmin
     ? ADMIN_TABS.filter(t => t.id !== 'digest')
-    : ADMIN_TABS.filter(t => t.id === 'logins' || (t.id === 'support' && isItAdmin))
+    // IT sees the modules SW Admin ticked for it (0246): Logins, Support, or both.
+    : ADMIN_TABS.filter(t => (t.id === 'logins' && (!isItAdmin || desks.it?.includes('Logins')))
+      || (t.id === 'support' && isItAdmin && desks.it?.includes('Support')))
   const deskHere = isSwAdmin ? 'software' : 'it'
   // The open tab is in the address, so a reload stays on it (the user, 12 Oct: "on reload im
   // going to logins tab").
