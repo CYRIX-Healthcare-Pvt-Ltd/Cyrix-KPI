@@ -34,7 +34,7 @@ interface Rule {
 type AdminData = {
   rules: Rule[]
   policy: Record<string, unknown>
-  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean; photo_needed: boolean }>
+  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean; photo_needed: boolean; needs_ticket: boolean }>
   expense_kinds: Array<{ id: number; label: string; role: string | null; bill_always: boolean; is_active: boolean }>
   projects: Array<{ id: number; label: string; is_active: boolean }>
   coordinators: Array<{ ecode: string; name: string; coordinator_ecode: string; coordinator: string }>
@@ -342,6 +342,8 @@ function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call;
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
             {/* The ride needs a visit photo (Travel te_0082; the user, 28 Oct: "image mandatory check box"). */}
             {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.photo_needed} onChange={e => void call('te_set_purpose_photo', { p_id: p.id, p_on: e.target.checked })} /> Photo needed</label>}
+            {/* The ride asks for the ticket ID (te_0105; the user, 3 Nov: "check box for ticket id enable option"). */}
+            {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.needs_ticket} onChange={e => void call('te_set_purpose_ticket', { p_id: p.id, p_on: e.target.checked })} /> Ticket ID</label>}
             {/* Gone only while nothing names it; after that In use is unticked instead. */}
             {sw && <button type="button" className="btn-icon text-cyrixRed-600" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
