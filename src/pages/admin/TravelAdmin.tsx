@@ -6,6 +6,7 @@ import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import TravelReport from './TravelReport'
 import PolicyHistory from '@/pages/admin/PolicyHistory'
 import TravelLive from '@/pages/admin/TravelLive'
+import TravelWatch from '@/pages/admin/TravelWatch'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -51,7 +52,8 @@ const POLICY: Array<[string, string]> = [
   ['km_tolerance_pct', 'Km over the map allowed, %'], ['bill_over', 'Bill needed above ₹'], ['auto_month', 'Auto allowance a month ₹'],
   ['phone_month', 'Phone allowance a month ₹'], ['tool_max', 'Tools above ₹ go to petty cash'], ['metro_extra_pct', 'Metro city room extra %'],
   ['bike_two_way_km', 'Bike two-way limit km'], ['car_two_way_km', 'Car two-way limit km'], ['submit_by_day', 'Submit by day of next month'], ['claim_within_days', 'Claim a day within (days)'],
-  ['late_pct', 'Late deduction % (1, 2, 3 months)'], ['auto_per_km', 'Auto fare ₹ a km'], ['auto_min_fare', 'Auto minimum fare ₹'],
+  ['late_pct', 'Late deduction % (1, 2, 3 months)'], ['auto_per_km', 'Auto fare ₹ a km'], ['auto_min_fare', 'Auto minimum fare ₹'], ['auto_min_km', 'Auto minimum fare covers km'],
+  ['home_changes_month', 'Home changes a month'],
 ]
 
 export function TravelAdmin() {
@@ -535,8 +537,8 @@ function LearnedPlaces() {
   "can you make live under reports, subtab? bcz our sw admin id is crowded with tabs"). Kept in the address too.
 */
 function Reports() {
-  const [rep, setRepState] = useState<'live' | 'km'>(() => (new URLSearchParams(window.location.search).get('rep') === 'km' ? 'km' : 'live'))
-  const setRep = (v: 'live' | 'km') => {
+  const [rep, setRepState] = useState<'live' | 'watch' | 'km'>(() => { const v = new URLSearchParams(window.location.search).get('rep'); return v === 'km' || v === 'watch' ? v : 'live' })
+  const setRep = (v: 'live' | 'watch' | 'km') => {
     setRepState(v)
     const u = new URL(window.location.href)
     u.searchParams.set('rep', v)
@@ -545,12 +547,12 @@ function Reports() {
   return (
     <div className="space-y-3">
       <div className="inline-flex rounded-xl bg-ink-100 p-1" role="tablist">
-        {([['live', 'Live'], ['km', 'Km vs map']] as const).map(([k, l]) => (
+        {([['live', 'Live'], ['watch', 'Watch'], ['km', 'Km vs map']] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={rep === k} onClick={() => setRep(k)}
             className={clsx('rounded-lg px-4 py-1.5 text-sm font-semibold', rep === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}>{l}</button>
         ))}
       </div>
-      {rep === 'live' ? <TravelLive /> : <TravelReport />}
+      {rep === 'live' ? <TravelLive /> : rep === 'watch' ? <TravelWatch /> : <TravelReport />}
     </div>
   )
 }

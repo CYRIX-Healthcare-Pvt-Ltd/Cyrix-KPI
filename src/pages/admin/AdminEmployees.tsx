@@ -13,6 +13,10 @@ import { exportOrgStatus, exportSheets } from '@/lib/export'
 import { Alert, PageLoader, Spinner, ScorePill, StatusBadge } from '@/components/ui'
 import type { OrgKpiStatusAllRow, AssignmentStatus } from '@/types/db'
 
+// Never deactivated by an upload nor listed as leaving (0248; the user, 3 Nov: "dont include sw_admin n test ids").
+const uploadSpares = (e: { ecode: string; full_name: string }) =>
+  ['SW_ADMIN', 'E6666', 'E7777', 'E8888', 'E9999'].includes(e.ecode.trim().toUpperCase()) || /- test/i.test(e.full_name)
+
 export default function AdminEmployees() {
   const fy = currentFy()
   const qc = useQueryClient()
@@ -576,8 +580,8 @@ function BulkImport({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         is why it now does the same thing.
       */
       const active = (await everyEmployee<
-        { ecode: string; full_name: string; is_active: boolean }
-      >('ecode, full_name, is_active')).filter(e => e.is_active)
+        { ecode: string; full_name: string; is_active: boolean; payroll_managed: boolean }
+      >('ecode, full_name, is_active, payroll_managed')).filter(e => e.is_active && e.payroll_managed && !uploadSpares(e))
 
       setActiveNow(active.length)
       setLeaving(
