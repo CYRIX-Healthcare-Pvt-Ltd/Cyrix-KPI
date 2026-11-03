@@ -1,4 +1,5 @@
-import { useMemo, useState, lazy, Suspense } from 'react'
+import { useMemo, useState, Suspense } from 'react'
+import { lazyRoute } from '@/lib/lazyRoute'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
@@ -26,7 +27,7 @@ const SCORED = new Set(['scored', 'finalized'])
 // This screen is not code-split — it is the first thing everyone loads —
 // so the chart is, or recharts lands in the bundle a service engineer
 // downloads on 4G just to sign in.
-const ScoreTrend = lazy(() => import('@/components/ScoreTrend'))
+const ScoreTrend = lazyRoute(() => import('@/components/ScoreTrend'))
 
 const ChartFallback = () => (
   <div className="h-[200px] animate-pulse rounded-lg bg-ink-50" />

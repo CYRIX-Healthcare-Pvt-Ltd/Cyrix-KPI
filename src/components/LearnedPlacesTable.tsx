@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { Suspense, useState, type ReactNode } from 'react'
+import { lazyRoute } from '@/lib/lazyRoute'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Hospital, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Alert, PageLoader } from '@/components/ui'
@@ -17,7 +18,7 @@ import { Alert, PageLoader } from '@/components/ui'
   column bcz i need to sort when needed"); who added it by name and code ("name - ecode"). A table on a computer,
   sorted by its column headings; rows with a sort menu on a phone.
 */
-const PlaceMapDialog = lazy(() => import('@/components/PlaceMapDialog'))
+const PlaceMapDialog = lazyRoute(() => import('@/components/PlaceMapDialog'))
 
 export interface LearnedPlace {
   id: string; name: string; full_name: string; district: string | null; visits: number; first_by: string | null; created_at: string
