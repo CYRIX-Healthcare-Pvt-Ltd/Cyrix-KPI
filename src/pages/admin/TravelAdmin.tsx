@@ -5,6 +5,7 @@ import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import TravelReport from './TravelReport'
 import PolicyHistory from '@/pages/admin/PolicyHistory'
+import TravelLive from '@/pages/admin/TravelLive'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -61,7 +62,15 @@ export function TravelAdmin() {
       ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
     })),
   })
-  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'reports' | 'delete' | 'history'>('rules')
+  type Sub = typeof TABS[number][0] | 'photos' | 'reports' | 'delete' | 'history'
+  // The sub-tab is in the address beside SW Admin's own, so a reload stays on it (the user, 3 Nov).
+  const [tab, setTabState] = useState<Sub>(() => (new URLSearchParams(window.location.search).get('sub') as Sub | null) ?? 'rules')
+  const setTab = (t: Sub) => {
+    setTabState(t)
+    const u = new URL(window.location.href)
+    u.searchParams.set('sub', t)
+    window.history.replaceState(window.history.state, '', u)
+  }
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
   // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
@@ -95,7 +104,7 @@ export function TravelAdmin() {
       {tab === 'desk' && <Desk list={data.desk} call={call} />}
       {tab === 'places' && <LearnedPlaces />}
       {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
-      {tab === 'reports' && data.sw && <TravelReport />}
+      {tab === 'reports' && data.sw && <Reports />}
       {tab === 'history' && <PolicyHistory names={Object.fromEntries([...RULE_COLS, ...POLICY])} />}
       {tab === 'delete' && data.sw && <DeleteClaim />}
     </div>
@@ -519,4 +528,29 @@ function DeleteClaim() {
 // Places our engineers taught the search, put right here (Travel te_0038, te_0071): the list shared with Travel's admin page.
 function LearnedPlaces() {
   return <LearnedPlacesTable call={rpc} confirmRemove={async name => confirm(`Remove ${name}? It is no longer offered when engineers search. Claims that used it keep it.`)} />
+}
+
+/*
+  Reports holds Live and Km vs map as its own two tabs, so SW Admin's row of tabs stays as it was (the user, 3 Nov:
+  "can you make live under reports, subtab? bcz our sw admin id is crowded with tabs"). Kept in the address too.
+*/
+function Reports() {
+  const [rep, setRepState] = useState<'live' | 'km'>(() => (new URLSearchParams(window.location.search).get('rep') === 'km' ? 'km' : 'live'))
+  const setRep = (v: 'live' | 'km') => {
+    setRepState(v)
+    const u = new URL(window.location.href)
+    u.searchParams.set('rep', v)
+    window.history.replaceState(window.history.state, '', u)
+  }
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex rounded-xl bg-ink-100 p-1" role="tablist">
+        {([['live', 'Live'], ['km', 'Km vs map']] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={rep === k} onClick={() => setRep(k)}
+            className={clsx('rounded-lg px-4 py-1.5 text-sm font-semibold', rep === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}>{l}</button>
+        ))}
+      </div>
+      {rep === 'live' ? <TravelLive /> : <TravelReport />}
+    </div>
+  )
 }
