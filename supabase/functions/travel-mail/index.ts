@@ -1,10 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { sendMail } from '../_shared/mail.ts'
 import { recipients, words, type AdvanceRow } from './words.ts'
+import { vehicleWords, type VehicleRow } from './vehicle.ts'
 
 /**
  * Travel Expense's mail: an expense advance the Travel Desk has approved, to the person with copies to their
  * reporting manager and the Travel Desk (Travel te_0067; the user, 24 Oct). The words are in words.ts.
+ * Also an out-of-policy vehicle approved by the Travel Desk or removed by the manager (Travel te_0097), words in vehicle.ts.
  *
  * Called by the approval itself (pg_net) and by pg_cron every five minutes, with the push key. Each call claims the
  * advances given and not mailed — claimed first, so each goes once even if two calls meet — and sends them two
@@ -39,5 +41,21 @@ Deno.serve(async req => {
     }
     if (i < rows.length - 1) await new Promise(res => setTimeout(res, 2000))
   }
-  return json({ claimed: rows.length, sent, failed, noAddress })
+  // Out-of-policy vehicles (te_0097): the same recipients — the person, copies to the manager and the Travel Desk.
+  const { data: vdata, error: verr } = await db.rpc('te_va_mail_claim', { p_limit: 20 })
+  if (verr) return json({ error: verr.message, claimed: rows.length, sent, failed, noAddress }, 500)
+  const vrows = (vdata ?? []) as VehicleRow[]
+  for (const [i, r] of vrows.entries()) {
+    const { to, cc } = recipients(r)
+    if (!to.length) { noAddress++; await db.rpc('te_va_mail_failed', { p_id: r.id, p_error: 'No work email for the person, the manager or the Travel Desk' }); continue }
+    if (i > 0 || rows.length) await new Promise(res => setTimeout(res, 2000))
+    try {
+      await sendMail(db as never, { to, cc, ...vehicleWords(r, APP) })
+      sent++
+    } catch (e) {
+      failed++
+      await db.rpc('te_va_mail_failed', { p_id: r.id, p_error: (e as Error).message })
+    }
+  }
+  return json({ claimed: rows.length + vrows.length, sent, failed, noAddress })
 })

@@ -142,6 +142,10 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // On a change every desk can be chosen (the user, 3 Nov: "on edit, why cant i click other modules?"): one the person
+  // already holds opens with its ticks and can be removed; another is added beside it on Save.
+  const holds = (d: Desk) => taken.some(t => t.employee_id === person[0] && t.desk === d)
+  const held = desk && holds(desk) ? desk : null
 
   // People only: the shared desk logins keep their own roles. Paged past the 1,000-row cap.
   const { data: people = [] } = useQuery({
@@ -180,7 +184,8 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
   const remove = async () => {
     if (!row) return
     setBusy(true); setError('')
-    const { error } = await supabase.rpc('desk_admin_remove', { p_employee_id: row.employee_id, p_desk: row.desk })
+    if (!held) return
+    const { error } = await supabase.rpc('desk_admin_remove', { p_employee_id: row.employee_id, p_desk: held })
     setBusy(false)
     if (error) { setError(friendlyError(error)); return }
     void qc.invalidateQueries({ queryKey: KEY })
@@ -203,9 +208,9 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
           <span className="label">Desk <span className="text-cyrixRed-600">*</span></span>
           <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {(Object.keys(DESKS) as Desk[]).map(d => (
-              <button key={d} type="button" onClick={() => pickDesk(d)} aria-pressed={desk === d} disabled={!!row && row.desk !== d}
+              <button key={d} type="button" onClick={() => pickDesk(d)} aria-pressed={desk === d}
                 className={clsx('justify-center', desk === d ? 'btn-primary' : 'btn-secondary')}>
-                {DESKS[d].label}
+                {DESKS[d].label}{row && holds(d) && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-green-500" aria-label="holds this desk" />}
               </button>
             ))}
           </div>
@@ -225,9 +230,9 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
           </div>
         )}
         {error && <p className="text-sm text-cyrixRed-600" role="alert">{error}</p>}
-        {confirmRemove && row ? (
+        {confirmRemove && row && held ? (
           <div className="rounded-lg border border-cyrixRed-200 bg-cyrixRed-50 p-3">
-            <p className="text-sm font-medium text-ink-900">Remove {row.full_name} as {DESKS[row.desk].label} admin?</p>
+            <p className="text-sm font-medium text-ink-900">Remove {row.full_name} as {DESKS[held ?? row.desk].label} admin?</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" className="btn-secondary justify-center" onClick={() => setConfirmRemove(false)}>Cancel</button>
               <button type="button" className="btn-primary justify-center !bg-cyrixRed-600" disabled={busy} onClick={() => void remove()}>
@@ -237,7 +242,7 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            {row
+            {row && held
               ? <button type="button" className="btn-secondary justify-center !text-cyrixRed-700" onClick={() => setConfirmRemove(true)}><Trash2 className="h-4 w-4" /> Remove</button>
               : <button type="button" className="btn-secondary justify-center" onClick={onClose}>Cancel</button>}
             <button type="button" className="btn-primary justify-center" disabled={busy} onClick={() => void save()}>

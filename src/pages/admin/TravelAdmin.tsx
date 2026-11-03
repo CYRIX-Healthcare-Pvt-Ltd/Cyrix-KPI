@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import TravelReport from './TravelReport'
+import PolicyHistory from '@/pages/admin/PolicyHistory'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -60,7 +61,7 @@ export function TravelAdmin() {
       ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
     })),
   })
-  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'reports' | 'delete'>('rules')
+  const [tab, setTab] = useState<typeof TABS[number][0] | 'photos' | 'reports' | 'delete' | 'history'>('rules')
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
   // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
@@ -75,7 +76,8 @@ export function TravelAdmin() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
-        {[...TABS.slice(0, 3), ...(data.sw ? [['photos', 'Visit photos'] as const] : []), ...TABS.slice(3), ...(data.sw ? [['reports', 'Reports'] as const, ['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {/* Accounts admins get Allowances by grade, Settings and History only (the user, 3 Nov: "for them, till setting is enough"); SW Admin every tab. */}
+        {(data.sw ? [...TABS.slice(0, 3), ['photos', 'Visit photos'] as const, ...TABS.slice(3), ['reports', 'Reports'] as const, ['history', 'History'] as const, ['delete', 'Delete'] as const] : [...TABS.slice(0, 2), ['history', 'History'] as const]).map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
@@ -94,6 +96,7 @@ export function TravelAdmin() {
       {tab === 'places' && <LearnedPlaces />}
       {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
       {tab === 'reports' && data.sw && <TravelReport />}
+      {tab === 'history' && <PolicyHistory names={Object.fromEntries([...RULE_COLS, ...POLICY])} />}
       {tab === 'delete' && data.sw && <DeleteClaim />}
     </div>
   )
