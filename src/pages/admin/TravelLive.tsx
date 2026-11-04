@@ -12,7 +12,7 @@ import { supabase, friendlyError } from '@/lib/supabase'
 */
 interface Person { ecode: string; name: string; function: string | null; manager: string | null; first_at: string; last_at: string; actions: number; started: number; sent: number; approved: number; photos: number; bills: number; home: boolean; new: boolean }
 interface Usage {
-  totals: Record<'people' | 'new' | 'started' | 'sent' | 'approved' | 'photos' | 'bills' | 'homes' | 'advances' | 'deputations' | 'vehicles', number>
+  totals: Record<'people' | 'new' | 'started' | 'sent' | 'approved' | 'photos' | 'bills' | 'homes' | 'advances' | 'deputations' | 'vehicles' | 'desk' | 'with_desk', number>
   functions: Array<{ function: string; people: number; started: number; sent: number; photos: number }>
   people: Person[]
   at: string
@@ -65,7 +65,7 @@ export default function TravelLive() {
   const t = data?.totals
   const tiles: Array<[string, number | undefined, 'brand' | 'default']> = t ? [
     ['People using', t.people, 'brand'], ['Started using', t.new, 'default'], ['Claims started', t.started, 'default'], ['Claims sent', t.sent, 'default'],
-    ['Manager approved', t.approved, 'default'], ['Visit photos', t.photos, 'default'], ['Bills', t.bills, 'default'], ['Homes set', t.homes, 'default'],
+    ['Manager approved', t.approved, 'default'], ['With Travel Desk', t.with_desk ?? 0, 'default'], ['Travel Desk approved', t.desk ?? 0, 'default'], ['Visit photos', t.photos, 'default'], ['Bills', t.bills, 'default'], ['Homes set', t.homes, 'default'],
     ['Advances', t.advances, 'default'], ['Deputations', t.deputations, 'default'], ['Vehicle requests', t.vehicles, 'default'],
   ] : []
 
