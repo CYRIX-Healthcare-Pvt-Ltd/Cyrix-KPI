@@ -8,10 +8,11 @@ import {
 import {
   useVisibleTemplates, useTemplateItems, useSaveTemplate,
   useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate,
-  useTeamMemberTemplates, currentFy,
+  useTeamMemberTemplates, useTeamSubtree, currentFy,
   type AssignOutcome, type TemplateReach,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
+import { currentReportingMonth } from '@/lib/fy'
 import {
   findDuplicate, displayTemplateName, templateLabels, type ComparableRow,
 } from '@/lib/templates'
@@ -734,6 +735,23 @@ function AssignPanel({
 
   const codes = useMemo(() => parseEcodes(pasted), [pasted])
 
+  // Find somebody in the team by name or code, here in the panel (the user, 4 Nov).
+  const { data: people } = useTeamSubtree(fy, currentReportingMonth(), null)
+  const [find, setFind] = useState('')
+  const found = useMemo(() => {
+    const q = find.trim().toLowerCase()
+    if (!q) return []
+    const have = new Set(codes.map(c => c.toUpperCase()))
+    return (people ?? [])
+      .filter(p => !have.has(p.ecode.toUpperCase())
+        && (p.full_name.toLowerCase().includes(q) || p.ecode.toLowerCase().includes(q)))
+      .slice(0, 8)
+  }, [find, people, codes])
+  const add = (code: string) => {
+    setPasted(t => (t.trim() ? t.replace(/[\s,;]*$/, '') + ', ' : '') + code)
+    setFind('')
+  }
+
   const run = async () => {
     setError(null)
     try {
@@ -766,13 +784,39 @@ function AssignPanel({
 
       {!out && (
         <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+            <input
+              className="input pl-9"
+              value={find}
+              onChange={e => setFind(e.target.value)}
+              placeholder="Search by name or code"
+              aria-label="Search your team"
+            />
+          </div>
+          {found.length > 0 && (
+            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200">
+              {found.map(p => (
+                <li key={p.employee_id}>
+                  <button type="button" onClick={() => add(p.ecode)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-violet-50">
+                    <Plus className="h-4 w-4 shrink-0 text-violet-600" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{p.full_name}</span>
+                    <span className="shrink-0 font-mono text-xs text-ink-500">{p.ecode}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {find.trim() !== '' && found.length === 0 && people && (
+            <p className="text-sm text-ink-500">Nobody in your team matches.</p>
+          )}
           <textarea
             className="input min-h-24 font-mono text-sm"
             value={pasted}
             onChange={e => setPasted(e.target.value)}
             placeholder={'E1234, CT616\nFTC23'}
             aria-label="Employee codes"
-            autoFocus
           />
           {/* Only matters for the ones who already have a KPI — a new
               joiner has no month to reach back into — and a mixed list
