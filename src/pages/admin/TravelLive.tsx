@@ -10,12 +10,13 @@ import { supabase, friendlyError } from '@/lib/supabase'
   with date filters?"): who is using Travel Expense and what they saved, real people only — the test accounts are left
   out ("dont include test accounts"). Refreshes every minute. Opens on today, as Custom.
 */
-interface Person { ecode: string; name: string; function: string | null; manager: string | null; first_at: string; last_at: string; actions: number; started: number; sent: number; approved: number; photos: number; bills: number; home: boolean; new: boolean; with_manager?: number; with_desk?: number; desk?: number; homes?: number; advances?: number; deputations?: number; vehicles?: number }
+interface Person { ecode: string; name: string; function: string | null; manager: string | null; first_at: string; last_at: string; actions: number; started: number; sent: number; approved: number; photos: number; bills: number; home: boolean; new: boolean; with_manager?: number; with_desk?: number; desk?: number; homes?: number; advances?: number; deputations?: number; vehicles?: number; skips?: number }
 interface Usage {
   totals: Record<'people' | 'new' | 'started' | 'sent' | 'approved' | 'photos' | 'bills' | 'homes' | 'advances' | 'deputations' | 'vehicles' | 'desk' | 'with_desk' | 'with_manager', number>
   people_of?: Record<string, number>
   functions: Array<{ function: string; people: number; started: number; sent: number; photos: number }>
   people: Person[]
+  skip_limit?: number
   at: string
 }
 
@@ -30,7 +31,7 @@ const when = (iso: string) => {
   return isoDay(d) === today() ? clock(iso) : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${clock(iso)}`
 }
 const az = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
-type SortKey = 'name' | 'function' | 'manager' | 'last' | 'started' | 'sent' | 'photos' | 'with_manager' | 'with_desk' | 'desk' | 'homes' | 'advances' | 'deputations' | 'vehicles'
+type SortKey = 'name' | 'function' | 'manager' | 'last' | 'started' | 'sent' | 'photos' | 'with_manager' | 'with_desk' | 'desk' | 'homes' | 'advances' | 'skips'
 
 export default function TravelLive() {
   const [period, setPeriod] = useState<Period>('custom')
@@ -165,7 +166,7 @@ export default function TravelLive() {
                     {p.new && <span className="badge shrink-0 bg-green-100 text-green-900">New</span>}
                   </div>
                   <p className="truncate text-xs text-ink-500">{p.function ?? '—'} · {p.manager ?? '—'}</p>
-                  <p className="mt-1 text-xs text-ink-700">{p.started} started · {p.sent} sent · {p.with_manager ?? 0} with manager · {p.with_desk ?? 0} with Travel Desk · {p.desk ?? 0} Desk approved · {p.homes ?? 0} home · {p.advances ?? 0} advances · {p.deputations ?? 0} deputations · {p.vehicles ?? 0} vehicle · last {when(p.last_at)}</p>
+                  <p className="mt-1 text-xs text-ink-700">{p.started} started · {p.sent} sent · {p.with_manager ?? 0} with manager · {p.with_desk ?? 0} with Travel Desk · {p.desk ?? 0} Desk approved · {p.homes ?? 0} home · {p.skips ?? 0}{data.skip_limit != null ? ` / ${data.skip_limit}` : ''} photo not possible · last {when(p.last_at)}</p>
                 </div>
               ))}
             </div>
@@ -182,9 +183,7 @@ export default function TravelLive() {
                     <SortHeader label="With Travel Desk" col="with_desk" align="right" sortKey={sort} asc={asc} onSort={onSort} />
                     <SortHeader label="Travel Desk approved" col="desk" align="right" sortKey={sort} asc={asc} onSort={onSort} />
                     <SortHeader label="Set home" col="homes" align="right" sortKey={sort} asc={asc} onSort={onSort} />
-                    <SortHeader label="Advances" col="advances" align="right" sortKey={sort} asc={asc} onSort={onSort} />
-                    <SortHeader label="Deputations" col="deputations" align="right" sortKey={sort} asc={asc} onSort={onSort} />
-                    <SortHeader label="Vehicle requests" col="vehicles" align="right" sortKey={sort} asc={asc} onSort={onSort} />
+                    <SortHeader label="Photo not possible" col="skips" align="right" sortKey={sort} asc={asc} onSort={onSort} />
                     <SortHeader label="Last used" col="last" sortKey={sort} asc={asc} onSort={onSort} />
                   </tr>
                 </thead>
@@ -203,9 +202,7 @@ export default function TravelLive() {
                       <td className="px-3 py-2 text-right tabular-nums">{p.with_desk ?? 0}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.desk ?? 0}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.homes ?? 0}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.advances ?? 0}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.deputations ?? 0}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.vehicles ?? 0}</td>
+                      <td className={clsx('px-3 py-2 text-right tabular-nums', data.skip_limit != null && (p.skips ?? 0) >= data.skip_limit && 'font-semibold text-cyrixRed-700')}>{p.skips ?? 0}{data.skip_limit != null && <span className="text-ink-400"> / {data.skip_limit}</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2">{when(p.last_at)}</td>
                     </tr>
                   ))}
