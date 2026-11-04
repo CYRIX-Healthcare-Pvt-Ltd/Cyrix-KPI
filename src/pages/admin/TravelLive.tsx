@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { RefreshCw, Search } from 'lucide-react'
-import { Alert, PageLoader, SortHeader, StatTile } from '@/components/ui'
+import { Alert, PageLoader, SortHeader } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
 /*
@@ -12,7 +12,8 @@ import { supabase, friendlyError } from '@/lib/supabase'
 */
 interface Person { ecode: string; name: string; function: string | null; manager: string | null; first_at: string; last_at: string; actions: number; started: number; sent: number; approved: number; photos: number; bills: number; home: boolean; new: boolean }
 interface Usage {
-  totals: Record<'people' | 'new' | 'started' | 'sent' | 'approved' | 'photos' | 'bills' | 'homes' | 'advances' | 'deputations' | 'vehicles' | 'desk' | 'with_desk', number>
+  totals: Record<'people' | 'new' | 'started' | 'sent' | 'approved' | 'photos' | 'bills' | 'homes' | 'advances' | 'deputations' | 'vehicles' | 'desk' | 'with_desk' | 'with_manager', number>
+  people_of?: Record<string, number>
   functions: Array<{ function: string; people: number; started: number; sent: number; photos: number }>
   people: Person[]
   at: string
@@ -63,10 +64,20 @@ export default function TravelLive() {
   }, [people, q, fn, sort, asc])
 
   const t = data?.totals
-  const tiles: Array<[string, number | undefined, 'brand' | 'default']> = t ? [
-    ['People using', t.people, 'brand'], ['Started using', t.new, 'default'], ['Claims started', t.started, 'default'], ['Claims sent', t.sent, 'default'],
-    ['Manager approved', t.approved, 'default'], ['With Travel Desk', t.with_desk ?? 0, 'default'], ['Travel Desk approved', t.desk ?? 0, 'default'], ['Visit photos', t.photos, 'default'], ['Bills', t.bills, 'default'], ['Homes set', t.homes, 'default'],
-    ['Advances', t.advances, 'default'], ['Deputations', t.deputations, 'default'], ['Vehicle requests', t.vehicles, 'default'],
+  // People on each tile, with the total under it (the user, 4 Nov): 15 people, 11 claims started by fewer of them.
+  const by = data?.people_of ?? {}
+  const tiles: Array<[string, number | undefined, 'brand' | 'default', string?]> = t ? [
+    ['People using', t.people, 'brand'],
+    ['Started a claim', by.started ?? 0, 'default', `${t.started} claims`.replace(/^1 claims$/, '1 claim')],
+    ['Sent a claim', by.sent ?? 0, 'default', `${t.sent} claims`.replace(/^1 claims$/, '1 claim')],
+    ['With manager', by.with_manager ?? 0, 'default', `${(t.with_manager ?? 0)} claims`.replace(/^1 claims$/, '1 claim')],
+    ['With Travel Desk', by.with_desk ?? 0, 'default', `${(t.with_desk ?? 0)} claims`.replace(/^1 claims$/, '1 claim')],
+    ['Travel Desk approved', by.desk ?? 0, 'default', `${(t.desk ?? 0)} claims`.replace(/^1 claims$/, '1 claim')],
+    ['Took visit photos', by.photo ?? 0, 'default', `${t.photos} photos`.replace(/^1 photos$/, '1 photo')],
+    ['Set home', by.home ?? 0, 'default', `${t.homes} times`],
+    ['Advances', by.advance ?? 0, 'default', `${t.advances} asked`],
+    ['Deputations', by.deputation ?? 0, 'default', `${t.deputations} asked`],
+    ['Vehicle requests', by.vehicle ?? 0, 'default', `${t.vehicles} asked`],
   ] : []
 
   return (
@@ -98,8 +109,13 @@ export default function TravelLive() {
       {isLoading ? <PageLoader />
         : error || !data ? <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
         : <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {tiles.map(([l, v, tone]) => <StatTile key={l} tone={tone} label={l} value={(v ?? 0).toLocaleString('en-IN')} />)}
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
+            {tiles.map(([l, v, tone, sub]) => (
+              <div key={l} className={clsx('rounded-lg border px-2.5 py-1.5', tone === 'brand' ? 'row-span-2 flex flex-col justify-center border-ink-200 bg-surface' : 'border-ink-200 bg-surface')}>
+                <p className="truncate text-[11px] font-medium text-ink-500" title={l}>{l}</p>
+                <p className={clsx('font-semibold leading-tight text-ink-900', tone === 'brand' ? 'text-3xl' : 'text-lg')}>{(v ?? 0).toLocaleString('en-IN')}{sub && <span className="ml-1.5 text-xs font-normal text-ink-500">{sub}</span>}</p>
+              </div>
+            ))}
           </div>
 
           {data.functions.length > 0 && (
