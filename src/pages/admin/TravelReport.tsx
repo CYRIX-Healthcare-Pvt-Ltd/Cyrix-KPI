@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { FileSpreadsheet, Search, X } from 'lucide-react'
+import { FileSpreadsheet, Map as MapIcon, Search, X } from 'lucide-react'
 import { Alert, PageLoader, SortHeader, Spinner, StatTile } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -75,6 +75,8 @@ interface Person {
 interface Ride {
   employee_id: string; day: string; number: string | null; way: string; mode: string; purpose: string | null; project: string | null
   map_km: number | null; claimed_km: number | null; top: number | null; amount: number | null
+  /** Where it went from and to (te_0112), to see on the map. */
+  from_lat?: number | null; from_lng?: number | null; to_lat?: number | null; to_lng?: number | null
 }
 interface Sign { employee_id: string; day: string; kind: Kind; what: string; amount: number | null }
 interface Report { tolerance: number; people: Person[]; rides: Ride[] | null; signs: Sign[] | null }
@@ -352,7 +354,14 @@ function PersonPage({ row, from, to, label, onClose }: { row: Row; from: string;
                       <span className="tabular-nums text-ink-500">{dayShort(r.day)}</span>
                       <span className="min-w-0">
                         <span className="block truncate text-ink-900">{r.way}</span>
-                        <span className="block truncate text-xs text-ink-500">{[MODE[r.mode] ?? r.mode, r.purpose, r.number].filter(Boolean).join(' · ')}</span>
+                        <span className="flex min-w-0 items-center gap-2 text-xs text-ink-500">
+                          <span className="truncate">{[MODE[r.mode] ?? r.mode, r.purpose, r.number].filter(Boolean).join(' · ')}</span>
+                          {/* The ride on Google Maps, From to To, to see where "Base location" really is (the user, 4 Nov). */}
+                          {r.from_lat != null && r.to_lat != null && (
+                            <a href={`https://www.google.com/maps/dir/?api=1&origin=${r.from_lat},${r.from_lng}&destination=${r.to_lat},${r.to_lng}&travelmode=driving`} target="_blank" rel="noreferrer"
+                              className="inline-flex shrink-0 items-center gap-1 font-semibold text-teal-700 hover:underline"><MapIcon className="h-3.5 w-3.5" />Map</a>
+                          )}
+                        </span>
                       </span>
                       <span className="text-right">
                         <span className="block whitespace-nowrap tabular-nums text-ink-900">{kmText(r.map_km)} → {kmText(r.claimed_km)}</span>
