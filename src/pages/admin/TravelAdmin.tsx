@@ -24,6 +24,12 @@ interface Rule {
   hotel_in_single: number; hotel_in_double: number; hotel_out_single: number; hotel_out_double: number
   bike_rate: number | null; bike_km_month: number | null; car_rate: number | null; car_km_month: number | null
   flight: boolean; taxi: boolean
+  /** Aurum E1–E3 (te_0122): the car is paid, with a vehicle request first. */
+  car_approval?: boolean
+  /** The room limit in a metro city (Aurum). */
+  hotel_metro?: number | null
+  /** Aurum (te_0123). */
+  per_diem?: number | null; misc_day?: number | null; day_trip_metro?: number | null; day_trip_other?: number | null
 }
 
 /*
@@ -45,8 +51,9 @@ type AdminData = {
 const TABS = [['rules', 'Allowances by grade'], ['policy', 'Settings'], ['purposes', 'Purposes'], ['projects', 'Projects'], ['coord', 'Coordinators'], ['desk', 'Travel Desk'], ['places', 'Places']] as const
 const RULE_COLS: Array<[keyof Rule, string]> = [
   ['da_in_district', 'DA in district'], ['da_out_district', 'DA out of district'], ['da_out_state', 'DA out of state'], ['da_out_state_stay', 'DA out of state, staying'],
-  ['hotel_in_single', 'Room in state S'], ['hotel_in_double', 'Room in state D'], ['hotel_out_single', 'Room out of state S'], ['hotel_out_double', 'Room out of state D'],
+  ['hotel_in_single', 'Room in state S'], ['hotel_in_double', 'Room in state D'], ['hotel_out_single', 'Room out of state S'], ['hotel_out_double', 'Room out of state D'], ['hotel_metro', 'Room metro'],
   ['bike_rate', 'Bike ₹/km'], ['bike_km_month', 'Bike km/month'], ['car_rate', 'Car ₹/km'], ['car_km_month', 'Car km/month'],
+  ['per_diem', 'Per diem'], ['misc_day', 'Misc a day'], ['day_trip_metro', 'Day trip metro'], ['day_trip_other', 'Day trip other'],
 ]
 const POLICY: Array<[string, string]> = [
   ['km_tolerance_pct', 'Km over the map allowed, %'], ['bill_over', 'Bill needed above ₹'], ['auto_month', 'Auto allowance a month ₹'],
@@ -122,7 +129,7 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
     <div className="card overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead><tr className="border-b border-ink-200 text-left text-xs text-ink-500">
-          <th className="px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th />
+          <th className="px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th className="px-2 py-2">Car needs approval</th><th />
         </tr></thead>
         <tbody>
           {grades.map(g => {
@@ -137,6 +144,7 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
                 ))}
                 <td className="px-2"><input type="checkbox" checked={r.flight} onChange={e => set({ flight: e.target.checked })} /></td>
                 <td className="px-2"><input type="checkbox" checked={r.taxi} onChange={e => set({ taxi: e.target.checked })} /></td>
+                <td className="px-2"><input type="checkbox" checked={!!r.car_approval} onChange={e => set({ car_approval: e.target.checked })} /></td>
                 <td className="px-2">{dirty && <button type="button" className="btn-primary !px-2.5 !py-1 text-xs" onClick={() => { onSave(r); const n = { ...edit }; delete n[g]; setEdit(n) }}>Save</button>}</td>
               </tr>
             )
