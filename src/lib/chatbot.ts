@@ -287,6 +287,8 @@ const ALIASES: Record<string, string[]> = {
   'sw.p8': ['make admin', 'add admin', 'set admin', 'admins tab', 'desk admin', 'hr admin', 'remove admin'],
   // Recall and the month's files (0244, 0245).
   'ask.p6': ['recall', 'take back', 'undo submit', 'submitted by mistake', 'wrong month'],
+  // Recall of the year's KPI before it is approved (0251).
+  's1.p5': ['recall my kpi', 'recall kpi', 'take back my kpi', 'kpi sent by mistake', 'change kpi before approval', 'edit kpi before approval'],
   'ask.p14': ['attach', 'attachment', 'upload file', 'supporting file', 'supporting document', 'excel sheet', 'add files'],
   'ask.p13': ['video', 'videos', 'demo', 'demo video', 'tutorial', 'walkthrough'],
   // A manager correcting somebody else's row before approving it. The

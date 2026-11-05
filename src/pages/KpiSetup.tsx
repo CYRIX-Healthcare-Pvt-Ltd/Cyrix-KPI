@@ -18,6 +18,7 @@ import type { ParseResult } from '@/lib/excel'
 import type { VisibleTemplate } from '@/types/db'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL, ESMS_WEIGHT } from '@/lib/sections'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
+import RecallKpi from '@/components/RecallKpi'
 
 /**
  * Team members define their Job Role rows only. The remaining 20% is
@@ -304,7 +305,8 @@ export default function KpiSetup() {
         }>
           {assignment?.status === 'active'
             ? 'Contact HR if something genuinely needs to change mid-year.'
-            : 'You can make changes again if your manager sends it back.'}
+            : 'Recall it to change it, until your manager approves it.'}
+          {assignment?.status === 'pending_approval' && <div><RecallKpi assignmentId={assignment.id} fy={fy} /></div>}
         </Alert>
       </div>
     )
