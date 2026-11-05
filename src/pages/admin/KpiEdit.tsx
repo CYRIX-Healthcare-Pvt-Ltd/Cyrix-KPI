@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import clsx from 'clsx'
 import { Plus, RotateCcw, Save, Search, Upload } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -94,14 +94,38 @@ export default function KpiEdit() {
     return f
   }
 
-  const find = async (e: FormEvent) => {
-    e.preventDefault()
-    setError(null); setNotice(null); setFound(null)
-    if (!code.trim()) return
+  // A name or an employee code (the user, 5 Nov: "need option to search name also"): names matching what is typed
+  // show under the box, a press opens that person.
+  type Match = { ecode: string; full_name: string; designation: string | null; is_active: boolean }
+  const [matches, setMatches] = useState<Match[]>([])
+  const [picking, setPicking] = useState(false)
+  useEffect(() => {
+    const q = code.trim().replace(/[%,()*\\]/g, ' ').trim()
+    if (!picking || q.length < 2) { setMatches([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const { data } = await supabase.from('employees').select('ecode, full_name, designation, is_active')
+        .eq('account_type', 'employee').or(`full_name.ilike.%${q}%,ecode.ilike.${q}%`)
+        .order('is_active', { ascending: false }).order('full_name').limit(8)
+      if (live) setMatches((data ?? []) as Match[])
+    }, 250)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [code, picking])
+  const open = async (ecode: string) => {
+    setError(null); setNotice(null); setFound(null); setMatches([]); setPicking(false)
     setBusy(true)
-    try { await load(code.trim()) }
+    try { await load(ecode) }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not find that person.') }
     finally { setBusy(false) }
+  }
+  const find = async (e: FormEvent) => {
+    e.preventDefault()
+    const q = code.trim()
+    if (!q) return
+    // A typed name opens the one person it matches; an employee code opens as before.
+    if (!/^[A-Za-z]{0,3}\d+$/.test(q) && matches.length === 1) { setCode(matches[0].ecode); return open(matches[0].ecode) }
+    if (!/^[A-Za-z]{0,3}\d+$/.test(q)) { setError(matches.length ? 'Choose the person from the list.' : 'Nobody by that name.'); return }
+    return open(q)
   }
 
   const job = Number(found?.assignment?.job_role_weight ?? JOB_ROLE_TOTAL)
@@ -205,9 +229,25 @@ export default function KpiEdit() {
   return (
     <div className="space-y-4">
       <form onSubmit={find} className="flex flex-wrap items-end gap-2">
-        <label className="block w-44">
-          <span className="label">Employee code</span>
-          <input className="input mt-1 font-mono uppercase" value={code} onChange={e => setCode(e.target.value)} placeholder="E1427" />
+        <label className="relative block w-full sm:w-80">
+          <span className="label">Name or employee code</span>
+          <input className="input mt-1" value={code} autoComplete="off" placeholder="Name or E1427"
+            onChange={e => { setCode(e.target.value); setPicking(true) }} />
+          {matches.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900">
+              {matches.map(m => (
+                <li key={m.ecode}>
+                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-50 dark:hover:bg-ink-800"
+                    onClick={() => { setCode(m.ecode); void open(m.ecode) }}>
+                    <span className="font-medium text-ink-900">{m.full_name}</span>
+                    <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
+                    {!m.is_active && <span className="text-xs text-cyrixRed-600">left</span>}
+                    {m.designation && <span className="ml-auto truncate text-xs text-ink-400">{m.designation}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </label>
         <button type="submit" className="btn-secondary" disabled={busy || !code.trim()}>
           {busy && !found ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} Find

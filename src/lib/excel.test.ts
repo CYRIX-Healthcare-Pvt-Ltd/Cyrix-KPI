@@ -239,3 +239,24 @@ describe('ruleFromCappingLabel', () => {
     expect(ruleFromCappingLabel('see note below')).toBeNull()
   })
 })
+
+describe('a target written as a percentage', () => {
+  it('reads 100% as 100, not the 1 Excel stores', () => {
+    const rows = [
+      ['KRA& Weightage', 'KRA', 'KPI (Mesurable Parameter)', 'Weightage', 'Target KPI', 'Capping'],
+      ['Job Role - 80%', 'Treasury', 'Forex payment processing', 0.4, 1, 'Higher is better (max weightage)'],
+      ['Job Role - 80%', 'Bank', 'Bank Reconciliation verification', 0.4, 0.95, 'Higher is better (max weightage)'],
+      ['Job Role - 80%', 'Visits', 'Field visits a month', 0, 12, 'Higher is better (max weightage)'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    for (let r = 1; r < 3; r++) {
+      ;(ws[XLSX.utils.encode_cell({ r, c: 3 })] as XLSX.CellObject).z = '0%'
+      ;(ws[XLSX.utils.encode_cell({ r, c: 4 })] as XLSX.CellObject).z = '0%'
+    }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Template')
+    const { rows: out } = parseKpiWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer)
+    expect(out.map(r => r.target_value)).toEqual([100, 95, 12])
+    expect(out.map(r => r.target_unit)).toEqual(['%', '%', null])
+  })
+})

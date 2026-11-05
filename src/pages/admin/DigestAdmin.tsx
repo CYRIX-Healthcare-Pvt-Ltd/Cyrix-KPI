@@ -866,7 +866,9 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   // Watch time as h:mm:ss, and everyone's together in hours (the user, 15 Oct).
   const hms = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const totalWatch = all.reduce((t, p) => t + (p.watched_seconds ?? 0), 0)
-  const download = () => {
+  // An Excel file in the grid and colours of the KPI and Travel exports (the user, 5 Nov: "in download, the wrapping
+  // is not proper ... make the excel format good"): long answers wrap in wide columns, everything sits at the top.
+  const download = async () => {
     const yn = (b: boolean) => (b ? 'Yes' : 'No')
     const head = ['E-code', 'Name', 'Department', 'Function', 'Reporting manager', 'Manager E-code', 'Opened', 'First opened', 'Last opened', 'Times opened',
       ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
@@ -875,8 +877,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
       ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
       ...(row.kind === 'video' ? ['Watched', 'Watch time (h:mm:ss)', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
-    const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
+    const body: Array<Array<string | number | null>> = all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
       ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
       yn(p.comments > 0), p.comments,
@@ -885,11 +886,45 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
         ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
       ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? hms(p.watched_seconds) : '', p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
-        p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])]
+        p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('People', { views: [{ state: 'frozen', ySplit: 3, xSplit: 2 }] })
+    const thin = { style: 'thin' as const, color: { argb: 'FF94A3B8' } }
+    const grid = { top: thin, left: thin, bottom: thin, right: thin }
+    const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
+    const opened = all.filter(p => p.opened_at).length
+    const answered = row.kind === 'form' ? all.filter(p => p.answered_at).length : null
+    ws.addRow([row.title]); ws.mergeCells(1, 1, 1, head.length)
+    ws.addRow([[`Out of ${all.length} people`, `Opened ${opened}`, answered === null ? '' : `Answered ${answered}`].filter(Boolean).join(' · ')])
+    ws.mergeCells(2, 1, 2, head.length)
+    ws.addRow(head)
+    for (const r of body) ws.addRow(r)
+    // A question's answer is free text: wide and wrapped. Short columns fit their longest value.
+    const qFrom = row.kind === 'form' ? head.length - questions.length : head.length
+    const isYn = head.map((_, i) => body.length > 0 && body.every(r => r[i] === 'Yes' || r[i] === 'No'))
+    const widths = head.map((h, i) => (i >= qFrom ? 45 : Math.min(30, Math.max(10, h.length + 2, ...body.map(r => String(r[i] ?? '').length + 2)))))
+    ws.columns = widths.map(width => ({ width }))
+    ws.eachRow((r, rn) => r.eachCell({ includeEmpty: true }, (c, cn) => {
+      if (cn > head.length) return
+      const i = cn - 1
+      c.font = { name: 'Calibri', size: 10, bold: rn === 3 }
+      c.alignment = { vertical: 'top', wrapText: i >= qFrom, horizontal: typeof c.value === 'number' ? 'right' : isYn[i] ? 'center' : 'left' }
+      if (rn >= 3) c.border = grid
+      if (rn === 1) { c.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill('FF1E293B'); c.alignment = { vertical: 'middle' } }
+      if (rn === 2) { c.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF475569' } }; c.alignment = { vertical: 'middle' } }
+      if (rn === 3) { c.fill = fill('FFDBEAFE'); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true } }
+      if (rn > 3 && isYn[i]) c.font = { name: 'Calibri', size: 10, bold: c.value === 'Yes', color: { argb: c.value === 'Yes' ? 'FF15803D' : 'FF94A3B8' } }
+    }))
+    ws.getRow(1).height = 24
+    ws.getRow(3).height = Math.min(90, 15 * Math.max(1, ...head.map((h, i) => Math.ceil(h.length / (widths[i] - 2)))))
+    ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: head.length } }
+    const buf = await wb.xlsx.writeBuffer()
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
-    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)}.csv`
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40) || 'Digest'}.xlsx`
     a.click()
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
   }
 
   return (
@@ -941,7 +976,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
           {showList ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           {showList ? 'Hide names' : `Show names · ${list.length}`}
         </button>
-        <button type="button" className="btn-secondary" onClick={download} disabled={!all.length}>Download all</button>
+        <button type="button" className="btn-secondary" onClick={() => void download()} disabled={!all.length}>Download all</button>
       </div>
       {showList && (() => {
         // Every column sorts (the user, 15 Oct): click once for A–Z / earliest / fewest, again to reverse.
