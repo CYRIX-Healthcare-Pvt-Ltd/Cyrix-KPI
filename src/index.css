@@ -1201,3 +1201,12 @@
       to left, rgb(var(--surface) / 0), rgb(var(--surface)) 55%);
   }
 }
+
+/* A day's rides on the map (DayRouteMap, the user, 5 Nov), the look of Travel's "See on map". */
+.rm-pin { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 12px Inter, sans-serif; border: 3px solid #fff; box-shadow: 0 2px 6px rgb(0 0 0 / 0.4); cursor: pointer; }
+.rm-tip { background: #fff; color: #111; border: 0; border-radius: 10px; padding: 6px 10px; font: 600 12px Inter, sans-serif; box-shadow: 0 10px 22px rgb(0 0 0 / 0.35); }
+.rm-tip::before { display: none; }
+.rm-km { font: 600 11px Inter, sans-serif; padding: 3px 7px; border-radius: 6px; white-space: nowrap; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35); transition: transform 0.18s, box-shadow 0.18s; cursor: pointer; display: inline-block; }
+.rm-km.up { transform: translateY(-4px) scale(1.12); box-shadow: 0 10px 18px rgb(0 0 0 / 0.35), 0 0 0 2px #fff; }
+.dim .rm-km, .dim.rm-km { opacity: 0.35; }
+.rm-line { transition: stroke-width 0.18s, opacity 0.18s; cursor: pointer; }

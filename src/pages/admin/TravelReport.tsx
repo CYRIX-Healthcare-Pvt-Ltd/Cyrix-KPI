@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { FileSpreadsheet, Map as MapIcon, Search, X } from 'lucide-react'
 import { Alert, PageLoader, SortHeader, Spinner, StatTile } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
+import DayRouteMap from '@/components/DayRouteMap'
 
 /*
   SW Admin's travel report (te_0095; the user, 2 Nov: "they need a report ie example map km, they claimed km … check how
@@ -79,7 +80,8 @@ interface Ride {
   from_lat?: number | null; from_lng?: number | null; to_lat?: number | null; to_lng?: number | null
 }
 interface Sign { employee_id: string; day: string; kind: Kind; what: string; amount: number | null }
-interface Report { tolerance: number; people: Person[]; rides: Ride[] | null; signs: Sign[] | null }
+/** all_rides (te_0130): every ride, auto, bus and train too, on the person page; rides stays bike and car for the Excel. */
+interface Report { tolerance: number; people: Person[]; rides: Ride[] | null; all_rides?: Ride[] | null; signs: Sign[] | null }
 type Row = Person & { pct: number | null; flags: number }
 type SortKey = 'name' | 'function' | 'manager' | 'rides' | 'map' | 'claimed' | 'pct' | 'extra' | 'signs'
 
@@ -97,7 +99,7 @@ const kmText = (v: number | null) => (v == null ? '—' : `${(Math.round(v * 10)
 const rupee = (v: number | null) => (v == null ? '—' : `₹${Math.round(v).toLocaleString('en-IN')}`)
 const pctText = (v: number | null) => (v == null ? '—' : `${v > 0.05 ? '+' : ''}${v.toFixed(1)}%`)
 const pctTone = (v: number | null) => (v == null || v <= 10 ? 'text-ink-900' : v <= 25 ? 'text-amber-700' : 'text-cyrixRed-700')
-const MODE: Record<string, string> = { bike: 'Bike', car: 'Car' }
+const MODE: Record<string, string> = { bike: 'Bike', car: 'Car', bus: 'Bus', train: 'Train', metro: 'Metro', auto: 'Auto', taxi: 'Taxi · Car', taxi_bike: 'Taxi · Bike', flight: 'Flight' }
 
 export default function TravelReport() {
   const [period, setPeriod] = useState<Period>('all')
@@ -146,7 +148,7 @@ export default function TravelReport() {
     try {
       const full = await rpc<Report>('te_km_report', { p_from: from, p_to: to, p_detail: true })
       const ids = new Set(shown.map(r => r.id))
-      await exportReport(label, shown, (full.rides ?? []).filter(x => ids.has(x.employee_id)), (full.signs ?? []).filter(x => ids.has(x.employee_id)))
+      await exportReport(label, shown, (full.all_rides ?? full.rides ?? []).filter(x => ids.has(x.employee_id)), (full.signs ?? []).filter(x => ids.has(x.employee_id)))
       setXl(null)
     } catch (e) { setXl((e as Error).message) }
   }
@@ -299,6 +301,10 @@ function PersonPage({ row, from, to, label, onClose }: { row: Row; from: string;
     queryFn: () => rpc<Report>('te_km_report', { p_from: from, p_to: to, p_employee: row.id, p_detail: true }),
   })
   const signs = data?.signs ?? []
+  // A day's rides on one map, with its stops (the user, 5 Nov: "can we get full ride map? like we check in claim form with stops").
+  const [dayMap, setDayMap] = useState<string | null>(null)
+  const list = data?.all_rides ?? data?.rides ?? []
+  const days = [...new Set(list.filter(r => r.from_lat != null && r.to_lat != null).map(r => r.day))]
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4" onClick={onClose}>
       <div role="dialog" aria-label={row.name} onClick={e => e.stopPropagation()}
@@ -344,11 +350,27 @@ function PersonPage({ row, from, to, label, onClose }: { row: Row; from: string;
               </div>
             )}
 
-            <h3 className="mt-5 text-sm font-semibold text-ink-900">Bike and car rides</h3>
-            {!data?.rides?.length ? <p className="mt-1 text-sm text-ink-500">No bike or car rides.</p> : (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-ink-900">Rides</h3>
+              {days.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {days.map(d => (
+                    <button key={d} type="button" onClick={() => setDayMap(d)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-teal-600/40 px-2.5 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-600/10">
+                      <MapIcon className="h-3.5 w-3.5" />{dayShort(d)} day map
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {dayMap && (
+              <DayRouteMap rides={list.filter(r => r.day === dayMap)} title={`${row.name} · ${dayShort(dayMap)}`} onClose={() => setDayMap(null)} />
+            )}
+            {!list.length ? <p className="mt-1 text-sm text-ink-500">No rides.</p> : (
               <div className="mt-2 divide-y divide-ink-100 rounded-xl border border-ink-200">
-                {data.rides.map((r, i) => {
+                {list.map((r, i) => {
                   const p = extraPct(r.map_km, r.claimed_km)
+                  const perKm = r.mode === 'bike' || r.mode === 'car'
                   return (
                     <div key={i} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-sm">
                       <span className="tabular-nums text-ink-500">{dayShort(r.day)}</span>
@@ -364,8 +386,17 @@ function PersonPage({ row, from, to, label, onClose }: { row: Row; from: string;
                         </span>
                       </span>
                       <span className="text-right">
-                        <span className="block whitespace-nowrap tabular-nums text-ink-900">{kmText(r.map_km)} → {kmText(r.claimed_km)}</span>
-                        <span className={clsx('block text-xs font-semibold tabular-nums', pctTone(p))}>{pctText(p)}</span>
+                        {perKm ? (
+                          <>
+                            <span className="block whitespace-nowrap tabular-nums text-ink-900">{kmText(r.map_km)} → {kmText(r.claimed_km)}</span>
+                            <span className={clsx('block text-xs font-semibold tabular-nums', pctTone(p))}>{pctText(p)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="block whitespace-nowrap tabular-nums text-ink-900">{rupee(r.amount)}</span>
+                            <span className="block text-xs tabular-nums text-ink-500">{kmText(r.map_km)}</span>
+                          </>
+                        )}
                       </span>
                     </div>
                   )
@@ -433,14 +464,16 @@ async function exportReport(label: string, people: Row[], rides: Ride[], signs: 
     Math.round(sum(people, p => p.extra_amount)), sum(people, p => p.over10),
     ...SIGNS.map(([k]) => sum(people, p => p.signs[k] ?? 0)), Math.round(sum(people, p => p.cut))])
 
-  const rMap = sum(rides, r => (r.map_km && r.claimed_km != null ? r.map_km : null)), rClaimed = sum(rides, r => (r.map_km && r.claimed_km != null ? r.claimed_km : null))
-  sheet('Bike and car rides', [
+  // Every ride (te_0130; the user, 5 Nov: "so in downloaded excel auto wasnt there?"); km against the map for bike and car only, which are paid by the km.
+  const perKm = (r: Ride) => r.mode === 'bike' || r.mode === 'car'
+  const rMap = sum(rides, r => (perKm(r) && r.map_km && r.claimed_km != null ? r.map_km : null)), rClaimed = sum(rides, r => (perKm(r) && r.map_km && r.claimed_km != null ? r.claimed_km : null))
+  sheet('Rides', [
     ['E-code', 'text'], ['Name', 'text'], ['Function', 'text'], ['Reporting manager', 'text'], ['Date', 'text'], ['Claim', 'text'], ['Ride', 'text'], ['Mode', 'text'],
     ['Purpose', 'text'], ['Call centre', 'text'], ['Map km', 'km'], ['Claimed km', 'km'], ['Extra km', 'km'], ['Extra %', 'pct'], ['Most allowed km', 'km'], ['Amount ₹', 'int'],
   ], rides.map(r => {
-    const p = extraPct(r.map_km, r.claimed_km)
-    return [...base(r.employee_id), date(r.day), r.number, r.way, MODE[r.mode] ?? r.mode, r.purpose, r.project, one(r.map_km), one(r.claimed_km),
-      r.map_km != null && r.claimed_km != null ? one(r.claimed_km - r.map_km) : null, p == null ? null : Math.round(p * 10) / 10, one(r.top), r.amount == null ? null : Math.round(r.amount)]
+    const k = perKm(r), p = k ? extraPct(r.map_km, r.claimed_km) : null
+    return [...base(r.employee_id), date(r.day), r.number, r.way, MODE[r.mode] ?? r.mode, r.purpose, r.project, one(r.map_km), k ? one(r.claimed_km) : null,
+      k && r.map_km != null && r.claimed_km != null ? one(r.claimed_km - r.map_km) : null, p == null ? null : Math.round(p * 10) / 10, k ? one(r.top) : null, r.amount == null ? null : Math.round(r.amount)]
   }), ['TOTAL', null, null, null, null, null, null, null, null, null, one(rMap), one(rClaimed), one(rClaimed - rMap),
     rMap > 0 ? Math.round(((rClaimed - rMap) / rMap) * 1000) / 10 : null, null, Math.round(sum(rides, r => r.amount))])
 
