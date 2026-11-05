@@ -10,7 +10,7 @@ import DigestSendTo from '@/components/DigestSendTo'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff, Shuffle, RotateCcw,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -34,6 +34,18 @@ const KIND_COLOR: Record<Kind, string> = {
   news: 'blue', announcement: 'orange', alert: 'red', notice: 'amber', vacancy: 'teal', meeting: 'green',
   poll: 'pink', form: 'violet', quiz: '#4f46e5', video: '#0891b2',
 }
+/** A quiz timer as typed, in minutes.seconds (0258; the user, 5 Nov: "0.2 mins means 20 secs"): seconds, or null for none, or NaN. */
+const timerSeconds = (t: string): number | null => {
+  const v = t.trim()
+  if (!v) return null
+  const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(v)
+  if (!m) return NaN
+  const sec = m[2] === undefined ? 0 : m[2].length === 1 ? Number(m[2]) * 10 : Number(m[2])
+  const total = Number(m[1]) * 60 + sec
+  return sec < 60 && total >= 5 && total <= 36000 ? total : NaN
+}
+const timerText = (sec: number) => [Math.floor(sec / 60) && `${Math.floor(sec / 60)} min`, sec % 60 && `${sec % 60} sec`].filter(Boolean).join(' ')
+const timerTyped = (sec: number | null) => (sec == null ? '' : `${Math.floor(sec / 60)}${sec % 60 ? '.' + (sec % 10 === 0 ? sec % 60 / 10 : String(sec % 60).padStart(2, '0')) : ''}`)
 /** A form or a quiz: questions, answers, a closing time (0181, 0253). */
 const ASKS = (k: Kind) => k === 'form' || k === 'quiz'
 const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
@@ -108,6 +120,8 @@ interface Draft {
   anonymous: boolean; answered: boolean
   /** Each person may submit again until it closes (0256; the user, 5 Nov: default off). */
   again: boolean
+  /** A quiz's order per person and its timer as typed, minutes.seconds (0258). */
+  shuffle: boolean; timer: string
   /** Already out to people (0182): publishing it again is an edit, and a link added to it is news. */
   wasPublished: boolean
   /** Minutes before the start that Join opens (0185). */
@@ -123,7 +137,7 @@ interface Draft {
   /** Send to (0242): everyone, or the chosen functions, teams and people. */
   to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
@@ -284,6 +298,8 @@ export default function DigestAdmin() {
           p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
         })
         if (qe) throw new Error(friendlyError(qe))
+        const { error: oe } = await supabase.rpc('digest_set_quiz_options', { p_id: id, p_shuffle: d.shuffle, p_seconds: timerSeconds(d.timer) })
+        if (oe) throw new Error(friendlyError(oe))
       }
       if (d.kind === 'poll') {
         const { error: pe } = await supabase.rpc('digest_set_poll', {
@@ -361,6 +377,7 @@ export default function DigestAdmin() {
     if (!d.closes) missing.push('Closes')
   }
   if (d.kind === 'quiz') {
+    if (Number.isNaN(timerSeconds(d.timer))) missing.push('Timer')
     if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
     if (d.questions.some(q => q.qtype !== 'short' && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
     if (d.questions.some(q => q.qtype === 'short' ? !(q.accepted ?? []).some(a => a.trim()) : !(q.right ?? []).some(k => q.options[k]?.trim()))) missing.push('the correct answer for each question')
@@ -435,133 +452,6 @@ export default function DigestAdmin() {
             placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : d.kind === 'vacancy' ? 'Two years in equipment repair; field travel' : 'Lunch, rangoli and prizes on 30 Oct'} />
         </div>
 
-        {d.kind === 'vacancy' && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="label" htmlFor="dg-vloc">Location <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-vloc" className="input" value={d.vloc} onChange={e => set({ vloc: e.target.value })} placeholder="Kochi" />
-            </div>
-            <div>
-              <label className="label" htmlFor="dg-vby">Apply by <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-vby" type="date" className="input" value={d.vby} onChange={e => set({ vby: e.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="dg-vlink">How to apply <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
-            </div>
-          </div>
-        )}
-
-        {d.kind === 'video' && (
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
-            <div>
-              <label className="label" htmlFor="dg-video">YouTube link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-video" className="input" value={d.video} onChange={e => set({ video: e.target.value })} placeholder="https://youtu.be/…" />
-            </div>
-            {youTubeId(d.video) && (
-              <img src={`https://i.ytimg.com/vi/${youTubeId(d.video)}/hqdefault.jpg`} alt="" className="aspect-video w-full rounded-lg object-cover" />
-            )}
-          </div>
-        )}
-
-        {d.kind === 'form' && (
-          <div className="space-y-3">
-            <FormBuilder questions={d.questions} onChange={questions => set({ questions })} />
-            <label className="inline-flex items-center gap-2 text-sm font-medium text-ink-800">
-              <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={d.anonymous} disabled={d.answered}
-                onChange={e => set({ anonymous: e.target.checked })} />
-              <EyeOff className="h-4 w-4 text-ink-500" /> Anonymous · no name or E-code with the answers
-            </label>
-            {!d.anonymous && <AgainBox on={d.again} onChange={again => set({ again })} />}
-            <div className="max-w-xs">
-              <label className="label" htmlFor="dg-fcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-fcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
-            </div>
-          </div>
-        )}
-
-        {d.kind === 'quiz' && (
-          <div className="space-y-3">
-            <FormBuilder quiz locked={d.answered} questions={d.questions} onChange={questions => set({ questions })} />
-            <AgainBox on={d.again} onChange={again => set({ again })} />
-            <div className="max-w-xs">
-              <label className="label" htmlFor="dg-qcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-qcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
-            </div>
-          </div>
-        )}
-
-        {d.kind === 'poll' && (
-          <div className="space-y-3">
-            <span className="label">Options <span className="text-cyrixRed-600" aria-hidden>*</span></span>
-            {d.options.map((o, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input className="input" maxLength={120} value={o} placeholder={`Option ${i + 1}`}
-                  onChange={e => set({ options: d.options.map((x, k) => (k === i ? e.target.value : x)) })} />
-                {d.options.length > 2 && (
-                  <button type="button" className="btn-icon" title="Remove option" onClick={() => set({ options: d.options.filter((_, k) => k !== i) })}><X className="h-4 w-4" /></button>
-                )}
-              </div>
-            ))}
-            {d.options.length < 6 && (
-              <button type="button" className="btn-secondary !px-3 !py-1.5 text-sm" onClick={() => set({ options: [...d.options, ''] })}>
-                <Plus className="h-4 w-4" /> Add option
-              </button>
-            )}
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="inline-flex items-center gap-2 text-sm text-ink-800">
-                <input type="checkbox" checked={d.multi} onChange={e => set({ multi: e.target.checked })} />
-                Multiple answers
-              </label>
-              <div>
-                <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-                <input id="dg-closes" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {d.kind === 'meeting' && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="dg-at">Date and time <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-at" type="datetime-local" className="input" value={d.date} onChange={e => set({ date: e.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="dg-min">Duration <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              {/* Hours and minutes from two columns (the user, 12 Oct: "how can i select 1 hr 20 mins?"). */}
-              <DurationPicker id="dg-min" value={d.minutes} onChange={minutes => set({ minutes })} />
-            </div>
-            <div>
-              <label className="flex items-center gap-2 py-1 text-sm font-medium text-ink-800">
-                <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={d.hasLink}
-                  onChange={e => set({ hasLink: e.target.checked })} />
-                Add meeting link
-              </label>
-              {d.hasLink && (
-                <>
-                  <label className="label mt-2" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-                  <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
-                  <span className="label mt-3">Join opens</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {JOIN_EARLY.map(m => (
-                      <button key={m} type="button" onClick={() => set({ joinEarly: m })}
-                        className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
-                          d.joinEarly === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
-                        {m >= 525600 ? 'Anytime' : m < 60 ? `${m} min before` : '1 hr before'}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            <div>
-              <label className="label" htmlFor="dg-place">Where</label>
-              <input id="dg-place" className="input" value={d.place} onChange={e => set({ place: e.target.value })} placeholder="Microsoft Teams" />
-            </div>
-          </div>
-        )}
-
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <span className="label">Colour</span>
@@ -609,27 +499,163 @@ export default function DigestAdmin() {
           </div>
         </div>
 
-        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && !ASKS(d.kind) && <div className="max-w-xs">
-          <span className="label">Show until <span className="text-red-600">*</span></span>
-          <div className="mt-1 grid grid-cols-2 gap-2">
-            {(['date', 'forever'] as const).map(m => {
-              const on = m === 'forever' ? d.until === 'forever' : d.until !== '' && d.until !== 'forever'
-              return <button key={m} type="button" aria-pressed={on}
-                className={on ? 'btn-primary justify-center' : 'btn-secondary justify-center'}
-                onClick={() => set({ until: m === 'forever' ? 'forever' : on ? d.until : new Date(Date.now() + 330 * 60_000 + 7 * 86_400_000).toISOString().slice(0, 10) })}>
-                {m === 'date' ? 'Date' : 'Forever'}
-              </button>
-            })}
+        {d.kind === 'vacancy' && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label" htmlFor="dg-vloc">Location <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-vloc" className="input" value={d.vloc} onChange={e => set({ vloc: e.target.value })} placeholder="Kochi" />
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-vby">Apply by <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-vby" type="date" className="input" value={d.vby} onChange={e => set({ vby: e.target.value })} />
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-vlink">How to apply <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-vlink" className="input" value={d.vlink} onChange={e => set({ vlink: e.target.value })} placeholder="hr@cyrix.in" />
+            </div>
           </div>
-          {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2" value={d.until}
-            min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
-            onChange={e => set({ until: e.target.value || d.until })} />}
-        </div>}
+        )}
+
+        {d.kind === 'video' && (
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <div>
+              <label className="label" htmlFor="dg-video">YouTube link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-video" className="input" value={d.video} onChange={e => set({ video: e.target.value })} placeholder="https://youtu.be/…" />
+            </div>
+            {youTubeId(d.video) && (
+              <img src={`https://i.ytimg.com/vi/${youTubeId(d.video)}/hqdefault.jpg`} alt="" className="aspect-video w-full rounded-lg object-cover" />
+            )}
+          </div>
+        )}
+
+        {d.kind === 'form' && (
+          <div className="space-y-3">
+            <FormBuilder questions={d.questions} onChange={questions => set({ questions })} />
+          </div>
+        )}
+
+        {d.kind === 'quiz' && (
+          <div className="space-y-3">
+            <FormBuilder quiz locked={d.answered} questions={d.questions} onChange={questions => set({ questions })} />
+          </div>
+        )}
+
+        {d.kind === 'poll' && (
+          <div className="space-y-3">
+            <span className="label">Options <span className="text-cyrixRed-600" aria-hidden>*</span></span>
+            {d.options.map((o, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input className="input" maxLength={120} value={o} placeholder={`Option ${i + 1}`}
+                  onChange={e => set({ options: d.options.map((x, k) => (k === i ? e.target.value : x)) })} />
+                {d.options.length > 2 && (
+                  <button type="button" className="btn-icon" title="Remove option" onClick={() => set({ options: d.options.filter((_, k) => k !== i) })}><X className="h-4 w-4" /></button>
+                )}
+              </div>
+            ))}
+            {d.options.length < 6 && (
+              <button type="button" className="btn-secondary !px-3 !py-1.5 text-sm" onClick={() => set({ options: [...d.options, ''] })}>
+                <Plus className="h-4 w-4" /> Add option
+              </button>
+            )}
+          </div>
+        )}
+
+        {d.kind === 'meeting' && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="dg-at">Date and time <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-at" type="datetime-local" className="input" value={d.date} onChange={e => set({ date: e.target.value })} />
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-min">Duration <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              {/* Hours and minutes from two columns (the user, 12 Oct: "how can i select 1 hr 20 mins?"). */}
+              <DurationPicker id="dg-min" value={d.minutes} onChange={minutes => set({ minutes })} />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 py-1 text-sm font-medium text-ink-800">
+                <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={d.hasLink}
+                  onChange={e => set({ hasLink: e.target.checked })} />
+                Add meeting link
+              </label>
+              {d.hasLink && (
+                <>
+                  <label className="label mt-2" htmlFor="dg-link">Meeting link <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+                  <input id="dg-link" className="input" value={d.link} onChange={e => set({ link: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+                  <span className="label mt-3">Join opens</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {JOIN_EARLY.map(m => (
+                      <button key={m} type="button" onClick={() => set({ joinEarly: m })}
+                        className={clsx('rounded-full border px-3 py-1.5 text-sm font-medium',
+                          d.joinEarly === m ? 'border-violet-600 bg-violet-600 text-white' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
+                        {m >= 525600 ? 'Anytime' : m < 60 ? `${m} min before` : '1 hr before'}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="dg-place">Where</label>
+              <input id="dg-place" className="input" value={d.place} onChange={e => set({ place: e.target.value })} placeholder="Microsoft Teams" />
+            </div>
+          </div>
+        )}
+
+        {/* Every setting together, the same way for every kind (the user, 5 Nov: "tidy the area not only in quiz, all are messed up"). */}
+        {(d.kind === 'poll' || ASKS(d.kind) || (d.kind !== 'vacancy' && d.kind !== 'meeting')) && (
+          <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
+            <span className="label">Settings</span>
+            <div className="mt-1 grid gap-4 sm:grid-cols-2">
+              {(d.kind === 'poll' || ASKS(d.kind)) ? (
+                <div>
+                  <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+                  <input id="dg-closes" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
+                </div>
+              ) : (
+                <div>
+                  <span className="label">Show until <span className="text-red-600">*</span></span>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(['date', 'forever'] as const).map(m => {
+                      const on = m === 'forever' ? d.until === 'forever' : d.until !== '' && d.until !== 'forever'
+                      return <button key={m} type="button" aria-pressed={on}
+                        className={on ? 'btn-primary justify-center' : 'btn-secondary justify-center'}
+                        onClick={() => set({ until: m === 'forever' ? 'forever' : on ? d.until : new Date(Date.now() + 330 * 60_000 + 7 * 86_400_000).toISOString().slice(0, 10) })}>
+                        {m === 'date' ? 'Date' : 'Forever'}
+                      </button>
+                    })}
+                  </div>
+                  {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2" value={d.until}
+                    min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
+                    onChange={e => set({ until: e.target.value || d.until })} />}
+                </div>
+              )}
+              {d.kind === 'quiz' && (
+                <div>
+                  <label className="label" htmlFor="dg-timer">
+                    Timer · minutes{timerSeconds(d.timer) ? <span className="ml-1 normal-case tracking-normal text-ink-500">= {timerText(timerSeconds(d.timer)!)}</span> : null}
+                  </label>
+                  <input id="dg-timer" className={clsx('input', Number.isNaN(timerSeconds(d.timer)) && '!border-cyrixRed-500')} inputMode="decimal" placeholder="No timer" value={d.timer}
+                    disabled={d.answered}
+                    // Minutes, then seconds after the dot: 0.2 is 20 sec, 1.45 is 1 min 45 sec; .6 and over cannot be typed.
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d{0,3}(\.([0-5]\d?)?)?$/.test(v)) set({ timer: v }) }} />
+                </div>
+              )}
+            </div>
+            {(d.kind === 'poll' || ASKS(d.kind)) && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {d.kind === 'poll' && <Tick on={d.multi} onChange={multi => set({ multi })} label="Multiple answers" />}
+                {d.kind === 'form' && <Tick on={d.anonymous} disabled={d.answered} onChange={anonymous => set({ anonymous })} label="Anonymous · no name or E-code kept" icon={EyeOff} />}
+                {d.kind === 'quiz' && <Tick on={d.shuffle} onChange={shuffle => set({ shuffle })} label="Shuffle questions and choices" icon={Shuffle} />}
+                {ASKS(d.kind) && !(d.kind === 'form' && d.anonymous) && <Tick on={d.again} onChange={again => set({ again })} label="Allow submitting again" icon={RotateCcw} />}
+              </div>
+            )}
+          </div>
+        )}
 
         <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes }}
           onTo={to => set({ to })} onChange={a => set(a)} hue={solid(d.color)} />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-ink-200 pt-4">
         <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}
           onClick={() => { setDone(null); save.mutate(false) }}>
           {save.isPending && save.variables === false ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
@@ -669,7 +695,7 @@ export default function DigestAdmin() {
         {previewing && (
           <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
             closes={(d.kind === 'poll' || ASKS(d.kind)) && d.closes ? new Date(d.closes).toISOString() : null}
-            questions={ASKS(d.kind) ? d.questions : []} anonymous={d.kind === 'form' && d.anonymous} again={d.again && !(d.kind === 'form' && d.anonymous)}
+            questions={ASKS(d.kind) ? d.questions : []} anonymous={d.kind === 'form' && d.anonymous} again={d.again && !(d.kind === 'form' && d.anonymous)} quiz={d.kind === 'quiz' ? { shuffle: d.shuffle, seconds: timerSeconds(d.timer) || null } : undefined}
             onClose={() => setPreviewing(false)} />
         )}
       </div>
@@ -743,6 +769,7 @@ export default function DigestAdmin() {
                     : []
                   const anonymous = r.kind === 'form' && !!(await supabase.rpc('digest_form_is_anonymous', { p_id: r.id })).data
                   const again = ASKS(r.kind) && !!(await supabase.rpc('digest_allow_again', { p_id: r.id })).data
+                  const qset = r.kind === 'quiz' ? (await supabase.rpc('digest_quiz_settings', { p_id: r.id })).data as { shuffle: boolean; seconds: number | null } | null : null
                   const answered = r.kind === 'quiz'
                     ? !!((await supabase.rpc('digest_quiz_scores', { p_id: r.id })).data as unknown[] | null)?.length
                     : (form[0]?.answered ?? 0) > 0
@@ -757,7 +784,7 @@ export default function DigestAdmin() {
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
                     questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
-                    anonymous, answered, again,
+                    anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
                     to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -842,12 +869,14 @@ type Person = {
 }
 type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
-/** Allow submitting again (0256): off unless ticked. */
-function AgainBox({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+/** A setting as a tile with its tick box (0256, 0258): the same size and look for each. */
+function Tick({ on, onChange, label, icon: Icon, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; icon?: typeof EyeOff; disabled?: boolean }) {
   return (
-    <label className="flex items-center gap-2 text-sm font-medium text-ink-800">
-      <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={on} onChange={e => onChange(e.target.checked)} />
-      Allow submitting again
+    <label className={clsx('flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-lg border bg-surface px-3 py-2 text-sm font-medium',
+      on ? 'border-ink-500 text-ink-900' : 'border-ink-200 text-ink-700', disabled && 'cursor-not-allowed opacity-60')}>
+      <input type="checkbox" className="h-4 w-4 shrink-0 accent-violet-600" checked={on} disabled={disabled} onChange={e => onChange(e.target.checked)} />
+      {Icon && <Icon className="h-4 w-4 shrink-0 text-ink-500" />}
+      {label}
     </label>
   )
 }

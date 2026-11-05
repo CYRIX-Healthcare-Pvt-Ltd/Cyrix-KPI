@@ -96,7 +96,7 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
 
   return (
     // Set off so the desks notice it (the user, 2 Nov: "show this send to field emphasised").
-    <div className="max-w-2xl rounded-xl border-2 p-3" style={{ borderColor: `${hue}b3`, background: `${hue}1a` }}>
+    <div className="rounded-xl border-2 p-4" style={{ borderColor: `${hue}b3`, background: `${hue}1a` }}>
       <div className="flex items-center gap-2">
         <span className="label">Send to <span className="text-red-600">*</span></span>
       </div>

@@ -22,7 +22,7 @@ export interface PreviewPost {
 /** The portal: the same site in production; its dev server locally (the KPI one is a different origin). */
 const PORTAL = import.meta.env.DEV ? 'http://localhost:5176' : ''
 
-export default function DigestPreview({ post, options, multi, closes, questions = [], anonymous = false, again = false, onClose }: {
+export default function DigestPreview({ post, options, multi, closes, questions = [], anonymous = false, again = false, quiz, onClose }: {
   post: PreviewPost
   options: string[]
   /** A form's questions (0181). */
@@ -31,13 +31,15 @@ export default function DigestPreview({ post, options, multi, closes, questions 
   anonymous?: boolean
   /** Allow submitting again (0256). */
   again?: boolean
+  /** A quiz's shuffle and timer (0258). */
+  quiz?: { shuffle: boolean; seconds: number | null }
   multi: boolean
   closes: string | null
   onClose: () => void
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const send = () => frame.current?.contentWindow?.postMessage(
-    { type: 'cyrix-digest-preview', post: { ...post, id: 'preview' }, options, multi, closes, questions, anonymous, again }, PORTAL || window.location.origin)
+    { type: 'cyrix-digest-preview', post: { ...post, id: 'preview' }, options, multi, closes, questions, anonymous, again, quiz }, PORTAL || window.location.origin)
 
   useEffect(() => {
     const ready = (e: MessageEvent) => { if ((e.data as { type?: string } | null)?.type === 'cyrix-digest-preview-ready') send() }
