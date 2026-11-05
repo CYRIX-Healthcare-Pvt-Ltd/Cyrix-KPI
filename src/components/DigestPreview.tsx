@@ -12,7 +12,7 @@ import { X } from 'lucide-react'
 export interface PreviewPost {
   kind: string; title: string; body: string; image_url: string | null; color: string
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
-  posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string
+  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt'; author: string | null; created_at: string
   likes: number; liked: boolean; comments: number
   vac_location: string | null; apply_by: string | null; apply_link: string | null
   /** Minutes before the start that Join opens, and a Video post's YouTube id (0185). */

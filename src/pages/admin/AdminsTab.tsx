@@ -14,13 +14,15 @@ import MultiPick from '@/components/MultiPick'
 import { EmptyState, SortHeader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
-type Desk = 'hr' | 'it' | 'mkt' | 'acc' | 'travel'
+type Desk = 'hr' | 'it' | 'mkt' | 'mgmt' | 'acc' | 'travel'
 
 /** Each desk and the modules it can administer, as desk_modules() has them. */
 const DESKS: Record<Desk, { label: string; modules: string[] }> = {
   hr: { label: 'HR', modules: ['KPI', 'Digest'] },
   it: { label: 'IT', modules: ['Logins', 'Support', 'Digest'] },
   mkt: { label: 'Marketing', modules: ['Digest'] },
+  /** Leaders posting to Cyrix Digest under "Management" (0249; the user, 5 Nov). */
+  mgmt: { label: 'Management', modules: ['Digest'] },
   acc: { label: 'Accounts', modules: ['Travel Expense'] },
   travel: { label: 'Travel Desk', modules: ['Travel Expense'] },
 }

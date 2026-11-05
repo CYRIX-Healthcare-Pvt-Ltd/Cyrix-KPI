@@ -10,8 +10,8 @@ import { supabase, friendlyError } from '@/lib/supabase'
  * The desk that posted it ticks the others; they see it in their own Digest tab and can edit
  * and publish it. Deleting stays the owner's.
  */
-type Desk = 'hr' | 'it' | 'mkt'
-const DESK: Record<Desk, string> = { hr: 'HR', it: 'IT', mkt: 'Marketing' }
+type Desk = 'hr' | 'it' | 'mkt' | 'mgmt'
+const DESK: Record<Desk, string> = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' }
 /** The post's fields as the form names them. */
 const FIELD: Record<string, string> = {
   title: 'Title', body: 'Description', image_url: 'Photo', color: 'Colour', kind: 'Kind',
@@ -34,7 +34,7 @@ export default function DigestAccess({ postId, owner, mine, editors }: {
   editors: string[]
 }) {
   const qc = useQueryClient()
-  const others = (['hr', 'it', 'mkt'] as Desk[]).filter(x => x !== owner)
+  const others = (['hr', 'it', 'mkt', 'mgmt'] as Desk[]).filter(x => x !== owner)
   const [ticked, setTicked] = useState<string[]>(editors)
   useEffect(() => setTicked(editors), [editors])
   const changed = [...ticked].sort().join() !== [...editors].sort().join()

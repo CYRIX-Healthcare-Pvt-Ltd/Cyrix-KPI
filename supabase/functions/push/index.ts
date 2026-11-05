@@ -330,7 +330,7 @@ Deno.serve(async req => {
     const { data: ok } = await user.rpc('digest_can_edit', { p_id: c.post_id })
     if (!ok) return json({ error: 'Only a desk that can edit it' }, 403)
     const { data: post } = await db.from('digest_posts').select('id, title').eq('id', c.post_id).maybeSingle()
-    const desk = ({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Cyrix Digest'
+    const desk = ({ hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Cyrix Digest'
     const t = await deliver(db, [c.employee_id], {
       title: `${desk} replied · ${post?.title ?? 'Cyrix Digest'}`,
       body: String(c.reply).slice(0, 180),

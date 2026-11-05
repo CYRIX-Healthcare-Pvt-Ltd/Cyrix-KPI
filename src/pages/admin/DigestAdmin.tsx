@@ -65,7 +65,7 @@ const grad = (h: Hue) => {
 interface Row {
   id: string; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
-  posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
+  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
   /** This desk may edit it: it posted it, or the poster shared it (0183). */
@@ -188,7 +188,7 @@ export default function DigestAdmin() {
   // Which desk this is, for "posted by" in the preview.
   const { data: desk } = useQuery({
     queryKey: ['digest', 'desk'],
-    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | null) ?? 'hr',
+    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | null) ?? 'hr',
   })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
@@ -656,9 +656,9 @@ export default function DigestAdmin() {
                       {r.title}
                     </span>
                     <span className="block text-xs text-ink-500">
-                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
+                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {DESK_WORD[r.posted_as] ?? 'HR'} · {fmt(r.created_at)}
                       {!r.mine && <span className="ml-1.5 font-medium text-violet-700">· Shared with you</span>}
-                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => (x === 'it' ? 'IT' : x === 'mkt' ? 'Marketing' : 'HR')).join(', ')}</span>}
+                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => DESK_WORD[x as keyof typeof DESK_WORD] ?? 'HR').join(', ')}</span>}
                       {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
                         ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                         // A meeting already says its date.
@@ -894,7 +894,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
-      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt'} mine={row.mine} editors={row.editors ?? []} />
+      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt'} mine={row.mine} editors={row.editors ?? []} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
@@ -1024,7 +1024,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                 <p className="text-ink-700">{c.body}</p>
                 {c.reply && replying?.id !== c.id && (
                   <div className="mt-1.5 rounded-lg border-l-2 border-violet-500 bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
-                    <p className="text-xs font-semibold text-violet-700">{({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Reply'}{c.reply_at ? <span className="font-normal text-ink-500"> · {fmtAmPm(c.reply_at)}</span> : null}</p>
+                    <p className="text-xs font-semibold text-violet-700">{(DESK_WORD as Record<string, string>)[c.reply_desk ?? ''] ?? 'Reply'}{c.reply_at ? <span className="font-normal text-ink-500"> · {fmtAmPm(c.reply_at)}</span> : null}</p>
                     <p className="text-ink-800">{c.reply}</p>
                   </div>
                 )}
@@ -1059,13 +1059,13 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   deleted ones too, so a post a desk deletes stays here as history. Read only; Details as the desks see it.
 */
 interface SwRow {
-  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt'; author: string | null
+  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt' | 'mgmt'; author: string | null
   created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
   meet_at: string | null; likes: number; comments: number; opened: number; joined: number
   /** Over: a meeting that ended, a form or poll that closed, a post past its last day (0210). */
   ended?: boolean
 }
-const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing' } as const
+const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' } as const
 
 export function DigestHistory() {
   const [find, setFind] = useState('')

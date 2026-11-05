@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isItAdmin,
         isMktAdmin,
         desks,
-        canPostDigest: ['hr', 'it', 'mkt'].some(d => desks[d]?.includes('Digest')),
+        canPostDigest: ['hr', 'it', 'mkt', 'mgmt'].some(d => desks[d]?.includes('Digest')),
         directReportCount,
         forcePasswordChange,
         loading,
