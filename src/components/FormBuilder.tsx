@@ -28,7 +28,7 @@ export default function FormBuilder({ questions, onChange, quiz = false, locked 
   questions: Question[]; onChange: (q: Question[]) => void
   /** A quiz: choice questions only, each with its correct answer and marks. */
   quiz?: boolean
-  /** A quiz people have sent: wording and order may change, not the choices, answers or marks. */
+  /** A quiz people have sent: its type and choices stay; wording, order, correct answers and marks may change, and scores follow (0259). */
   locked?: boolean
 }) {
   const put = (i: number, patch: Partial<Question>) => onChange(questions.map((q, k) => (k === i ? { ...q, ...patch } : q)))
@@ -79,7 +79,7 @@ export default function FormBuilder({ questions, onChange, quiz = false, locked 
             {quiz ? (
               <label className="ml-auto inline-flex items-center gap-1.5 text-sm text-ink-800">
                 Marks
-                <input type="number" min={0} max={100} inputMode="numeric" className="input !w-20 !py-1" value={q.points ?? 1} disabled={locked}
+                <input type="number" min={0} max={100} inputMode="numeric" className="input !w-20 !py-1" value={q.points ?? 1}
                   onChange={e => { const v = Number(e.target.value); put(i, { points: Number.isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 0 }) }} />
               </label>
             ) : (
@@ -94,15 +94,15 @@ export default function FormBuilder({ questions, onChange, quiz = false, locked 
               {(q.accepted?.length ? q.accepted : ['']).map((a, k, list) => (
                 <div key={k} className="flex items-center gap-2">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border-2 border-green-600 bg-green-600 text-white"><Check className="h-4 w-4" /></span>
-                  <input className="input !border-green-600 !py-1.5" maxLength={120} value={a} disabled={locked}
+                  <input className="input !border-green-600 !py-1.5" maxLength={120} value={a}
                     placeholder={k === 0 ? 'Correct answer' : 'Also accept'}
                     onChange={e => put(i, { accepted: list.map((x, j) => (j === k ? e.target.value : x)) })} />
-                  {list.length > 1 && !locked && (
+                  {list.length > 1 && (
                     <button type="button" className="btn-icon" title="Remove" onClick={() => put(i, { accepted: list.filter((_, j) => j !== k) })}><X className="h-4 w-4" /></button>
                   )}
                 </div>
               ))}
-              {(q.accepted?.length ?? 1) < 10 && !locked && (
+              {(q.accepted?.length ?? 1) < 10 && (
                 <button type="button" className="text-sm font-medium text-violet-700 hover:underline" onClick={() => put(i, { accepted: [...(q.accepted?.length ? q.accepted : ['']), ''] })}>
                   + Also accept
                 </button>
@@ -116,7 +116,7 @@ export default function FormBuilder({ questions, onChange, quiz = false, locked 
                 return (
                   <div key={k} className="flex items-center gap-2">
                     {quiz && (
-                      <button type="button" disabled={locked} onClick={() => mark(i, k)} aria-pressed={right} title="Correct answer"
+                      <button type="button" onClick={() => mark(i, k)} aria-pressed={right} title="Correct answer"
                         className={clsx('grid h-8 w-8 shrink-0 place-items-center border-2', q.qtype === 'one' ? 'rounded-full' : 'rounded-md',
                           right ? 'border-green-600 bg-green-600 text-white' : 'border-ink-300 text-transparent hover:border-green-500')}>
                         <Check className="h-4 w-4" />
