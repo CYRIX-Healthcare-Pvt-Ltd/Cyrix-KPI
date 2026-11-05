@@ -2,11 +2,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { sendMail } from '../_shared/mail.ts'
 import { recipients, words, type AdvanceRow } from './words.ts'
 import { vehicleWords, type VehicleRow } from './vehicle.ts'
+import { managerWords, type ManagerRow } from './manager.ts'
 
 /**
  * Travel Expense's mail: an expense advance the Travel Desk has approved, to the person with copies to their
  * reporting manager and the Travel Desk (Travel te_0067; the user, 24 Oct). The words are in words.ts.
- * Also an out-of-policy vehicle approved by the Travel Desk or removed by the manager (Travel te_0097), words in vehicle.ts.
+ * Also an out-of-policy vehicle approved by the Travel Desk or removed by the manager (Travel te_0097), words in vehicle.ts,
+ * and an advance the reporting manager approved, to the Travel Desk (Travel te_0128), words in manager.ts.
  *
  * Called by the approval itself (pg_net) and by pg_cron every five minutes, with the push key. Each call claims the
  * advances given and not mailed — claimed first, so each goes once even if two calls meet — and sends them two
@@ -57,5 +59,21 @@ Deno.serve(async req => {
       await db.rpc('te_va_mail_failed', { p_id: r.id, p_error: (e as Error).message })
     }
   }
-  return json({ claimed: rows.length + vrows.length, sent, failed, noAddress })
+  // An advance the manager approved (te_0128): to the Travel Desk alone. Kept last, so a database without it yet
+  // still sends the rest.
+  const { data: mdata, error: merr } = await db.rpc('te_advance_mgr_mail_claim', { p_limit: 20 })
+  const mrows = merr ? [] : (mdata ?? []) as ManagerRow[]
+  for (const [i, r] of mrows.entries()) {
+    const to = [...new Set((r.desk_emails ?? []).map(x => x.trim().toLowerCase()).filter(Boolean))]
+    if (!to.length) { noAddress++; await db.rpc('te_advance_mgr_mail_failed', { p_id: r.id, p_error: 'No work email for the Travel Desk' }); continue }
+    if (i > 0 || rows.length || vrows.length) await new Promise(res => setTimeout(res, 2000))
+    try {
+      await sendMail(db as never, { to, cc: [], ...managerWords(r, APP) })
+      sent++
+    } catch (e) {
+      failed++
+      await db.rpc('te_advance_mgr_mail_failed', { p_id: r.id, p_error: (e as Error).message })
+    }
+  }
+  return json({ claimed: rows.length + vrows.length + mrows.length, sent, failed, noAddress })
 })
