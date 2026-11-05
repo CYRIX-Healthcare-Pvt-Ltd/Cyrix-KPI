@@ -368,6 +368,7 @@ Deno.serve(async req => {
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
       : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'
       : post.kind === 'form' ? 'Fill it in, in Cyrix Digest.'
+      : post.kind === 'quiz' ? 'Take the quiz in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const { data: me } = await user.rpc('current_employee_id')
     // Sent to chosen people (0242): them alone.

@@ -5,7 +5,8 @@ import MultiPick from '@/components/MultiPick'
 import { supabase } from '@/lib/supabase'
 
 type Way = 'direct' | 'fns' | 'mgrs' | 'people'
-const WAYS: Array<[Way, string]> = [['direct', 'Direct reportees'], ['fns', 'Function'], ['mgrs', 'Team of'], ['people', 'People']]
+// Each says whom it reaches (the user, 5 Nov: 'Managers direct reportees, managers whole team, Function, custom individuals').
+const WAYS: Array<[Way, string]> = [['direct', "Manager's direct reportees"], ['mgrs', "Manager's whole team"], ['fns', 'Function'], ['people', 'Custom individuals']]
 
 export interface Audience { direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[] }
 

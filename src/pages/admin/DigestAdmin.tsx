@@ -3,14 +3,14 @@ import { htmlToMd } from '@/lib/htmlToMd'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
-import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
+import FormBuilder, { blankQuestion, blankQuizQuestion, type Question } from '@/components/FormBuilder'
 import DigestAccess from '@/components/DigestAccess'
 import MultiPick from '@/components/MultiPick'
 import DigestSendTo from '@/components/DigestSendTo'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -22,13 +22,20 @@ import { Alert } from '@/components/ui'
  * post shows its likes and comments, and a meeting shows who clicked Join,
  * how often, first and last.
  */
-type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form' | 'video'
+type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form' | 'video' | 'quiz'
 /** Every kind, its word and its icon (0170; the user: "announcement, alerts, notice, vacancy"). */
 const KINDS: Array<[Kind, string, typeof Newspaper]> = [
   ['news', 'News', Newspaper], ['announcement', 'Announcement', Megaphone], ['alert', 'Alert', TriangleAlert],
   ['notice', 'Notice', Pin], ['vacancy', 'Vacancy', Briefcase], ['meeting', 'Meeting', Video], ['poll', 'Poll', BarChart3],
-  ['form', 'Form', ClipboardList], ['video', 'Video', PlayCircle],
+  ['form', 'Form', ClipboardList], ['quiz', 'Quiz', Trophy], ['video', 'Video', PlayCircle],
 ]
+/** Each kind starts in a colour of its own (the user, 5 Nov: "every modules default color is purple, for each make it unique"). */
+const KIND_COLOR: Record<Kind, string> = {
+  news: 'blue', announcement: 'orange', alert: 'red', notice: 'amber', vacancy: 'teal', meeting: 'green',
+  poll: 'pink', form: 'violet', quiz: '#4f46e5', video: '#0891b2',
+}
+/** A form or a quiz: questions, answers, a closing time (0181, 0253). */
+const ASKS = (k: Kind) => k === 'form' || k === 'quiz'
 const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
 /** The kinds that are like news: words, a picture, likes. */
 const LIKABLE = new Set<Kind>(['news', 'announcement', 'alert', 'notice', 'vacancy', 'video'])
@@ -95,6 +102,10 @@ interface Draft {
   hadLink: boolean
   /** A form's questions (0181). Its closing time is `closes`, as a poll's is. */
   questions: Question[]
+  /** A form that keeps no names with its answers (0254), and whether people have sent it (the choice is then fixed). */
+  anonymous: boolean; answered: boolean
+  /** Each person may submit again until it closes (0256; the user, 5 Nov: default off). */
+  again: boolean
   /** Already out to people (0182): publishing it again is an edit, and a link added to it is news. */
   wasPublished: boolean
   /** Minutes before the start that Join opens (0185). */
@@ -110,7 +121,7 @@ interface Draft {
   /** Send to (0242): everyone, or the chosen functions, teams and people. */
   to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
@@ -220,7 +231,7 @@ export default function DigestAdmin() {
       if (error) throw new Error(friendlyError(error))
       // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
       // no Show until for them.
-      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || d.kind === 'form'
+      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || ASKS(d.kind)
       const { error: pe0 } = await supabase.rpc('digest_set_pdf', { p_id: id, p_url: d.pdf_url ?? '', p_name: d.pdf_name ?? '' })
       if (pe0) throw new Error(friendlyError(pe0))
       const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd || d.until === 'forever' ? null : d.until || null })
@@ -251,6 +262,26 @@ export default function DigestAdmin() {
           p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
         })
         if (fe) throw new Error(friendlyError(fe))
+        const { error: ne } = await supabase.rpc('digest_set_form_anonymous', { p_id: id, p_on: d.anonymous })
+        if (ne) throw new Error(friendlyError(ne))
+      }
+      if (ASKS(d.kind)) {
+        const { error: ge } = await supabase.rpc('digest_set_allow_again', { p_id: id, p_on: d.again && !(d.kind === 'form' && d.anonymous) })
+        if (ge) throw new Error(friendlyError(ge))
+      }
+      if (d.kind === 'quiz') {
+        const { error: qe } = await supabase.rpc('digest_set_quiz', {
+          p_id: id,
+          p_questions: d.questions.map(q => {
+            const opts = q.options.map(o => o.trim())
+            return q.qtype === 'short'
+              ? { id: q.id, label: q.label.trim(), qtype: q.qtype, options: [], correct: (q.accepted ?? []).map(a => a.trim()).filter(Boolean), points: q.points ?? 1 }
+              : { id: q.id, label: q.label.trim(), qtype: q.qtype, options: opts.filter(Boolean),
+                  correct: (q.right ?? []).map(k => opts[k]).filter(Boolean), points: q.points ?? 1 }
+          }),
+          p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
+        })
+        if (qe) throw new Error(friendlyError(qe))
       }
       if (d.kind === 'poll') {
         const { error: pe } = await supabase.rpc('digest_set_poll', {
@@ -327,12 +358,18 @@ export default function DigestAdmin() {
     if (d.questions.some(q => (q.qtype === 'one' || q.qtype === 'many') && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
     if (!d.closes) missing.push('Closes')
   }
+  if (d.kind === 'quiz') {
+    if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
+    if (d.questions.some(q => q.qtype !== 'short' && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
+    if (d.questions.some(q => q.qtype === 'short' ? !(q.accepted ?? []).some(a => a.trim()) : !(q.right ?? []).some(k => q.options[k]?.trim()))) missing.push('the correct answer for each question')
+    if (!d.closes) missing.push('Closes')
+  }
   if (d.kind === 'meeting') {
     if (!d.date) missing.push('Date and time')
     if (!(d.minutes >= 5 && d.minutes <= 600)) missing.push('Duration')
     if (d.hasLink && !/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
   }
-  if (d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && !d.until) missing.push('Show until')
+  if (d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && !ASKS(d.kind) && !d.until) missing.push('Show until')
   if (d.to === 'chosen' && !d.direct.length && !d.fns.length && !d.mgrs.length && !d.ecodes.length) missing.push('Send to')
   const ready = missing.length === 0
 
@@ -364,7 +401,11 @@ export default function DigestAdmin() {
       <div className="card space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
           {KINDS.map(([k, word, Icon]) => (
-            <button key={k} type="button" onClick={() => set({ kind: k })}
+            <button key={k} type="button" onClick={() => set({
+              kind: k,
+              color: d.color === KIND_COLOR[d.kind] ? KIND_COLOR[k] : d.color,
+              questions: (k === 'quiz') === (d.kind === 'quiz') ? d.questions : [k === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+            })}
               className={clsx('inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium',
                 d.kind === k ? 'border-violet-600 bg-violet-600 text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
               <Icon className="h-4 w-4" />
@@ -422,9 +463,26 @@ export default function DigestAdmin() {
         {d.kind === 'form' && (
           <div className="space-y-3">
             <FormBuilder questions={d.questions} onChange={questions => set({ questions })} />
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-ink-800">
+              <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={d.anonymous} disabled={d.answered}
+                onChange={e => set({ anonymous: e.target.checked })} />
+              <EyeOff className="h-4 w-4 text-ink-500" /> Anonymous · no name or E-code with the answers
+            </label>
+            {!d.anonymous && <AgainBox on={d.again} onChange={again => set({ again })} />}
             <div className="max-w-xs">
               <label className="label" htmlFor="dg-fcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
               <input id="dg-fcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
+            </div>
+          </div>
+        )}
+
+        {d.kind === 'quiz' && (
+          <div className="space-y-3">
+            <FormBuilder quiz locked={d.answered} questions={d.questions} onChange={questions => set({ questions })} />
+            <AgainBox on={d.again} onChange={again => set({ again })} />
+            <div className="max-w-xs">
+              <label className="label" htmlFor="dg-qcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+              <input id="dg-qcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
             </div>
           </div>
         )}
@@ -547,7 +605,7 @@ export default function DigestAdmin() {
           </div>
         </div>
 
-        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && <div className="max-w-xs">
+        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && !ASKS(d.kind) && <div className="max-w-xs">
           <span className="label">Show until <span className="text-red-600">*</span></span>
           <div className="mt-1 grid grid-cols-2 gap-2">
             {(['date', 'forever'] as const).map(m => {
@@ -606,8 +664,8 @@ export default function DigestAdmin() {
         )}
         {previewing && (
           <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
-            closes={(d.kind === 'poll' || d.kind === 'form') && d.closes ? new Date(d.closes).toISOString() : null}
-            questions={d.kind === 'form' ? d.questions : []}
+            closes={(d.kind === 'poll' || ASKS(d.kind)) && d.closes ? new Date(d.closes).toISOString() : null}
+            questions={ASKS(d.kind) ? d.questions : []} anonymous={d.kind === 'form' && d.anonymous} again={d.again && !(d.kind === 'form' && d.anonymous)}
             onClose={() => setPreviewing(false)} />
         )}
       </div>
@@ -674,8 +732,16 @@ export default function DigestAdmin() {
                 </span>
                 {r.can_edit && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
                   const form = r.kind === 'form'
-                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null }> | null) ?? []
+                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number }> | null) ?? []
+                    : r.kind === 'quiz'
+                    ? (((await supabase.rpc('digest_quiz', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; correct: string[] | null }> | null) ?? [])
+                        .map(q => ({ ...q, required: true, answered: 0, right: q.options.flatMap((o, k) => (q.correct?.includes(o) ? [k] : [])), accepted: q.qtype === 'short' ? q.correct ?? [''] : undefined }))
                     : []
+                  const anonymous = r.kind === 'form' && !!(await supabase.rpc('digest_form_is_anonymous', { p_id: r.id })).data
+                  const again = ASKS(r.kind) && !!(await supabase.rpc('digest_allow_again', { p_id: r.id })).data
+                  const answered = r.kind === 'quiz'
+                    ? !!((await supabase.rpc('digest_quiz_scores', { p_id: r.id })).data as unknown[] | null)?.length
+                    : (form[0]?.answered ?? 0) > 0
                   const poll = r.kind === 'poll'
                     ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
                     : []
@@ -686,8 +752,9 @@ export default function DigestAdmin() {
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
-                    questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? 'forever',
+                    questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+                    anonymous, answered, again,
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
                     to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4" /></button>}
@@ -771,6 +838,17 @@ type Person = {
 }
 type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
+/** Allow submitting again (0256): off unless ticked. */
+function AgainBox({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-medium text-ink-800">
+      <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={on} onChange={e => onChange(e.target.checked)} />
+      Allow submitting again
+    </label>
+  )
+}
+const answerText = (v: unknown) => (Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v))
+
 function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
@@ -801,8 +879,32 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   // A form's questions, for its columns.
   const { data: questions = [] } = useQuery({
     queryKey: ['digest_form_q', row.id],
-    enabled: row.kind === 'form',
+    enabled: ASKS(row.kind),
     queryFn: async () => ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string }>,
+  })
+  // A quiz's scores (0253), by E-code.
+  const { data: scores } = useQuery({
+    queryKey: ['digest_quiz_scores', row.id],
+    enabled: row.kind === 'quiz',
+    staleTime: 0, refetchOnMount: 'always', refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('digest_quiz_scores', { p_id: row.id })
+      if (error) throw new Error(friendlyError(error))
+      return new Map(((data ?? []) as Array<{ ecode: string; score: number; max_score: number }>).map(x => [x.ecode, x]))
+    },
+  })
+  const scoreOf = (p: Person) => scores?.get(p.ecode)
+  // An anonymous form (0254): who has answered is known, what they said comes without names.
+  const { data: anonymous = false } = useQuery({
+    queryKey: ['digest_form_anon_flag', row.id],
+    enabled: row.kind === 'form',
+    queryFn: async () => !!(await supabase.rpc('digest_form_is_anonymous', { p_id: row.id })).data,
+  })
+  const { data: anonAnswers = [] } = useQuery({
+    queryKey: ['digest_form_anon', row.id],
+    enabled: row.kind === 'form' && anonymous,
+    staleTime: 0, refetchOnMount: 'always', refetchInterval: 60_000,
+    queryFn: async () => (((await supabase.rpc('digest_form_anon_answers', { p_id: row.id })).data ?? []) as Array<{ answers: Record<string, unknown> }>).map(x => x.answers),
   })
   const { data: comments } = useQuery({
     queryKey: ['digest_comments', row.id],
@@ -845,7 +947,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     ['commented', 'Commented', all.filter(test.commented).length],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join', all.filter(test.joined).length] as [Lens, string, number]] : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
-    ...(row.kind === 'form' ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
+    ...(ASKS(row.kind) ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
     ...(row.kind === 'video' ? [['watched', 'Watched', all.filter(test.watched).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
@@ -854,7 +956,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     ['commented', 'Commented'],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted'], ['not_voted', 'Not voted']] as Array<[Lens, string]> : []),
-    ...(row.kind === 'form' ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
+    ...(ASKS(row.kind) ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
     ...(row.kind === 'video' ? [['watched', 'Watched'], ['not_watched', 'Not watched']] as Array<[Lens, string]> : []),
   ]
   const f = find.trim().toLowerCase()
@@ -875,7 +977,8 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       'Commented', 'Comments',
       ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First joined', 'Last joined'] : []),
       ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
-      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
+      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...(anonymous ? [] : questions.map(q => q.label))] : []),
+      ...(row.kind === 'quiz' ? ['Answered', 'Answered at', 'Score', 'Out of', ...questions.map(q => q.label)] : []),
       ...(row.kind === 'video' ? ['Watched', 'Watch time (h:mm:ss)', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
     const body: Array<Array<string | number | null>> = all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
       yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
@@ -884,7 +987,9 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : '', p.last_joined ? fmt(p.last_joined) : ''] : []),
       ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
       ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
-        ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
+        ...(anonymous ? [] : questions.map(q => answerText(p.answers?.[q.id])))] : []),
+      ...(row.kind === 'quiz' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '', scoreOf(p)?.score ?? null, scoreOf(p)?.max_score ?? null,
+        ...questions.map(q => answerText(p.answers?.[q.id]))] : []),
       ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? hms(p.watched_seconds) : '', p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
         p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])
     const { default: ExcelJS } = await import('exceljs')
@@ -894,14 +999,14 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     const grid = { top: thin, left: thin, bottom: thin, right: thin }
     const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
     const opened = all.filter(p => p.opened_at).length
-    const answered = row.kind === 'form' ? all.filter(p => p.answered_at).length : null
+    const answered = ASKS(row.kind) ? all.filter(p => p.answered_at).length : null
     ws.addRow([row.title]); ws.mergeCells(1, 1, 1, head.length)
     ws.addRow([[`Out of ${all.length} people`, `Opened ${opened}`, answered === null ? '' : `Answered ${answered}`].filter(Boolean).join(' · ')])
     ws.mergeCells(2, 1, 2, head.length)
     ws.addRow(head)
     for (const r of body) ws.addRow(r)
     // A question's answer is free text: wide and wrapped. Short columns fit their longest value.
-    const qFrom = row.kind === 'form' ? head.length - questions.length : head.length
+    const qFrom = row.kind === 'quiz' || (row.kind === 'form' && !anonymous) ? head.length - questions.length : head.length
     const isYn = head.map((_, i) => body.length > 0 && body.every(r => r[i] === 'Yes' || r[i] === 'No'))
     const widths = head.map((h, i) => (i >= qFrom ? 45 : Math.min(30, Math.max(10, h.length + 2, ...body.map(r => String(r[i] ?? '').length + 2)))))
     ws.columns = widths.map(width => ({ width }))
@@ -919,6 +1024,26 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     ws.getRow(1).height = 24
     ws.getRow(3).height = Math.min(90, 15 * Math.max(1, ...head.map((h, i) => Math.ceil(h.length / (widths[i] - 2)))))
     ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: head.length } }
+    if (row.kind === 'form' && anonymous) {
+      const wa = wb.addWorksheet('Answers', { views: [{ state: 'frozen', ySplit: 3 }] })
+      const ah = ['#', ...questions.map(q => q.label)]
+      wa.addRow([`${row.title} · anonymous`]); wa.mergeCells(1, 1, 1, ah.length)
+      wa.addRow([`${anonAnswers.length} answers · no names`]); wa.mergeCells(2, 1, 2, ah.length)
+      wa.addRow(ah)
+      anonAnswers.forEach((a, k) => wa.addRow([k + 1, ...questions.map(q => answerText(a[q.id]))]))
+      wa.columns = ah.map((_, i) => ({ width: i === 0 ? 6 : 45 }))
+      wa.eachRow((r, rn) => r.eachCell({ includeEmpty: true }, (c, cn) => {
+        if (cn > ah.length) return
+        c.font = { name: 'Calibri', size: 10, bold: rn === 3 }
+        c.alignment = { vertical: 'top', wrapText: cn > 1, horizontal: cn === 1 ? 'center' : 'left' }
+        if (rn >= 3) c.border = grid
+        if (rn === 1) { c.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill('FF1E293B'); c.alignment = { vertical: 'middle' } }
+        if (rn === 2) { c.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF475569' } }; c.alignment = { vertical: 'middle' } }
+        if (rn === 3) { c.fill = fill('FFDBEAFE'); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true } }
+      }))
+      wa.getRow(1).height = 24
+      wa.getRow(3).height = Math.min(90, 15 * Math.max(1, ...ah.map(h => Math.ceil(h.length / 43))))
+    }
     const buf = await wb.xlsx.writeBuffer()
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
@@ -980,7 +1105,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       </div>
       {showList && (() => {
         // Every column sorts (the user, 15 Oct): click once for A–Z / earliest / fewest, again to reverse.
-        const lastKey = row.kind === 'video' ? 'watched' : LIKABLE.has(row.kind) ? 'liked' : row.kind === 'poll' ? 'voted' : row.kind === 'form' ? 'answered' : 'joins'
+        const lastKey = row.kind === 'video' ? 'watched' : LIKABLE.has(row.kind) ? 'liked' : row.kind === 'poll' ? 'voted' : ASKS(row.kind) ? 'answered' : 'joins'
         const val = (p: Person, k: string): string | number => {
           switch (k) {
             case 'name': return p.full_name.toLowerCase()
@@ -1015,7 +1140,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
               <Th k="opened" label="First opened" /><Th k="last" label="Last opened" />
-              <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
+              <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: row.kind === 'quiz' ? 'Score' : 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
               {lastKey === 'joins' && <><Th k="firstjoin" label="First joined" /><Th k="lastjoin" label="Last joined" /></>}
             </tr>
           </thead>
@@ -1035,6 +1160,8 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
                   : row.kind === 'form'
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmtAmPm(p.answered_at) : '—'}</td>
+                  : row.kind === 'quiz'
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? <><span className="font-semibold text-ink-900">{scoreOf(p)?.score ?? '…'} of {scoreOf(p)?.max_score ?? '…'}</span> · {fmtAmPm(p.answered_at)}</> : '—'}</td>
                   : <td className="px-3 py-1.5 text-right tabular-nums">{p.joins || '—'}</td>}
                 {lastKey === 'joins' && <>
                   <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.joined_at ? fmtAmPm(p.joined_at) : '—'}</td>
