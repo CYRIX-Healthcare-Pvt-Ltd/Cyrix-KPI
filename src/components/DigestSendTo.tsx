@@ -14,11 +14,13 @@ export interface Audience { direct: string[]; fns: string[]; mgrs: string[]; eco
  * Who a Digest post goes to (0242; the user, 2 Nov: "select function, reportees, ecode or name (multiple ecode or
  * name and upload excel only ecode also) it should be very user friendly"; "send to mandatory, default as all").
  */
-export default function DigestSendTo({ to, value, onTo, onChange }: {
+export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed' }: {
   to: 'all' | 'chosen'
   value: Audience
   onTo: (to: 'all' | 'chosen') => void
   onChange: (v: Audience) => void
+  /** The post's colour as #rrggbb: the box takes it (the user, 5 Nov: "the send to is in purple, that theme should follow"). */
+  hue?: string
 }) {
   const chosen = to === 'chosen'
   // One of the four ways a post (the user, 2 Nov: "it should able to choose any of the 4, not more than that"):
@@ -87,18 +89,18 @@ export default function DigestSendTo({ to, value, onTo, onChange }: {
 
   const choice = (k: 'all' | 'chosen', label: string, Icon: typeof Globe) => (
     <button type="button" aria-pressed={to === k} onClick={() => onTo(k)}
-      className={to === k ? 'btn-primary justify-center' : 'btn-secondary justify-center'}>
+      className={to === k ? 'btn-primary justify-center whitespace-nowrap' : 'btn-secondary justify-center whitespace-nowrap'}>
       <Icon className="h-4 w-4" /> {label}
     </button>
   )
 
   return (
     // Set off so the desks notice it (the user, 2 Nov: "show this send to field emphasised").
-    <div className="max-w-2xl rounded-xl border-2 border-violet-400/70 bg-violet-500/10 p-3">
+    <div className="max-w-2xl rounded-xl border-2 p-3" style={{ borderColor: `${hue}b3`, background: `${hue}1a` }}>
       <div className="flex items-center gap-2">
         <span className="label">Send to <span className="text-red-600">*</span></span>
       </div>
-      <div className="mt-1 grid max-w-xs grid-cols-2 gap-2">
+      <div className="mt-1 grid max-w-sm grid-cols-2 gap-2">
         {choice('all', 'Everyone', Globe)}
         {choice('chosen', 'Chosen people', Users)}
       </div>

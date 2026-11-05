@@ -59,6 +59,8 @@ const HUES: Array<[Hue, string, string]> = [
 ]
 /** More ready-made ones, stored as their colour. */
 const MORE: Hue[] = ['#4f46e5', '#0891b2', '#65a30d', '#a16207', '#be123c', '#334155']
+/** A colour as one solid #rrggbb: a named one's deeper end, or the colour itself. */
+const solid = (h: Hue) => HUES.find(([k]) => k === h)?.[2] ?? (/^#[0-9a-f]{6}$/i.test(h) ? h : '#7c3aed')
 const grad = (h: Hue) => {
   const x = HUES.find(([k]) => k === h)
   if (x) return `linear-gradient(135deg, ${x[1]}, ${x[2]})`
@@ -406,8 +408,10 @@ export default function DigestAdmin() {
               color: d.color === KIND_COLOR[d.kind] ? KIND_COLOR[k] : d.color,
               questions: (k === 'quiz') === (d.kind === 'quiz') ? d.questions : [k === 'quiz' ? blankQuizQuestion() : blankQuestion()],
             })}
+              // The chosen kind in its own colour (the user, 5 Nov: "the default color should come in tab selection also").
+              style={d.kind === k ? { background: grad(KIND_COLOR[k]) } : undefined}
               className={clsx('inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium',
-                d.kind === k ? 'border-violet-600 bg-violet-600 text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
+                d.kind === k ? 'border-transparent text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-ink-500 hover:text-ink-900')}>
               <Icon className="h-4 w-4" />
               {word}
             </button>
@@ -564,14 +568,14 @@ export default function DigestAdmin() {
             <div className="flex flex-wrap gap-2">
               {[...HUES.map(([h]) => h), ...MORE].map(h => (
                 <button key={h} type="button" onClick={() => set({ color: h })} aria-label={h}
-                  className={clsx('h-8 w-8 rounded-full transition-transform hover:scale-110', d.color === h && 'ring-2 ring-violet-500 ring-offset-2 ring-offset-surface')}
-                  style={{ background: grad(h) }} />
+                  className={clsx('h-8 w-8 rounded-full transition-transform hover:scale-110', d.color === h && 'ring-2 ring-offset-2 ring-offset-surface')}
+                  style={{ background: grad(h), ['--tw-ring-color' as string]: solid(h) }} />
               ))}
               {/* Any colour at all. */}
               <label title="Custom colour"
                 className={clsx('relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border-2 border-dashed border-ink-400 transition-transform hover:scale-110',
-                  d.color.startsWith('#') && !MORE.includes(d.color) && 'ring-2 ring-violet-500 ring-offset-2 ring-offset-surface')}
-                style={d.color.startsWith('#') && !MORE.includes(d.color) ? { background: grad(d.color), borderStyle: 'solid' } : undefined}>
+                  d.color.startsWith('#') && !MORE.includes(d.color) && 'ring-2 ring-offset-2 ring-offset-surface')}
+                style={d.color.startsWith('#') && !MORE.includes(d.color) ? { background: grad(d.color), borderStyle: 'solid', ['--tw-ring-color' as string]: solid(d.color) } : undefined}>
                 <Plus className="h-4 w-4 text-ink-500" />
                 <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={d.color.startsWith('#') ? d.color : '#7c3aed'}
                   onChange={e => set({ color: e.target.value })} />
@@ -623,7 +627,7 @@ export default function DigestAdmin() {
         </div>}
 
         <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes }}
-          onTo={to => set({ to })} onChange={a => set(a)} />
+          onTo={to => set({ to })} onChange={a => set(a)} hue={solid(d.color)} />
 
         <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}

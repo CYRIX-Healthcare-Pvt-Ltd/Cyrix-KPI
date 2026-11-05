@@ -234,10 +234,10 @@ export default function KpiEdit() {
           <input className="input mt-1" value={code} autoComplete="off" placeholder="Name or E1427"
             onChange={e => { setCode(e.target.value); setPicking(true) }} />
           {matches.length > 0 && (
-            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900">
+            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-surface shadow-lg">
               {matches.map(m => (
                 <li key={m.ecode}>
-                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-50 dark:hover:bg-ink-800"
+                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100"
                     onClick={() => { setCode(m.ecode); void open(m.ecode) }}>
                     <span className="font-medium text-ink-900">{m.full_name}</span>
                     <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
