@@ -2069,7 +2069,7 @@ export function useMyMessages(employeeId: string | undefined, enabled: boolean) 
     queryKey: ['my_messages', employeeId],
     refetchInterval: 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('my_messages')
+      const { data, error } = await supabase.rpc('my_app_messages', { p_app: 'kpi' })
       if (error) throw new Error(friendlyError(error))
       return (data ?? []) as InboxMessage[]
     },
@@ -2081,7 +2081,7 @@ export function useMessageActions() {
   const done = () => qc.invalidateQueries({ queryKey: ['my_messages'] })
   return {
     read: useMutation({
-      mutationFn: async () => { const { error } = await supabase.rpc('mark_messages_read'); if (error) throw new Error(friendlyError(error)) },
+      mutationFn: async () => { const { error } = await supabase.rpc('mark_app_messages_read', { p_app: 'kpi' }); if (error) throw new Error(friendlyError(error)) },
       onSuccess: done,
     }),
     dismiss: useMutation({
