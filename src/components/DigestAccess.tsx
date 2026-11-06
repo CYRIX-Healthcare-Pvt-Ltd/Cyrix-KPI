@@ -79,7 +79,7 @@ export default function DigestAccess({ postId, owner, mine, editors }: {
             </button>
             {save.error && <span className="text-sm text-cyrixRed-600">{(save.error as Error).message}</span>}
           </div>
-        ) : (
+        ) : editors.length > 0 && (
           <p className="mt-1 text-sm text-ink-700">{editors.map(x => DESK[x as Desk] ?? x).join(', ')} <span className="text-ink-400">· can edit and publish</span></p>
         )}
       </div>
