@@ -760,7 +760,8 @@ export default function DigestAdmin() {
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
                   <span className="inline-flex items-center gap-1" title="Opened"><Eye className="h-3.5 w-3.5" /> {r.opened ?? 0}</span>
                 </span>
-                {r.can_edit && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
+                {/* A labelled button, not a bare pencil (the user, 6 Nov: "edit button not clearly visible for users"). */}
+                {r.can_edit && <button type="button" className="btn-secondary shrink-0 !gap-1.5 !px-3 !py-1.5 text-sm" onClick={async () => {
                   const form = r.kind === 'form'
                     ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number }> | null) ?? []
                     : r.kind === 'quiz'
@@ -788,7 +789,7 @@ export default function DigestAdmin() {
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
                     to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}><Pencil className="h-4 w-4" /></button>}
+                }}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
                 {r.can_edit && r.published_at && !(r.show_until && r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)) && !(r.kind === 'meeting' && r.meet_at && new Date(r.meet_at).getTime() + (r.meet_minutes ?? 60) * 60_000 < Date.now()) && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
                   onClick={() => { if (confirm(`Delete "${r.title}" from Cyrix Digest?`)) remove.mutate(r.id) }}><Trash2 className="h-4 w-4" /></button>}

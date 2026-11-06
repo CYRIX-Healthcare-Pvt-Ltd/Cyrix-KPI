@@ -4,9 +4,9 @@ import { FileSpreadsheet, Globe, Loader2, Users } from 'lucide-react'
 import MultiPick from '@/components/MultiPick'
 import { supabase } from '@/lib/supabase'
 
-type Way = 'direct' | 'fns' | 'mgrs' | 'people'
+type Way = '' | 'direct' | 'fns' | 'mgrs' | 'people'
 // Each says whom it reaches (the user, 5 Nov: 'Managers direct reportees, managers whole team, Function, custom individuals').
-const WAYS: Array<[Way, string]> = [['direct', "Manager's direct reportees"], ['mgrs', "Manager's whole team"], ['fns', 'Function'], ['people', 'Custom individuals']]
+const WAYS: Array<[Exclude<Way, ''>, string]> = [['direct', "Manager's direct reportees"], ['mgrs', "Manager's whole team"], ['fns', 'Function'], ['people', 'Custom individuals']]
 
 export interface Audience { direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[] }
 
@@ -24,8 +24,8 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
 }) {
   const chosen = to === 'chosen'
   // One of the four ways a post (the user, 2 Nov: "it should able to choose any of the 4, not more than that"):
-  // another way starts the choice afresh.
-  const [way, setWay] = useState<Way>(value.fns.length ? 'fns' : value.mgrs.length ? 'mgrs' : value.ecodes.length ? 'people' : 'direct')
+  // another way starts the choice afresh. Blank until one is chosen (the user, 6 Nov: "default dropedown should be blank").
+  const [way, setWay] = useState<Way>(value.fns.length ? 'fns' : value.mgrs.length ? 'mgrs' : value.ecodes.length ? 'people' : value.direct.length ? 'direct' : '')
   const pickWay = (k: Way) => { if (k === way) return; setWay(k); setUpload(null); onChange({ direct: [], fns: [], mgrs: [], ecodes: [] }) }
   const { data: opts } = useQuery({
     queryKey: ['digest_audience_options'],
@@ -108,7 +108,8 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
         <div className="mt-2 space-y-3 rounded-xl border border-ink-200 bg-ink-50/60 p-3">
 
           {/* Which way, as a dropdown (the user, 2 Nov: "make it dropdown"). */}
-          <select className="input" value={way} onChange={e => pickWay(e.target.value as Way)} aria-label="Choose by">
+          <select className={way ? 'input' : 'input text-ink-500'} value={way} onChange={e => pickWay(e.target.value as Way)} aria-label="Choose by">
+            <option value="" disabled>Choose by</option>
             {WAYS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
           {way === 'direct' && (
@@ -143,7 +144,7 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
             </div>
           )}
           <p className="text-sm font-semibold text-ink-900">
-            {!picked ? <span className="text-cyrixRed-600">Choose at least one</span>
+            {!way ? null : !picked ? <span className="text-cyrixRed-600">Choose at least one</span>
               : isFetching ? <Loader2 className="inline h-4 w-4 animate-spin" />
               : `Reaches ${reach ?? 0} ${reach === 1 ? 'person' : 'people'}`}
           </p>
