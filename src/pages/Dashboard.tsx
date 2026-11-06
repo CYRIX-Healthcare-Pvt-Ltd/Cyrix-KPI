@@ -28,6 +28,7 @@ const SCORED = new Set(['scored', 'finalized'])
 // so the chart is, or recharts lands in the bundle a service engineer
 // downloads on 4G just to sign in.
 const ScoreTrend = lazyRoute(() => import('@/components/ScoreTrend'))
+const TeamStanding = lazyRoute(() => import('@/components/TeamStanding'))
 
 const ChartFallback = () => (
   <div className="h-[200px] animate-pulse rounded-lg bg-ink-50" />
@@ -380,6 +381,11 @@ export default function Dashboard() {
           </Suspense>
         </div>
       )}
+
+      {/* Where I stand in my manager's team (0262). */}
+      <Suspense fallback={null}>
+        <TeamStanding fy={fy} />
+      </Suspense>
 
       {/* ---- what to work on ---- */}
       {(annual?.months_scored ?? 0) > 0 && (
