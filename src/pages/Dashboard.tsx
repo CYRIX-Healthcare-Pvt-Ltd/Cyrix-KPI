@@ -382,10 +382,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Where I stand in my manager's team (0262). */}
-      <Suspense fallback={null}>
-        <TeamStanding fy={fy} />
-      </Suspense>
+      {/* Where I stand in my manager's team (0262). A draft (the user, 6 Nov: "recall this ie save it as draft ... once i
+          confirm you can bring it back"): only the local preview shows it; to bring it back, drop the DEV check and revert
+          the manual and Cyra lines of this commit. */}
+      {import.meta.env.DEV && (
+        <Suspense fallback={null}>
+          <TeamStanding fy={fy} />
+        </Suspense>
+      )}
 
       {/* ---- what to work on ---- */}
       {(annual?.months_scored ?? 0) > 0 && (

@@ -22,8 +22,10 @@ type Mark = { score: number; rank: number; of: number; months: number }
 type Member = { id: string; name: string; designation: string | null; me: boolean; year: Mark | null; scores: Map<string, Mark> }
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((t, x) => t + x, 0) / xs.length : null)
-/* Distinct, not loud; green is mine alone. */
-const OTHER = ['#3b82f6', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#64748b']
+/* Distinct, not loud; green is mine alone. At most four lit at once, so no colour repeats. */
+const OTHER = ['#3b82f6', '#f59e0b', '#a855f7', '#ec4899']
+const MAX_PICK = OTHER.length
+const FAINT = '#9ca3af'
 const MINE = '#10b981'
 
 export default function TeamStanding({ fy }: { fy: string }) {
@@ -49,6 +51,8 @@ export default function TeamStanding({ fy }: { fy: string }) {
     return { members: [...by.values()], months: ms, manager: rows?.[0]?.manager_name ?? '' }
   }, [rows])
   const [view, setView] = useState<'year' | 'month'>('year')
+  // Whom my line is compared with (null = the default below).
+  const [picked, setPicked] = useState<string[] | null>(null)
 
   const me = members.find(m => m.me)
   if (!me || members.length < 2 || !months.length) return null
@@ -63,19 +67,24 @@ export default function TeamStanding({ fy }: { fy: string }) {
   const countOf = (x: { months: number }) => (view === 'year' ? x.months : 1)
 
   // Month by month, everyone's score % side by side (the user, 6 Nov: "month wise, comparison with others also, so
-  // graph better show scored %"): my line bold, each other member in a colour of their own, my rank above my points.
+  // graph better show scored %"). A team of 20 in 20 colours was unreadable: my line green, the team average dashed,
+  // everybody else faint, and up to four people lit in colour — pressed on a name, or the top of the team to start.
   const scored = members.filter(m => m.scores.size)
   const others = scored.filter(m => !m.me)
+    .sort((a, b) => (a.year?.rank ?? 99) - (b.year?.rank ?? 99) || a.name.localeCompare(b.name))
+  const lit = picked ?? (others.length <= MAX_PICK ? others.map(m => m.id) : others.slice(0, 1).map(m => m.id))
+  const pick = (id: string) => setPicked(lit.includes(id) ? lit.filter(x => x !== id) : [...lit, id].slice(-MAX_PICK))
   const chart = months.map(mo => {
     const my = me.scores.get(mo)
-    return { month: monthLabel(mo).split('-')[0], full: monthLabel(mo), rank: my ? `#${my.rank} of ${my.of}` : '',
+    const that = scored.flatMap(m => { const k = m.scores.get(mo); return k ? [k.score] : [] })
+    return { month: monthLabel(mo).split('-')[0], full: monthLabel(mo), rank: my ? `#${my.rank} of ${my.of}` : '', avg: avg(that),
       ...Object.fromEntries(scored.map(m => [m.id, m.scores.get(mo)?.score ?? null])) }
   })
   // The scale starts 10 below the lowest score anyone had, in steps of 10.
   const lowest = Math.min(...scored.flatMap(m => [...m.scores.values()].map(k => k.score)))
   const lo = Math.max(0, Math.floor((lowest - 5) / 10) * 10)
-  const colour = new Map(others.map((m, i) => [m.id, OTHER[i % OTHER.length]]))
-  const nameOf = new Map(scored.map(m => [m.id, m.me ? 'Me' : m.name]))
+  const colour = new Map(lit.map((id, i) => [id, OTHER[i]]))
+  const nameOf = new Map<string, string>([...scored.map(m => [m.id, m.me ? 'Me' : m.name] as [string, string]), ['avg', 'Team average']])
 
   return (
     <div className="card p-4">
@@ -111,9 +120,10 @@ export default function TeamStanding({ fy }: { fy: string }) {
 
       <ol className="mt-3 divide-y divide-ink-100">
         {list.map(x => (
-          <li key={x.m.id} className={clsx('flex items-center gap-3 px-2 py-2', x.m.me && 'rounded-lg bg-emerald-50 ring-1 ring-inset ring-emerald-200')}>
+          <li key={x.m.id} onClick={x.m.me || !x.m.scores.size ? undefined : () => pick(x.m.id)}
+            className={clsx('flex items-center gap-3 px-2 py-2', x.m.me ? 'rounded-lg bg-emerald-50 ring-1 ring-inset ring-emerald-200' : 'cursor-pointer rounded-lg hover:bg-ink-50')}>
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums text-white"
-              style={{ background: x.m.me ? MINE : colour.get(x.m.id) ?? '#9ca3af' }}>{x.rank}</span>
+              style={{ background: x.m.me ? MINE : colour.get(x.m.id) ?? FAINT }}>{x.rank}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-ink-900">{x.m.name}{x.m.me && <span className="font-normal text-emerald-700"> · You</span>}</span>
               <span className="block truncate text-xs text-ink-500">{x.m.designation ?? ''}{view === 'year' ? ` · ${countOf(x)} ${countOf(x) === 1 ? 'month' : 'months'}` : ''}</span>
@@ -125,12 +135,31 @@ export default function TeamStanding({ fy }: { fy: string }) {
       {waiting.length > 0 && <p className="mt-2 px-2 text-xs text-ink-400">Not scored yet: {waiting.join(', ')}</p>}
 
       <h4 className="mb-1 mt-4 text-sm font-semibold text-ink-800">Month by month</h4>
-      <div className="mb-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
+      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
         <span className="flex items-center gap-1.5 font-semibold text-ink-800"><span className="h-[3px] w-4 rounded bg-emerald-500" /> Me</span>
-        {others.map(m => (
-          <span key={m.id} className="flex items-center gap-1.5"><span className="h-[2px] w-4 rounded" style={{ background: colour.get(m.id) }} /> {m.name}</span>
-        ))}
+        <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-ink-400" /> Team average</span>
       </div>
+      {others.length > MAX_PICK && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {others.map(m => {
+            const on = colour.get(m.id)
+            return (
+              <button key={m.id} type="button" onClick={() => pick(m.id)} aria-pressed={!!on}
+                className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs', on ? 'font-semibold text-ink-900' : 'border-ink-200 text-ink-500')}
+                style={on ? { borderColor: on, background: `${on}1f` } : undefined}>
+                <span className="h-2 w-2 rounded-full" style={{ background: on ?? FAINT }} /> {m.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {others.length <= MAX_PICK && (
+        <div className="mb-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
+          {others.map(m => (
+            <span key={m.id} className="flex items-center gap-1.5"><span className="h-[2px] w-4 rounded" style={{ background: colour.get(m.id) ?? FAINT }} /> {m.name}</span>
+          ))}
+        </div>
+      )}
       <div style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chart} margin={TREND_MARGIN}>
@@ -144,8 +173,13 @@ export default function TeamStanding({ fy }: { fy: string }) {
               formatter={(v: unknown, id: string, item: { payload?: { rank?: string } }) =>
                 typeof v !== 'number' ? ['—', nameOf.get(id) ?? ''] : [`${v.toFixed(1)}%${id === me.id ? ` · ${item.payload?.rank ?? ''}` : ''}`, nameOf.get(id) ?? '']}
             />
-            {others.map(m => (
-              <Line key={m.id} type="monotone" dataKey={m.id} stroke={colour.get(m.id)} strokeWidth={1.5} dot={{ r: 2.5, fill: colour.get(m.id), strokeWidth: 0 }} connectNulls isAnimationActive={false} />
+            {/* Everybody not lit, faint and out of the tooltip; then the average; then the lit ones on top. */}
+            {others.filter(m => !colour.has(m.id)).map(m => (
+              <Line key={m.id} type="monotone" dataKey={m.id} stroke={FAINT} strokeOpacity={0.25} strokeWidth={1} dot={false} activeDot={false} tooltipType="none" connectNulls isAnimationActive={false} />
+            ))}
+            <Line type="monotone" dataKey="avg" stroke={FAINT} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
+            {others.filter(m => colour.has(m.id)).map(m => (
+              <Line key={m.id} type="monotone" dataKey={m.id} stroke={colour.get(m.id)} strokeWidth={2} dot={{ r: 3, fill: colour.get(m.id), strokeWidth: 0 }} connectNulls isAnimationActive={false} />
             ))}
             <Line type="monotone" dataKey={me.id} stroke={MINE} strokeWidth={3} dot={{ r: 4.5, fill: MINE, strokeWidth: 0 }} connectNulls isAnimationActive={false} />
           </LineChart>
