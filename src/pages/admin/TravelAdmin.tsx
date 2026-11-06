@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
+import { Camera, Check, ExternalLink, Pencil, Search, Timer, Trash2, X } from 'lucide-react'
 import LearnedPlacesTable from '@/components/LearnedPlacesTable'
 import TravelReport from './TravelReport'
 import PolicyHistory from '@/pages/admin/PolicyHistory'
@@ -627,6 +627,55 @@ function DeleteClaim() {
   )
 }
 
+/*
+  A claim as its manager sees it (the user, 6 Nov: "give sw admin to check the claim like manager does, just searching
+  claim id"): the number is found as Delete finds it, and the claim opens on its own page in Travel, which SW Admin
+  already sees whole — the days, map, visit photos, bills, observations and history.
+*/
+const TRAVEL = import.meta.env.DEV ? 'http://localhost:5178' : ''
+function CheckClaim() {
+  const [typed, setTyped] = useState('')
+  const [found, setFound] = useState<FoundClaim | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const lookUp = async () => {
+    setError(null); setFound(null); setBusy(true)
+    try { setFound({ kind: 'claim', ...(await rpc<Omit<FoundClaim, 'kind'>>('te_find_claim', { p_number: typed })) }) }
+    catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+  }
+  const mon = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return `${d.toLocaleDateString('en-GB', { month: 'short' })}-${String(d.getFullYear()).slice(2)}` }
+  const rupees = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <Search className="h-4 w-4 text-violet-600" />
+        <h3 className="text-sm font-semibold text-ink-800">Check a claim</h3>
+      </div>
+      <div className="space-y-3 p-4">
+        <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); void lookUp() }}>
+          <label className="block w-44"><span className="label">Claim number</span>
+            <input className="input mt-1 h-11 font-mono" value={typed} onChange={e => { setTyped(e.target.value); setFound(null); setError(null) }} placeholder="TE-17" /></label>
+          <button type="submit" className="btn-primary h-11" disabled={busy || !typed.trim()}>
+            {busy ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} Find
+          </button>
+        </form>
+        {error && <Alert kind="error">{error}</Alert>}
+        {found && (
+          <div className="flex flex-col gap-3 rounded-xl border border-ink-200 bg-ink-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium text-ink-900">{found.number} · {found.name} ({found.ecode})</p>
+              <p className="mt-0.5 text-xs text-ink-600">{mon(found.month)} · {rupees(found.total)} · {STATUS_WORD[found.status] ?? found.status} · {found.days} day{found.days === 1 ? '' : 's'}</p>
+            </div>
+            <a href={`${TRAVEL}/travel/claim/${found.id}`} target="_blank" rel="noopener" className="btn-primary h-11 shrink-0">
+              <ExternalLink className="h-4 w-4" /> Open {found.number}
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Places our engineers taught the search, put right here (Travel te_0038, te_0071): the list shared with Travel's admin page.
 function LearnedPlaces() {
   return <LearnedPlacesTable call={rpc} confirmRemove={async name => confirm(`Remove ${name}? It is no longer offered when engineers search. Claims that used it keep it.`)} />
@@ -635,10 +684,12 @@ function LearnedPlaces() {
 /*
   Reports holds Live and Km vs map as its own two tabs, so SW Admin's row of tabs stays as it was (the user, 3 Nov:
   "can you make live under reports, subtab? bcz our sw admin id is crowded with tabs"). Kept in the address too.
+  Check claim beside them (the user, 6 Nov).
 */
+type Rep = 'live' | 'watch' | 'km' | 'check'
 function Reports() {
-  const [rep, setRepState] = useState<'live' | 'watch' | 'km'>(() => { const v = new URLSearchParams(window.location.search).get('rep'); return v === 'km' || v === 'watch' ? v : 'live' })
-  const setRep = (v: 'live' | 'watch' | 'km') => {
+  const [rep, setRepState] = useState<Rep>(() => { const v = new URLSearchParams(window.location.search).get('rep'); return v === 'km' || v === 'watch' || v === 'check' ? v : 'live' })
+  const setRep = (v: Rep) => {
     setRepState(v)
     const u = new URL(window.location.href)
     u.searchParams.set('rep', v)
@@ -646,13 +697,13 @@ function Reports() {
   }
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-xl bg-ink-100 p-1" role="tablist">
-        {([['live', 'Live'], ['watch', 'Watch'], ['km', 'Km vs map']] as const).map(([k, l]) => (
+      <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-ink-100 p-1" role="tablist">
+        {([['live', 'Live'], ['watch', 'Watch'], ['km', 'Km vs map'], ['check', 'Check claim']] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={rep === k} onClick={() => setRep(k)}
-            className={clsx('rounded-lg px-4 py-1.5 text-sm font-semibold', rep === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}>{l}</button>
+            className={clsx('shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold sm:px-4', rep === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}>{l}</button>
         ))}
       </div>
-      {rep === 'live' ? <TravelLive /> : rep === 'watch' ? <TravelWatch /> : <TravelReport />}
+      {rep === 'live' ? <TravelLive /> : rep === 'watch' ? <TravelWatch /> : rep === 'check' ? <CheckClaim /> : <TravelReport />}
     </div>
   )
 }
