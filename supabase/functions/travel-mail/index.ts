@@ -3,6 +3,7 @@ import { sendMail } from '../_shared/mail.ts'
 import { recipients, words, type AdvanceRow } from './words.ts'
 import { vehicleWords, type VehicleRow } from './vehicle.ts'
 import { managerWords, type ManagerRow } from './manager.ts'
+import { claimWords, depWords, copiesTo, type ClaimRow, type DepRow } from './more.ts'
 
 /**
  * Travel Expense's mail: an expense advance the Travel Desk has approved, to the person with copies to their
@@ -75,5 +76,29 @@ Deno.serve(async req => {
       await db.rpc('te_advance_mgr_mail_failed', { p_id: r.id, p_error: (e as Error).message })
     }
   }
-  return json({ claimed: rows.length + vrows.length + mrows.length, sent, failed, noAddress })
+  // A claim the Travel Desk approved, and a deputation the manager approved (te_0132): to the person, copies to the
+  // manager, the Travel Desk and the people SW Admin ticked. A database without them yet sends the rest.
+  let more = 0
+  const kinds = [
+    { claim: 'te_claim_mail_claim', failed: 'te_claim_mail_failed', words: (r: unknown) => claimWords(r as ClaimRow, APP) },
+    { claim: 'te_dep_mail_claim', failed: 'te_dep_mail_failed', words: (r: unknown) => depWords(r as DepRow, APP) },
+  ]
+  for (const k of kinds) {
+    const { data: kd, error: ke } = await db.rpc(k.claim, { p_limit: 20 })
+    if (ke) continue
+    for (const r of (kd ?? []) as Array<ClaimRow | DepRow>) {
+      const { to, cc } = copiesTo(r)
+      more++
+      if (!to.length) { noAddress++; await db.rpc(k.failed, { p_id: r.id, p_error: 'No work email for the person, the manager or the Travel Desk' }); continue }
+      if (sent + failed > 0) await new Promise(res => setTimeout(res, 2000))
+      try {
+        await sendMail(db as never, { to, cc, ...k.words(r) })
+        sent++
+      } catch (e) {
+        failed++
+        await db.rpc(k.failed, { p_id: r.id, p_error: (e as Error).message })
+      }
+    }
+  }
+  return json({ claimed: rows.length + vrows.length + mrows.length + more, sent, failed, noAddress })
 })

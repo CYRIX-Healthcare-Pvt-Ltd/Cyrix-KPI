@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Camera, Check, Pencil, Timer, Trash2, X } from 'lucide-react'
@@ -71,7 +71,7 @@ export function TravelAdmin() {
       ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
     })),
   })
-  type Sub = typeof TABS[number][0] | 'photos' | 'reports' | 'delete' | 'history'
+  type Sub = typeof TABS[number][0] | 'photos' | 'copies' | 'reports' | 'delete' | 'history'
   // The sub-tab is in the address beside SW Admin's own, so a reload stays on it (the user, 3 Nov).
   const [tab, setTabState] = useState<Sub>(() => (new URLSearchParams(window.location.search).get('sub') as Sub | null) ?? 'rules')
   const setTab = (t: Sub) => {
@@ -95,7 +95,7 @@ export function TravelAdmin() {
       <div className="flex flex-wrap gap-1.5">
         {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
         {/* Accounts admins get Allowances by grade, Settings and History only (the user, 3 Nov: "for them, till setting is enough"); SW Admin every tab. */}
-        {(data.sw ? [...TABS.slice(0, 3), ['photos', 'Visit photos'] as const, ...TABS.slice(3), ['reports', 'Reports'] as const, ['history', 'History'] as const, ['delete', 'Delete'] as const] : [...TABS.slice(0, 2), ['history', 'History'] as const]).map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {(data.sw ? [...TABS.slice(0, 3), ['photos', 'Visit photos'] as const, ...TABS.slice(3, 6), ['copies', 'Mail copies'] as const, ...TABS.slice(6), ['reports', 'Reports'] as const, ['history', 'History'] as const, ['delete', 'Delete'] as const] : [...TABS.slice(0, 2), ['history', 'History'] as const]).map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
@@ -111,6 +111,7 @@ export function TravelAdmin() {
       {tab === 'projects' && <Projects list={data.projects} call={call} />}
       {tab === 'coord' && <Coordinators list={data.coordinators} call={call} />}
       {tab === 'desk' && <Desk list={data.desk} call={call} />}
+      {tab === 'copies' && data.sw && <MailCopies />}
       {tab === 'places' && <LearnedPlaces />}
       {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
       {tab === 'reports' && data.sw && <Reports />}
@@ -402,6 +403,95 @@ function Desk({ list, call }: { list: AdminData['desk']; call: Call }) {
         <input className="input w-40" placeholder="E-code" value={e} onChange={x => setE(x.target.value)} />
         <button type="button" className="btn-secondary" disabled={!e.trim()} onClick={() => { void call('te_set_desk', { p_ecode: e, p_on: true }, 'Added to the Travel Desk.'); setE('') }}>Add</button>
       </div>
+    </div>
+  )
+}
+
+/*
+  Mail copies (Travel te_0132; the user, 6 Nov: "accounts team told, ... if a advance is approved, they need cc for other
+  custom persons also", then "add check box, ie claim, advance, vehicle, deputation"): people by E-code, each ticked for
+  the Travel mails they get a copy of.
+*/
+type Copy = { employee_id: string; ecode: string; name: string; email: string | null; claim: boolean; advance: boolean; vehicle: boolean; deputation: boolean; added_by: string | null; added_at: string }
+const COPY_KINDS = [['claim', 'Claim'], ['advance', 'Advance'], ['vehicle', 'Vehicle'], ['deputation', 'Deputation']] as const
+function MailCopies() {
+  const qc = useQueryClient()
+  const { data, isLoading, error } = useQuery({ queryKey: ['te_mail_copies'], queryFn: () => rpc<Copy[]>('te_mail_copies_list', {}) })
+  const [e, setE] = useState('')
+  const [q, setQ] = useState('')
+  const [err, setErr] = useState<{ at: string; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  // A name or an E-code (the user, 6 Nov: "need name search also"): active people matching what is typed, a press adds.
+  type Match = { ecode: string; full_name: string; designation: string | null }
+  const [matches, setMatches] = useState<Match[]>([])
+  useEffect(() => {
+    const t0 = e.trim().replace(/[%,()*\\]/g, ' ').trim()
+    if (t0.length < 2) { setMatches([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const { data } = await supabase.from('employees').select('ecode, full_name, designation')
+        .eq('account_type', 'employee').eq('is_active', true).or(`full_name.ilike.%${t0}%,ecode.ilike.${t0}%`).order('full_name').limit(8)
+      if (live) setMatches((data ?? []) as Match[])
+    }, 250)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [e])
+  const add = (code: string) => void run('add', 'te_mail_copies_set', { p_ecode: code }).then(ok => { if (ok) { setE(''); setMatches([]) } })
+  const run = async (at: string, fn: string, args: Record<string, unknown>) => {
+    setErr(null); setBusy(true)
+    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_mail_copies'] }); return true }
+    catch (x) { setErr({ at, text: (x as Error).message }); return false }
+    finally { setBusy(false) }
+  }
+  if (isLoading) return <div className="grid place-items-center py-10"><Spinner className="h-6 w-6" /></div>
+  if (error) return <Alert kind="error">{(error as Error).message}</Alert>
+  const list = (data ?? []).filter(c => !q.trim() || `${c.name} ${c.ecode} ${c.email ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <div className="card space-y-3 p-4">
+      {(data?.length ?? 0) > 5 && <input className="input max-w-xs" placeholder="Search name or E-code" value={q} onChange={x => setQ(x.target.value)} />}
+      {list.map(c => (
+        <div key={c.employee_id} className="border-t border-ink-100 pt-3 first:border-t-0 first:pt-0">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="min-w-[12rem] text-sm">
+              <span className="font-medium text-ink-900">{c.name}</span> <span className="text-ink-500">{c.ecode}</span>
+              <span className="block text-xs text-ink-500">{c.email ?? 'No work email'}</span>
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {COPY_KINDS.map(([k, l]) => (
+                <label key={k} className={clsx('flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm', c[k] ? 'border-violet-500 text-ink-900' : 'border-ink-200 text-ink-600')}>
+                  <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={c[k]} disabled={busy}
+                    onChange={x => void run(c.employee_id, 'te_mail_copies_set', { p_ecode: c.ecode, [`p_${k}`]: x.target.checked })} />
+                  {l}
+                </label>
+              ))}
+            </div>
+            <button type="button" className="btn-icon text-cyrixRed-600" aria-label="Remove" disabled={busy}
+              onClick={() => void run(c.employee_id, 'te_mail_copies_remove', { p_employee: c.employee_id })}><Trash2 className="h-4 w-4" /></button>
+          </div>
+          {err?.at === c.employee_id && <p className="mt-1 text-sm text-cyrixRed-700">{err.text}</p>}
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2 border-t border-ink-100 pt-3">
+        <div className="relative w-full max-w-xs">
+          <input className="input w-full" placeholder="Name or E-code" value={e} onChange={x => { setE(x.target.value); setErr(null) }}
+            onKeyDown={x => { if (x.key === 'Enter' && e.trim()) add(matches.length === 1 ? matches[0].ecode : e.trim()) }} />
+          {matches.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-surface shadow-lg">
+              {matches.map(m => (
+                <li key={m.ecode}>
+                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100" onClick={() => add(m.ecode)}>
+                    <span className="font-medium text-ink-900">{m.full_name}</span>
+                    <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
+                    {m.designation && <span className="ml-auto truncate text-xs text-ink-400">{m.designation}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button type="button" className="btn-secondary" disabled={!e.trim() || busy}
+          onClick={() => add(matches.length === 1 ? matches[0].ecode : e.trim())}>Add</button>
+      </div>
+      {err?.at === 'add' && <p className="text-sm text-cyrixRed-700">{err.text}</p>}
     </div>
   )
 }
