@@ -7,6 +7,7 @@ import FormBuilder, { blankQuestion, blankQuizQuestion, type Question } from '@/
 import DigestAccess from '@/components/DigestAccess'
 import MultiPick from '@/components/MultiPick'
 import DigestSendTo from '@/components/DigestSendTo'
+import { buildDigestWorkbook, type QuizScore } from '@/lib/digestExcel'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
@@ -881,7 +882,6 @@ function Tick({ on, onChange, label, icon: Icon, disabled }: { on: boolean; onCh
     </label>
   )
 }
-const answerText = (v: unknown) => (Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v))
 
 function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
@@ -924,7 +924,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     queryFn: async () => {
       const { data, error } = await supabase.rpc('digest_quiz_scores', { p_id: row.id })
       if (error) throw new Error(friendlyError(error))
-      return new Map(((data ?? []) as Array<{ ecode: string; score: number; max_score: number }>).map(x => [x.ecode, x]))
+      return new Map(((data ?? []) as QuizScore[]).map(x => [x.ecode, x]))
     },
   })
   const scoreOf = (p: Person) => scores?.get(p.ecode)
@@ -999,85 +999,12 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   /** How much of the video they watched, as a whole percent, or blank. */
   const pct = (p: Person) => (p.watched_seconds && p.video_seconds ? `${Math.min(100, Math.round((p.watched_seconds / p.video_seconds) * 100))}%` : '')
   const mins = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
-  // Watch time as h:mm:ss, and everyone's together in hours (the user, 15 Oct).
-  const hms = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const totalWatch = all.reduce((t, p) => t + (p.watched_seconds ?? 0), 0)
   // An Excel file in the grid and colours of the KPI and Travel exports (the user, 5 Nov: "in download, the wrapping
   // is not proper ... make the excel format good"): long answers wrap in wide columns, everything sits at the top.
   const download = async () => {
-    const yn = (b: boolean) => (b ? 'Yes' : 'No')
-    const head = ['E-code', 'Name', 'Department', 'Function', 'Reporting manager', 'Manager E-code', 'Opened', 'First opened', 'Last opened', 'Times opened',
-      ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
-      'Commented', 'Comments',
-      ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First joined', 'Last joined'] : []),
-      ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
-      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...(anonymous ? [] : questions.map(q => q.label))] : []),
-      ...(row.kind === 'quiz' ? ['Answered', 'Answered at', 'Score', 'Out of', ...questions.map(q => q.label)] : []),
-      ...(row.kind === 'video' ? ['Watched', 'Watch time (h:mm:ss)', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
-    const body: Array<Array<string | number | null>> = all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
-      yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
-      ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
-      yn(p.comments > 0), p.comments,
-      ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : '', p.last_joined ? fmt(p.last_joined) : ''] : []),
-      ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
-      ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
-        ...(anonymous ? [] : questions.map(q => answerText(p.answers?.[q.id])))] : []),
-      ...(row.kind === 'quiz' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '', scoreOf(p)?.score ?? null, scoreOf(p)?.max_score ?? null,
-        ...questions.map(q => answerText(p.answers?.[q.id]))] : []),
-      ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? hms(p.watched_seconds) : '', p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
-        p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])
     const { default: ExcelJS } = await import('exceljs')
-    const wb = new ExcelJS.Workbook()
-    const ws = wb.addWorksheet('People', { views: [{ state: 'frozen', ySplit: 3, xSplit: 2 }] })
-    const thin = { style: 'thin' as const, color: { argb: 'FF94A3B8' } }
-    const grid = { top: thin, left: thin, bottom: thin, right: thin }
-    const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
-    const opened = all.filter(p => p.opened_at).length
-    const answered = ASKS(row.kind) ? all.filter(p => p.answered_at).length : null
-    ws.addRow([row.title]); ws.mergeCells(1, 1, 1, head.length)
-    ws.addRow([[`Out of ${all.length} people`, `Opened ${opened}`, answered === null ? '' : `Answered ${answered}`].filter(Boolean).join(' · ')])
-    ws.mergeCells(2, 1, 2, head.length)
-    ws.addRow(head)
-    for (const r of body) ws.addRow(r)
-    // A question's answer is free text: wide and wrapped. Short columns fit their longest value.
-    const qFrom = row.kind === 'quiz' || (row.kind === 'form' && !anonymous) ? head.length - questions.length : head.length
-    const isYn = head.map((_, i) => body.length > 0 && body.every(r => r[i] === 'Yes' || r[i] === 'No'))
-    const widths = head.map((h, i) => (i >= qFrom ? 45 : Math.min(30, Math.max(10, h.length + 2, ...body.map(r => String(r[i] ?? '').length + 2)))))
-    ws.columns = widths.map(width => ({ width }))
-    ws.eachRow((r, rn) => r.eachCell({ includeEmpty: true }, (c, cn) => {
-      if (cn > head.length) return
-      const i = cn - 1
-      c.font = { name: 'Calibri', size: 10, bold: rn === 3 }
-      c.alignment = { vertical: 'top', wrapText: i >= qFrom, horizontal: typeof c.value === 'number' ? 'right' : isYn[i] ? 'center' : 'left' }
-      if (rn >= 3) c.border = grid
-      if (rn === 1) { c.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill('FF1E293B'); c.alignment = { vertical: 'middle' } }
-      if (rn === 2) { c.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF475569' } }; c.alignment = { vertical: 'middle' } }
-      if (rn === 3) { c.fill = fill('FFDBEAFE'); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true } }
-      if (rn > 3 && isYn[i]) c.font = { name: 'Calibri', size: 10, bold: c.value === 'Yes', color: { argb: c.value === 'Yes' ? 'FF15803D' : 'FF94A3B8' } }
-    }))
-    ws.getRow(1).height = 24
-    ws.getRow(3).height = Math.min(90, 15 * Math.max(1, ...head.map((h, i) => Math.ceil(h.length / (widths[i] - 2)))))
-    ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: head.length } }
-    if (row.kind === 'form' && anonymous) {
-      const wa = wb.addWorksheet('Answers', { views: [{ state: 'frozen', ySplit: 3 }] })
-      const ah = ['#', ...questions.map(q => q.label)]
-      wa.addRow([`${row.title} · anonymous`]); wa.mergeCells(1, 1, 1, ah.length)
-      wa.addRow([`${anonAnswers.length} answers · no names`]); wa.mergeCells(2, 1, 2, ah.length)
-      wa.addRow(ah)
-      anonAnswers.forEach((a, k) => wa.addRow([k + 1, ...questions.map(q => answerText(a[q.id]))]))
-      wa.columns = ah.map((_, i) => ({ width: i === 0 ? 6 : 45 }))
-      wa.eachRow((r, rn) => r.eachCell({ includeEmpty: true }, (c, cn) => {
-        if (cn > ah.length) return
-        c.font = { name: 'Calibri', size: 10, bold: rn === 3 }
-        c.alignment = { vertical: 'top', wrapText: cn > 1, horizontal: cn === 1 ? 'center' : 'left' }
-        if (rn >= 3) c.border = grid
-        if (rn === 1) { c.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill('FF1E293B'); c.alignment = { vertical: 'middle' } }
-        if (rn === 2) { c.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF475569' } }; c.alignment = { vertical: 'middle' } }
-        if (rn === 3) { c.fill = fill('FFDBEAFE'); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true } }
-      }))
-      wa.getRow(1).height = 24
-      wa.getRow(3).height = Math.min(90, 15 * Math.max(1, ...ah.map(h => Math.ceil(h.length / 43))))
-    }
+    const wb = buildDigestWorkbook(new ExcelJS.Workbook(), { row, all, questions, anonymous, anonAnswers, scoreOf })
     const buf = await wb.xlsx.writeBuffer()
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))

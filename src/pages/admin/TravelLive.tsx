@@ -202,7 +202,10 @@ export default function TravelLive() {
                       <td className="px-3 py-2 text-right tabular-nums">{p.with_desk ?? 0}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.desk ?? 0}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.homes ?? 0}</td>
-                      <td className={clsx('px-3 py-2 text-right tabular-nums', data.skip_limit != null && (p.skips ?? 0) >= data.skip_limit && 'font-semibold text-cyrixRed-700')}>{p.skips ?? 0}{data.skip_limit != null && <span className="text-ink-400"> / {data.skip_limit}</span>}</td>
+                      <td className={clsx('px-3 py-2 text-right tabular-nums',
+                        // Each skip warmer (the user, 6 Nov: "dark yellow for 2, light for 1"); the limit reached, red.
+                        data.skip_limit != null && (p.skips ?? 0) >= data.skip_limit ? 'font-semibold text-cyrixRed-700'
+                          : (p.skips ?? 0) >= 2 ? 'font-semibold text-amber-600' : (p.skips ?? 0) === 1 ? 'font-semibold text-amber-400' : undefined)}>{p.skips ?? 0}{data.skip_limit != null && <span className="text-ink-400"> / {data.skip_limit}</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2">{when(p.last_at)}</td>
                     </tr>
                   ))}

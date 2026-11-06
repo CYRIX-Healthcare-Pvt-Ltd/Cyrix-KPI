@@ -154,26 +154,26 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
   blocks.forEach((_, i) => ws.mergeCells(1, FIXED + 1 + i * W, 1, FIXED + (i + 1) * W))
 
   const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
-  const thin = { style: 'thin' as const, color: { argb: 'FF94A3B8' } }
+  const thin = { style: 'thin' as const, color: { argb: 'FFD1D5DB' } }
   const grid = { top: thin, left: thin, bottom: thin, right: thin }
   const last = FIXED + blocks.length * W
   // Months in alternating blues, each quarter's average in teal, the year's in green; an Actual heading a shade darker.
   let monthNo = 0
   const look = blocks.map(b => b.kind === 'month'
-    ? { band: monthNo++ % 2 ? 'FF2563EB' : 'FF1D4ED8', head: 'FFDBEAFE', headActual: 'FFBFDBFE', cell: null as string | null, ink: 'FF1E3A8A' }
+    ? { band: monthNo++ % 2 ? 'FF111111' : 'FF3F3F46', head: 'FFF3F4F6', headActual: 'FFE5E7EB', cell: null as string | null, ink: 'FF111111' }
     : b.kind === 'quarter'
-      ? { band: 'FF0F766E', head: 'FFCCFBF1', headActual: 'FF99F6E4', cell: 'FFF0FDFA', ink: 'FF134E4A' }
-      : { band: 'FF15803D', head: 'FFDCFCE7', headActual: 'FFBBF7D0', cell: 'FFF0FDF4', ink: 'FF14532D' })
+      ? { band: 'FFE30613', head: 'FFFEE2E2', headActual: 'FFFECACA', cell: 'FFFEF2F2', ink: 'FF7F1D1D' }
+      : { band: 'FF460610', head: 'FFFCE7EA', headActual: 'FFF9CDD3', cell: 'FFFFF5F6', ink: 'FF460610' })
   const blockOf = (c: number) => (c <= FIXED ? null : { b: Math.floor((c - FIXED - 1) / W), k: (c - FIXED - 1) % W })
   for (let c = 1; c <= last; c++) {
     const at = blockOf(c)
     const top = ws.getCell(1, c), sub = ws.getCell(2, c)
-    top.fill = fill(at ? look[at.b].band : 'FF1E293B')
+    top.fill = fill(at ? look[at.b].band : 'FF111111')
     top.font = { bold: true, color: { argb: 'FFFFFFFF' } }
     top.alignment = { horizontal: 'center', vertical: 'middle' }
     top.border = grid
     if (at) {
-      sub.fill = fill(isAch(at.k) ? 'FFFDE68A' : isActual(at.k) ? look[at.b].headActual : look[at.b].head)
+      sub.fill = fill(isAch(at.k) ? 'FFFDE8E8' : isActual(at.k) ? look[at.b].headActual : look[at.b].head)
       sub.font = { bold: true, color: { argb: look[at.b].ink } }
       sub.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
     }
@@ -188,7 +188,7 @@ export async function exportKpiScores(rows: ExportRow[], fy: string, filename: s
       cell.border = grid
       cell.alignment = { vertical: 'middle', horizontal: c <= FIXED ? 'left' : 'center' }
       if (at && look[at.b].cell) { cell.fill = fill(look[at.b].cell!); cell.font = { bold: true } }
-      else if (i % 2) cell.fill = fill('FFF8FAFC')
+      else if (i % 2) cell.fill = fill('FFFAFAFA')
       if (at && typeof cell.value === 'number') cell.numFmt = isAch(at.k) ? '0%' : '0.00'
     })
   })

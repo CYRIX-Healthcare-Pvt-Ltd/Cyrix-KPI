@@ -142,13 +142,13 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
         months.forEach((_, i) => ws.mergeCells(1, 5 + i * 5, 1, 9 + i * 5))
         // Title and month bands: the year's months alternate two blues so each block reads as one.
         for (let c = 1; c <= last; c++) {
-          const band = c <= 4 ? 'FF1E293B' : Math.floor((c - 5) / 5) % 2 ? 'FF2563EB' : 'FF1D4ED8'
+          const band = c <= 4 ? 'FF111111' : Math.floor((c - 5) / 5) % 2 ? 'FF111111' : 'FF3F3F46'
           const top = ws.getCell(1, c)
           top.fill = fill(band); top.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: c <= 4 ? 12 : 11 }
           top.alignment = { horizontal: c <= 4 ? 'left' : 'center', vertical: 'middle' }; top.border = grid
           const sub = ws.getCell(2, c)
           // Actual score's heading a shade darker, so it reads apart from Score (the user, 16 Oct).
-          sub.fill = fill(c > 4 && (c - 5) % 5 === 4 ? 'FFBFDBFE' : 'FFDBEAFE'); sub.font = { bold: true, color: { argb: 'FF1E3A8A' } }
+          sub.fill = fill(c > 4 && (c - 5) % 5 === 4 ? 'FFE5E7EB' : 'FFF3F4F6'); sub.font = { bold: true, color: { argb: 'FF111111' } }
           sub.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; sub.border = grid
         }
         ws.getRow(1).height = 22; ws.getRow(2).height = 30
@@ -158,7 +158,7 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
             if (c > last) return
             cell.border = grid
             cell.alignment = { vertical: 'middle', wrapText: c <= 3, horizontal: c <= 3 ? 'left' : 'center' }
-            if (i % 2) cell.fill = fill('FFF8FAFC')
+            if (i % 2) cell.fill = fill('FFFAFAFA')
             // Score and Actual score to two places, as on screen (the user, 16 Oct).
             if (c > 4 && (c - 5) % 5 >= 3 && typeof cell.value === 'number') cell.numFmt = '0.00'
             if (c > 4 && (c - 5) % 5 === 2 && typeof cell.value === 'number') {
@@ -175,7 +175,7 @@ export async function exportReporteesZip(people: Employee[], fy: string, filenam
           row.eachCell({ includeEmpty: true }, (cell, c) => {
             if (c > last) return
             cell.font = { bold: true }
-            cell.fill = fill(isTotal ? 'FFDCFCE7' : 'FFF1F5F9')
+            cell.fill = fill(isTotal ? 'FFE5E7EB' : 'FFF3F4F6')
             if (c > 4 && typeof cell.value === 'number') cell.numFmt = '0.00'
             cell.border = grid
             cell.alignment = { vertical: 'middle', horizontal: c <= 4 ? 'left' : 'center' }
