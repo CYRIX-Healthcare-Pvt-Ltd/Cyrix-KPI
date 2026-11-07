@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { MapPin, RefreshCw, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, MapPin, RefreshCw, Search, X } from 'lucide-react'
 import { Alert, PageLoader } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -71,7 +71,148 @@ function PlaceLine({ lat, lng, what }: { lat: number; lng: number; what: string 
   )
 }
 
+/*
+  What the Watch has found so far, kept (te_0137; the user, 7 Nov: "ya add the log, in that it will see what was
+  corrected isnt?"): every sign the first time it was seen, and when it was corrected — no longer seen. For management:
+  found, corrected, still open, sign by sign.
+*/
+interface Found { kind: Kind; weight: Weight; day: string; claim: string | null; status: string | null; detail: string; amount: number | null; found_at: string; corrected_at: string | null; ecode: string; name: string; function: string | null }
+type FoundSort = 'found' | 'day' | 'person' | 'sign' | 'corrected'
+const stamp = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+function FoundLog() {
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['te_watch_found'],
+    queryFn: async () => {
+      const s = await supabase.rpc('te_watch_sync')
+      if (s.error) throw new Error(friendlyError(s.error))
+      const { data, error } = await supabase.rpc('te_watch_found')
+      if (error) throw new Error(friendlyError(error))
+      return data as Found[]
+    },
+  })
+  const [q, setQ] = useState('')
+  const [state, setState] = useState<'all' | 'open' | 'corrected'>('all')
+  const [kind, setKind] = useState<Kind | ''>('')
+  const [sort, setSort] = useState<{ by: FoundSort; up: boolean }>({ by: 'found', up: false })
+  const rows = data ?? []
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    const key = (r: Found) => sort.by === 'found' ? r.found_at : sort.by === 'day' ? r.day : sort.by === 'person' ? r.name : sort.by === 'sign' ? LABEL[r.kind] ?? r.kind : r.corrected_at ?? ''
+    return rows
+      .filter(r => (state === 'all' || (state === 'open') === !r.corrected_at) && (!kind || r.kind === kind)
+        && (!t || `${r.name} ${r.ecode} ${r.claim ?? ''} ${r.detail} ${LABEL[r.kind] ?? ''}`.toLowerCase().includes(t)))
+      .sort((a, b) => az.compare(key(a), key(b)) * (sort.up ? 1 : -1))
+  }, [rows, q, state, kind, sort])
+  if (isLoading) return <PageLoader />
+  if (error || !data) return <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
+  const corrected = rows.filter(r => r.corrected_at).length
+  const kinds = ORDER.filter(k => rows.some(r => r.kind === k))
+  const head = (by: FoundSort, label: string) => (
+    <th className="px-3 py-2 text-left">
+      <button type="button" className="inline-flex items-center gap-1 font-semibold" onClick={() => setSort(x => ({ by, up: x.by === by ? !x.up : by === 'person' || by === 'sign' }))}>
+        {label}{sort.by === by && (sort.up ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)}
+      </button>
+    </th>
+  )
+  const tiles: Array<[string, number, string]> = [['Found', rows.length, 'text-ink-900'], ['Corrected', corrected, 'text-green-700'], ['Still open', rows.length - corrected, 'text-cyrixRed-700']]
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        {tiles.map(([l, n, c]) => (
+          <div key={l} className="card px-3 py-3 text-center">
+            <p className={clsx('text-2xl font-bold tabular-nums', c)}>{n}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{l}</p>
+          </div>
+        ))}
+      </div>
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-xs text-ink-600"><tr><th className="px-3 py-2 text-left">Sign</th><th className="px-3 py-2 text-right">Found</th><th className="px-3 py-2 text-right">Corrected</th><th className="px-3 py-2 text-right">Still open</th></tr></thead>
+          <tbody>
+            {kinds.map(k => {
+              const of = rows.filter(r => r.kind === k), c = of.filter(r => r.corrected_at).length
+              return (
+                <tr key={k} className="border-t border-ink-100">
+                  <td className="px-3 py-2"><span className={clsx('mr-2 inline-block h-2 w-2 rounded-full', DOT[WEIGHT[k]])} />{LABEL[k]}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{of.length}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-green-700">{c}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{of.length - c}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+          <input className="input h-10 pl-9" value={q} placeholder="Search name, E-code, claim" onChange={e => setQ(e.target.value)} />
+        </label>
+        <select className="input h-10" value={state} onChange={e => setState(e.target.value as typeof state)}>
+          <option value="all">Open and corrected</option><option value="open">Still open</option><option value="corrected">Corrected</option>
+        </select>
+        <select className="input h-10" value={kind} onChange={e => setKind(e.target.value as Kind | '')}>
+          <option value="">All signs</option>{kinds.map(k => <option key={k} value={k}>{LABEL[k]}</option>)}
+        </select>
+        <button type="button" onClick={() => void refetch()} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm text-ink-600 hover:bg-ink-100">
+          <RefreshCw className={clsx('h-4 w-4', isFetching && 'animate-spin')} /> Refresh
+        </button>
+      </div>
+      {!shown.length ? <div className="card p-8 text-center text-sm text-ink-500">Nothing found.</div> : <>
+        <div className="space-y-2 sm:hidden">
+          {shown.map((r, i) => (
+            <div key={i} className="card px-4 py-3 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                <p className={clsx('text-xs font-semibold', r.weight === 'red' ? 'text-cyrixRed-700' : 'text-amber-700')}>{LABEL[r.kind] ?? r.kind}</p>
+                <span className={clsx('badge shrink-0', r.corrected_at ? 'bg-green-100 text-green-800' : 'bg-cyrixRed-100 text-cyrixRed-900')}>{r.corrected_at ? `Corrected ${stamp(r.corrected_at)}` : 'Open'}</span>
+              </div>
+              <p className="font-medium text-ink-900">{r.name} <span className="text-xs font-normal text-ink-500">{r.ecode}</span></p>
+              <p className="break-words text-ink-800">{r.detail}</p>
+              <p className="text-xs text-ink-500">{dayText(r.day)}{r.claim ? ` · ${r.claim}` : ''} · found {stamp(r.found_at)}</p>
+            </div>
+          ))}
+        </div>
+        <div className="card hidden overflow-x-auto sm:block">
+          <table className="w-full text-sm">
+            <thead className="bg-ink-50 text-xs text-ink-600"><tr>{head('person', 'Person')}{head('sign', 'Sign')}<th className="px-3 py-2 text-left">What</th>{head('day', 'Day')}<th className="px-3 py-2 text-left">Claim</th>{head('found', 'Found')}{head('corrected', 'Corrected')}</tr></thead>
+            <tbody>
+              {shown.map((r, i) => (
+                <tr key={i} className="border-t border-ink-100 align-top">
+                  <td className="whitespace-nowrap px-3 py-2">{r.name} ({r.ecode})</td>
+                  <td className={clsx('whitespace-nowrap px-3 py-2 text-xs font-semibold', r.weight === 'red' ? 'text-cyrixRed-700' : 'text-amber-700')}>{LABEL[r.kind] ?? r.kind}</td>
+                  <td className="px-3 py-2 text-ink-800">{r.detail}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{dayText(r.day)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{r.claim ?? '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{stamp(r.found_at)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{r.corrected_at ? <span className="font-semibold text-green-700">{stamp(r.corrected_at)}</span> : <span className="text-cyrixRed-700">Open</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>}
+    </div>
+  )
+}
+
 export default function TravelWatch() {
+  const [view, setView] = useState<'now' | 'found'>('now')
+  const views: Array<['now' | 'found', string]> = [['now', 'Now'], ['found', 'Found so far']]
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex rounded-lg bg-ink-100 p-1">
+        {views.map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setView(k)}
+            className={clsx('h-9 rounded-md px-4 text-sm font-semibold', view === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-600 hover:text-ink-900')}>{l}</button>
+        ))}
+      </div>
+      {view === 'now' ? <WatchNow /> : <FoundLog />}
+    </div>
+  )
+}
+
+function WatchNow() {
   const [period, setPeriod] = useState<Period>('custom')
   const [custom, setCustom] = useState<[string, string]>([today(), today()])
   const [from, to] = period === 'all' ? [null, null] : period === 'this' ? [monthStart(), today()] : custom[0] <= custom[1] ? custom : [custom[1], custom[0]]
