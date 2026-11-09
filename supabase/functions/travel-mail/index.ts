@@ -3,7 +3,7 @@ import { sendMail } from '../_shared/mail.ts'
 import { recipients, words, type AdvanceRow } from './words.ts'
 import { vehicleWords, type VehicleRow } from './vehicle.ts'
 import { managerWords, type ManagerRow } from './manager.ts'
-import { claimWords, depWords, copiesTo, type ClaimRow, type DepRow } from './more.ts'
+import { claimWords, claimsWords, depWords, copiesTo, type ClaimRow, type DepRow } from './more.ts'
 
 /**
  * Travel Expense's mail: an expense advance the Travel Desk has approved, to the person with copies to their
@@ -79,24 +79,31 @@ Deno.serve(async req => {
   // A claim the Travel Desk approved, and a deputation the manager approved (te_0132): to the person, copies to the
   // manager, the Travel Desk and the people SW Admin ticked. A database without them yet sends the rest.
   let more = 0
-  const kinds = [
-    { claim: 'te_claim_mail_claim', failed: 'te_claim_mail_failed', words: (r: unknown) => claimWords(r as ClaimRow, APP) },
-    { claim: 'te_dep_mail_claim', failed: 'te_dep_mail_failed', words: (r: unknown) => depWords(r as DepRow, APP) },
+  // A person's claims come together (te_0138) and go as one mail; one claim keeps its own mail.
+  type Group = { ids: string[]; first: ClaimRow | DepRow; words: () => { subject: string; text: string; html: string } }
+  const kinds: Array<{ claim: string; failed: string; groups: (rows: unknown[]) => Group[] }> = [
+    { claim: 'te_claim_mail_claim', failed: 'te_claim_mail_failed', groups: rows => {
+      const by = new Map<string, ClaimRow[]>()
+      for (const r of rows as ClaimRow[]) { const k = r.employee_id ?? r.id; by.set(k, [...(by.get(k) ?? []), r]) }
+      return [...by.values()].map(rs => ({ ids: rs.map(x => x.id), first: rs[0], words: () => (rs.length === 1 ? claimWords(rs[0], APP) : claimsWords(rs, APP)) }))
+    } },
+    { claim: 'te_dep_mail_claim', failed: 'te_dep_mail_failed', groups: rows => (rows as DepRow[]).map(r => ({ ids: [r.id], first: r, words: () => depWords(r, APP) })) },
   ]
   for (const k of kinds) {
     const { data: kd, error: ke } = await db.rpc(k.claim, { p_limit: 20 })
     if (ke) continue
-    for (const r of (kd ?? []) as Array<ClaimRow | DepRow>) {
-      const { to, cc } = copiesTo(r)
-      more++
-      if (!to.length) { noAddress++; await db.rpc(k.failed, { p_id: r.id, p_error: 'No work email for the person, the manager or the Travel Desk' }); continue }
+    for (const g of k.groups((kd ?? []) as unknown[])) {
+      const { to, cc } = copiesTo(g.first)
+      more += g.ids.length
+      const fail = (msg: string) => Promise.all(g.ids.map(id => db.rpc(k.failed, { p_id: id, p_error: msg })))
+      if (!to.length) { noAddress++; await fail('No work email for the person, the manager or the Travel Desk'); continue }
       if (sent + failed > 0) await new Promise(res => setTimeout(res, 2000))
       try {
-        await sendMail(db as never, { to, cc, ...k.words(r) })
+        await sendMail(db as never, { to, cc, ...g.words() })
         sent++
       } catch (e) {
         failed++
-        await db.rpc(k.failed, { p_id: r.id, p_error: (e as Error).message })
+        await fail((e as Error).message)
       }
     }
   }
