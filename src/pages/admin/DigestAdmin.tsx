@@ -747,7 +747,7 @@ export default function DigestAdmin() {
                     <span className="block text-xs text-ink-500">
                       {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {DESK_WORD[r.posted_as] ?? 'HR'} · {fmt(r.created_at)}
                       {!r.mine && <span className="ml-1.5 font-medium text-violet-700">· Shared with you</span>}
-                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => DESK_WORD[x as keyof typeof DESK_WORD] ?? 'HR').join(', ')}</span>}
+                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => DESK_WORD[x as keyof typeof DESK_WORD] ?? x).join(', ')}</span>}
                       {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
                         ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                         // A meeting already says its date.
@@ -886,7 +886,8 @@ function Tick({ on, onChange, label, icon: Icon, disabled }: { on: boolean; onCh
 function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
-  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>(null)
+  // Whoever opened it last first (the user, 9 Nov: "default sorting should be first recently opened").
+  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>({ key: 'opened', asc: false })
   const [find, setFind] = useState('')
   const { data: people } = useQuery({
     queryKey: ['digest_people', row.id],
@@ -1015,7 +1016,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
-      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt'} mine={row.mine} editors={row.editors ?? []} />
+      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt'} author={row.author} mine={row.mine} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
