@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Trophy } from 'lucide-react'
+import { Crown, Trophy } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea,
 } from 'recharts'
@@ -46,6 +46,48 @@ function Move({ now, was }: { now: number; was: number | null }) {
   return (
     <span className={clsx('w-7 shrink-0 text-right text-xs font-semibold tabular-nums', up ? 'ts-up text-emerald-600' : 'ts-down text-cyrixRed-600')}
       aria-label={up ? `Up ${was - now} since last month` : `Down ${now - was} since last month`}>{up ? '▲' : '▼'}{Math.abs(was - now)}</span>
+  )
+}
+
+/* My rank month by month as medals under the chart, each under its month's point (the user, 9 Nov: "how can we show
+   our month wise rank also beautifully", Option A): gold with a crown for 1st, silver 2nd, bronze 3rd, plain after;
+   green ▲ / red ▼ by the places moved since the month before. The chart's own side margins (18 px) place them. */
+// Metal faces lit from the top left, the same in light and dark (the user, 9 Nov: "top rank 1 looks 3d, so should we
+// make others also"): silver 2nd, bronze 3rd, and a raised plain face after that, dark in dark mode.
+const RAISED = '0 1px 2px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.55)'
+const face = (rank: number, dark: boolean) =>
+  rank === 2 ? { background: 'linear-gradient(135deg,#ffffff 0%,#e5e7eb 40%,#9ca3af 78%,#6b7280 100%)', borderColor: '#e5e7eb', color: '#1f2937', boxShadow: RAISED }
+  : rank === 3 ? { background: 'linear-gradient(135deg,#fde2cc 0%,#e8a06a 40%,#c2703d 72%,#8a4b1f 100%)', borderColor: '#f6c39b', color: '#3b1a06', boxShadow: RAISED }
+  : dark ? { background: 'linear-gradient(135deg,#4a4e57 0%,#2c2f36 60%,#1c1e23 100%)', borderColor: '#5b606b', color: '#f3f4f6', boxShadow: '0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.12)' }
+  : { background: 'linear-gradient(135deg,#ffffff 0%,#eef0f3 60%,#d6d9de 100%)', borderColor: '#cfd3da', color: '#1f2937', boxShadow: '0 1px 2px rgba(0,0,0,.18), inset 0 1px 0 #fff' }
+function Medals({ me, months, dark }: { me: Member; months: string[]; dark: boolean }) {
+  const n = months.length
+  const at = (i: number) => (n === 1 ? '50%' : `calc(18px + ${i / (n - 1)} * (100% - 36px))`)
+  return (
+    <div className="relative h-[44px] sm:h-[48px]">
+      {months.map((mo, i) => {
+        const k = me.scores.get(mo)
+        const king = k?.rank === 1
+        const moved = k && k.prev != null ? k.prev - k.rank : null
+        return (
+          <div key={mo} className="absolute top-0 flex -translate-x-1/2 flex-col items-center" style={{ left: at(i) }}
+            title={k ? `${monthLabel(mo)} · ${k.rank} of ${k.of}` : `${monthLabel(mo)} · Not scored`}>
+            {k ? (
+              <span className={clsx('grid h-6 w-6 place-items-center rounded-full border-[1.5px] text-[11px] font-bold tabular-nums sm:h-7 sm:w-7 sm:text-xs',
+                king ? 'ts-king' : clsx('ts-tile', k.rank === 2 && 'ts-silver', k.rank === 3 && 'ts-bronze'))}
+                style={{ animationDelay: `${i * 45}ms`, ...(king ? {} : face(k.rank, dark)) }}
+                aria-label={`${monthLabel(mo)}: ${k.rank} of ${k.of}`}>
+                {king ? <Crown className="ts-crown relative z-10 h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={2.5} /> : k.rank}
+              </span>
+            ) : <span className="grid h-6 w-6 place-items-center text-ink-300 sm:h-7 sm:w-7">–</span>}
+            <span className={clsx('mt-0.5 h-4 text-[10px] font-semibold tabular-nums',
+              moved == null || moved === 0 ? 'text-ink-400' : moved > 0 ? 'ts-up text-emerald-600' : 'ts-down text-cyrixRed-600')}>
+              {moved == null ? '' : moved === 0 ? '–' : `${moved > 0 ? '▲' : '▼'}${Math.abs(moved)}`}
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -188,7 +230,21 @@ export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (s
         @keyframes ts-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         @keyframes ts-down{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
         .ts-up{animation:ts-up .4s ease-out both}.ts-down{animation:ts-down .4s ease-out both}
-        @media (prefers-reduced-motion:reduce){.ts-tile,.ts-line,.ts-up,.ts-down{animation:none}}`}</style>
+        .ts-king{position:relative;overflow:hidden;color:#5b3200;border-color:#fde68a;background:linear-gradient(135deg,#fef3c7 0%,#fbbf24 38%,#f59e0b 62%,#b45309 100%);
+          animation:ts-pop .35s cubic-bezier(.2,.9,.3,1.3) both,ts-glow 2.4s ease-in-out .5s infinite}
+        .ts-king::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.9) 50%,transparent 70%);transform:translateX(-130%);animation:ts-shine 3s ease-in-out 1s infinite}
+        @keyframes ts-shine{0%{transform:translateX(-130%)}45%,100%{transform:translateX(130%)}}
+        @keyframes ts-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 10px 2px rgba(245,158,11,.6)}}
+        /* Silver shines less than gold, bronze less than silver (the user, 9 Nov). */
+        .ts-silver,.ts-bronze{position:relative;overflow:hidden}
+        .ts-silver{animation:ts-pop .35s cubic-bezier(.2,.9,.3,1.3) both,ts-glow2 3.2s ease-in-out .5s infinite}
+        @keyframes ts-glow2{0%,100%{box-shadow:0 1px 2px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.55)}50%{box-shadow:0 1px 2px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.55),0 0 7px 1px rgba(203,213,225,.55)}}
+        .ts-silver::after,.ts-bronze::after{content:'';position:absolute;inset:0;transform:translateX(-130%)}
+        .ts-silver::after{background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.65) 50%,transparent 65%);animation:ts-shine 4.5s ease-in-out 1.5s infinite}
+        .ts-bronze::after{background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.4) 50%,transparent 62%);animation:ts-shine 6s ease-in-out 2s infinite}
+        .ts-crown{animation:ts-crown 2.4s ease-in-out .5s infinite}
+        @keyframes ts-crown{0%,100%{transform:none}50%{transform:translateY(-1px) scale(1.12)}}
+        @media (prefers-reduced-motion:reduce){.ts-tile,.ts-line,.ts-up,.ts-down,.ts-king,.ts-king::after,.ts-crown,.ts-silver,.ts-silver::after,.ts-bronze::after{animation:none}}`}</style>
       {/* The people one by one (the user, 9 Nov: "hide ... only the portion which i shared"): hidden until it is wanted
           again; set PEOPLE to true to bring the list back. */}
       {PEOPLE && view === 'year' && (
@@ -247,7 +303,7 @@ export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (s
       <div style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           {/* With no axis the first point sits on the edge: room for its figure on the left. */}
-          <LineChart data={chart} margin={{ ...TREND_MARGIN, left: 18, bottom: 14 }}>
+          <LineChart data={chart} margin={{ ...TREND_MARGIN, left: 18, bottom: 4 }}>
             <CartesianGrid vertical={false} stroke="#8884" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b6e79' }} axisLine={{ stroke: '#8886' }} tickLine={false} />
             {/* No % axis (the user, 6 Nov): the points carry their own figures, on the score bands of the other charts. */}
@@ -282,6 +338,10 @@ export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (s
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Right under the chart's month names, which name the medals too (the user: "add under axis? bcz in axis
+          already month name is there isnt?"). */}
+      <Medals me={me} months={months} dark={dark} />
     </div>
   )
 }
