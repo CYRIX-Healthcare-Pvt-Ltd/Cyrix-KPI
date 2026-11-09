@@ -37,7 +37,7 @@ const admin = () => createClient(URL_, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 webpush.setVapidDetails('https://app.cyrix.in', Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
 
-type Payload = { title: string; body: string; url: string; tag?: string }
+type Payload = { title: string; body: string; url: string; tag?: string; image?: string }
 type Tally = { people: number; devices: number; delivered: number; failed: number }
 
 /** Every device of these people, sent the same payload, twenty at a time. */
@@ -124,16 +124,16 @@ const joinWords = (m: { id: string; title: string; meet_at: string; meet_place: 
 */
 async function sendQueued(db: ReturnType<typeof admin>, kinds: string[], by?: string): Promise<Tally> {
   const total: Tally = { people: 0, devices: 0, delivered: 0, failed: 0 }
-  let q = db.from('push_messages').select('id, kind, title, body, url').in('kind', kinds).is('devices', null)
+  let q = db.from('push_messages').select('id, kind, title, body, url, image').in('kind', kinds).is('devices', null)
     .gt('created_at', new Date(Date.now() - 86_400_000).toISOString()).order('created_at').limit(200)
   if (by) q = q.eq('sent_by', by)
   const { data } = await q
-  for (const m of (data ?? []) as Array<{ id: string; kind: string; title: string; body: string; url: string }>) {
+  for (const m of (data ?? []) as Array<{ id: string; kind: string; title: string; body: string; url: string; image: string | null }>) {
     const { data: took } = await db.from('push_messages').update({ devices: 0 }).eq('id', m.id).is('devices', null).select('id')
     if (!took?.length) continue
     const { data: to } = await db.from('push_inbox').select('employee_id').eq('message_id', m.id)
     const ids = ((to ?? []) as Array<{ employee_id: string }>).map(x => x.employee_id)
-    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: m.kind + '-' + m.id })
+    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: m.kind + '-' + m.id, ...(m.image ? { image: m.image } : {}) })
     await db.from('push_messages').update(t).eq('id', m.id)
     total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
   }
