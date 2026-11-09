@@ -17,6 +17,7 @@ import { waitingForScore, waitingCaption } from '@/lib/waiting'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { hasSeenHelp, manualOffer } from '@/lib/seenHelp'
 import { READY_LANGS } from '@/lib/i18n'
+import { useTeamStanding, teamCardShows } from '@/lib/teamStanding'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
   ScoreHeader, WeakAreas, KraBars, ActionRequired,
@@ -71,7 +72,9 @@ export default function Dashboard() {
   // Read once per mount. Opening the manual is a navigation away from
   // here and back, so the card is gone the next time this screen loads.
   const [seenHelp] = useState(() => hasSeenHelp(employee?.id))
-  const [teamShown, setTeamShown] = useState(false)
+  // Hidden while the team answer loads, then only when the team card shows (no flash on a reload).
+  const team = useTeamStanding(fy)
+  const teamShown = !team.isError && (!team.data || teamCardShows(team.data))
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.
   const otherLangs = READY_LANGS
@@ -388,7 +391,7 @@ export default function Dashboard() {
       {/* Where I stand in my manager's team (0262–0268); back from its draft on the user's word, 6 Nov: "bring back the
           team card on dashboard". */}
       <Suspense fallback={null}>
-        <TeamStanding fy={fy} onShown={setTeamShown} />
+        <TeamStanding fy={fy} />
       </Suspense>
 
       {/* ---- what to work on ---- */}

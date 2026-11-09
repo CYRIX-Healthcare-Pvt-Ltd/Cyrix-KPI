@@ -1,11 +1,10 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { Fragment, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { Crown, Trophy } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea,
 } from 'recharts'
-import { supabase } from '@/lib/supabase'
+import { useTeamStanding } from '@/lib/teamStanding'
 import { monthLabel } from '@/lib/fy'
 import { ScorePill } from '@/components/ui'
 import { TREND_MARGIN, ScoreLabel } from '@/components/ScoreTrend'
@@ -18,10 +17,6 @@ import { useIsDark } from '@/lib/isDark'
   score alone (0264; the user, 6 Nov: "i think it is bad to show everyone's score, so just show the rank and that line
   graph vs me"), and my score month by month against the team average.
 */
-type Row = { employee_id: string; ecode: string; full_name: string; designation: string | null; is_me: boolean
-  manager_name: string; period_month: string | null; score: number | null; team_rank: number | null; team_of: number | null
-  months: number | null; team_avg: number | null; band_from: number | null; prev_rank: number | null
-  ytd_rank: number | null; ytd_of: number | null; shape: number | null }
 type Mark = { rank: number; of: number; months: number; score: number | null; band: number | null; prev: number | null; ytd: number | null; ytdOf: number | null; shape: number | null }
 type Member = { id: string; name: string; designation: string | null; me: boolean; year: Mark | null; scores: Map<string, Mark> }
 
@@ -119,16 +114,8 @@ function Tiles({ m, months }: { m: Member; months: string[] }) {
   )
 }
 
-export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (shown: boolean) => void }) {
-  const { data: rows } = useQuery({
-    queryKey: ['kpi_team_standing', fy],
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('kpi_team_standing', { p_fy: fy })
-      if (error) throw error
-      return (data ?? []) as Row[]
-    },
-  })
+export default function TeamStanding({ fy }: { fy: string }) {
+  const { data: rows } = useTeamStanding(fy)
   const { members, months, manager, teamAvg } = useMemo(() => {
     const by = new Map<string, Member>()
     const avgs = new Map<string, number>() // 'year', or the month
@@ -148,10 +135,7 @@ export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (s
   const dark = useIsDark()
 
   const me = members.find(m => m.me)
-  const cardShown = !!me && members.length >= 2 && months.length > 0
-  // The Dashboard drops its own month-by-month chart while this card shows my line (the user, 9 Nov).
-  useEffect(() => { onShown?.(cardShown) }, [cardShown, onShown])
-  if (!me || !cardShown) return null
+  if (!me || members.length < 2 || !months.length) return null
   const latest = months[months.length - 1]
 
   const markOf = (m: Member) => (view === 'year' ? m.year : m.scores.get(latest) ?? null)
