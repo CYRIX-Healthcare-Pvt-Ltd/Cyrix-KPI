@@ -29,6 +29,8 @@ const FAINT = '#9ca3af'
 const MINE = '#10b981'
 /* The rank circle in the person's score band: white figures in light mode as before, dark ones on every band in dark
    mode so the number reads (the user, 6 Nov: "when light keep the same as earlier"; then "why top 4 font white"). */
+/** The team's people, one row each with their rank: hidden for now (9 Nov), the rank, score and chart stay. */
+const PEOPLE = false
 const circle = (band: number | null, dark: boolean) => {
   const b = band == null ? null : bandFor(band)
   if (!b) return { background: FAINT, color: '#fff' }
@@ -184,7 +186,9 @@ export default function TeamStanding({ fy }: { fy: string }) {
         @keyframes ts-down{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
         .ts-up{animation:ts-up .4s ease-out both}.ts-down{animation:ts-down .4s ease-out both}
         @media (prefers-reduced-motion:reduce){.ts-tile,.ts-line,.ts-up,.ts-down{animation:none}}`}</style>
-      {view === 'year' && (
+      {/* The people one by one (the user, 9 Nov: "hide ... only the portion which i shared"): hidden until it is wanted
+          again; set PEOPLE to true to bring the list back. */}
+      {PEOPLE && view === 'year' && (
         <div className="mt-3 flex items-center justify-end px-2 text-[10px] font-semibold uppercase text-ink-400" aria-hidden>
           {months.map((mo, i) => (
             <span key={mo} className={clsx(TILE, 'grid place-items-center', i && 'ml-1', i === months.length - 1 && 'text-ink-800')}>
@@ -193,7 +197,7 @@ export default function TeamStanding({ fy }: { fy: string }) {
           ))}
         </div>
       )}
-      <ol className={view === 'year' ? 'mt-1' : 'mt-3'}>
+      {PEOPLE && <ol className={view === 'year' ? 'mt-1' : 'mt-3'}>
         {shown.map(({ x, n, gap }) => (
           <Fragment key={x.m.id}>
           {gap > 0 && (
@@ -228,9 +232,9 @@ export default function TeamStanding({ fy }: { fy: string }) {
             <span>{below} more</span>
           </li>
         )}
-      </ol>
+      </ol>}
 
-      {waiting.length > 0 && <p className="mt-2 px-2 text-xs text-ink-400">Not scored yet: {waiting.join(', ')}</p>}
+      {PEOPLE && waiting.length > 0 && <p className="mt-2 px-2 text-xs text-ink-400">Not scored yet: {waiting.join(', ')}</p>}
 
       <h4 className="mb-1 mt-4 text-sm font-semibold text-ink-800">Month by month</h4>
       <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
