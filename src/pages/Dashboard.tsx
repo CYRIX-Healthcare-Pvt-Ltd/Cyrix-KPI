@@ -382,11 +382,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Where I stand in my manager's team (0262–0268); back from its draft on the user's word, 6 Nov: "bring back the
-          team card on dashboard". */}
-      <Suspense fallback={null}>
-        <TeamStanding fy={fy} />
-      </Suspense>
+      {/* Where I stand in my manager's team (0262–0268). Hidden (the user, 9 Nov: "just hide, when needed in future we can
+          enable it"); only the local preview shows it. To bring it back, drop the DEV check and revert the manual and
+          Cyra lines of the commit that hid it (as cfcd3f2 did). */}
+      {import.meta.env.DEV && (
+        <Suspense fallback={null}>
+          <TeamStanding fy={fy} />
+        </Suspense>
+      )}
 
       {/* ---- what to work on ---- */}
       {(annual?.months_scored ?? 0) > 0 && (

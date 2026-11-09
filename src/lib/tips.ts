@@ -52,7 +52,7 @@ const notHr = (c: TipContext) => !c.isHrAdmin
 export const TIPS: Tip[] = [
   // ---- your own record
   { key: 'tip.photo', to: '/me', toLabel: 'My profile', when: notHr },
-  { key: 'tip.rank', to: '/', toLabel: 'Dashboard', when: scored },
+  { key: 'tip.rank', to: '/me', toLabel: 'My profile', when: scored },
   { key: 'tip.language', to: null, toLabel: '', when: anyone },
   { key: 'tip.manual', to: '/help', toLabel: 'The manual', when: anyone },
   // Not HR: the videos are the steps of one's own KPI and one's own team,
