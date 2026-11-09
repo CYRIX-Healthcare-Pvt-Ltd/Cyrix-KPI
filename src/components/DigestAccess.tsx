@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { History, Loader2, Users } from 'lucide-react'
+import { History, Loader2, Search, Users } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 
 /**
@@ -42,7 +42,7 @@ export default function DigestAccess({ postId, owner, author, mine }: {
 }) {
   const qc = useQueryClient()
   const { data: people } = useQuery({
-    queryKey: ['digest_people', postId],
+    queryKey: ['digest_editor_people', postId],
     staleTime: 0,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('digest_editor_people', { p_id: postId })
@@ -62,11 +62,17 @@ export default function DigestAccess({ postId, owner, author, mine }: {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
-      qc.invalidateQueries({ queryKey: ['digest_people', postId] })
+      qc.invalidateQueries({ queryKey: ['digest_editor_people', postId] })
       qc.invalidateQueries({ queryKey: ['digest_log', postId] })
     },
   })
   const shared = (people ?? []).filter(p => p.ticked)
+  // Folded to one line until Change is pressed (the user, 9 Nov: "why that who can edit container is always open? what
+  // if list is big?"); a search once the list is long.
+  const [open, setOpen] = useState(false)
+  const [find, setFind] = useState('')
+  const f = find.trim().toLowerCase()
+  const listed = (people ?? []).filter(p => !f || `${p.full_name} ${p.ecode} ${DESK[p.desk]}`.toLowerCase().includes(f))
   const { data: log } = useQuery({
     queryKey: ['digest_log', postId],
     staleTime: 0,
@@ -83,13 +89,25 @@ export default function DigestAccess({ postId, owner, author, mine }: {
       <div className="rounded-lg border border-ink-200 bg-surface p-3">
         <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-800"><Users className="h-4 w-4 text-ink-400" /> Who can edit</p>
         <p className="text-sm text-ink-700">{author ?? DESK[owner]} <span className="text-ink-400">· {DESK[owner]} · posted it, the only one who can delete it</span></p>
-        {mine ? (
+        {mine && !open ? (
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-ink-700">{shared.length ? <>{shared.map(p => p.full_name).join(', ')} <span className="text-ink-400">· can edit and publish</span></> : <span className="text-ink-400">Not shared</span>}</p>
+            <button type="button" className="btn-secondary !px-3 !py-1.5 text-sm" onClick={() => setOpen(true)}>Change</button>
+          </div>
+        ) : mine ? (
           <div className="mt-2 space-y-2.5">
-            {ORDER.filter(d => (people ?? []).some(p => p.desk === d)).map(d => (
+            {(people ?? []).length > 8 && (
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <input className="input h-9 !pl-8 text-sm" value={find} placeholder="Name or E-code" onChange={e => setFind(e.target.value)} />
+              </label>
+            )}
+            <div className="max-h-64 space-y-2.5 overflow-auto">
+            {ORDER.filter(d => listed.some(p => p.desk === d)).map(d => (
               <div key={d}>
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">{DESK[d]}</p>
                 <div className="space-y-1">
-                  {(people ?? []).filter(p => p.desk === d).map(p => (
+                  {listed.filter(p => p.desk === d).map(p => (
                     <label key={p.employee_id} className="flex items-center gap-2 text-sm text-ink-800">
                       <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={ticked.includes(p.employee_id)}
                         onChange={e => setTicked(t => (e.target.checked ? [...t, p.employee_id] : t.filter(y => y !== p.employee_id)))} />
@@ -99,10 +117,12 @@ export default function DigestAccess({ postId, owner, author, mine }: {
                 </div>
               </div>
             ))}
+            </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className="btn-secondary !px-3 !py-1.5 text-sm" disabled={!changed || save.isPending} onClick={() => save.mutate()}>
+              <button type="button" className="btn-secondary !px-3 !py-1.5 text-sm" disabled={!changed || save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => { setOpen(false); setFind('') } })}>
                 {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save
               </button>
+              <button type="button" className="text-sm text-ink-500 hover:text-ink-800" onClick={() => { setOpen(false); setFind(''); setTicked(saved) }}>Cancel</button>
               {save.error && <span className="text-sm text-cyrixRed-600">{(save.error as Error).message}</span>}
             </div>
           </div>
