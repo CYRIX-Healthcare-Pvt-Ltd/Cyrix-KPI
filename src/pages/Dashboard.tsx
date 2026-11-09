@@ -71,6 +71,7 @@ export default function Dashboard() {
   // Read once per mount. Opening the manual is a navigation away from
   // here and back, so the card is gone the next time this screen loads.
   const [seenHelp] = useState(() => hasSeenHelp(employee?.id))
+  const [teamShown, setTeamShown] = useState(false)
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.
   const otherLangs = READY_LANGS
@@ -365,7 +366,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {(kpiStatus === 'active' || (annual?.months_scored ?? 0) > 0) && (
+      {/* Hidden while the team card below shows my line month by month (the user, 9 Nov: "already we are showing my
+          graph twice so better remove top line graph"); somebody without the team card keeps it. */}
+      {!teamShown && (kpiStatus === 'active' || (annual?.months_scored ?? 0) > 0) && (
         <div className="card p-4">
           <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
             <LineChart className="h-4 w-4 text-ink-400" /> My score, month by month
@@ -385,7 +388,7 @@ export default function Dashboard() {
       {/* Where I stand in my manager's team (0262–0268); back from its draft on the user's word, 6 Nov: "bring back the
           team card on dashboard". */}
       <Suspense fallback={null}>
-        <TeamStanding fy={fy} />
+        <TeamStanding fy={fy} onShown={setTeamShown} />
       </Suspense>
 
       {/* ---- what to work on ---- */}

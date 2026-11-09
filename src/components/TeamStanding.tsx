@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Trophy } from 'lucide-react'
@@ -77,7 +77,7 @@ function Tiles({ m, months }: { m: Member; months: string[] }) {
   )
 }
 
-export default function TeamStanding({ fy }: { fy: string }) {
+export default function TeamStanding({ fy, onShown }: { fy: string; onShown?: (shown: boolean) => void }) {
   const { data: rows } = useQuery({
     queryKey: ['kpi_team_standing', fy],
     staleTime: 5 * 60_000,
@@ -106,7 +106,10 @@ export default function TeamStanding({ fy }: { fy: string }) {
   const dark = useIsDark()
 
   const me = members.find(m => m.me)
-  if (!me || members.length < 2 || !months.length) return null
+  const cardShown = !!me && members.length >= 2 && months.length > 0
+  // The Dashboard drops its own month-by-month chart while this card shows my line (the user, 9 Nov).
+  useEffect(() => { onShown?.(cardShown) }, [cardShown, onShown])
+  if (!me || !cardShown) return null
   const latest = months[months.length - 1]
 
   const markOf = (m: Member) => (view === 'year' ? m.year : m.scores.get(latest) ?? null)
