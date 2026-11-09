@@ -1056,7 +1056,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[12rem] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-          <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code or department" />
+          <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code, department or function" />
         </div>
         <button type="button" className="btn-secondary" onClick={() => setShowList(v => !v)}>
           {showList ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -1072,6 +1072,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
             case 'name': return p.full_name.toLowerCase()
             case 'ecode': return p.ecode.toLowerCase()
             case 'dept': return (p.department ?? '').toLowerCase()
+            case 'func': return (p.function_name ?? '').toLowerCase()
             case 'opened': return p.opened_at ?? ''
             case 'last': return p.last_opened ?? ''
             case 'watched': return p.watched_seconds ?? 0
@@ -1099,7 +1100,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-              <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
+              <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" /><Th k="func" label="Function" />
               <Th k="opened" label="First opened" /><Th k="last" label="Last opened" />
               <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: row.kind === 'quiz' ? 'Score' : 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
               {lastKey === 'joins' && <><Th k="firstjoin" label="First joined" /><Th k="lastjoin" label="Last joined" /></>}
@@ -1111,6 +1112,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                 <td className="px-3 py-1.5 text-ink-900">{p.full_name}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
+                <td className="px-3 py-1.5 text-ink-600">{p.function_name ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmtAmPm(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.last_opened && p.opens > 1 ? fmtAmPm(p.last_opened) : '—'}</td>
                 {row.kind === 'video'
