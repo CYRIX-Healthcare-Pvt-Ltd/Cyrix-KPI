@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Download, BarChart3, Users } from 'lucide-react'
+import { Download, BarChart3, Users, ClipboardList } from 'lucide-react'
 import { useOrgKpiStatus, currentFy } from '@/lib/queries'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportKpiScores } from '@/lib/export'
@@ -14,6 +14,7 @@ import KpiReport from './KpiReport'
   will disagree in front of somebody eventually.
 */
 import { SummaryTab } from './SwAdmin'
+import AssessmentView from './AssessmentView'
 import type { Employee } from '@/types/db'
 
 // Completion by month, completion by manager and turnaround were three
@@ -22,7 +23,7 @@ import type { Employee } from '@/types/db'
 // whose shape is chosen; see KpiReport. The score export stays separate
 // because it is a different artefact — a per-employee workbook, not a
 // summary.
-type Tab = 'report' | 'scores' | 'summary'
+type Tab = 'report' | 'scores' | 'summary' | 'assessment'
 
 export default function AdminReports() {
   const fy = currentFy()
@@ -110,17 +111,19 @@ export default function AdminReports() {
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      <div className="flex gap-1 border-b border-ink-200">
+      <div className="flex gap-1 overflow-x-auto border-b border-ink-200">
         {([
           ['report', 'KPI report', BarChart3],
           ['scores', 'Score export', Download],
           ['summary', 'Summary report', Users],
+          // One person's months, read only (the user, 10 Nov).
+          ['assessment', 'KPI assessment', ClipboardList],
         ] as Array<[Tab, string, React.ComponentType<{ className?: string }>]>).map(
           ([key, label, Icon]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === key
                   ? 'border-ink-900 text-ink-900'
                   : 'border-transparent text-ink-500 hover:text-ink-800'
@@ -167,6 +170,7 @@ export default function AdminReports() {
         </div>
       )}
       {tab === 'summary' && <SummaryTab />}
+      {tab === 'assessment' && <AssessmentView />}
     </div>
   )
 }

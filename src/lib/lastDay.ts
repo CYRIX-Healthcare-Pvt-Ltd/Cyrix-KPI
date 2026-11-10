@@ -13,28 +13,36 @@ export type Side = 'tm' | 'manager'
 
 const IST_MINUTES = 330
 
-/** Day N of the month after `period`, as a UTC date at midnight. Null where no last day applies. */
-function lastDayUtc(period: string, side: Side, p: TatPolicy | undefined): Date | null {
+/**
+ * Day N of the month after `period`, as a UTC date at midnight. Null where no last day applies.
+ * `reopen` is the month's own "open until" from an approved request (0273): the instant
+ * after its last day in India, so its last day is the day before that, if it is later.
+ */
+function lastDayUtc(period: string, side: Side, p: TatPolicy | undefined, reopen?: string | null): Date | null {
   if (!p?.deadlines_from || period < p.deadlines_from) return null
   const day = Math.max(1, Math.min(28, side === 'manager' ? p.manager_grace_days : p.tm_grace_days))
   const [y, m] = period.split('-').map(Number)
-  return new Date(Date.UTC(y, m, day))
+  const base = Date.UTC(y, m, day)
+  if (!reopen) return new Date(base)
+  const ist = new Date(new Date(reopen).getTime() + IST_MINUTES * 60_000)
+  const own = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - 86_400_000
+  return new Date(Math.max(base, own))
 }
 
 /** The instant the last day is over. */
-export function lastDayEnds(period: string, side: Side, p: TatPolicy | undefined): Date | null {
-  const d = lastDayUtc(period, side, p)
+export function lastDayEnds(period: string, side: Side, p: TatPolicy | undefined, reopen?: string | null): Date | null {
+  const d = lastDayUtc(period, side, p, reopen)
   return d ? new Date(d.getTime() + (24 * 60 - IST_MINUTES) * 60_000) : null
 }
 
 /** "12 Oct". */
-export function lastDayLabel(period: string, side: Side, p: TatPolicy | undefined): string | null {
-  const d = lastDayUtc(period, side, p)
+export function lastDayLabel(period: string, side: Side, p: TatPolicy | undefined, reopen?: string | null): string | null {
+  const d = lastDayUtc(period, side, p, reopen)
   return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null
 }
 
-export function isPastLastDay(period: string, side: Side, p: TatPolicy | undefined, now = new Date()): boolean {
-  const end = lastDayEnds(period, side, p)
+export function isPastLastDay(period: string, side: Side, p: TatPolicy | undefined, now = new Date(), reopen?: string | null): boolean {
+  const end = lastDayEnds(period, side, p, reopen)
   return !!end && now >= end
 }
 

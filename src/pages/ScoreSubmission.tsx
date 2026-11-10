@@ -18,6 +18,7 @@ import {
 } from '@/lib/queries'
 import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
+import { ReopenRequest } from '@/components/ReopenRequest'
 import { monthLabel } from '@/lib/fy'
 import { BANDS } from '@/lib/bands'
 import {
@@ -142,8 +143,9 @@ export default function ScoreSubmission() {
   // The last days (0153). A first score is refused after the manager's;
   // a month already scored can still be revised while it is open.
   const period = submission?.period_month ?? ''
-  const pastScoreDay = !!submission && isPastLastDay(period, 'manager', policy)
-  const pastSubmitDay = !!submission && isPastLastDay(period, 'tm', policy)
+  // A month opened on an approved request (0273) has its own later last days.
+  const pastScoreDay = !!submission && isPastLastDay(period, 'manager', policy, undefined, submission.reopen_mgr_until)
+  const pastSubmitDay = !!submission && isPastLastDay(period, 'tm', policy, undefined, submission.reopen_tm_until)
   const firstScoreLate = submission?.status === 'submitted' && pastScoreDay
   const editable = (submission?.status === 'submitted' && !pastScoreDay) || submission?.status === 'scored'
 
@@ -520,6 +522,11 @@ export default function ScoreSubmission() {
       {(firstScoreLate || submission.deadline_outcome === 'not_scored') && (
         <Alert kind="error" title={`The last day to score ${monthLabel(period)} was ${lastDayLabel(period, 'manager', policy)}`}>
           {data.employee.full_name.split(' ')[0]}'s own job role score counts, with full marks for core values.
+          {/* The manager missed it, so the manager asks, straight to HR (0273). */}
+          {submission.deadline_outcome === 'not_scored' && (
+            <ReopenRequest submissionId={submission.id}
+              title={`Open ${data.employee.full_name.split(' ')[0]}'s ${monthLabel(period)}?`} sendLabel="Send to HR" />
+          )}
         </Alert>
       )}
       {submission.deadline_outcome === 'not_submitted' && (
@@ -527,9 +534,9 @@ export default function ScoreSubmission() {
           {data.employee.full_name.split(' ')[0]} did not submit it, so the month is scored 0.
         </Alert>
       )}
-      {submission.status === 'submitted' && !pastScoreDay && lastDayLabel(period, 'manager', policy) && (
-        <Alert kind="warning" title={<TimeLeft period={period} side="manager" policy={policy} />}>
-          Last day {lastDayLabel(period, 'manager', policy)}. Not scored by then, {data.employee.full_name.split(' ')[0]}'s own job role score counts, with full marks for core values.
+      {submission.status === 'submitted' && !pastScoreDay && lastDayLabel(period, 'manager', policy, submission.reopen_mgr_until) && (
+        <Alert kind="warning" title={<TimeLeft period={period} side="manager" policy={policy} reopen={submission.reopen_mgr_until} />}>
+          Last day {lastDayLabel(period, 'manager', policy, submission.reopen_mgr_until)}. Not scored by then, {data.employee.full_name.split(' ')[0]}'s own job role score counts, with full marks for core values.
         </Alert>
       )}
 

@@ -330,6 +330,9 @@ export interface KpiSubmission {
    * moves the day later.
    */
   deadline_outcome?: DeadlineOutcome | null
+  /** Opened again on an approved request (0273): the month's own last days, to the end of the day in India. */
+  reopen_tm_until?: string | null
+  reopen_mgr_until?: string | null
 }
 
 export type DeadlineOutcome = 'not_submitted' | 'not_scored'
@@ -444,6 +447,8 @@ interface TwoStageRequest {
 export interface DeletionRequest extends TwoStageRequest {
   submission_id: string
   period_month: string
+  /** A request to open a month a last day closed (kind 'reopen' in the table, 0273): whose last day it was. */
+  closed_as?: DeadlineOutcome | null
 }
 
 export interface RevisionRequest extends TwoStageRequest {
@@ -453,6 +458,7 @@ export interface RevisionRequest extends TwoStageRequest {
 
 export type RecordRequest =
   | ({ kind: 'deletion' } & DeletionRequest)
+  | ({ kind: 'reopen' } & DeletionRequest)
   | ({ kind: 'revision' } & RevisionRequest)
 
 /**

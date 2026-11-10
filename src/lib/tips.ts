@@ -64,6 +64,10 @@ export const TIPS: Tip[] = [
   { key: 'tip.query', to: '/history', toLabel: 'Assessments', when: scored },
   { key: 'tip.split', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
   { key: 'tip.startmonth', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
+  // 0273: whoever missed a last day asks, once.
+  { key: 'tip.reopen', to: '/history', toLabel: 'Assessments', when: c => c.hasKpi || c.isManager },
+  // HR's read-only look at one person (the user, 10 Nov).
+  { key: 'tip.assess', to: '/admin/reports', toLabel: 'Reports', when: c => c.isHrAdmin },
 
   // ---- the app itself
   // The install icon is in the portal, above this app's basename: the sentence says where.

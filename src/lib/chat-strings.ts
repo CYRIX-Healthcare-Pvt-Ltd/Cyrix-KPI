@@ -188,6 +188,20 @@ export const CHAT: Record<string, Phrase> = {
     te: 'మొత్తం క్యూలోని KPI లను ఒకేసారి ఆమోదించవచ్చు? ప్రతి ఒక్కటీ సరైన 80 / 20 విభజన కోసం ఇంకా తనిఖీ అవుతుంది.',
     ta: 'ஒரே நேரத்தில் முழு வரிசை KPI களையும் அங்கீகரிக்கலாம்? ஒவ்வொன்றும் சரியான 80 / 20 பிரிவுக்காக இன்னும் சரிபார்க்கப்படும்.',
   },
+  'tip.reopen': {
+    en: 'a month closed by its last day can be asked open once? Request to open is on that month, for whoever missed the day.',
+    ml: 'അവസാന ദിവസം കൊണ്ട് അടച്ച ഒരു മാസം തുറക്കാൻ ഒരിക്കൽ അപേക്ഷിക്കാം? ആ ദിവസം നഷ്ടപ്പെടുത്തിയ ആൾക്ക് ആ മാസത്തിൽ Request to open ഉണ്ട്.',
+    hi: 'आख़िरी दिन से बंद हुआ महीना एक बार खोलने का अनुरोध किया जा सकता है? जिससे वह दिन छूटा, उसके लिए उसी महीने पर Request to open है।',
+    te: 'చివరి రోజుతో మూసిన నెలను ఒక్కసారి తెరవమని అభ్యర్థించవచ్చు? ఆ రోజు తప్పినవారికి ఆ నెలపై Request to open ఉంటుంది.',
+    ta: 'கடைசி நாளால் மூடிய மாதத்தை ஒருமுறை திறக்கக் கோரலாம்? அந்த நாளைத் தவறவிட்டவருக்கு அந்த மாதத்தில் Request to open உள்ளது.',
+  },
+  'tip.assess': {
+    en: 'you can see anyone\'s assessments month by month? Reports, KPI assessment: type a name or ECODE.',
+    ml: 'ആരുടെയും വിലയിരുത്തലുകൾ മാസം തോറും കാണാം? Reports, KPI assessment: പേരോ ECODE-ഓ ടൈപ്പ് ചെയ്യുക.',
+    hi: 'किसी के भी असेसमेंट महीने-दर-महीने देख सकते हैं? Reports, KPI assessment: नाम या ECODE लिखें।',
+    te: 'ఎవరి అసెస్‌మెంట్‌లనైనా నెలవారీగా చూడవచ్చు? Reports, KPI assessment: పేరు లేదా ECODE టైప్ చేయండి.',
+    ta: 'யாருடைய மதிப்பீடுகளையும் மாதவாரியாகப் பார்க்கலாம்? Reports, KPI assessment: பெயர் அல்லது ECODE ஐ தட்டச்சு செய்யுங்கள்.',
+  },
   'tip.export': {
     en: 'you can export your team\'s scores to Excel? The month on screen, or the whole year.',
     ml: 'നിങ്ങളുടെ ടീമിന്റെ സ്കോറുകൾ Excel-ലേക്ക് എടുക്കാം? സ്ക്രീനിലുള്ള മാസം, അല്ലെങ്കിൽ വർഷം മുഴുവൻ.',

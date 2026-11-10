@@ -22,6 +22,7 @@ import {
 } from '@/lib/queries'
 import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
+import { ReopenRequest } from '@/components/ReopenRequest'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
   calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, corePoints, type ScoringRule, type RuleParams,
@@ -84,8 +85,9 @@ export default function MonthlySubmission() {
   const items = data?.items ?? []
   const { data: policy } = useTatPolicy()
   // The last day to submit (0153): after it nothing more is entered.
-  const pastLastDay = isPastLastDay(month, 'tm', policy)
-  const lastDay = lastDayLabel(month, 'tm', policy)
+  // A month opened on an approved request (0273) has its own later last day.
+  const pastLastDay = isPastLastDay(month, 'tm', policy, undefined, submission?.reopen_tm_until)
+  const lastDay = lastDayLabel(month, 'tm', policy, submission?.reopen_tm_until)
   const editable = (submission?.status === 'draft' || submission?.status === 'returned') && !pastLastDay
   // Asked of the database: it knows whether the manager has saved anything on the month.
   const { data: canRecall = false, refetch: recheckRecall } = useQuery({
@@ -462,6 +464,10 @@ export default function MonthlySubmission() {
         || (pastLastDay && (submission.status === 'draft' || submission.status === 'returned'))) && (
         <Alert kind="error" title={`The last day to submit ${monthLabel(month)} was ${lastDay}`}>
           It was not submitted, so the month is scored 0.
+          {/* The team member missed it, so the team member asks (0273). */}
+          {submission.deadline_outcome === 'not_submitted' && (
+            <ReopenRequest submissionId={submission.id} title={`Open ${monthLabel(month)}?`} sendLabel="Send to your manager" />
+          )}
         </Alert>
       )}
       {submission.deadline_outcome === 'not_scored' && (
@@ -470,7 +476,7 @@ export default function MonthlySubmission() {
         </Alert>
       )}
       {editable && lastDay && (
-        <Alert kind="warning" title={<TimeLeft period={month} side="tm" policy={policy} />}>
+        <Alert kind="warning" title={<TimeLeft period={month} side="tm" policy={policy} reopen={submission.reopen_tm_until} />}>
           Last day {lastDay}. Not submitted by then, the month is scored 0.
         </Alert>
       )}

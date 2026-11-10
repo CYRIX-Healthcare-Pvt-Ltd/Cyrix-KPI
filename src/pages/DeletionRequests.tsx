@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Trash2, Check, X, Inbox, ArrowRight, PencilRuler } from 'lucide-react'
+import { Trash2, Check, X, Inbox, ArrowRight, PencilRuler, LockOpen } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRecordRequests, useRequestAction } from '@/lib/queries'
+import { useRecordRequests, useRequestAction, useTatPolicy } from '@/lib/queries'
+import { lastDayLabel } from '@/lib/lastDay'
 import { monthLabel } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, EmptyState } from '@/components/ui'
 import { waitingLabel } from '@/lib/tat'
@@ -30,6 +31,14 @@ const KIND = {
     finalApprove: 'Approve and delete permanently',
     outcome: 'The month and its scores are removed.',
   },
+  // 0273: a month a last day closed, asked open by whoever missed it.
+  reopen: {
+    icon: LockOpen,
+    noun: 'Open a month',
+    approve: 'Approve and pass to HR',
+    finalApprove: 'Approve and open for 3 days',
+    outcome: '',
+  },
   revision: {
     icon: PencilRuler,
     noun: 'Revise a KPI',
@@ -42,7 +51,7 @@ const KIND = {
 } as const
 
 const subjectOf = (r: RecordRequest) =>
-  r.kind === 'deletion' ? monthLabel(r.period_month) : `FY ${r.financial_year} KPI`
+  r.kind === 'revision' ? `FY ${r.financial_year} KPI` : monthLabel(r.period_month)
 
 /**
  * Two things can be asked of a record that is otherwise locked: remove a
@@ -56,6 +65,7 @@ export default function DeletionRequests() {
   const [error, setError] = useState<string | null>(null)
 
   const { data, isLoading } = useRecordRequests()
+  const { data: policy } = useTatPolicy()
   const review = useRequestAction()
 
   if (isLoading) return <PageLoader />
@@ -151,6 +161,15 @@ export default function DeletionRequests() {
                       {tm?.ecode} · requested by {requester?.full_name} on{' '}
                       {new Date(request.created_at).toLocaleDateString('en-GB')}
                     </p>
+                    {/* Why it closed, naming whoever missed the last day (the user, 10 Nov:
+                        "the hr should see why it was closed is it manager or emp issue of tat"). */}
+                    {request.kind === 'reopen' && (
+                      <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-cyrixRed-50 px-2.5 py-1.5 text-sm font-medium text-cyrixRed-800">
+                        {request.closed_as === 'not_scored'
+                          ? `${requester?.full_name ?? 'The manager'} did not score by ${lastDayLabel(request.period_month, 'manager', policy) ?? 'the last day'}`
+                          : `${tm?.full_name ?? 'The team member'} did not submit by ${lastDayLabel(request.period_month, 'tm', policy) ?? 'the last day'}`}
+                      </p>
+                    )}
                     <p className="mt-2 rounded-lg bg-ink-50 p-2.5 text-sm italic text-ink-700">
                       “{request.reason}”
                     </p>
@@ -159,7 +178,7 @@ export default function DeletionRequests() {
                         Manager's note: {request.manager_note}
                       </p>
                     )}
-                    {isFinal && (
+                    {isFinal && kind.outcome && (
                       <p className="mt-2 text-xs text-ink-500">{kind.outcome}</p>
                     )}
                   </div>

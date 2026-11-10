@@ -1871,7 +1871,7 @@ export function useRecordRequests() {
     queryKey: ['record_requests'],
     queryFn: async () => {
       const [deletions, revisions] = await Promise.all([
-        unwrap<DeletionRequest[]>(
+        unwrap<Array<DeletionRequest & { kind?: string }>>(
           supabase.from('record_deletion_requests').select('*')
             .order('created_at', { ascending: false }),
         ),
@@ -1882,7 +1882,10 @@ export function useRecordRequests() {
       ])
 
       const rows: RecordRequest[] = [
-        ...deletions.map(r => ({ kind: 'deletion' as const, ...r })),
+        // One table holds both: a month to remove, and a month a last day closed to open again (0273).
+        ...deletions.map(r => r.kind === 'reopen'
+          ? { ...r, kind: 'reopen' as const }
+          : { ...r, kind: 'deletion' as const }),
         ...revisions.map(r => ({ kind: 'revision' as const, ...r })),
       ].sort((a, b) => b.created_at.localeCompare(a.created_at))
 
@@ -1920,6 +1923,24 @@ export function usePendingRecordRequests(enabled: boolean) {
   })
 }
 
+/**
+ * The request to open this month (0273), whatever became of it: a month is
+ * asked about once, so a decided one still takes the button's place.
+ */
+export function useReopenRequest(submissionId: string | undefined) {
+  return useQuery({
+    enabled: !!submissionId,
+    queryKey: ['open_request', 'reopen', submissionId],
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ status: string }>>(
+        supabase.from('record_deletion_requests').select('status')
+          .eq('submission_id', submissionId!).eq('kind', 'reopen').limit(1),
+      )
+      return rows[0] ?? null
+    },
+  })
+}
+
 /** Is there already an open request against this month or this KPI? */
 export function useOpenRequestFor(
   kind: 'deletion' | 'revision',
@@ -1945,7 +1966,7 @@ export function useRequestAction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (args: {
-      kind: 'deletion' | 'revision'
+      kind: 'deletion' | 'reopen' | 'revision'
       action: 'request' | 'review'
       /** submission_id for a deletion, assignment_id for a revision. */
       subjectId?: string
@@ -1955,11 +1976,12 @@ export function useRequestAction() {
       note?: string
     }) => {
       const fn = args.action === 'request'
-        ? (args.kind === 'deletion' ? 'request_record_deletion' : 'request_kpi_revision')
-        : (args.kind === 'deletion' ? 'review_record_deletion' : 'review_kpi_revision')
+        ? (args.kind === 'deletion' ? 'request_record_deletion'
+          : args.kind === 'reopen' ? 'request_kpi_reopen' : 'request_kpi_revision')
+        : (args.kind === 'revision' ? 'review_kpi_revision' : 'review_record_deletion')
 
       const params: Record<string, unknown> = args.action === 'request'
-        ? args.kind === 'deletion'
+        ? args.kind !== 'revision'
           ? { p_submission_id: args.subjectId, p_reason: args.reason ?? '' }
           : { p_assignment_id: args.subjectId, p_reason: args.reason ?? '' }
         : {
@@ -1971,7 +1993,8 @@ export function useRequestAction() {
       const { data, error } = await supabase.rpc(fn, params)
       if (error) throw new Error(friendlyError(error))
       // Only a new one. Reviewing is HR acting on it, not being told.
-      if (args.action === 'request') {
+      // A request to open waits in HR's queue and round-up; it has no mail of its own.
+      if (args.action === 'request' && args.kind !== 'reopen') {
         notifyHr(
           args.kind === 'deletion' ? 'record' : 'revision',
           (data as { id?: string } | null)?.id,
