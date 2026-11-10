@@ -9,6 +9,7 @@ import {
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
 import AdminsTab from './AdminsTab'
+import PlatformAdmin from './PlatformAdmin'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import CyraAccess from '@/pages/admin/CyraAccess'
@@ -2540,6 +2541,8 @@ const ADMIN_TABS = [
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
+  // The portal home (app.cyrix.in): the Rank 1s bar on or off (the user, 10 Nov, 0277).
+  { id: 'platform', label: 'Platform', short: 'Platform', icon: LayoutGrid, render: () => <PlatformAdmin /> },
   { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTab /> },
   { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
   { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
