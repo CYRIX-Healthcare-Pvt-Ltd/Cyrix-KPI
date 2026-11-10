@@ -10,7 +10,7 @@ import { supabase, friendlyError } from '@/lib/supabase'
   new refresh new summary"): the signs worth a look, on drafts as well as sent claims, real people only, one card a
   person with the reddest first. Refreshes every minute; a sign's chip at the top keeps only that sign.
 */
-type Kind = 'shared' | 'paid_time' | 'bill_low' | 'start_away' | 'too_fast' | 'short_visit' | 'long_gap' | 'day_unstarted' | 'fare_high' | 'home_unset' | 'home_map' | 'home_moved' | 'other_big' | 'km_over' | 'no_photo_near' | 'photo_late'
+type Kind = 'shared' | 'paid_time' | 'bill_low' | 'start_away' | 'too_fast' | 'short_visit' | 'long_gap' | 'day_unstarted' | 'day_unended' | 'fare_high' | 'home_unset' | 'home_map' | 'home_moved' | 'other_big' | 'km_over' | 'no_photo_near' | 'photo_late'
 type Weight = 'red' | 'amber' | 'grey'
 interface Sign { kind: Kind; weight: Weight; day: string; claim: string | null; status: string | null; detail: string; amount: number | null; point: { lat: number; lng: number } | null }
 interface Person { ecode: string; name: string; function: string | null; manager: string | null; n: number; red: number; signs: Sign[] }
@@ -19,11 +19,11 @@ interface Watch { counts: Partial<Record<Kind, number>>; people: Person[]; at: s
 const LABEL: Record<Kind, string> = {
   shared: 'Same trip on another claim', paid_time: 'Paid at another time',
   bill_low: 'Bill under amount', km_over: 'Km over map', home_unset: 'No home saved', home_map: 'Home set on map',
-  home_moved: 'Home moved', other_big: 'Big Other expense', fare_high: 'Fare over policy', start_away: 'Day not started from home', too_fast: 'Too fast between photos', short_visit: 'Short visit', long_gap: 'Long gap', day_unstarted: 'Day not started in the app', no_photo_near: 'No photo at destination', photo_late: 'Photo saved late',
+  home_moved: 'Home moved', other_big: 'Big Other expense', fare_high: 'Fare over policy', start_away: 'Day not started from home', too_fast: 'Too fast between photos', short_visit: 'Short visit', long_gap: 'Long gap', day_unstarted: 'Day not started in the app', day_unended: 'Day not ended in the app', no_photo_near: 'No photo at destination', photo_late: 'Photo saved late',
 }
-const ORDER: Kind[] = ['shared', 'paid_time', 'bill_low', 'km_over', 'home_unset', 'home_map', 'home_moved', 'too_fast', 'fare_high', 'start_away', 'day_unstarted', 'short_visit', 'long_gap', 'other_big', 'no_photo_near', 'photo_late']
+const ORDER: Kind[] = ['shared', 'paid_time', 'bill_low', 'km_over', 'home_unset', 'home_map', 'home_moved', 'too_fast', 'day_unended', 'fare_high', 'start_away', 'day_unstarted', 'short_visit', 'long_gap', 'other_big', 'no_photo_near', 'photo_late']
 const WEIGHT: Record<Kind, Weight> = {
-  shared: 'red', paid_time: 'red', bill_low: 'red', km_over: 'red', home_unset: 'red', home_map: 'amber', home_moved: 'amber', other_big: 'amber', fare_high: 'amber', start_away: 'amber', too_fast: 'red', short_visit: 'amber', long_gap: 'amber', day_unstarted: 'amber', no_photo_near: 'amber', photo_late: 'amber',
+  shared: 'red', paid_time: 'red', bill_low: 'red', km_over: 'red', home_unset: 'red', home_map: 'amber', home_moved: 'amber', other_big: 'amber', fare_high: 'amber', start_away: 'amber', too_fast: 'red', short_visit: 'amber', long_gap: 'amber', day_unstarted: 'amber', day_unended: 'red', no_photo_near: 'amber', photo_late: 'amber',
 }
 const TONE: Record<Weight, string> = {
   red: 'bg-cyrixRed-100 text-cyrixRed-900', amber: 'bg-amber-100 text-amber-900', grey: 'bg-ink-100 text-ink-700',
