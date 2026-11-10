@@ -8,6 +8,7 @@ import {
 } from '@/lib/queries'
 import { fyMonths, monthLabel, monthStart, isMonthOpen } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, StatTile } from '@/components/ui'
+import Dialog from '@/components/Dialog'
 
 /** '2026-09-01' → '1 Oct': the day that month's clock starts. */
 function firstOfNext(monthIso: string): string {
@@ -74,6 +75,39 @@ export default function KpiTiming() {
     } catch (err) {
       setFailed(err instanceof Error ? err.message : 'Could not save that.')
     }
+  }
+
+  /*
+    The first month the last days apply to (0272; the user, 10 Nov: "where is sept 26, shown?"). It was set once and shown
+    nowhere. Moving it settles or reopens months, so the change is asked first, with what it would do counted.
+  */
+  const [ask, setAsk] = useState<{ month: string; zero: number; self: number; reopen: number } | null>(null)
+  const [moving, setMoving] = useState(false)
+  const pickFrom = async (month: string) => {
+    if (!policy?.deadlines_from || month === policy.deadlines_from) return
+    setNotice(null); setFailed(null)
+    try {
+      const { data, error } = await supabase.rpc('kpi_last_days_effect', { p_from: month })
+      if (error) throw new Error(error.message)
+      const e = (data ?? {}) as { zero?: number; self?: number; reopen?: number }
+      setAsk({ month, zero: e.zero ?? 0, self: e.self ?? 0, reopen: e.reopen ?? 0 })
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : 'Could not check that.')
+    }
+  }
+  const moveFrom = async () => {
+    if (!ask) return
+    setMoving(true)
+    try {
+      const { error } = await supabase.rpc('set_kpi_last_days_from', { p_from: ask.month })
+      if (error) throw new Error(error.message)
+      await qc.invalidateQueries()
+      setNotice(`Last days now apply from ${monthLabel(ask.month)}.`)
+      setAsk(null)
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : 'Could not save that.')
+      setAsk(null)
+    } finally { setMoving(false) }
   }
 
   const saveDay = async (day: number | null) => {
@@ -147,6 +181,18 @@ export default function KpiTiming() {
             disabled={save.isPending} onChange={e => void toggleRules(e.target.checked)} />
           <span className="font-medium text-ink-900">Last days {rulesOn ? 'on' : 'off'}</span>
         </label>
+        {rulesOn && (
+          <div>
+            <label className="label" htmlFor="last-days-from">Last days apply from</label>
+            <select id="last-days-from" className="input max-w-xs" value={policy?.deadlines_from ?? ''}
+              onChange={e => void pickFrom(e.target.value)}>
+              {/* The month in force is always listed, though it be of another year. */}
+              {[...new Set([policy!.deadlines_from!, ...fyMonths(fy).filter(m => m <= monthStart(new Date()))])].sort().map(m => (
+                <option key={m} value={m}>{monthLabel(m)}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="tm-days">
@@ -278,6 +324,23 @@ export default function KpiTiming() {
         </div>
       </div>
 
+      {ask && (
+        <Dialog title={`Last days from ${monthLabel(ask.month)}?`} icon={<CalendarClock className="h-5 w-5 text-cyrixRed-600" />} onClose={() => { if (!moving) setAsk(null) }}>
+          <ul className="space-y-2 text-sm text-ink-800">
+            {ask.zero > 0 && <li><strong className="text-cyrixRed-700">{ask.zero.toLocaleString('en-IN')}</strong> {ask.zero === 1 ? 'month' : 'months'} not sent in · becomes 0</li>}
+            {ask.self > 0 && <li><strong className="text-cyrixRed-700">{ask.self.toLocaleString('en-IN')}</strong> {ask.self === 1 ? 'month' : 'months'} not scored · takes the team member's own score</li>}
+            {ask.reopen > 0 && <li><strong>{ask.reopen.toLocaleString('en-IN')}</strong> settled {ask.reopen === 1 ? 'month opens' : 'months open'} again</li>}
+            {ask.zero + ask.self + ask.reopen === 0 && <li>No month changes</li>}
+          </ul>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button type="button" className="btn-secondary" disabled={moving} onClick={() => setAsk(null)}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={moving} onClick={() => void moveFrom()}>
+              {moving ? <Spinner className="h-4 w-4" /> : null} Yes, from {monthLabel(ask.month)}
+            </button>
+          </div>
+        </Dialog>
+      )}
+
       <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-3">
         <StatTile
           label="Team member last day"
@@ -293,6 +356,11 @@ export default function KpiTiming() {
           label="Month closes on"
           value={closeDay}
           sub="of the following month"
+        />
+        <StatTile
+          label="Last days from"
+          value={<span className="text-base">{policy?.deadlines_from ? monthLabel(policy.deadlines_from) : 'Off'}</span>}
+          sub={policy?.deadlines_from ? 'earlier months have no last day' : 'no last days'}
         />
         <StatTile
           label="Counting from"
