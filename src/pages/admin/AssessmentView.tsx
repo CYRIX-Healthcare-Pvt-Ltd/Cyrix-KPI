@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Eye } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -179,10 +180,15 @@ function MonthView({ submissionId, onClose }: { submissionId: string; onClose: (
               <div key={i.id} className="rounded-xl border border-ink-200 p-3">
                 <div className="flex flex-wrap items-start gap-2">
                   <span className="badge bg-ink-100 text-ink-700">{SECTION_SHORT[i.section]}</span>
-                  <p className="min-w-0 flex-1 font-medium text-ink-900">{i.kra}</p>
+                  {/* The KRA and, under it, its KPI description (the user, 10 Nov: "nee kra descirpion also"); not for core values. */}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink-900">{i.kra}</p>
+                    {i.section !== 'core_values' && i.kpi_description?.trim() &&<p className="mt-0.5 whitespace-pre-line text-sm text-ink-600">{i.kpi_description}</p>}
+                  </div>
                   <span className="text-xs text-ink-500">{fmt(i.weightage, 0)}%</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                {/* One row on every screen: Target, Self, Manager, Score (the user, 10 Nov: "why cant be it in same row?"). */}
+                <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
                   <div><p className="text-ink-500">Target</p><p className="tabular-nums text-ink-900">{i.target_value ?? '—'}{i.target_unit ? ` ${i.target_unit}` : ''}</p></div>
                   <div><p className="text-amber-700">Self</p><p className="tabular-nums font-semibold text-amber-700">{i.self_achieved ?? '—'}</p></div>
                   <div><p className="text-emerald-700">Manager</p><p className="tabular-nums font-semibold text-emerald-700">{i.manager_achieved ?? '—'}</p></div>
@@ -205,13 +211,30 @@ function MonthView({ submissionId, onClose }: { submissionId: string; onClose: (
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ink-100">
-                  {data.ratings.map(r => (
-                    <tr key={r.id}>
-                      <td className="px-3 py-2 text-ink-800">{name.get(r.core_value_id) ?? 'Core value'}</td>
-                      <td className="px-3 py-2 text-amber-700">{r.self_rating ?? '—'}</td>
-                      <td className="px-3 py-2 font-medium text-emerald-700">{r.manager_rating ?? '—'}</td>
-                    </tr>
-                  ))}
+                  {data.ratings.map(r => {
+                    // Rated in parts (0225): each part under its core value, and the core value's average points.
+                    const parts = (data.parts ?? []).filter(p => p.rating_id === r.id).sort((x, y) => x.sort_order - y.sort_order)
+                    const pts = (v: number | null | undefined) => (v == null ? '—' : `${fmt(v)} points`)
+                    return (
+                      <Fragment key={r.id}>
+                        <tr className={parts.length ? 'bg-ink-50/60' : undefined}>
+                          <td className={clsx('px-3 py-2 text-ink-800', parts.length && 'font-semibold')}>{name.get(r.core_value_id) ?? 'Core value'}</td>
+                          <td className="px-3 py-2 text-amber-700">{parts.length ? pts(r.self_points) : r.self_rating ?? '—'}</td>
+                          <td className="px-3 py-2 font-medium text-emerald-700">{parts.length ? pts(r.manager_points) : r.manager_rating ?? '—'}</td>
+                        </tr>
+                        {parts.map(p => (
+                          <tr key={p.id}>
+                            <td className="py-2 pl-7 pr-3 text-ink-700">
+                              {p.label}
+                              {p.is_goal && p.goal?.trim() && <span className="block text-xs text-ink-500">{p.goal}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-amber-700">{p.self_rating ?? '—'}</td>
+                            <td className="px-3 py-2 font-medium text-emerald-700">{p.manager_rating ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
