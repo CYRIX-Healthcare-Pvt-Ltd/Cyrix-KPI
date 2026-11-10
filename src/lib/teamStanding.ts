@@ -9,7 +9,9 @@ import { supabase } from '@/lib/supabase'
 export type TeamRow = { employee_id: string; ecode: string; full_name: string; designation: string | null; is_me: boolean
   manager_name: string; period_month: string | null; score: number | null; team_rank: number | null; team_of: number | null
   months: number | null; team_avg: number | null; band_from: number | null; prev_rank: number | null
-  ytd_rank: number | null; ytd_of: number | null; shape: number | null }
+  ytd_rank: number | null; ytd_of: number | null; shape: number | null
+  /** The team's average job role, ESMS and core values points (0274). */
+  team_avg_job?: number | null; team_avg_esms?: number | null; team_avg_core?: number | null }
 
 export function useTeamStanding(fy: string) {
   return useQuery({

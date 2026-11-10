@@ -1,4 +1,5 @@
 import { useMemo, useState, Suspense } from 'react'
+import { useLegendArrival } from '@/components/LegendCrest'
 import { lazyRoute } from '@/lib/lazyRoute'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
@@ -75,6 +76,10 @@ export default function Dashboard() {
   // Hidden while the team answer loads, then only when the team card shows (no flash on a reload).
   const team = useTeamStanding(fy)
   const teamShown = !team.isError && (!team.data || teamCardShows(team.data))
+  // Team rank 1 in the month being assessed (the user, 10 Nov: "current month means, now running kpi month";
+  // "we need only in team"): the header turns gold.
+  const champ = team.data?.find(r => r.is_me && r.period_month?.slice(0, 10) === month && r.team_rank === 1) ?? null
+  const legendPlay = useLegendArrival(champ ? month : null)
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.
   const otherLangs = READY_LANGS
@@ -150,6 +155,10 @@ export default function Dashboard() {
         subtitle={`FY ${fy} · reporting on ${monthLabel(month)}`}
         score={annual?.avg_total_score}
         scoreLabel="My year average"
+        legend={champ ? {
+          month: monthLabel(month), of: champ.team_of ?? 0, play: legendPlay,
+          team: `${(champ.manager_name ?? '').split(' ')[0]}'s team`,
+        } : null}
       />
 
       {kpiStatus === null && (
@@ -300,7 +309,9 @@ export default function Dashboard() {
         </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
+      {/* Not with the team card, which has the month's score and the split (the user, 10 Nov: "that oct status not
+          needed ... oct scored already we have in that my place container"). Without it, the tiles stay. */}
+      {!teamShown && <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
         <StatTile
           label={`${monthLabel(month)} status`}
           value={monthInScope
@@ -367,7 +378,7 @@ export default function Dashboard() {
             ? `out of ${JOB_ROLE_TOTAL}, ${esmsWeight} and ${coreWeight}`
             : `out of ${JOB_ROLE_TOTAL} and ${coreWeight}`}
         />
-      </div>
+      </div>}
 
       {/* Hidden while the team card below shows my line month by month (the user, 9 Nov: "already we are showing my
           graph twice so better remove top line graph"); somebody without the team card keeps it. */}
@@ -391,7 +402,12 @@ export default function Dashboard() {
       {/* Where I stand in my manager's team (0262–0268); back from its draft on the user's word, 6 Nov: "bring back the
           team card on dashboard". */}
       <Suspense fallback={null}>
-        <TeamStanding fy={fy} />
+        <TeamStanding fy={fy} hasEsms={hasEsms}
+          yearSplit={annual ? { job: annual.avg_job_role_score, esms: annual.avg_esms_score, core: annual.avg_core_values_score } : null}
+          monthSplit={mo => {
+            const s = (history ?? []).find(h => h.period_month === mo && SCORED.has(h.status))
+            return s ? { job: s.final_job_role_score, esms: s.final_esms_score, core: s.final_core_score } : null
+          }} />
       </Suspense>
 
       {/* ---- what to work on ---- */}

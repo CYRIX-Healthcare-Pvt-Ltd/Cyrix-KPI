@@ -114,22 +114,46 @@ function Tiles({ m, months }: { m: Member; months: string[] }) {
   )
 }
 
-export default function TeamStanding({ fy }: { fy: string }) {
+type Split = { job: number | null | undefined; esms: number | null | undefined; core: number | null | undefined }
+
+/** "Job 73.3 · Core 17.8", small under a score. */
+function SplitLine({ sp, hasEsms }: { sp: Split | null | undefined; hasEsms?: boolean }) {
+  if (!sp) return null
+  const f = (n: number | null | undefined) => (n == null ? '—' : Number(n).toFixed(1))
+  return (
+    <p className="mt-0.5 text-[11px] tabular-nums text-ink-500">
+      Job <span className="font-semibold text-ink-700">{f(sp.job)}</span>
+      {hasEsms && <> · ESMS <span className="font-semibold text-ink-700">{f(sp.esms)}</span></>}
+      {' '}· Core <span className="font-semibold text-ink-700">{f(sp.core)}</span>
+    </p>
+  )
+}
+
+export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
+  fy: string
+  /** What my score is made of, small under it (the user, 10 Nov: "better show the split in small inside that also"). */
+  yearSplit?: Split | null
+  monthSplit?: (month: string) => Split | null
+  hasEsms?: boolean
+}) {
   const { data: rows } = useTeamStanding(fy)
-  const { members, months, manager, teamAvg } = useMemo(() => {
+  const { members, months, manager, teamAvg, teamSplit } = useMemo(() => {
     const by = new Map<string, Member>()
     const avgs = new Map<string, number>() // 'year', or the month
+    const avgSplit = new Map<string, Split>()
     for (const r of rows ?? []) {
       if (!by.has(r.employee_id)) by.set(r.employee_id, { id: r.employee_id, name: r.full_name, designation: r.designation, me: r.is_me, year: null, scores: new Map() })
       if (r.team_rank == null) continue
       const mark = { rank: r.team_rank, of: r.team_of ?? 0, months: r.months ?? 1, score: r.score == null ? null : Number(r.score), band: r.band_from, prev: r.prev_rank, ytd: r.ytd_rank, ytdOf: r.ytd_of, shape: r.shape == null ? null : Number(r.shape) }
       const key = r.period_month ? r.period_month.slice(0, 10) : 'year'
       if (r.team_avg != null) avgs.set(key, Number(r.team_avg))
+      if (r.team_avg_job != null || r.team_avg_core != null)
+        avgSplit.set(key, { job: r.team_avg_job == null ? null : Number(r.team_avg_job), esms: r.team_avg_esms == null ? null : Number(r.team_avg_esms), core: r.team_avg_core == null ? null : Number(r.team_avg_core) })
       if (r.period_month) by.get(r.employee_id)!.scores.set(key, mark)
       else by.get(r.employee_id)!.year = mark
     }
     const ms = [...new Set([...by.values()].flatMap(m => [...m.scores.keys()]))].sort()
-    return { members: [...by.values()], months: ms, manager: rows?.[0]?.manager_name ?? '', teamAvg: avgs }
+    return { members: [...by.values()], months: ms, manager: rows?.[0]?.manager_name ?? '', teamAvg: avgs, teamSplit: avgSplit }
   }, [rows])
   const [view, setView] = useState<'year' | 'month'>('year')
   const dark = useIsDark()
@@ -201,10 +225,13 @@ export default function TeamStanding({ fy }: { fy: string }) {
         <div className="rounded-lg bg-ink-50 px-3 py-2">
           <p className="text-xs text-ink-500">My score</p>
           <p className="text-xl font-semibold tabular-nums text-ink-900">{mine?.score != null ? mine.score.toFixed(2) : '—'}</p>
+          {mine?.score != null && <SplitLine sp={view === 'year' ? yearSplit : monthSplit?.(latest)} hasEsms={hasEsms} />}
         </div>
         <div className="rounded-lg bg-ink-50 px-3 py-2">
           <p className="text-xs text-ink-500">Team average</p>
           <p className="text-xl font-semibold tabular-nums text-ink-900">{avgNow?.toFixed(2) ?? '—'}</p>
+          {/* The team's split beside mine (the user, 10 Nov: "need team avr job and core split also"). */}
+          {avgNow != null && <SplitLine sp={teamSplit.get(view === 'year' ? 'year' : latest)} hasEsms={hasEsms} />}
         </div>
       </div>
 
