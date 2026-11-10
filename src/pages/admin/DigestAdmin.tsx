@@ -3,7 +3,7 @@ import { htmlToMd } from '@/lib/htmlToMd'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
-import FormBuilder, { blankQuestion, blankQuizQuestion, type Question } from '@/components/FormBuilder'
+import FormBuilder, { blankQuestion, blankQuizQuestion, subFrom, subRule, type Question } from '@/components/FormBuilder'
 import DigestAccess from '@/components/DigestAccess'
 import MultiPick from '@/components/MultiPick'
 import DigestSendTo from '@/components/DigestSendTo'
@@ -275,7 +275,8 @@ export default function DigestAdmin() {
       if (d.kind === 'form') {
         const { error: fe } = await supabase.rpc('digest_set_form', {
           p_id: id,
-          p_questions: d.questions.map(q => ({ ...q, label: q.label.trim(), options: q.options.map(o => o.trim()).filter(Boolean) })),
+          p_questions: d.questions.map(q => ({ ...q, label: q.label.trim(), options: q.options.map(o => o.trim()).filter(Boolean),
+            subs: (q.subs ?? []).map(sq => ({ id: sq.id, label: sq.label.trim(), ...subRule(sq, q.qtype) })) })),
           p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
         })
         if (fe) throw new Error(friendlyError(fe))
@@ -374,6 +375,7 @@ export default function DigestAdmin() {
   if (d.kind === 'video' && !youTubeId(d.video)) missing.push('YouTube link')
   if (d.kind === 'form') {
     if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
+    if (d.questions.some(q => (q.subs ?? []).some(sq => !sq.label.trim()))) missing.push('every sub-question')
     if (d.questions.some(q => (q.qtype === 'one' || q.qtype === 'many') && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
     if (!d.closes) missing.push('Closes')
   }
@@ -764,7 +766,7 @@ export default function DigestAdmin() {
                 {/* A labelled button, not a bare pencil (the user, 6 Nov: "edit button not clearly visible for users"). */}
                 {r.can_edit && <button type="button" className="btn-secondary shrink-0 !gap-1.5 !px-3 !py-1.5 text-sm" onClick={async () => {
                   const form = r.kind === 'form'
-                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number }> | null) ?? []
+                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number; parent_id?: string | null; required_if?: string | null }> | null) ?? []
                     : r.kind === 'quiz'
                     ? (((await supabase.rpc('digest_quiz', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; correct: string[] | null }> | null) ?? [])
                         .map(q => ({ ...q, required: true, answered: 0, right: q.options.flatMap((o, k) => (q.correct?.includes(o) ? [k] : [])), accepted: q.qtype === 'short' ? q.correct ?? [''] : undefined }))
@@ -785,7 +787,8 @@ export default function DigestAdmin() {
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
                     options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
-                    questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+                    questions: form.length ? form.filter(q => !('parent_id' in q && q.parent_id)).map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted,
+                      subs: form.filter(x => 'parent_id' in x && x.parent_id === q.id).map(x => subFrom({ id: x.id, label: x.label, required: x.required, required_if: ('required_if' in x ? x.required_if : null) ?? null })) })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
                     anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
                     to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
@@ -915,7 +918,11 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const { data: questions = [] } = useQuery({
     queryKey: ['digest_form_q', row.id],
     enabled: ASKS(row.kind),
-    queryFn: async () => ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string }>,
+    // A sub-question's column carries its question's wording first (0278).
+    queryFn: async () => {
+      const rows = ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string; parent_id?: string | null }>
+      return rows.map(q => (q.parent_id ? { ...q, label: `${rows.find(x => x.id === q.parent_id)?.label ?? ''} — ${q.label}` } : q))
+    },
   })
   // A quiz's scores (0253), by E-code.
   const { data: scores } = useQuery({

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArrowDown, ArrowUp, Check, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CornerDownRight, Plus, X } from 'lucide-react'
 
 /**
  * The questions of a Cyrix Digest form (0181; the user, 12 Oct: "can we add forms also?").
@@ -12,7 +12,26 @@ export interface Question {
   right?: number[]; points?: number
   /** A quiz's Text question (0255): the answers it accepts, matched without regard to capitals or spaces. */
   accepted?: string[]
+  /** A form's sub-questions (0278): long text under this question, with its own wording and rule. */
+  subs?: SubQuestion[]
 }
+
+/**
+ * A long-text sub-question under a form question (0278; the user, 10 Nov: "how is my performance, 1-5, so on same qstn
+ * under that, tell me whr to improve as long text box"). Optional, required, or required only when the rating is below
+ * a number or the answer is No.
+ */
+export interface SubQuestion { id?: string; label: string; need: 'optional' | 'always' | 'below' | 'no'; below?: number }
+/** The rule as the database keeps it: required, and required_if 'below:N' or 'no'. */
+export const subRule = (s: SubQuestion, parent: QType) => ({
+  required: s.need === 'always',
+  required_if: s.need === 'below' && parent === 'rating' ? `below:${s.below ?? 3}` : s.need === 'no' && parent === 'yesno' ? 'no' : null,
+})
+/** Back from the database's required and required_if. */
+export const subFrom = (r: { id: string; label: string; required: boolean; required_if: string | null }): SubQuestion =>
+  r.required_if === 'no' ? { id: r.id, label: r.label, need: 'no' }
+    : r.required_if?.startsWith('below:') ? { id: r.id, label: r.label, need: 'below', below: Number(r.required_if.slice(6)) }
+    : { id: r.id, label: r.label, need: r.required ? 'always' : 'optional' }
 
 export const QTYPES: Array<[QType, string]> = [
   ['short', 'Short text'], ['long', 'Long text'], ['one', 'One choice'], ['many', 'Many choices'],
@@ -105,6 +124,46 @@ export default function FormBuilder({ questions, onChange, quiz = false, locked 
               {(q.accepted?.length ?? 1) < 10 && (
                 <button type="button" className="text-sm font-medium text-violet-700 hover:underline" onClick={() => put(i, { accepted: [...(q.accepted?.length ? q.accepted : ['']), ''] })}>
                   + Also accept
+                </button>
+              )}
+            </div>
+          )}
+          {!quiz && (
+            <div className="space-y-2 pl-8">
+              {(q.subs ?? []).map((sq, k) => {
+                const putSub = (patch: Partial<SubQuestion>) => put(i, { subs: (q.subs ?? []).map((x, j) => (j === k ? { ...x, ...patch } : x)) })
+                // A rule that no longer fits the question's type reads as Required.
+                const need = (sq.need === 'below' && q.qtype !== 'rating') || (sq.need === 'no' && q.qtype !== 'yesno') ? 'always' : sq.need
+                const value = need === 'below' ? `below:${sq.below ?? 3}` : need
+                return (
+                  <div key={sq.id ?? k} className="rounded-lg border border-violet-200 bg-surface p-2">
+                    <div className="flex items-center gap-2">
+                      <CornerDownRight className="h-4 w-4 shrink-0 text-violet-500" />
+                      <input className="input !py-1.5" maxLength={200} value={sq.label} placeholder="Tell us where to improve"
+                        onChange={e => putSub({ label: e.target.value })} aria-label={`Question ${i + 1}, sub-question ${k + 1}`} />
+                      <button type="button" className="btn-icon text-ink-400 hover:text-cyrixRed-600" title="Remove sub-question"
+                        onClick={() => put(i, { subs: (q.subs ?? []).filter((_, j) => j !== k) })}><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-6">
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Long text</span>
+                      <select className="input !w-auto !py-1 text-sm" value={value} aria-label="When it must be answered"
+                        onChange={e => {
+                          const v = e.target.value
+                          putSub(v.startsWith('below:') ? { need: 'below', below: Number(v.slice(6)) } : { need: v as SubQuestion['need'] })
+                        }}>
+                        <option value="optional">Optional</option>
+                        <option value="always">Required</option>
+                        {q.qtype === 'rating' && [2, 3, 4, 5].map(n => <option key={n} value={`below:${n}`}>Required if rating below {n}</option>)}
+                        {q.qtype === 'yesno' && <option value="no">Required if No</option>}
+                      </select>
+                    </div>
+                  </div>
+                )
+              })}
+              {(q.subs?.length ?? 0) < 5 && (
+                <button type="button" className="text-sm font-medium text-violet-700 hover:underline"
+                  onClick={() => put(i, { subs: [...(q.subs ?? []), { label: '', need: q.qtype === 'rating' ? 'below' : q.qtype === 'yesno' ? 'no' : 'optional', below: 3 }] })}>
+                  + Sub-question
                 </button>
               )}
             </div>
