@@ -2084,7 +2084,7 @@ export function useSetPushEnabled() {
 }
 
 /** Messages from HR or SW Admin, in the bell (0158). */
-export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean }
+export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean; image?: string | null }
 
 export function useMyMessages(employeeId: string | undefined, enabled: boolean) {
   return useQuery({
