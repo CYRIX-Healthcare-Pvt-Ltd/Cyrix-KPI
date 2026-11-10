@@ -78,7 +78,8 @@ export default function Dashboard() {
   const teamShown = !team.isError && (!team.data || teamCardShows(team.data))
   // Team rank 1 in the month being assessed (the user, 10 Nov: "current month means, now running kpi month";
   // "we need only in team"): the header turns gold.
-  const champ = team.data?.find(r => r.is_me && r.period_month?.slice(0, 10) === month && r.team_rank === 1) ?? null
+  // Ties are broken in kpi_team_standing (0275); one person scored is no contest (the user, 10 Nov).
+  const champ = team.data?.find(r => r.is_me && r.period_month?.slice(0, 10) === month && r.team_rank === 1 && (r.team_of ?? 0) > 1) ?? null
   const legendPlay = useLegendArrival(champ ? month : null)
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.

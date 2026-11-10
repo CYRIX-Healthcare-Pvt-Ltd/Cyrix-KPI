@@ -83,8 +83,9 @@ export function ScoreHeader({
         <div className="min-w-0">
           {/* Rank 1: "Hello," gold and still, the name gold and shining (the user, 10 Nov: "always name is imp"). */}
           <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">
-            {legend && typeof title === 'string' && title.includes(', ')
-              ? <><span className="lc-gold-still text-xl sm:text-2xl">{title.slice(0, title.indexOf(', ') + 2)}</span><span className="lc-gold-name">{title.slice(title.indexOf(', ') + 2)}</span></>
+            {/* "Hello," a size under the name for everybody (the user, 10 Nov: "for all hello should be 20 px"). */}
+            {typeof title === 'string' && title.includes(', ')
+              ? <><span className={clsx('text-xl sm:text-2xl', legend && 'lc-gold-still')}>{title.slice(0, title.indexOf(', ') + 2)}</span><span className={clsx(legend && 'lc-gold-name')}>{title.slice(title.indexOf(', ') + 2)}</span></>
               : <span className={clsx(legend && 'lc-gold-name')}>{title}</span>}
           </h1>
           {subtitle && (
