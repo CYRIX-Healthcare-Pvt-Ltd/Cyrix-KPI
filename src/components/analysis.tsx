@@ -81,7 +81,12 @@ export function ScoreHeader({
           with nothing. Left on a phone, right beside the title. */}
       <div className="relative flex flex-wrap items-end justify-between gap-4 p-6 sm:gap-6 sm:p-7">
         <div className="min-w-0">
-          <h1 className={clsx('text-2xl font-bold tracking-tight sm:text-[28px]', legend && 'lc-gold-name')}>{title}</h1>
+          {/* Rank 1: "Hello," gold and still, the name gold and shining (the user, 10 Nov: "always name is imp"). */}
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">
+            {legend && typeof title === 'string' && title.includes(', ')
+              ? <><span className="lc-gold-still text-xl sm:text-2xl">{title.slice(0, title.indexOf(', ') + 2)}</span><span className="lc-gold-name">{title.slice(title.indexOf(', ') + 2)}</span></>
+              : <span className={clsx(legend && 'lc-gold-name')}>{title}</span>}
+          </h1>
           {subtitle && (
             <p className="mt-1.5 text-sm text-white/50">{subtitle}</p>
           )}

@@ -49,10 +49,10 @@ export function LegendLine({ month, of, team, play }: { month: string; of: numbe
         <span key={i} aria-hidden className="lc-spark pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 rounded-full sm:left-auto sm:right-16"
           style={{ ['--x' as string]: `${x}px`, ['--y' as string]: `${y}px`, animationDelay: `${700 + i * 120}ms` }} />
       ))}
-      <p className="lc-words lc-metal whitespace-nowrap font-serif text-xl font-extrabold uppercase leading-tight tracking-[.12em] sm:text-2xl">
+      <p className="lc-words lc-metal whitespace-nowrap text-lg font-extrabold uppercase leading-tight tracking-[.12em] sm:text-xl">
         Rank 1 · {month}
       </p>
-      <p className="lc-words lc-sub whitespace-nowrap text-[11px] font-semibold uppercase tracking-[.18em]">
+      <p className="lc-words lc-sub whitespace-nowrap text-[10px] font-semibold uppercase tracking-[.18em]">
         {team} · of {of}
       </p>
 
@@ -99,7 +99,10 @@ export function LegendLine({ month, of, team, play }: { month: string; of: numbe
         .lc-hero-play .lc-spot{animation-name:lc-fade;animation-duration:1.6s;animation-timing-function:ease-out;animation-iteration-count:1;animation-fill-mode:both}
         @keyframes lc-fade{from{opacity:0}to{opacity:1}}
         .lc-gold-num{background:linear-gradient(180deg,#fffaf0 0%,${GOLD.light} 32%,${GOLD.bright} 64%,${GOLD.base} 88%,${GOLD.deep});-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px ${GOLD.base}40) drop-shadow(0 1px 0 rgba(0,0,0,.45))}
-        .lc-gold-name{background:linear-gradient(180deg,#fffaf0 0%,${GOLD.light} 45%,${GOLD.bright} 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 0 rgba(0,0,0,.4))}
+        .lc-gold-name{background:linear-gradient(110deg,transparent 38%,rgba(255,255,255,.95) 48%,rgba(255,255,255,.95) 52%,transparent 62%) no-repeat,linear-gradient(180deg,#fffaf0 0%,${GOLD.light} 45%,${GOLD.bright} 100%);background-size:250% 100%,100% 100%;background-position:160% 0,0 0;-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 0 rgba(0,0,0,.4));animation:lc-name-shine 5s ease-in-out 1.5s infinite}
+        @keyframes lc-name-shine{0%{background-position:160% 0,0 0}40%,100%{background-position:-60% 0,0 0}}
+        .lc-gold-still{background:linear-gradient(180deg,#fffaf0 0%,${GOLD.light} 45%,${GOLD.bright} 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 0 rgba(0,0,0,.4))}
+        @media (prefers-reduced-motion:reduce){.lc-gold-name{animation:none}}
         .lc-gold-chip{color:${GOLD.light};background:${GOLD.deep}26;box-shadow:inset 0 0 0 1px ${GOLD.base}b3}
         @media (prefers-reduced-motion:reduce){.lc *,.lc-flow *,.lc-flow::after,.lc-metal{animation:none!important}.lc-spark{display:none}}
       `}</style>
