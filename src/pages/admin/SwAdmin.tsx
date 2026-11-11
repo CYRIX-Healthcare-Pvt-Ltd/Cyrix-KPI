@@ -1515,6 +1515,8 @@ const CONTRACTS: { id: string; label: string }[] = [
   // A project of its own in BEMMP, not a contract export (BEMMP 0012; the user, 31 Oct).
   { id: 'mt', label: 'Medtronic' },
   { id: 'pm', label: 'PM checklist' },
+  // A module like the others (KPI 0279; the user, 11 Nov): ticked here, roles on the Quotation tracker sub-tab.
+  { id: 'qt', label: 'Quotation tracker' },
 ]
 
 /** BEMMP's Quotation tracker (BEMMP 0015, 0027; the user, 11 Nov): one role each, engineers under a Team Lead. */
@@ -1679,6 +1681,8 @@ function BemmpTab() {
    * does it this way.
    */
   const [picking, setPicking] = useState<BemmpProfile | null>(null)
+  // Modules in a pop-up (the user, 11 Nov): the column stays one button however many modules there are.
+  const [modsFor, setModsFor] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>([])
 
   const update = useMutation({
@@ -1751,6 +1755,7 @@ function BemmpTab() {
     const tlName = (c: string | null) => (c && qtByCode.get(c)?.name) || ''
     const q = search.trim().toLowerCase()
     const rows = people
+      .filter(r => (r.scope ?? []).includes('qt'))
       .map(r => ({ r, p: qtByCode.get(r.code) }))
       .filter(({ r, p }) => (qtRole === 'all' || (qtRole === '' ? !p : p?.role === qtRole))
         && (!q || r.code.toLowerCase().includes(q) || (r.full_name ?? '').toLowerCase().includes(q)))
@@ -1760,7 +1765,7 @@ function BemmpTab() {
           : tlName(x.p?.team_lead_ecode ?? null) || '~'
         return (qtSort.asc ? 1 : -1) * (v(a).localeCompare(v(b)) || (a.r.full_name ?? '').localeCompare(b.r.full_name ?? ''))
       })
-    const count = (v: string) => people.filter(r => qtByCode.get(r.code)?.role === v).length
+    const count = (v: string) => people.filter(r => (r.scope ?? []).includes('qt') && qtByCode.get(r.code)?.role === v).length
     const QTh = ({ k, label }: { k: 'name' | 'role' | 'tl'; label: string }) => (
       <th className="px-3 py-2.5">
         <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-ink-900"
@@ -1884,7 +1889,7 @@ function BemmpTab() {
             <tr>
               <th className="px-3 py-2.5">Employee</th>
               <th className="px-3 py-2.5">Role</th>
-              <th className="px-3 py-2.5">Contracts</th>
+              <th className="px-3 py-2.5">BEMMP modules</th>
               <th className="px-3 py-2.5">Area</th>
               <th className="px-3 py-2.5">Cyra</th>
             </tr>
@@ -1915,42 +1920,20 @@ function BemmpTab() {
                   </td>
 
                   <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {CONTRACTS.map(c => {
-                        const on = scope.includes(c.id)
-                        return (
-                          <button
-                            key={c.id}
-                            aria-pressed={on}
-                            disabled={update.isPending}
-                            onClick={() => update.mutate({
-                              id: r.id,
-                              patch: {
-                                scope: on
-                                  ? scope.filter(s => s !== c.id)
-                                  : [...scope, c.id],
-                              },
-                            })}
-                            className={clsx(
-                              'badge cursor-pointer transition-colors disabled:opacity-50',
-                              on ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
-                                 : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
-                            )}
-                          >
-                            {c.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {scope.length === 0 && qtByCode.has(r.code) && (
-                      <p className="mt-1 text-xs text-ink-500">Quotation tracker only</p>
-                    )}
-                    {scope.length === 0 && !qtByCode.has(r.code) && (
-                      // Empty means none here, not everything — the opposite of
-                      // what it means for the area below, which is exactly the
-                      // confusion that once left everybody locked out.
-                      <p className="mt-1 text-xs text-cyrixRed-600">Sees nothing</p>
-                    )}
+                    {(() => {
+                      const held = CONTRACTS.filter(c => scope.includes(c.id))
+                      return (
+                        <button type="button" onClick={() => setModsFor(r.id)}
+                          title={held.map(c => c.label).join(', ') || 'No modules'}
+                          className={clsx('flex w-52 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs hover:border-ink-400',
+                            held.length ? 'border-ink-200 text-ink-700' : 'border-cyrixRed-600/60 text-cyrixRed-600')}>
+                          <span className="min-w-0 flex-1 truncate">
+                            {held.length ? <><span className="font-semibold text-ink-900">{held.length}</span> · {held.map(c => c.label).join(', ')}</> : 'Sees nothing'}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                        </button>
+                      )
+                    })()}
                   </td>
 
                   <td className="px-3 py-2.5">
@@ -2025,6 +2008,46 @@ function BemmpTab() {
         </p>
       )}
       {/* The whole set, saved once. */}
+      {modsFor && (() => {
+        const r = people.find(x => x.id === modsFor)
+        if (!r) return null
+        const scope = r.scope ?? []
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setModsFor(null) }}>
+            <div className="card w-full max-w-sm p-4" role="dialog" aria-modal="true" aria-label={`BEMMP modules for ${r.full_name ?? r.code}`}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="font-medium text-ink-900">BEMMP modules · {r.full_name ?? r.code}</p>
+                <button type="button" className="btn-icon" onClick={() => setModsFor(null)} aria-label="Close"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="space-y-1">
+                {CONTRACTS.map(c => {
+                  const on = scope.includes(c.id)
+                  return (
+                    <label key={c.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-ink-800 hover:bg-ink-100">
+                      <input type="checkbox" className="h-4 w-4 rounded border-ink-300" checked={on}
+                        disabled={update.isPending || qtRemove.isPending}
+                        onChange={async () => {
+                          // Taking the tracker away takes the tracker role too; refused while the person holds open requests.
+                          const qp = qtByCode.get(r.code)
+                          if (on && c.id === 'qt' && qp) {
+                            try { await qtRemove.mutateAsync(qp.employee_id) } catch { return }
+                          }
+                          update.mutate({ id: r.id, patch: { scope: on ? scope.filter(x => x !== c.id) : [...scope, c.id] } })
+                        }} />
+                      {c.label}
+                    </label>
+                  )
+                })}
+              </div>
+              {error && <p className="mt-2 text-xs text-cyrixRed-600">{error}</p>}
+              <div className="mt-3 flex justify-end">
+                <button type="button" className="btn-primary" onClick={() => setModsFor(null)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {picking && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
