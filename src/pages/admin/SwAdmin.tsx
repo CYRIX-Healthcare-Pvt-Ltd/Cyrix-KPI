@@ -1517,6 +1517,84 @@ const CONTRACTS: { id: string; label: string }[] = [
   { id: 'pm', label: 'PM checklist' },
 ]
 
+/** BEMMP's Quotation tracker (BEMMP 0015, 0027; the user, 11 Nov): one role each, engineers under a Team Lead. */
+const QT_ROLES: { value: string; label: string }[] = [
+  { value: '', label: 'Off' },
+  { value: 'engineer', label: 'Engineer' },
+  { value: 'team_lead', label: 'Team Lead' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'purchase', label: 'Purchase' },
+  { value: 'pv', label: 'PV' },
+]
+
+interface QtPerson {
+  employee_id: string
+  ecode: string
+  name: string
+  role: string
+  lead: boolean
+  team_lead_ecode: string | null
+}
+
+function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
+  code: string
+  person: QtPerson | undefined
+  teamLeads: QtPerson[]
+  busy: boolean
+  onSave: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => void
+  onRemove: (employeeId: string) => void
+}) {
+  // Engineer waits here until a Team Lead is chosen; the server refuses an engineer without one.
+  const [pending, setPending] = useState<string | null>(null)
+  const role = pending ?? person?.role ?? ''
+  const lead = person?.lead ?? false
+  return (
+    <div className="flex min-w-44 flex-col gap-1.5">
+      <select
+        className="input h-8 py-0 text-sm"
+        value={role}
+        disabled={busy}
+        onChange={e => {
+          const v = e.target.value
+          if (!v) { setPending(null); if (person) onRemove(person.employee_id); return }
+          if (v === 'engineer' && !person?.team_lead_ecode) { setPending('engineer'); return }
+          setPending(null)
+          onSave({ ecode: code, role: v, lead, team_lead_ecode: v === 'engineer' ? person?.team_lead_ecode ?? null : null })
+        }}
+      >
+        {QT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+      </select>
+      {role === 'engineer' && (
+        <select
+          className={clsx('input h-8 py-0 text-sm', pending && 'border-cyrixRed-600')}
+          value={pending ? '' : person?.team_lead_ecode ?? ''}
+          disabled={busy}
+          onChange={e => {
+            if (!e.target.value) return
+            setPending(null)
+            onSave({ ecode: code, role: 'engineer', lead, team_lead_ecode: e.target.value })
+          }}
+        >
+          <option value="">Team Lead…</option>
+          {teamLeads.map(t => <option key={t.ecode} value={t.ecode}>{t.name} ({t.ecode})</option>)}
+        </select>
+      )}
+      {person && !pending && (
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-500">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-[color:var(--score-accent)]"
+            checked={lead}
+            disabled={busy}
+            onChange={e => onSave({ ecode: code, role: person.role, lead: e.target.checked, team_lead_ecode: person.team_lead_ecode })}
+          />
+          Lead
+        </label>
+      )}
+    </div>
+  )
+}
+
 function BemmpTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
@@ -1621,6 +1699,33 @@ function BemmpTab() {
 
   const cyraOn = useMemo(() => people.filter(r => r.cyra).length, [people])
 
+  const { data: qtPeople } = useQuery({
+    queryKey: ['qt_people'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('qt_people_list')
+      if (error) throw error
+      return (data ?? []) as QtPerson[]
+    },
+  })
+  const qtByCode = useMemo(() => new Map((qtPeople ?? []).map(p => [p.ecode, p])), [qtPeople])
+  const teamLeads = useMemo(() => (qtPeople ?? []).filter(p => p.role === 'team_lead'), [qtPeople])
+  const qtSave = useMutation({
+    mutationFn: async (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => {
+      const { error } = await supabase.rpc('qt_save_person', { p })
+      if (error) throw error
+    },
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ['qt_people'] }) },
+    onError: (e) => setError(friendlyError(e)),
+  })
+  const qtRemove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('qt_remove_person', { p_employee: id })
+      if (error) throw error
+    },
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ['qt_people'] }) },
+    onError: (e) => setError(friendlyError(e)),
+  })
+
   if (isLoading || holdersLoading) return <PageLoader />
 
   return (
@@ -1681,6 +1786,7 @@ function BemmpTab() {
               <th className="px-3 py-2.5">Role</th>
               <th className="px-3 py-2.5">Contracts</th>
               <th className="px-3 py-2.5">Area</th>
+              <th className="px-3 py-2.5">Quotation</th>
               <th className="px-3 py-2.5">Cyra</th>
             </tr>
           </thead>
@@ -1789,6 +1895,17 @@ function BemmpTab() {
                         {(r.districts ?? []).join(', ')}
                       </p>
                     )}
+                  </td>
+
+                  <td className="px-3 py-2.5 align-top">
+                    <QuotationCell
+                      code={r.code}
+                      person={qtByCode.get(r.code)}
+                      teamLeads={teamLeads}
+                      busy={qtSave.isPending || qtRemove.isPending}
+                      onSave={p => qtSave.mutate(p)}
+                      onRemove={id => qtRemove.mutate(id)}
+                    />
                   </td>
 
                   <td className="px-3 py-2.5">
