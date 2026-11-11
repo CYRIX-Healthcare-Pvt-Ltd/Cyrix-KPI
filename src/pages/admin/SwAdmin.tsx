@@ -1525,6 +1525,7 @@ const QT_ROLES: { value: string; label: string }[] = [
   { value: 'coordinator', label: 'Coordinator' },
   { value: 'purchase', label: 'Purchase' },
   { value: 'pv', label: 'PV' },
+  { value: 'observer', label: 'Observer' },
 ]
 
 interface QtPerson {
@@ -1549,7 +1550,7 @@ function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
   const role = pending ?? person?.role ?? ''
   const lead = person?.lead ?? false
   return (
-    <div className="flex min-w-44 flex-col gap-1.5">
+    <div className="grid min-w-44 grid-cols-1 gap-1.5 sm:grid-cols-2">
       <select
         className="input h-8 py-0 text-sm"
         value={role}
@@ -1726,16 +1727,115 @@ function BemmpTab() {
     onError: (e) => setError(friendlyError(e)),
   })
 
+  // Sub-tabs (the user, 11 Nov): BEMMP's own access, then each sub-module's settings.
+  const [sub, setSub] = useState<'access' | 'qt'>('access')
+  const [qtRole, setQtRole] = useState('all')
+  const [qtSort, setQtSort] = useState<{ key: 'name' | 'role' | 'tl'; asc: boolean }>({ key: 'role', asc: true })
+
   if (isLoading || holdersLoading) return <PageLoader />
+
+  const subTabs = (
+    <div className="flex gap-1.5 overflow-x-auto">
+      {([['access', 'Access'], ['qt', 'Quotation tracker']] as const).map(([id, label]) => (
+        <button key={id} type="button" aria-pressed={sub === id} onClick={() => setSub(id)}
+          className={clsx('badge shrink-0 cursor-pointer px-3 py-1.5 text-sm transition-colors',
+            sub === id ? 'bg-ink-900 text-onInk' : 'bg-ink-100 text-ink-500 hover:bg-ink-200')}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (sub === 'qt') {
+    const roleLabel = (v: string) => QT_ROLES.find(r => r.value === v)?.label ?? ''
+    const tlName = (c: string | null) => (c && qtByCode.get(c)?.name) || ''
+    const q = search.trim().toLowerCase()
+    const rows = people
+      .map(r => ({ r, p: qtByCode.get(r.code) }))
+      .filter(({ r, p }) => (qtRole === 'all' || (qtRole === '' ? !p : p?.role === qtRole))
+        && (!q || r.code.toLowerCase().includes(q) || (r.full_name ?? '').toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const v = (x: typeof a) => qtSort.key === 'name' ? (x.r.full_name ?? '')
+          : qtSort.key === 'role' ? (x.p ? String(QT_ROLES.findIndex(t => t.value === x.p!.role)) : '9')
+          : tlName(x.p?.team_lead_ecode ?? null) || '~'
+        return (qtSort.asc ? 1 : -1) * (v(a).localeCompare(v(b)) || (a.r.full_name ?? '').localeCompare(b.r.full_name ?? ''))
+      })
+    const count = (v: string) => people.filter(r => qtByCode.get(r.code)?.role === v).length
+    const QTh = ({ k, label }: { k: 'name' | 'role' | 'tl'; label: string }) => (
+      <th className="px-3 py-2.5">
+        <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-ink-900"
+          onClick={() => setQtSort(s => s.key === k ? { key: k, asc: !s.asc } : { key: k, asc: true })}>
+          {label}<span className="text-[10px]">{qtSort.key === k ? (qtSort.asc ? '▲' : '▼') : '↕'}</span>
+        </button>
+      </th>
+    )
+    return (
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            {QT_ROLES.filter(r => r.value).map(r => `${r.label} ${count(r.value)}`).join(' · ')}
+          </p>
+        </div>
+        {subTabs}
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+            <input className="input pl-9" placeholder="Search by name or employee code"
+              value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <select className="input" value={qtRole} onChange={e => setQtRole(e.target.value)}>
+            <option value="all">All roles</option>
+            {QT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-ink-200">
+          <table className="w-full text-sm">
+            <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+              <tr>
+                <QTh k="name" label="Employee" />
+                <QTh k="role" label="Role" />
+                <QTh k="tl" label="Team Lead" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {rows.slice(0, 300).map(({ r, p }) => (
+                <tr key={r.id}>
+                  <td className="px-3 py-2.5 align-top">
+                    <span className="font-medium text-ink-900">{r.full_name}</span>
+                    <span className="ml-2 text-ink-400">{r.code}</span>
+                    {p && <span className="sr-only">{roleLabel(p.role)}</span>}
+                  </td>
+                  <td className="px-3 py-2.5 align-top" colSpan={2}>
+                    <QuotationCell
+                      code={r.code}
+                      person={p}
+                      teamLeads={teamLeads}
+                      busy={qtSave.isPending || qtRemove.isPending}
+                      onSave={x => qtSave.mutate(x)}
+                      onRemove={id => qtRemove.mutate(id)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-ink-900">BEMMP access</h2>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
         <p className="mt-0.5 text-sm text-ink-500">
           {filtered.length} of {people.length} people · Cyra on for {cyraOn}
         </p>
       </div>
+
+      {subTabs}
 
       <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
@@ -1786,7 +1886,6 @@ function BemmpTab() {
               <th className="px-3 py-2.5">Role</th>
               <th className="px-3 py-2.5">Contracts</th>
               <th className="px-3 py-2.5">Area</th>
-              <th className="px-3 py-2.5">Quotation</th>
               <th className="px-3 py-2.5">Cyra</th>
             </tr>
           </thead>
@@ -1843,7 +1942,10 @@ function BemmpTab() {
                         )
                       })}
                     </div>
-                    {scope.length === 0 && (
+                    {scope.length === 0 && qtByCode.has(r.code) && (
+                      <p className="mt-1 text-xs text-ink-500">Quotation tracker only</p>
+                    )}
+                    {scope.length === 0 && !qtByCode.has(r.code) && (
                       // Empty means none here, not everything — the opposite of
                       // what it means for the area below, which is exactly the
                       // confusion that once left everybody locked out.
@@ -1895,17 +1997,6 @@ function BemmpTab() {
                         {(r.districts ?? []).join(', ')}
                       </p>
                     )}
-                  </td>
-
-                  <td className="px-3 py-2.5 align-top">
-                    <QuotationCell
-                      code={r.code}
-                      person={qtByCode.get(r.code)}
-                      teamLeads={teamLeads}
-                      busy={qtSave.isPending || qtRemove.isPending}
-                      onSave={p => qtSave.mutate(p)}
-                      onRemove={id => qtRemove.mutate(id)}
-                    />
                   </td>
 
                   <td className="px-3 py-2.5">
