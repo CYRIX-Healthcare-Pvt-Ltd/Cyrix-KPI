@@ -1537,6 +1537,7 @@ interface QtPerson {
   role: string
   lead: boolean
   team_lead_ecode: string | null
+  observes?: string | null
 }
 
 function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
@@ -1544,7 +1545,7 @@ function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
   person: QtPerson | undefined
   teamLeads: QtPerson[]
   busy: boolean
-  onSave: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => void
+  onSave: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null; observes?: string | null }) => void
   onRemove: (employeeId: string) => void
 }) {
   // Engineer waits here until a Team Lead is chosen; the server refuses an engineer without one.
@@ -1582,6 +1583,14 @@ function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
           {teamLeads.map(t => <option key={t.ecode} value={t.ecode}>{t.name} ({t.ecode})</option>)}
         </select>
       )}
+      {/* An observer watches one team's dashboard (BEMMP 0037; the user, 11 Nov). */}
+      {role === 'observer' && person && (
+        <select className="input h-8 py-0 text-sm" value={person.observes ?? ''} disabled={busy}
+          onChange={e => onSave({ ecode: code, role: 'observer', lead, team_lead_ecode: null, observes: e.target.value || null })}>
+          <option value="">Observes every team</option>
+          {QT_ROLES.filter(r => r.value && r.value !== 'observer').map(r => <option key={r.value} value={r.value}>Observes {r.label}</option>)}
+        </select>
+      )}
       {person && !pending && (
         <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-500">
           <input
@@ -1589,7 +1598,7 @@ function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
             className="h-3.5 w-3.5 accent-[color:var(--score-accent)]"
             checked={lead}
             disabled={busy}
-            onChange={e => onSave({ ecode: code, role: person.role, lead: e.target.checked, team_lead_ecode: person.team_lead_ecode })}
+            onChange={e => onSave({ ecode: code, role: person.role, lead: e.target.checked, team_lead_ecode: person.team_lead_ecode, observes: person.observes ?? null })}
           />
           Lead
         </label>
@@ -1715,7 +1724,7 @@ function BemmpTab() {
   const qtByCode = useMemo(() => new Map((qtPeople ?? []).map(p => [p.ecode, p])), [qtPeople])
   const teamLeads = useMemo(() => (qtPeople ?? []).filter(p => p.role === 'team_lead'), [qtPeople])
   const qtSave = useMutation({
-    mutationFn: async (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => {
+    mutationFn: async (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null; observes?: string | null }) => {
       const { error } = await supabase.rpc('qt_save_person', { p })
       if (error) throw error
     },
