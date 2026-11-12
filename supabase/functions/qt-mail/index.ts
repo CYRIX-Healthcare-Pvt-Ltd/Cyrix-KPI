@@ -32,7 +32,7 @@ type Req = {
   quote_date: string | null; file: string | null; signed: boolean; step: string
 }
 type Job = {
-  ids: number[]; kind: 'raised' | 'quote_ok' | 'rates'; to: string[]; cc: string[]
+  ids: number[]; kind: 'raised' | 'tl_ok' | 'quote_ok' | 'rates'; to: string[]; cc: string[]
   engineer: string | null; engineer_ecode: string | null; team_lead: string | null; by: string | null
   hospital: string; district: string | null; category: string | null
   equipment: string; make: string | null; model: string | null; serial: string | null; step: string; requests: Req[]
@@ -58,10 +58,14 @@ function words(j: Job) {
   let title: string, lead: string, subject: string
   const rows: Array<[string, string]> = []
   let extra = ''
-  if (j.kind === 'raised') {
-    title = `New spare request · ${nos}`
-    subject = `[${nos}] New spare request · ${many ? `${j.requests.length} spares` : r.spare} · ${j.hospital}`
-    lead = `${esc(j.engineer)} raised ${many ? `${j.requests.length} spare requests` : 'a spare request'}. ${j.step === 'tl_review' && j.team_lead ? `It is with ${esc(j.team_lead)} for review.` : `It is with the ${esc(now)}.`}`
+  if (j.kind === 'raised' || j.kind === 'tl_ok') {
+    // The first mail goes at the Team Lead's approval (the user, 12 Nov); a Team Lead's own request mails when raised.
+    const ok = j.kind === 'tl_ok'
+    title = `${ok ? 'Spare request approved' : 'New spare request'} · ${nos}`
+    subject = `[${nos}] ${ok ? 'Spare request approved by the Team Lead' : 'New spare request'} · ${many ? `${j.requests.length} spares` : r.spare} · ${j.hospital}`
+    lead = ok
+      ? `${esc(j.by ?? j.team_lead)} approved ${esc(j.engineer)}’s ${many ? `${j.requests.length} spare requests` : 'spare request'}. It is with the ${esc(now)}.`
+      : `${esc(j.engineer)} raised ${many ? `${j.requests.length} spare requests` : 'a spare request'}. It is with the ${esc(now)}.`
     rows.push(['Engineer', esc(`${j.engineer ?? ''}${j.engineer_ecode ? ` (${j.engineer_ecode})` : ''}`)])
     rows.push(['Hospital', esc([j.hospital, j.district, j.category].filter(Boolean).join(' · '))])
     rows.push(['Equipment', esc(equip) + (j.serial ? ` · <span style="color:#777">S/N ${esc(j.serial)}</span>` : '')])
