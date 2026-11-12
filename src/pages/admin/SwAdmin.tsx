@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, ShieldCheck, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
-  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown,
+  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown, Building2,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
@@ -16,6 +16,7 @@ import CyraAccess from '@/pages/admin/CyraAccess'
 import { DigestHistory } from '@/pages/admin/DigestAdmin'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
+import { WorkplaceAdmin } from '@/pages/admin/WorkplaceAdmin'
 import MissingLogins from '@/components/MissingLogins'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
@@ -2815,6 +2816,9 @@ const ADMIN_TABS = [
   // Whether photographs are required, what each mode pays, and deleting a
   // claim by its number — the module's own settings, also on its Rates page.
   { id: 'travel', label: 'Travel Expense', short: 'Travel', icon: Navigation, render: () => <TravelAdmin /> },
+  // Workplace keeps its settings in its own app; this says what is set where and opens it
+  // (the user, 13 Nov: "why workspace is not available here on this tabs section").
+  { id: 'workplace', label: 'Workplace', short: 'Workplace', icon: Building2, render: () => <WorkplaceAdmin /> },
   // A message to people's phones and desktops; HR has the same page (0154).
   { id: 'notify', label: 'Send notification', short: 'Notify', icon: BellRing, render: () => <SendNotification desk="sw" /> },
   // IT posts to Cyrix Digest from here; HR has it in its own menu (0163).
