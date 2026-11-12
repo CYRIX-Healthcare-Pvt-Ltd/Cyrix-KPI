@@ -441,7 +441,7 @@ export function TeamBands({
     <div className="card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-800">{label}</h3>
-        <p className="text-xs text-ink-500">
+        <p className="hidden text-xs text-ink-500 sm:block">
           {share.people === 0
             ? 'Nobody scored yet'
             : `Averaged across ${share.people} scored ${

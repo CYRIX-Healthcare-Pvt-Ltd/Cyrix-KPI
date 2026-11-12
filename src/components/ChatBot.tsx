@@ -26,7 +26,7 @@ import { videoFor } from '@/lib/manualVideos'
 import { pickTip } from '@/lib/tips'
 import { pickStanding, type TeamStanding } from '@/lib/standing'
 import { greetingKey } from '@/lib/greeting'
-import { shouldPeek, dayKey } from '@/lib/peek'
+import { dayKey } from '@/lib/peek'
 import { SCORED_STATUSES } from '@/lib/bands'
 import { forecastYear, biggestLever, averageRows, weakestOf } from '@/lib/forecast'
 import { ratingToPoints } from '@/lib/scoring'
@@ -591,16 +591,8 @@ export default function ChatBot() {
 
   const [peek, setPeek] = useState(false)
 
-  useEffect(() => {
-    let dismissed: string | null = null
-    try { dismissed = localStorage.getItem(mine(PEEK_KEY, employee?.id)) } catch { /* private window */ }
-    if (!shouldPeek({ waiting, unread, dismissed, systemAccount, panelOpen: open })) {
-      setPeek(false)
-      return
-    }
-    const show = setTimeout(() => setPeek(true), 2_000)
-    return () => clearTimeout(show)
-  }, [waiting, unread, systemAccount, open, employee?.id])
+  // No greeting bubble on any screen (the user, 12 Nov: "close this, we dont need pop ups"; phones since
+  // earlier the same day). The red count on the button says what is waiting; one press opens it.
 
   /*
     Greeted by name and told what is waiting.

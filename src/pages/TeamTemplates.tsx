@@ -249,7 +249,7 @@ export default function TeamTemplates() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900">Team KPI templates</h1>
-          <p className="mt-0.5 text-sm text-ink-500">
+          <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
             FY {fy} · the rows your people start from
           </p>
         </div>
@@ -298,7 +298,8 @@ export default function TeamTemplates() {
         />
       ) : (
         <>
-          <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
+          {/* Desktop only; on a phone the groups below say it (the user, 12 Nov). */}
+          <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
             <div className="text-ink-600">
               <p className="font-medium text-ink-900">Who sees these</p>
@@ -509,7 +510,7 @@ function TemplateGroup({
           {title}
           <span className="badge bg-ink-100 text-ink-500">{templates.length}</span>
         </h2>
-        <p className="mt-0.5 text-xs text-ink-500">{hint}</p>
+        <p className="mt-0.5 hidden text-xs text-ink-500 sm:block">{hint}</p>
       </div>
 
       <div className="space-y-2">
@@ -520,9 +521,10 @@ function TemplateGroup({
           return (
             <div key={t.id} className="card overflow-hidden">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
+                {/* A phone: the name and its counts the full width, the buttons a row under them (the user, 12 Nov). */}
                 <button
                   onClick={() => onPreview(t.id)}
-                  className="min-w-0 flex-1 text-left"
+                  className="min-w-0 basis-full text-left sm:basis-auto sm:flex-1"
                   aria-expanded={open}
                 >
                   {/* Wraps rather than truncates: with two buttons beside
@@ -531,13 +533,12 @@ function TemplateGroup({
                   <p className="font-medium text-ink-900">
                     {labels.get(t.id) ?? displayTemplateName(t.name)}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-ink-500">
-                    {t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-500">
+                    <span>{t.item_count} row{Number(t.item_count) === 1 ? '' : 's'}
                     {/* No owner. The group already says whether it is
                         yours; who else wrote it is not something anybody
                         choosing a template acts on. */}
-                    {total !== JOB_ROLE_TOTAL && ` · totals ${total}%`}
-                  </p>
+                    {total !== JOB_ROLE_TOTAL && ` · totals ${total}%`}</span>
                   {/*
                     How many people are on it, which is the fact that
                     turns an edit from a correction into an event. Said
@@ -545,7 +546,7 @@ function TemplateGroup({
                     a template written five minutes ago is noise.
                   */}
                   {Number(t.in_use) > 0 && (
-                    <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-ink-600">
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-ink-600">
                       <Users className="h-3 w-3 text-ink-400" />
                       {/* Two numbers when they differ, because they mean
                           different things: an edit reaches all 250, and
@@ -553,8 +554,9 @@ function TemplateGroup({
                       {Number(t.on_my_team) > 0 && Number(t.on_my_team) < Number(t.in_use)
                         ? `${t.on_my_team} of your team · ${t.in_use} in all`
                         : `${t.in_use} ${Number(t.in_use) === 1 ? 'person' : 'people'} on this`}
-                    </p>
+                    </span>
                   )}
+                  </p>
                 </button>
 
                 <div className="flex shrink-0 gap-1.5">

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, Send, Save, Lock, Trash2, Undo2, MessageSquare, MessageSquarePlus, Paperclip, CheckCircle2,
-  Shuffle,
+  Shuffle, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import { ScoreCutNotice } from '@/components/ScoreCutReason'
 import { SelfParts, PartsTable, partsAverage, type PartDraft } from '@/components/CoreParts'
@@ -25,12 +25,12 @@ import { TimeLeft } from '@/components/TimeLeft'
 import { ReopenRequest } from '@/components/ReopenRequest'
 import { monthLabel, isMonthOpen } from '@/lib/fy'
 import {
-  calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, corePoints, type ScoringRule, type RuleParams,
+  calcKpiScore, weightedCoreValueRatings, RATING_SCALE, ratingToPoints, corePoints, ruleDirection, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile, EmptyState,
 } from '@/components/ui'
-import { bandOfRating } from '@/lib/bands'
+import { bandOfRating, bandFor } from '@/lib/bands'
 import MonthFiles from '@/components/MonthFiles'
 import type { KpiSubmissionItem, ScoreQueryState, Alternate, CorePartRating } from '@/types/db'
 
@@ -71,6 +71,8 @@ export default function MonthlySubmission() {
   const [targets, setTargets] = useState<Record<string, string>>({})
   // A note against each row, in the person's own words: why the figure is what it is.
   const [notes, setNotes] = useState<Record<string, string>>({})
+  // Which rows have their note box open; the Add a note button sits in the score row (the user, 12 Nov).
+  const [notesOpen, setNotesOpen] = useState<Record<string, boolean>>({})
   const [remarks, setRemarks] = useState('')
   const [showDelete, setShowDelete] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
@@ -445,14 +447,21 @@ export default function MonthlySubmission() {
     <div className="space-y-5">
       <div>
         <BackLink />
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-ink-900">
+        <div className="mt-2 flex items-center gap-2 sm:gap-3">
+          <h1 className="text-lg font-semibold text-ink-900 sm:text-xl">
             {monthLabel(month)} assessment
           </h1>
           <StatusBadge
             status={submission.status}
             queried={queryState?.existing_status === 'open'}
           />
+          {/* Read-only said on the title row, not in a box of its own (the user, 12 Nov: "why this much area?"). */}
+          {!editable && submission.status !== 'returned' && !submission.deadline_outcome && !pastLastDay && (
+            <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-500">
+              <Lock className="h-3.5 w-3.5" />
+              Read-only
+            </span>
+          )}
         </div>
       </div>
 
@@ -487,79 +496,69 @@ export default function MonthlySubmission() {
         </Alert>
       )}
 
-      {!editable && submission.status !== 'returned' && !submission.deadline_outcome && !pastLastDay && (
-        <Alert kind="info" title="This month is read-only">
-          <span className="inline-flex items-center gap-1.5">
-            <Lock className="h-3.5 w-3.5" />
-            {submission.status === 'submitted'
-              ? 'It is with your manager for scoring.'
-              : submission.status === 'scored'
-              ? 'Your manager has scored it.'
-              : 'This month is final.'}
-          </span>
-        </Alert>
-      )}
 
-      {/* ---- running totals: one tile per band this person has ---- */}
-      <div className={clsx('grid gap-3', hasEsms ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
-        <StatTile label="Job role" value={jobTotal.toFixed(2)} sub={`out of ${jobWeight}`} />
-        {hasEsms && (
+      {/* ---- scored: mine, then the manager's parts, then the final, in one row (the user, 12 Nov: "4 grid in same
+          row but grid is not in same order, check for phone also"); two by two on a phone ---- */}
+      {isScored ? (
+        <div className={clsx('grid grid-cols-2 gap-3 sm:grid-cols-3', (hasEsms ? 1 : 0) + (adjusted ? 1 : 0) === 0 ? 'lg:grid-cols-4'
+          : (hasEsms ? 1 : 0) + (adjusted ? 1 : 0) === 1 ? 'lg:grid-cols-5' : 'lg:grid-cols-6')}>
           <StatTile
-            label="ESMS"
-            value={esmsTotal.toFixed(2)}
-            sub={`out of ${esmsWeight}`}
+            label="My assessment"
+            value={selfTotal.toFixed(2)}
+            // Split like the final when there is more than job role to split (the user, 12 Nov).
+            sub={hasEsms || coreSelf
+              ? [`Job ${jobTotal.toFixed(2)}`, hasEsms && `ESMS ${esmsTotal.toFixed(2)}`,
+                 coreSelf && `Core ${(selfCoreTotal ?? 0).toFixed(2)}`].filter(Boolean).join(' · ')
+              : `job role, out of ${selfWeight}`}
           />
-        )}
-        {/* Named for whose it is. Before the month is scored there is no
-            rating to show, and a flat 0.00 out of 20 reads as a verdict
-            rather than as an empty box. */}
-        <StatTile
-          label="Core values"
-          value={isScored
-            ? coreTotal.toFixed(2)
-            : coreSelf && selfCoreTotal !== null
-            ? selfCoreTotal.toFixed(2)
-            : <span className="text-2xl font-semibold text-ink-300">—</span>}
-          sub={isScored
-            ? `your manager's rating, out of ${coreWeight}`
-            : coreSelf
-            ? `your rating, out of ${coreWeight}`
-            : 'Your manager rates these'}
-        />
-        {/* The bands this person fills in, and nothing else. It said "My
-            total, out of 100", which added the manager's core-value
-            figure to their own two and then measured the sum against a
-            ceiling they could not reach alone. */}
-        <StatTile
-          label={editable ? 'My assessment so far' : 'My assessment'}
-          value={<ScorePill value={selfTotal} outOf={selfWeight} size="lg" />}
-          sub={`${[ 'job role', hasEsms && 'ESMS', coreSelf && 'core values'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}, out of ${selfWeight}`}
-          tone="brand"
-        />
-      </div>
-
-      {/* One figure, said once. Two tiles carrying the same number, the
-          second of them explaining itself as an average that stopped
-          happening in 0095, read as though something had been worked out
-          between them. The manager's tile comes back the moment there is
-          genuinely a second number to compare it against. */}
-      {submission.status === 'scored' || submission.status === 'finalized' ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {adjusted && (
-            <StatTile
-              label="Manager's total"
-              value={<ScorePill value={submission.mgr_total_score} size="lg" />}
-              sub="what your manager scored"
-            />
-          )}
+          {/* On a phone only mine and the final (the user, 12 Nov: "only 2 grid enough"); the parts show from sm up. */}
+          <div className="hidden sm:contents">
+            <StatTile label="Job role" value={(submission.mgr_job_role_score ?? 0).toFixed(2)} sub={`by manager, out of ${jobWeight}`} />
+            {hasEsms && <StatTile label="ESMS" value={(submission.mgr_esms_score ?? 0).toFixed(2)} sub={`by manager, out of ${esmsWeight}`} />}
+            <StatTile label="Core values" value={coreTotal.toFixed(2)} sub={`by manager, out of ${coreWeight}`} />
+            {adjusted && (
+              <StatTile label="Manager's total" value={<ScorePill value={submission.mgr_total_score} size="lg" />} sub="what your manager scored" />
+            )}
+          </div>
           <StatTile
             label="Final score"
-            value={<ScorePill value={submission.final_total_score} size="lg" />}
-            sub={adjusted ? 'self and manager combined' : "your manager's assessment"}
+            // The same size as My assessment beside it, its colour in the text, no box (the user, 12 Nov).
+            value={submission.final_total_score == null ? '—' : (
+              <span className={bandFor(Number(submission.final_total_score))?.accent}>
+                {Number(submission.final_total_score).toFixed(2)}
+              </span>
+            )}
+            sub={[`Job ${(submission.mgr_job_role_score ?? 0).toFixed(2)}`,
+              hasEsms && `ESMS ${(submission.mgr_esms_score ?? 0).toFixed(2)}`,
+              `Core ${coreTotal.toFixed(2)}`].filter(Boolean).join(' · ')}
             tone="brand"
           />
         </div>
-      ) : null}
+      ) : (
+      // Before scoring: on a phone only My assessment so far, its split under it (the user, 12 Nov: "space wasteage").
+      <div className={clsx('grid gap-3', hasEsms ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
+        <div className="hidden sm:contents">
+          <StatTile label="Job role" value={jobTotal.toFixed(2)} sub={`out of ${jobWeight}`} />
+          {hasEsms && <StatTile label="ESMS" value={esmsTotal.toFixed(2)} sub={`out of ${esmsWeight}`} />}
+          <StatTile
+            label="Core values"
+            value={coreSelf && selfCoreTotal !== null
+              ? selfCoreTotal.toFixed(2)
+              : <span className="text-2xl font-semibold text-ink-300">—</span>}
+            sub={coreSelf ? `your rating, out of ${coreWeight}` : 'Your manager rates these'}
+          />
+        </div>
+        <StatTile
+          label={editable ? 'My assessment so far' : 'My assessment'}
+          value={selfTotal.toFixed(2)}
+          sub={hasEsms || coreSelf
+            ? [`Job ${jobTotal.toFixed(2)}`, hasEsms && `ESMS ${esmsTotal.toFixed(2)}`,
+               coreSelf && `Core ${(selfCoreTotal ?? 0).toFixed(2)}`].filter(Boolean).join(' · ')
+            : `job role, out of ${selfWeight}`}
+          tone="brand"
+        />
+      </div>
+      )}
 
       {/* Why the manager's figure is lower, next to the figure rather
           than at the bottom with the remarks. It is the answer to the
@@ -585,20 +584,36 @@ export default function MonthlySubmission() {
           </h3>
           <ScorePill value={block.total} outOf={block.weight} size="sm" />
         </div>
-        <div className="divide-y divide-ink-100">
-          {block.rows.map(item => (
-            <div key={item.id} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+        {/* Each row its own box, not a hairline between them (the user, 12 Nov: people found 1 and 2 hard to tell apart). */}
+        <div className="space-y-3 p-3 sm:p-4">
+          {block.rows.map((item, idx) => (
+            <div key={item.id} className="rounded-xl border border-ink-200 bg-ink-50/60 p-3">
+              <div className="flex items-start justify-between gap-2">
+                {/* Numbered like My KPI, a size smaller (the user, 12 Nov). */}
+                <span
+                  className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-violet-700 text-[11px] font-bold text-violet-700"
+                  aria-hidden
+                >
+                  {idx + 1}
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink-900">{item.kra}</p>
-                  {item.kpi_description && (
-                    <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
-                  )}
                 </div>
-                <span className="badge bg-ink-100 text-ink-600">
-                  {item.weightage}%
-                </span>
+                {(() => {
+                  const dir = ruleDirection(item.scoring_rule as ScoringRule)
+                  const Arrow = dir?.tone === 'lower' ? ArrowDown : ArrowUp
+                  return (
+                    <span className="badge gap-1 bg-ink-100 text-ink-600" title={dir?.label}>
+                      {dir && <Arrow className={clsx('h-3 w-3', dir.tone === 'lower' ? 'text-violet-700' : 'text-sky-700')} aria-label={dir.label} />}
+                      {item.weightage}%
+                    </span>
+                  )
+                })()}
               </div>
+              {/* The description under the title and the badge both, the full width of the box (the user, 12 Nov). */}
+              {item.kpi_description && (
+                <p className="mt-0.5 pl-7 text-sm text-ink-500">{item.kpi_description}</p>
+              )}
 
               {/* This row can measure more than one thing, and which one
                   changes by month. Only shown where a choice actually
@@ -611,7 +626,7 @@ export default function MonthlySubmission() {
                 onError={setError}
               />
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
                 {/* Targets legitimately move month to month — a call quota
                     in April is not December's. Editable while the month is
                     open; the KRA, weightage and scoring rule are not.
@@ -664,12 +679,25 @@ export default function MonthlySubmission() {
                 <div>
                   <label className="label text-xs">My score</label>
                   <div className="py-1.5">
+                    {/* "/ 10" while filling it in; once sent, the % badge says it (the user, 12 Nov). */}
                     <ScorePill value={liveScore(item)} outOf={item.weightage} />
-                    <span className="ml-1.5 text-xs text-ink-400">
-                      / {item.weightage}
-                    </span>
+                    {editable && <span className="ml-1.5 text-xs text-ink-400">/ {item.weightage}</span>}
                   </div>
                 </div>
+
+                {/* Add a note at the right end of the My score row; the box opens full width below (the user, 12 Nov). */}
+                {editable && !(notes[item.id] ?? '') && !notesOpen[item.id] && (
+                  <div className="flex items-end justify-end sm:col-start-4">
+                    <button
+                      type="button"
+                      onClick={() => setNotesOpen({ ...notesOpen, [item.id]: true })}
+                      className="btn-press inline-flex items-center gap-1.5 rounded-lg py-2 text-sm font-medium text-violet-700 hover:text-violet-800"
+                    >
+                      <MessageSquarePlus className="h-4 w-4 shrink-0" />
+                      Add a note
+                    </button>
+                  </div>
+                )}
 
                 {(submission.status === 'scored' || submission.status === 'finalized') && (
                   <div>
@@ -684,32 +712,13 @@ export default function MonthlySubmission() {
                         person most needs to know about the month, and the
                         figure the manager used is why.
                       */}
-                      {(() => {
-                        const mine = liveScore(item)
-                        const theirs = item.manager_score
-                        if (mine == null || theirs == null) return null
-                        const diff = Math.round((Number(theirs) - Number(mine)) * 100) / 100
-                        if (diff === 0) return null
-                        const down = diff < 0
-                        const figureChanged = item.manager_achieved != null
-                          && item.self_achieved != null
-                          && Number(item.manager_achieved) !== Number(item.self_achieved)
-                        return (
-                          <span className={clsx(
-                            'text-xs font-medium',
-                            down ? 'text-cyrixRed-700' : 'text-emerald-700',
-                          )}>
-                            {down ? '▼ Reduced' : '▲ Raised'} by {Math.abs(diff).toFixed(2)}
-                            {figureChanged && (
-                              <span className="font-normal text-ink-500">
-                                {' '}· Manager entered {Number(item.manager_achieved)}
-                              </span>
-                            )}
-                          </span>
-                        )
-                      })()}
+                      <span className="hidden sm:inline"><ScoreChange item={item} mine={liveScore(item)} /></span>
                     </div>
                   </div>
+                )}
+                {/* On a phone the change gets the full row under both halves (the user, 12 Nov: "extend this full row"). */}
+                {(submission.status === 'scored' || submission.status === 'finalized') && (
+                  <div className="col-span-2 -mt-1 empty:hidden sm:hidden"><ScoreChange item={item} mine={liveScore(item)} /></div>
                 )}
               </div>
 
@@ -731,6 +740,8 @@ export default function MonthlySubmission() {
                 id={item.id}
                 value={notes[item.id] ?? ''}
                 editable={editable}
+                open={!!notesOpen[item.id]}
+                setOpen={o => setNotesOpen({ ...notesOpen, [item.id]: o })}
                 onChange={v => setNotes({ ...notes, [item.id]: v })}
               />
             </div>
@@ -742,12 +753,13 @@ export default function MonthlySubmission() {
       {/* ---- core values ---- */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-ink-800">
-            Alignment To Core Values{' '}
-            <span className="font-normal text-ink-500">
-              — {coreWeight}%
-            </span>
-          </h3>
+          {/* 20% on the title's line, "Rated by your manager" under it (the user, 12 Nov). */}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-ink-800">
+              Alignment To Core Values <span className="whitespace-nowrap font-normal text-ink-500">— {coreWeight}%</span>
+            </h3>
+            {!isScored && !coreWeights && <p className="text-xs text-ink-500">Rated by your manager</p>}
+          </div>
           {/* The manager's figure alone. "Mine" came off with the
               dropdown that produced it. */}
           <div className="flex items-center gap-3 text-xs text-ink-500">
@@ -760,9 +772,7 @@ export default function MonthlySubmission() {
                     <ScorePill value={selfCoreTotal} outOf={coreWeight} size="sm" />
                   </>
                 )}
-                <span>
-                  Manager {coreRolled === null ? '—' : `${coreRolled.toFixed(0)}/100`}
-                </span>
+                {/* "Manager 72/100" came off: the same score again, out of 100 (the user, 12 Nov: "what is that 72/100?"). */}
                 <ScorePill value={coreRows[0]?.manager_score} outOf={coreWeight} size="sm" />
               </>
             ) : coreWeights ? (() => {
@@ -773,9 +783,7 @@ export default function MonthlySubmission() {
               })
               const total = earned.some(e => e !== null) ? Math.round(earned.reduce<number>((t, e) => t + (e ?? 0), 0) * 100) / 100 : null
               return <ScorePill value={total} outOf={coreWeight} size="sm" />
-            })() : (
-              <span>Rated by your manager</span>
-            )}
+            })() : null}
           </div>
         </div>
 
@@ -809,17 +817,21 @@ export default function MonthlySubmission() {
               rating.manager_rating !== rating.self_rating
 
             return (
-              <div key={rating.id} className="p-4 sm:flex sm:items-center sm:gap-4">
+              // Only the manager's chip to show: on a phone it sits on the core value's row (the user, 12 Nov).
+              // and as low as the Core values score row under them.
+              <div key={rating.id} className={clsx('sm:flex sm:items-center sm:gap-4 sm:p-4',
+                (isScored && !coreWeights && !parts.length) || (!isScored && !coreSelf) ? 'flex items-center gap-3 px-4 py-2.5' : 'p-4')}>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-ink-900">
+                  <p className={clsx('font-medium text-ink-900', ((isScored && !coreWeights && !parts.length) || (!isScored && !coreSelf)) && 'text-sm sm:text-base')}>
                     {def?.name ?? 'Core value'}
                     {/* This core value's own weight, when the KPI splits them (the user, 17 Oct). */}
                     {coreWeights?.[rating.core_value_id] != null && (
                       <span className="badge ml-2 bg-ink-100 align-middle text-ink-900">{Number(coreWeights[rating.core_value_id])}%</span>
                     )}
                   </p>
+                  {/* No description on a phone (the user, 12 Nov). */}
                   {def?.description && (
-                    <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
+                    <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">{def.description}</p>
                   )}
                   {/*
                     What the rating earns of the value's weight, as job role rows show it: Very Good on a
@@ -945,13 +957,7 @@ export default function MonthlySubmission() {
                     </div>
                   )
                 })()}
-                {!isScored && !coreSelf && (
-                  <div className="mt-2 sm:mt-0 sm:w-48">
-                    <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-500">
-                      Your manager rates this
-                    </p>
-                  </div>
-                )}
+                {/* No "Your manager rates this" on every row: the header says it once (the user, 12 Nov: "space wasteage"). */}
 
                 {/*
                   The manager's verdict, in the colour that verdict has
@@ -967,11 +973,10 @@ export default function MonthlySubmission() {
                   actually reporting.
                 */}
                 {isScored && !coreWeights && !parts.length && (
-                  <div className="mt-2 sm:mt-0 sm:w-40">
-                    <p className="mb-1 text-xs text-ink-400 sm:hidden">Manager's rating</p>
+                  <div className="shrink-0 sm:w-40">
                     <div
                       className={clsx(
-                        'rounded-lg px-3 py-2 text-sm font-medium',
+                        'rounded-lg px-2.5 py-0.5 text-xs font-medium sm:px-3 sm:py-2 sm:text-sm',
                         bandOfRating(rating.manager_rating)?.chip
                           ?? 'bg-ink-50 font-normal text-ink-500',
                       )}
@@ -1622,13 +1627,14 @@ const NOTE_MAX = 500
  * empty, it folds away again. Once the month is sent, it is a quotation —
  * read by the manager beside the figure it explains (ScoreSubmission).
  */
-function RowNote({ id, value, editable, onChange }: {
+function RowNote({ id, value, editable, open, setOpen, onChange }: {
   id: string
   value: string
   editable: boolean
+  open: boolean
+  setOpen: (open: boolean) => void
   onChange: (v: string) => void
 }) {
-  const [open, setOpen] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
   // Grows with what is typed, so a note is read whole rather than scrolled inside a box.
   useLayoutEffect(() => {
@@ -1647,18 +1653,8 @@ function RowNote({ id, value, editable, onChange }: {
       </figure>
     )
   }
-  if (!open && !value) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn-press mt-2 inline-flex items-center gap-1.5 rounded-lg py-1 text-left text-sm font-medium text-violet-700 hover:text-violet-800"
-      >
-        <MessageSquarePlus className="h-4 w-4 shrink-0" />
-        <span>Add a note <span className="font-normal text-violet-700/75">— why this figure</span></span>
-      </button>
-    )
-  }
+  // Closed and empty: the button is in the score row.
+  if (!open && !value) return null
   return (
     <div className="mt-3">
       <label className="label text-xs !text-violet-700" htmlFor={`note-${id}`}>Your note</label>
@@ -1688,27 +1684,32 @@ function RuleHint({
   weightage: number
   params: RuleParams
 }) {
-  const penalty = params.penalty_per_unit
-  const hint = {
-    higher_capped: 'Higher is better. Hitting the target earns the full weightage; going beyond adds nothing more.',
-    higher_uncapped: 'Higher is better. Exceeding the target can earn more than the weightage.',
-    lower_penalty: 'Lower is better. Going over the target reduces this score.',
-    lower_linear: penalty != null
-      // The one row where the consequence is not confined to the row,
-      // and where the reader is about to type the figure that triggers
-      // it. Saying the number is the difference between a rule and a
-      // surprise.
-      ? `Lower is better. Staying within the target costs nothing; every one over takes ${penalty}% off your total.`
-      : 'Lower is better. Every unit over the target cuts into this score.',
-    banded: 'Scored in bands against the target.',
-    boolean: 'Enter 1 if done, 0 if not.',
-    rating_scale: 'Scored from the core value ratings.',
-  }[rule]
+  // Only what can carry a row past its weightage or below zero. The direction is the arrow in the
+  // % badge and the plain cap went with the sentence (the user, 12 Nov: "do we need this?").
+  return <RuleTraits rule={rule} weightage={weightage} params={params} skip={['higher', 'lower', 'capped']} className="mt-2" />
+}
 
+/** How the manager's score differs from mine, and the figure the manager used. */
+function ScoreChange({ item, mine }: { item: { manager_score: number | null; manager_achieved: number | null; self_achieved: number | null }; mine: number | null }) {
+  const theirs = item.manager_score
+  if (mine == null || theirs == null) return null
+  const diff = Math.round((Number(theirs) - Number(mine)) * 100) / 100
+  if (diff === 0) return null
+  const down = diff < 0
+  const figureChanged = item.manager_achieved != null
+    && item.self_achieved != null
+    && Number(item.manager_achieved) !== Number(item.self_achieved)
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-      <RuleTraits rule={rule} weightage={weightage} params={params} />
-      <p className="text-xs text-ink-400">{hint}</p>
-    </div>
+    <span className={clsx(
+      'text-xs font-medium',
+      down ? 'text-cyrixRed-700' : 'text-emerald-700',
+    )}>
+      {down ? '▼ Reduced' : '▲ Raised'} by {Math.abs(diff).toFixed(2)}
+      {figureChanged && (
+        <span className="font-normal text-ink-500">
+          {' '}· Manager entered {Number(item.manager_achieved)}
+        </span>
+      )}
+    </span>
   )
 }

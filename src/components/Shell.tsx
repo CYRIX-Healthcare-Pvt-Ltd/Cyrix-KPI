@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   LayoutDashboard, ClipboardList, Users, CheckSquare, CalendarCheck,
@@ -83,6 +83,12 @@ export default function Shell() {
 
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  // A new page opens at its top, not at the scroll of the list it was opened from (the user, 12 Nov: a team member's
+  // page opened at Sep-26). Back and forward keep the browser's own position.
+  const navType = useNavigationType()
+  useEffect(() => {
+    if (navType !== 'POP') window.scrollTo(0, 0)
+  }, [pathname, navType])
   const fy = currentFy()
 
   /**

@@ -4,15 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import {
-  useSubmissionHistory, useAnnualSummary, useMyAssignment, useSetKpiStart, useFirstAssessedMonth, currentFy,
+  useMyAssignment, useSetKpiStart, useFirstAssessedMonth, currentFy,
 } from '@/lib/queries'
 import { StartMonthBanner } from '@/components/StartMonth'
-import { fyMonthsFrom, openFyMonthsFrom, monthLabel } from '@/lib/fy'
-import {
-  PageLoader, ScorePill, StatTile, StatusBadge, Alert, BandCell,
-} from '@/components/ui'
-import BandTrend from '@/components/BandTrend'
-import { sectionsOf, JOB_ROLE_TOTAL } from '@/lib/sections'
+import { PageLoader, Alert } from '@/components/ui'
+import { AssessmentYear } from '@/pages/MyHistory'
+import { sectionsOf } from '@/lib/sections'
 import type { Employee } from '@/types/db'
 
 export default function TeamMember() {
@@ -32,41 +29,14 @@ export default function TeamMember() {
     },
   })
 
-  const { data: history } = useSubmissionHistory(employeeId, fy)
-  const { data: annual } = useAnnualSummary(employeeId, fy)
   const { data: assignment } = useMyAssignment(employeeId, fy)
   const { data: firstAssessed } = useFirstAssessedMonth(employeeId, fy)
 
   if (isLoading) return <PageLoader />
   if (!member) return <Alert kind="error">Team member not found.</Alert>
 
-  const byMonth = new Map((history ?? []).map(s => [s.period_month, s]))
-  // Which bands this person carries, read off the KPI rather than the
-  // scores — so somebody with ESMS who has not been scored on it yet
-  // still gets the line, rather than the chart changing shape later.
-  const esmsWeight = Number(assignment?.assignment?.esms_weight ?? 0)
-  const hasEsms = esmsWeight > 0
-  // Months this person's KPI covers. Before this, a manager looking at a
-  // June joiner saw April and May sitting empty on their record.
+  // The month their KPI starts, for the banner that lets the manager move it.
   const startsFrom = assignment?.assignment?.starts_from ?? null
-  const months = fyMonthsFrom(fy, startsFrom)
-
-  // Only months that have finished. The table below lists the whole year
-  // on purpose — it is the record, and a month still to come is a row
-  // waiting to be filled — but a chart cannot draw a month that has not
-  // happened, so plotting all twelve left the line stopping a third of
-  // the way across an axis that ran to March.
-  const chartData = openFyMonthsFrom(fy, startsFrom).map(m => {
-    const s = byMonth.get(m)
-    const scored = s && (s.status === 'scored' || s.status === 'finalized')
-    return {
-      month: m,
-      total: scored ? s.final_total_score : null,
-      job: scored ? s.final_job_role_score : null,
-      esms: scored ? s.final_esms_score : null,
-      core: scored ? s.final_core_score : null,
-    }
-  })
 
   return (
     <div className="space-y-5">
@@ -82,134 +52,8 @@ export default function TeamMember() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
-        <StatTile
-          label={`FY ${fy} average`}
-          value={<ScorePill value={annual?.avg_total_score} size="lg" />}
-          tone="brand"
-        />
-        <StatTile label="Months scored" value={annual?.months_scored ?? 0} sub="of 12" />
-        <StatTile label="Best" value={annual?.highest_month?.toFixed(1) ?? '—'} />
-        <StatTile label="Lowest" value={annual?.lowest_month?.toFixed(1) ?? '—'} />
-      </div>
-
-      {chartData.some(d => d.total !== null) && (
-        <div className="card p-4">
-          <h3 className="mb-1 text-sm font-semibold text-ink-800">Score trend</h3>
-          <p className="mb-3 text-xs text-ink-500">
-            The total, and what it is made of. Job role is out of{' '}
-            {JOB_ROLE_TOTAL} and core values out of{' '}
-            {100 - JOB_ROLE_TOTAL - esmsWeight}
-            {hasEsms && `, with ESMS out of ${esmsWeight}`}.
-          </p>
-          <BandTrend points={chartData} hasEsms={hasEsms} />
-        </div>
-      )}
-
-      <div className="card overflow-hidden">
-        <div className="border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-ink-800">Month by month</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
-                <th className="px-4 py-2.5 font-medium">Month</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                {/* "Mine" read as the manager's own row on their own
-                    screen. It is their assessment of somebody else, and
-                    the word for that is Manager. */}
-                <th className="px-4 py-2.5 text-right font-medium">
-                  Self
-                  {/* Named, because it is not comparable with the columns
-                      beside it: the person scores their job role only. */}
-                  <span className="block text-[10px] font-normal normal-case tracking-normal text-ink-400">
-                    job role only
-                  </span>
-                </th>
-                <th className="px-4 py-2.5 text-right font-medium">Manager</th>
-                <th className="px-4 py-2.5 text-right font-medium">Final</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-100">
-              {months.map(m => {
-                const s = byMonth.get(m)
-                return (
-                  <tr key={m} className="hover:bg-ink-50">
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-ink-900">
-                      {monthLabel(m)}
-                    </td>
-                    <td className="px-4 py-3"><StatusBadge status={s?.status ?? null} outcome={s?.deadline_outcome} /></td>
-                    {/* The total, and underneath it what it is made of.
-                        A month at 88 built on a weak job role and a full
-                        core-values score is a different conversation
-                        from one built the other way round, and the total
-                        alone cannot tell them apart. */}
-                    {/*
-                      No self TOTAL and no self CORE: the person fills in
-                      only the job role, so a total would be the job role
-                      with core counted as nought and a core figure would be
-                      a zero nobody entered.
-
-                      Which makes the job-role figure the whole of the self
-                      assessment, and it is shown as the number rather than
-                      as a part of one. It used to go through BandCell as a
-                      part with a null total, and BandCell draws its parts
-                      only when there is a total to break down — so a
-                      manager looking at what their report claimed saw an
-                      empty column, on every month, for a figure that was
-                      sitting right there.
-                    */}
-                    <td className="px-4 py-3 text-right">
-                      <span className="tabular-nums text-ink-600">
-                        {s?.self_job_role_score != null
-                          ? s.self_job_role_score.toFixed(2)
-                          : '—'}
-                      </span>
-                      {hasEsms && s?.self_esms_score != null && (
-                        <p className="mt-1 text-[10px] leading-tight text-ink-400">
-                          ESMS{' '}
-                          <span className="font-semibold tabular-nums text-ink-600">
-                            {s.self_esms_score.toFixed(1)}
-                          </span>
-                        </p>
-                      )}
-                    </td>
-                    <BandCell
-                      total={s?.mgr_total_score}
-                      job={s?.mgr_job_role_score}
-                      esms={s?.mgr_esms_score}
-                      core={s?.mgr_core_score}
-                      hasEsms={hasEsms}
-                    />
-                    <BandCell
-                      total={s?.final_total_score}
-                      job={s?.final_job_role_score}
-                      esms={s?.final_esms_score}
-                      core={s?.final_core_score}
-                      hasEsms={hasEsms}
-                      pill
-                    />
-                    <td className="px-4 py-3 text-right">
-                      {/* The state is what sends scoring back to this
-                          person's record rather than to the team list.
-                          Reading down a year opens several of these. */}
-                      {s && (
-                        <Link to={`/score/${s.id}`}
-                              state={{ from: 'member', employeeId }}
-                              className="link-accent text-xs hover:underline">
-                          {s.status === 'submitted' ? 'Score' : 'View'}
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* The same year as the person's own Assessments page (the user, 12 Nov). */}
+      <AssessmentYear employeeId={employeeId} manager />
 
       {/* their KPI structure, for context while scoring */}
       {assignment?.assignment && (
@@ -256,7 +100,8 @@ export default function TeamMember() {
                       <tr key={i.id}>
                         <td className="px-4 py-2.5">
                           <p className="font-medium text-ink-900">{i.kra}</p>
-                          <p className="text-xs text-ink-500">{i.kpi_description}</p>
+                          {/* Core values' description on desktop only (the user, 12 Nov). */}
+                          <p className={section === 'core_values' ? 'hidden text-xs text-ink-500 sm:block' : 'text-xs text-ink-500'}>{i.kpi_description}</p>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
                           {i.weightage}%

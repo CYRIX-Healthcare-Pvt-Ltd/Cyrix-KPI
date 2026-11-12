@@ -10,6 +10,7 @@ import { ScorePill } from '@/components/ui'
 import { TREND_MARGIN, ScoreLabel } from '@/components/ScoreTrend'
 import { bandFor, BAND_SCALE } from '@/lib/bands'
 import { useIsDark } from '@/lib/isDark'
+import { useNarrow } from '@/lib/useNarrow'
 
 /*
   Where I stand in my manager's team (KPI 0262; a director's ask). Everyone sees the people who share their reporting
@@ -122,9 +123,11 @@ function SplitLine({ sp, hasEsms }: { sp: Split | null | undefined; hasEsms?: bo
   const f = (n: number | null | undefined) => (n == null ? '—' : Number(n).toFixed(1))
   return (
     <p className="mt-0.5 text-[11px] tabular-nums text-ink-500">
-      Job <span className="font-semibold text-ink-700">{f(sp.job)}</span>
-      {hasEsms && <> · ESMS <span className="font-semibold text-ink-700">{f(sp.esms)}</span></>}
-      {' '}· Core <span className="font-semibold text-ink-700">{f(sp.core)}</span>
+      {/* One a line on a phone, so a part never breaks from its figure (the user, 12 Nov: "in phone, bring core to
+          next row"); one line with dots from sm up. */}
+      <span className="block whitespace-nowrap sm:inline">Job <span className="font-semibold text-ink-700">{f(sp.job)}</span></span>
+      {hasEsms && <span className="block whitespace-nowrap sm:inline"><span className="hidden sm:inline"> · </span>ESMS <span className="font-semibold text-ink-700">{f(sp.esms)}</span></span>}
+      <span className="block whitespace-nowrap sm:inline"><span className="hidden sm:inline"> · </span>Core <span className="font-semibold text-ink-700">{f(sp.core)}</span></span>
     </p>
   )
 }
@@ -157,6 +160,8 @@ export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
   }, [rows])
   const [view, setView] = useState<'year' | 'month'>('year')
   const dark = useIsDark()
+  // Phones: tighter padding and smaller figures so seven months fit (the user, 12 Nov: "same, in phone, padding and small font").
+  const narrow = useNarrow()
 
   const me = members.find(m => m.me)
   if (!me || members.length < 2 || !months.length) return null
@@ -201,7 +206,7 @@ export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
   const myStops = scoredAt.map(({ i, v }) => ({ at: (i - scoredAt[0].i) / span, c: bandFor(v)?.hex.base ?? MINE }))
 
   return (
-    <div className="card p-4">
+    <div className="card p-3 sm:p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-800">
@@ -311,12 +316,12 @@ export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
         <span className="flex items-center gap-1.5 font-semibold text-ink-800"><span className="h-[3px] w-4 rounded" style={{ background: myStops.length > 1 ? `linear-gradient(to right, ${myStops.map(st => st.c).join(', ')})` : myStops[0]?.c ?? MINE }} /> Me</span>
         <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-ink-400" /> Team average</span>
       </div>
-      <div style={{ height: 240 }}>
+      <div style={{ height: narrow ? 210 : 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           {/* With no axis the first point sits on the edge: room for its figure on the left. */}
           <LineChart data={chart} margin={{ ...TREND_MARGIN, left: 18, bottom: 4 }}>
             <CartesianGrid vertical={false} stroke="#8884" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b6e79' }} axisLine={{ stroke: '#8886' }} tickLine={false} />
+            <XAxis dataKey="month" tick={{ fontSize: narrow ? 10 : 11, fill: '#6b6e79' }} axisLine={{ stroke: '#8886' }} tickLine={false} interval={0} />
             {/* No % axis (the user, 6 Nov): the points carry their own figures, on the score bands of the other charts. */}
             <YAxis hide domain={[lo, 100]} />
             {BAND_SCALE.filter(b => b.to > lo).map(({ band, from, to }) => (
@@ -333,7 +338,7 @@ export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
                 below. */}
             <Line type="monotone" dataKey="avg" stroke={avgInk} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3, fill: avgInk, strokeWidth: 0 }} connectNulls isAnimationActive={false}
               label={(p: { x?: number; y?: number; value?: number | null; index?: number }) =>
-                <ScoreLabel key={p.index} x={p.x} y={p.y} value={p.value} index={p.index} count={chart.length} fill={avgInk} dy={above('avg', p.index) ? -12 : 18} />} />
+                <ScoreLabel key={p.index} x={p.x} y={p.y} value={p.value} index={p.index} count={chart.length} fontSize={narrow ? 9 : 11} fill={avgInk} dy={above('avg', p.index) ? -12 : 18} />} />
             {/* My line in the colours of my months' bands, blended from one month to the next ("why green line? for
                 rajiv?"), with each point and figure in its band. */}
             <defs>
@@ -345,7 +350,7 @@ export default function TeamStanding({ fy, yearSplit, monthSplit, hasEsms }: {
               dot={(p: { cx?: number; cy?: number; value?: number | null; index?: number }) => p.value == null || p.cx == null || p.cy == null ? <g key={p.index} /> :
                 <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill={bandFor(p.value)?.hex.base ?? MINE} stroke="rgb(var(--surface))" strokeWidth={1.5} />}
               label={(p: { x?: number; y?: number; value?: number | null; index?: number }) =>
-                <ScoreLabel key={p.index} x={p.x} y={p.y} value={p.value} index={p.index} count={chart.length} fill={p.value == null ? MINE : bandFor(p.value)?.hex.base ?? MINE} dy={above('me', p.index) ? -12 : 20} />} />
+                <ScoreLabel key={p.index} x={p.x} y={p.y} value={p.value} index={p.index} count={chart.length} fontSize={narrow ? 9 : 11} fill={p.value == null ? MINE : bandFor(p.value)?.hex.base ?? MINE} dy={above('me', p.index) ? -12 : 20} />} />
           </LineChart>
         </ResponsiveContainer>
       </div>

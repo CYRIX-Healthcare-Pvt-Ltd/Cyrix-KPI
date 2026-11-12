@@ -123,7 +123,9 @@ export function StartMonthBanner({
         )} />
       </span>
 
-      <div className="min-w-0 flex-1">
+      {/* At least 12rem wide, so on a phone the month picker drops to a line of its own instead of squeezing the
+          words into one-word lines (the user, 12 Nov). */}
+      <div className="min-w-0 flex-1 basis-48">
         <p className="text-[11px] font-semibold uppercase tracking-label text-ink-400">
           This KPI starts from
         </p>
@@ -147,24 +149,25 @@ export function StartMonthBanner({
             not. Only where the control is, because it is the answer to
             "what happens if I change this". */}
         {editable && (
-          <p className="mt-1.5 text-xs text-ink-400">
+          // Desktop only (the user, 12 Nov: not needed on a phone).
+          <p className="mt-1.5 hidden text-xs text-ink-400 sm:block">
             Moving this later clears earlier months that are still drafts.
             A month already filed stays, and has to be deleted before the
             start can pass it.
           </p>
         )}
-        {editable && <AssessedFrom latest={latest} who={who} />}
+        {editable && <div className="hidden sm:block"><AssessedFrom latest={latest} who={who} /></div>}
       </div>
 
       {editable && onChange && (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
           {busy && <Spinner className="h-4 w-4 text-ink-400" />}
           <StartMonthSelect
             fy={fy}
             value={startsFrom ?? ''}
             onChange={onChange}
             placeholder="Choose a month"
-            className="input w-auto"
+            className="input w-full sm:w-auto"
             latest={latest}
           />
         </div>

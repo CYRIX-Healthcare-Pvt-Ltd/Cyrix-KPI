@@ -4,6 +4,7 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ArrowLeft, ArrowDown, Check, Undo2, Lock, Trash2, MessageSquare,
+  ArrowUp,
 } from 'lucide-react'
 import { ScoreCutPrompt } from '@/components/ScoreCutReason'
 import RuleTraits from '@/components/RuleTraits'
@@ -20,10 +21,10 @@ import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
 import { ReopenRequest } from '@/components/ReopenRequest'
 import { monthLabel } from '@/lib/fy'
-import { BANDS } from '@/lib/bands'
+import { BANDS, bandFor } from '@/lib/bands'
 import {
   calcKpiScore, weightedCoreValueRatings, ratingToPoints, RATING_SCALE,
-  SCORE_CUT_POINTS, type ScoringRule, type RuleParams,
+  SCORE_CUT_POINTS, ruleDirection, type ScoringRule, type RuleParams,
 } from '@/lib/scoring'
 import {
   Alert, PageLoader, Spinner, ScorePill, StatusBadge, StatTile,
@@ -505,11 +506,18 @@ export default function ScoreSubmission() {
         <Link to={back.to} className="inline-flex items-center gap-1.5 text-sm text-ink-600 hover:text-ink-900">
           <ArrowLeft className="h-4 w-4" /> {back.label}
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-ink-900">
+        <div className="mt-2 flex items-center gap-2 sm:gap-3">
+          <h1 className="text-lg font-semibold text-ink-900 sm:text-xl">
             {data.employee.full_name}
           </h1>
           <StatusBadge status={submission.status} whose={data.employee.full_name.split(' ')[0]} />
+          {/* Said on the title row, not in a box (the user, 12 Nov), as on the month page. */}
+          {submission.status === 'finalized' && (
+            <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-500">
+              <Lock className="h-3.5 w-3.5" />
+              Read-only
+            </span>
+          )}
         </div>
         <p className="mt-0.5 text-sm text-ink-500">
           {data.employee.ecode} · {monthLabel(submission.period_month)}
@@ -566,13 +574,6 @@ export default function ScoreSubmission() {
         </div>
       )}
 
-      {submission.status === 'finalized' && (
-        <Alert kind="info" title="This month is final">
-          <span className="inline-flex items-center gap-1.5">
-            <Lock className="h-3.5 w-3.5" /> Contact HR if it genuinely needs reopening.
-          </span>
-        </Alert>
-      )}
 
       {submission.employee_remarks && (
         <div className="card p-4">
@@ -621,7 +622,8 @@ export default function ScoreSubmission() {
         />
         <StatTile
           label="Final score"
-          value={<ScorePill value={mgrTotal} size="lg" />}
+          // The same size as the self figure beside it, its colour in the text (the user, 12 Nov).
+          value={<span className={bandFor(mgrTotal)?.accent}>{mgrTotal.toFixed(2)}</span>}
           sub={mgrSplit}
           tone="brand"
         />
@@ -660,15 +662,20 @@ export default function ScoreSubmission() {
               rescore — and it sat in the header of the block a manager
               is reading to do the actual work. */}
         </div>
-        <div className="divide-y divide-ink-100">
-          {rows.map(item => (
-            <div key={item.id} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+        {/* As the month page (the user, 12 Nov): each row its own box, numbered, the direction an arrow in the % badge,
+            the description the full width. */}
+        <div className="space-y-3 p-3 sm:p-4">
+          {rows.map((item, idx) => (
+            <div key={item.id} className="rounded-xl border border-ink-200 bg-ink-50/60 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <span
+                  className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-violet-700 text-[11px] font-bold text-violet-700"
+                  aria-hidden
+                >
+                  {idx + 1}
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink-900">{item.kra}</p>
-                  {item.kpi_description && (
-                    <p className="mt-0.5 text-sm text-ink-500">{item.kpi_description}</p>
-                  )}
                 </div>
                 {/* Beside the weightage rather than under the fields:
                     a row that can take points off the total is not the
@@ -679,12 +686,25 @@ export default function ScoreSubmission() {
                     rule={item.scoring_rule as ScoringRule}
                     weightage={item.weightage}
                     params={item.rule_params as RuleParams}
+                    skip={['higher', 'lower', 'capped']}
                   />
-                  <span className="badge bg-ink-100 text-ink-600">{item.weightage}%</span>
+                  {(() => {
+                    const dir = ruleDirection(item.scoring_rule as ScoringRule)
+                    const Arrow = dir?.tone === 'lower' ? ArrowDown : ArrowUp
+                    return (
+                      <span className="badge gap-1 bg-ink-100 text-ink-600" title={dir?.label}>
+                        {dir && <Arrow className={clsx('h-3 w-3', dir.tone === 'lower' ? 'text-violet-700' : 'text-sky-700')} aria-label={dir.label} />}
+                        {item.weightage}%
+                      </span>
+                    )
+                  })()}
                 </div>
               </div>
+              {item.kpi_description && (
+                <p className="mt-0.5 pl-7 text-sm text-ink-500">{item.kpi_description}</p>
+              )}
 
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
                 {/* The manager sets the target, not just checks it. The
                     team member can type one while the month is theirs,
                     but the number that decides whether 42 calls is good
@@ -831,8 +851,9 @@ export default function ScoreSubmission() {
                       <span className="badge ml-2 bg-ink-100 align-middle text-ink-900">{Number(coreWeights[rating.core_value_id])}%</span>
                     )}
                   </p>
+                  {/* No description on a phone (the user, 12 Nov). */}
                   {def?.description && (
-                    <p className="mt-0.5 text-sm text-ink-500">{def.description}</p>
+                    <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">{def.description}</p>
                   )}
                   {/* What the manager's rating earns of the value's weight: Very Good on 10% is 8 / 10 (the user, 17 Oct). */}
                   {coreWeights?.[rating.core_value_id] != null && (() => {
@@ -857,8 +878,9 @@ export default function ScoreSubmission() {
                   {!parts.length && rating.self_rating && (
                     <div className="mt-2 space-y-1">
                       {/* As job role rows say it (the user, 17 Oct): "Kevin claimed", their rating and what it earns. */}
-                      <label className="label text-xs">{data?.employee.full_name.split(' ')[0] ?? 'They'} claimed</label>
-                      <p className="inline-block rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700">
+                      {/* On a phone the claim sits beside the manager's box instead (the user, 12 Nov: "why 2 rows?"). */}
+                      <label className="label hidden text-xs sm:block">{data?.employee.full_name.split(' ')[0] ?? 'They'} claimed</label>
+                      <p className="hidden rounded-lg bg-ink-50 px-3 py-2 text-sm tabular-nums text-ink-700 sm:inline-block">
                         {rating.self_rating}
                         {coreWeights?.[rating.core_value_id] != null && (() => {
                           const pts = ratingToPoints(rating.self_rating)
@@ -955,11 +977,21 @@ export default function ScoreSubmission() {
                   one place a manager is trying to concentrate on five
                   judgements.
                 */}
-                {!parts.length && <div className="mt-2 flex items-center gap-3 sm:mt-0">
+                {!parts.length && <div className="mt-2 grid grid-cols-2 items-end gap-3 sm:mt-0 sm:flex sm:items-center">
+                  <div className="min-w-0 sm:hidden">
+                    {rating.self_rating && <>
+                      <span className="label text-xs">{firstName} claimed</span>
+                      <p className="truncate rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-700">{rating.self_rating}</p>
+                    </>}
+                  </div>
+                  {/* Named on a phone, as the job role rows' "My figure" (the user, 12 Nov: "which is manager given?"). */}
+                  <div className="min-w-0 sm:contents">
+                  <label htmlFor={`core-${rating.id}`} className="label text-xs sm:hidden">My rating</label>
                   <select
                     id={`core-${rating.id}`}
+                    aria-label={`Your rating for ${def?.name ?? 'this core value'}`}
                     className={clsx(
-                      'input w-44',
+                      'input w-full sm:w-44',
                       needsRating && 'border-amber-400 ring-1 ring-amber-300',
                     )}
                     disabled={!editable}
@@ -974,6 +1006,7 @@ export default function ScoreSubmission() {
                       <option key={r.label} value={r.label}>{r.label} ({r.points})</option>
                     ))}
                   </select>
+                  </div>
                 </div>}
               </div>
             )
