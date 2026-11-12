@@ -207,8 +207,8 @@ Deno.serve(async req => {
   if (input.action === 'bell' || input.action === 'reminders' || input.action === 'queued') {
     if (req.headers.get('x-push-key') !== Deno.env.get('PUSH_REMINDER_KEY')) return json({ error: 'Not allowed' }, 403)
 
-    // A module or BEMMP project just given (0233): sent the moment it is, not on the next round.
-    if (input.action === 'queued') return json(await sendQueued(db, ['travel', 'ops', 'module']))
+    // A module or BEMMP project just given (0233), or a Quotation tracker step (BEMMP 0049): sent the moment it is, not on the next round.
+    if (input.action === 'queued') return json(await sendQueued(db, ['travel', 'ops', 'module', 'bemmp']))
 
     if (input.action === 'bell') {
       const { data, error } = await db.rpc('push_bell_due')
@@ -245,7 +245,7 @@ Deno.serve(async req => {
         const t = await deliverNamed(db, joinWords(m), a?.audience_ids ?? null)
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
-      const travel = await sendQueued(db, ['travel', 'ops', 'module'])
+      const travel = await sendQueued(db, ['travel', 'ops', 'module', 'bemmp'])
       total.people += travel.people; total.devices += travel.devices; total.delivered += travel.delivered; total.failed += travel.failed
       return json(total)
     }
