@@ -8,6 +8,7 @@ import { LOGO_WHITE_PNG } from './logo.ts'
  *   raised    a spare request raised (spares raised together in one mail)
  *   quote_ok  the engineer marks the customer's approval, with the signed quotation (else the Coordinator's file) attached
  *   rates     Purchase sends the rates, Cc also the Purchase person who sent them
+ *   transfer  a Coordinator or Purchase person transfers a request (BEMMP 0050): To the new person, Cc the one who transferred
  * Company colours: black band with the Cyrix logo as it is (inline image, the portal's own file), a red rule,
  * light grey tables.
  *
@@ -32,7 +33,8 @@ type Req = {
   quote_date: string | null; file: string | null; signed: boolean; step: string
 }
 type Job = {
-  ids: number[]; kind: 'raised' | 'tl_ok' | 'quote_ok' | 'rates'; to: string[]; cc: string[]
+  ids: number[]; kind: 'raised' | 'tl_ok' | 'quote_ok' | 'rates' | 'transfer'; to: string[]; cc: string[]
+  to_name?: string | null; transfer_note?: string | null
   engineer: string | null; engineer_ecode: string | null; team_lead: string | null; by: string | null
   hospital: string; district: string | null; category: string | null
   equipment: string; make: string | null; model: string | null; serial: string | null; step: string; requests: Req[]
@@ -71,6 +73,15 @@ function words(j: Job) {
     rows.push(['Equipment', esc(equip) + (j.serial ? ` · <span style="color:#777">S/N ${esc(j.serial)}</span>` : '')])
     for (const x of j.requests) rows.push([many ? x.no : 'Spare', `<b>${esc(x.spare)} × ${x.qty}</b>${x.part_no ? ` · <span style="color:#777">${esc(x.part_no)}</span>` : ''}`])
     if (r.note) rows.push(['Engineer’s note', esc(r.note)])
+  } else if (j.kind === 'transfer') {
+    title = `Transferred to you · ${r.no}`
+    subject = `[${r.no}] Transferred to you by ${firstName(j.by)} · ${r.spare} · ${j.hospital}`
+    lead = `${esc(j.by)} transferred ${esc(r.no)} to ${esc(j.to_name)}. Accept it to work on it.`
+    if (j.transfer_note) rows.push(['Reason', esc(j.transfer_note)])
+    rows.push(['Engineer', esc(`${j.engineer ?? ''}${j.engineer_ecode ? ` (${j.engineer_ecode})` : ''}`)])
+    rows.push(['Hospital', esc([j.hospital, j.district].filter(Boolean).join(' · '))])
+    rows.push(['Equipment', esc([j.equipment, j.make, j.model].filter(Boolean).join(' · '))])
+    rows.push(['Spare', `<b>${esc(r.spare)} × ${r.qty}</b>`])
   } else if (j.kind === 'quote_ok') {
     title = `Quotation approved · ${r.no}`
     subject = `[${r.no}] Quotation approved by the customer · ${j.hospital}`
