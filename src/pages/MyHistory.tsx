@@ -20,7 +20,9 @@ import {
   Alert, PageLoader, StatusBadge, ScorePill,
 } from '@/components/ui'
 import { ScoreLabel, TREND_MARGIN } from '@/components/ScoreTrend'
-import { bandFor } from '@/lib/bands'
+import { bandFor, bandScaleGradient } from '@/lib/bands'
+
+const SCALE = bandScaleGradient()
 import { ratingFor, ratingLabel } from '@/lib/rating'
 
 export default function MyHistory() {
@@ -142,7 +144,7 @@ export function AssessmentYear({ employeeId, manager = false }: { employeeId: st
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-label text-ink-500">Year average</p>
                   <p className="text-xs text-ink-500">FY {fy}</p>
-                  <p className={`mt-2 text-5xl font-bold leading-none tabular-nums ${champ ? '' : band ? band.accent : 'text-ink-300'}`}
+                  <p className={`mt-2 whitespace-nowrap text-5xl font-bold leading-none tabular-nums ${champ ? '' : band ? band.accent : 'text-ink-300'}`}
                     style={champ ? {
                       // Metal, not paint: flat yellow read as Satisfactory (the user, 12 Nov: "make the shining").
                       backgroundImage: dark
@@ -168,14 +170,23 @@ export function AssessmentYear({ employeeId, manager = false }: { employeeId: st
                   )}
                 </span>
               </div>
-              <div className={`grid gap-3 border-t border-ink-200 pt-4 lg:grid-cols-1 ${parts.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              {/* The dividing line is the band scale, bright up to the year average, as the Dashboard's (the user, 12 Nov:
+                  "the separating line, here make it our band color"). */}
+              <div className="relative h-1.5 overflow-hidden rounded-full bg-ink-100" aria-hidden>
+                <div className="absolute inset-0 opacity-25" style={{ backgroundImage: SCALE }} />
+                {avg !== null && (
+                  <div className="absolute inset-0" style={{ backgroundImage: SCALE, clipPath: `inset(0 ${100 - Math.max(0, Math.min(100, avg))}% 0 0)` }} />
+                )}
+              </div>
+              <div className={`grid gap-3 lg:grid-cols-1 ${parts.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 {parts.map(x => (
                   <div key={x.label} className="flex flex-col lg:flex-row lg:items-baseline lg:justify-between">
                     <span className="flex items-center gap-1.5 text-xs text-ink-500">
-                      {x.colour && <span className="h-[3px] w-2.5 rounded-full" style={{ background: x.colour }} aria-hidden />}{x.label}
+                      {/* The graph's key, so only where the graph is: not on a phone (the user, 12 Nov). */}
+                      {x.colour && <span className="hidden h-[3px] w-2.5 rounded-full sm:inline-block" style={{ background: x.colour }} aria-hidden />}{x.label}
                     </span>
                     <span>
-                      <span className="text-lg font-semibold tabular-nums text-ink-900">{x.value != null ? ('whole' in x && x.whole ? String(x.value) : x.value.toFixed(1)) : '—'}</span>
+                      <span className={`text-lg font-semibold tabular-nums ${x.value == null ? 'text-ink-300' : 'text-ink-900'}`}>{x.value != null ? ('whole' in x && x.whole ? String(x.value) : x.value.toFixed(1)) : '—'}</span>
                       <span className="text-xs text-ink-400"> /{x.of}</span>
                     </span>
                   </div>
@@ -268,7 +279,8 @@ export function AssessmentYear({ employeeId, manager = false }: { employeeId: st
         </div>
         {/* Phones: one row a month, the score at the end and an arrow, no table to scroll sideways for View
             (the user, 12 Nov: "im seeing people scrolling to find view"). */}
-        <ul className="divide-y divide-ink-100 sm:hidden">
+        {/* Each month its own box, as the KRAs and My Team (the user, 12 Nov: "and that seperation"). */}
+        <ul className="space-y-2 p-3 sm:hidden">
           {months.map(m => {
             const s = byMonth.get(m)
             const open = isMonthOpen(m)
@@ -283,7 +295,13 @@ export function AssessmentYear({ employeeId, manager = false }: { employeeId: st
               <li key={m}>
                 <button type="button" disabled={!open || (manager && !s)}
                   onClick={() => go(m)}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left ${open ? 'active:bg-ink-50' : 'bg-ink-50/40'}`}>
+                  className={`group relative isolate flex w-full items-center gap-3 overflow-hidden rounded-xl border border-ink-200 px-3 py-2.5 text-left transition-colors ${open ? 'bg-ink-50/60 hover:bg-ink-100 active:bg-ink-100' : 'bg-ink-50/30'}`}>
+                  {/* A light wash of the month's score colour that deepens under the pointer, as My Team (the user, 12 Nov). */}
+                  {open && total != null && (
+                    <span aria-hidden
+                      className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-l ${bandFor(Number(total))?.wash ?? ''} to-transparent opacity-[var(--w)] transition-opacity duration-200 group-hover:opacity-100`}
+                      style={{ '--w': dark ? 0.35 : 0.8 } as React.CSSProperties} />
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className={`block font-semibold ${open ? 'text-ink-900' : 'text-ink-400'}`}>{monthLabel(m)}</span>
                     <span className="mt-1 block">
