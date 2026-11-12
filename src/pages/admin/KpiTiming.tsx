@@ -6,16 +6,9 @@ import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
   currentFy, type TatPolicy,
 } from '@/lib/queries'
-import { fyMonths, monthLabel, monthStart, isMonthOpen } from '@/lib/fy'
+import { fyMonths, monthLabel, monthStart } from '@/lib/fy'
 import { PageLoader, Alert, Spinner, StatTile } from '@/components/ui'
 import Dialog from '@/components/Dialog'
-
-/** '2026-09-01' → '1 Oct': the day that month's clock starts. */
-function firstOfNext(monthIso: string): string {
-  const d = new Date(monthIso + 'T00:00:00')
-  d.setMonth(d.getMonth() + 1)
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
 
 /**
  * When turnaround starts counting, and how much of it is free.
@@ -41,7 +34,6 @@ export default function KpiTiming() {
 
   const [tm, setTm] = useState('3')
   const [mgr, setMgr] = useState('5')
-  const [from, setFrom] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
 
@@ -49,7 +41,6 @@ export default function KpiTiming() {
     if (!policy) return
     setTm(String(policy.tm_grace_days))
     setMgr(String(policy.manager_grace_days))
-    setFrom(policy.starts_from ?? '')
   }, [policy])
 
   // undefined = still loading, null = deliberately off.
@@ -135,8 +126,7 @@ export default function KpiTiming() {
   const dirty =
     !!policy && (
       tmDays !== policy.tm_grace_days ||
-      mgrDays !== policy.manager_grace_days ||
-      (from || null) !== policy.starts_from
+      mgrDays !== policy.manager_grace_days
     )
 
   const submit = async () => {
@@ -145,7 +135,8 @@ export default function KpiTiming() {
       ...policy,
       tm_grace_days: tmDays,
       manager_grace_days: mgrDays,
-      starts_from: from || null,
+      // Measuring starts with the last days (the user, 12 Nov: "make start measuring from and last day same").
+      starts_from: policy?.deadlines_from ?? policy?.starts_from ?? null,
     }
     try {
       await save.mutateAsync(next)
@@ -272,42 +263,6 @@ export default function KpiTiming() {
           )}
         </div>
 
-        <div className="border-t border-ink-100 pt-5">
-          <label className="label" htmlFor="from-month">
-            <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
-            Start measuring from
-          </label>
-          <select
-            id="from-month"
-            className="input max-w-xs"
-            value={from}
-            onChange={e => setFrom(e.target.value)}
-          >
-            <option value="">Every month of the year</option>
-            {/* Finished months and the one still running. The running
-                month is the usual answer at go-live: in September 2026,
-                508 of the 543 KPIs then active had been approved that
-                month, so it was the first month most people could have
-                sent in on time. The line below says what choosing it does
-                until it ends. */}
-            {fyMonths(fy).filter(m => m <= monthStart(new Date())).map(m => (
-              <option key={m} value={m}>{monthLabel(m)} onwards</option>
-            ))}
-          </select>
-          {from && !isMonthOpen(from) && (
-            <p className="mt-2 text-xs text-amber-700">
-              {monthLabel(from)} is still running, so nothing is measured until
-              it ends. Until {firstOfNext(from)}, TAT and lateness stay blank on
-              the HR report and on managers' profiles, and the team scoring
-              rank runs on the team average band alone.
-            </p>
-          )}
-          <p className="mt-2 text-xs text-ink-500">
-            Months before this still count as owed and still count as scored —
-            they simply have no clock on them. Completion&nbsp;% is unaffected:
-            a month that was owed is owed whenever it was owed.
-          </p>
-        </div>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-ink-100 pt-5">
           <button
@@ -361,15 +316,6 @@ export default function KpiTiming() {
           label="Last days from"
           value={<span className="text-base">{policy?.deadlines_from ? monthLabel(policy.deadlines_from) : 'Off'}</span>}
           sub={policy?.deadlines_from ? 'earlier months have no last day' : 'no last days'}
-        />
-        <StatTile
-          label="Counting from"
-          value={
-            <span className="text-base">
-              {policy?.starts_from ? monthLabel(policy.starts_from) : 'Every month'}
-            </span>
-          }
-          sub={policy?.starts_from ? 'earlier months have no clock' : 'nothing excluded'}
         />
       </div>
 
