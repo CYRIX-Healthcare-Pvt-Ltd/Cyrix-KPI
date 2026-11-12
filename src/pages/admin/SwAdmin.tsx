@@ -1540,15 +1540,18 @@ interface QtPerson {
   observes?: string | null
 }
 
-function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
+function QuotationCell({ code, person, teamLeads, busy, onSave, onTry, onRemove }: {
   code: string
   person: QtPerson | undefined
   teamLeads: QtPerson[]
   busy: boolean
   onSave: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null; observes?: string | null }) => void
+  /** Saved as an engineer with the reporting manager as Team Lead (BEMMP 0045); false when the manager is not one. */
+  onTry: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => Promise<boolean>
   onRemove: (employeeId: string) => void
 }) {
-  // Engineer waits here until a Team Lead is chosen; the server refuses an engineer without one.
+  // Engineer: the reporting manager is the Team Lead when the manager is one (the user, 12 Nov);
+  // otherwise it waits here until a Team Lead is chosen.
   const [pending, setPending] = useState<string | null>(null)
   const role = pending ?? person?.role ?? ''
   const lead = person?.lead ?? false
@@ -1561,7 +1564,11 @@ function QuotationCell({ code, person, teamLeads, busy, onSave, onRemove }: {
         onChange={e => {
           const v = e.target.value
           if (!v) { setPending(null); if (person) onRemove(person.employee_id); return }
-          if (v === 'engineer' && !person?.team_lead_ecode) { setPending('engineer'); return }
+          if (v === 'engineer' && !person?.team_lead_ecode) {
+            setPending('engineer')
+            void onTry({ ecode: code, role: 'engineer', lead, team_lead_ecode: null }).then(ok => { if (ok) setPending(null) })
+            return
+          }
           setPending(null)
           onSave({ ecode: code, role: v, lead, team_lead_ecode: v === 'engineer' ? person?.team_lead_ecode ?? null : null })
         }}
@@ -1828,6 +1835,12 @@ function BemmpTab() {
                       teamLeads={teamLeads}
                       busy={qtSave.isPending || qtRemove.isPending}
                       onSave={x => qtSave.mutate(x)}
+                      onTry={async x => {
+                        try { await supabase.rpc('qt_save_person', { p: x }).then(({ error }) => { if (error) throw error }) }
+                        catch { return false }
+                        qc.invalidateQueries({ queryKey: ['qt_people'] })
+                        return true
+                      }}
                       onRemove={id => qtRemove.mutate(id)}
                     />
                   </td>
