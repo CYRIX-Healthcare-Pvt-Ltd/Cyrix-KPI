@@ -52,14 +52,32 @@ export default function KpiTiming() {
       setExempt(list); setSavedExempt(list.map(p => p.ecode).sort().join(','))
     })
   }, [])
+  // A name or an ecode, with suggestions as it is typed (the user, 13 Nov: "need to type name or ecode, need to show suggestions").
+  type Match = Person & { designation: string | null; is_active: boolean }
+  const [matches, setMatches] = useState<Match[]>([])
+  useEffect(() => {
+    const q = code.trim().replace(/[%,()*\\]/g, ' ').trim()
+    if (q.length < 2) { setMatches([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const { data } = await supabase.from('employees').select('ecode, full_name, designation, is_active')
+        .eq('account_type', 'employee').or(`full_name.ilike.%${q}%,ecode.ilike.${q}%`)
+        .order('is_active', { ascending: false }).order('full_name').limit(8)
+      if (live) setMatches((data ?? []) as Match[])
+    }, 250)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [code])
+  const pick = (m: Person) => {
+    if (exempt?.some(p => p.ecode === m.ecode)) { setCodeErr(`${m.full_name} is added already`); return }
+    setExempt(l => [...(l ?? []), { ecode: m.ecode, full_name: m.full_name }]); setCode(''); setMatches([]); setCodeErr(null)
+  }
   const addCode = async () => {
-    const c = code.trim().toUpperCase()
-    if (!c) { setCodeErr('Type an ecode'); return }
-    if (exempt?.some(p => p.ecode.toUpperCase() === c)) { setCodeErr(`${c} is added already`); return }
-    const { data } = await supabase.from('employees').select('ecode, full_name').ilike('ecode', c).limit(1)
-    const hit = (data ?? [])[0] as Person | undefined
-    if (!hit) { setCodeErr(`No one with ecode ${c}`); return }
-    setExempt(l => [...(l ?? []), hit]); setCode(''); setCodeErr(null)
+    const c = code.trim()
+    if (!c) { setCodeErr('Type a name or ecode'); return }
+    const exact = matches.find(m => m.ecode.toUpperCase() === c.toUpperCase())
+    if (exact) return pick(exact)
+    if (matches.length === 1) return pick(matches[0])
+    setCodeErr(matches.length ? 'Choose the person from the list' : `No one called ${c}`)
   }
   const exemptDirty = exempt !== null && exempt.map(p => p.ecode).sort().join(',') !== savedExempt
 
@@ -246,11 +264,25 @@ export default function KpiTiming() {
         {rulesOn && (
           <div>
             <label className="label" htmlFor="exempt-code">No last days for</label>
-            <div className="flex max-w-sm gap-2">
-              <input id="exempt-code" className="input flex-1" placeholder="E1" value={code}
+            <div className="relative flex max-w-md gap-2">
+              <input id="exempt-code" className="input flex-1" placeholder="Name or ecode" autoComplete="off" value={code}
                 onChange={e => { setCode(e.target.value); setCodeErr(null) }}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addCode() } }} />
               <button type="button" className="btn-secondary" onClick={() => void addCode()}><Plus className="h-4 w-4" /> Add</button>
+              {matches.length > 0 && (
+                <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-ink-200 bg-surface shadow-lg">
+                  {matches.map(m => (
+                    <li key={m.ecode}>
+                      <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100" onClick={() => pick(m)}>
+                        <span className="font-medium text-ink-900">{m.full_name}</span>
+                        <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
+                        {!m.is_active && <span className="text-xs text-cyrixRed-600">left</span>}
+                        {m.designation && <span className="ml-auto truncate text-xs text-ink-400">{m.designation}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             {codeErr && <p className="mt-1.5 text-sm font-medium text-cyrixRed-600">{codeErr}</p>}
             {!!exempt?.length && (
