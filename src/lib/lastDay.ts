@@ -20,6 +20,7 @@ const IST_MINUTES = 330
  */
 function lastDayUtc(period: string, side: Side, p: TatPolicy | undefined, reopen?: string | null): Date | null {
   if (!p?.deadlines_from || period < p.deadlines_from) return null
+  if (side === 'tm' ? p.no_tm : p.no_mgr) return null  // in the list with no last days (0293)
   const day = Math.max(1, Math.min(28, side === 'manager' ? p.manager_grace_days : p.tm_grace_days))
   const [y, m] = period.split('-').map(Number)
   const base = Date.UTC(y, m, day)

@@ -9,7 +9,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
-  useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
+  useTeamMonth, useTeamSubmissions, useTatPolicy, forPeople, useMonthClose,
   useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket,
   useKpiRanking, usePushEnabled, currentFy,
 } from '@/lib/queries'
@@ -202,7 +202,9 @@ export default function ChatBot() {
   // The manual states deadlines as {tmDays} and {mgrDays}, filled from
   // live settings. The Help page has always done this; the panel quoted
   // the same sentences without them and printed the braces at people.
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // My own last days: none if I am in the list (0293).
+  const policy = forPeople(tatPolicy, employee?.id, employee?.id)
   const closingDay = useMonthClose().data ?? null
 
   /**

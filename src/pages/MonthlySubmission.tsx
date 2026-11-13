@@ -18,7 +18,7 @@ import {
   useSubmission, useOpenSubmission, useSaveItemValues, useSaveCoreRatings, useSaveCoreParts,
   useSubmissionAction, useCoreValues, useMyAssignment, useSaveMonthlyTarget,
   useOpenRequestFor, useRequestAction, useScoreQueryState, useRaiseScoreQuery,
-  useScoreQueries, useUseAlternate, useTatPolicy, currentFy, type QueryPointInput,
+  useScoreQueries, useUseAlternate, useTatPolicy, forPeople, currentFy, type QueryPointInput,
 } from '@/lib/queries'
 import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
@@ -85,7 +85,9 @@ export default function MonthlySubmission() {
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // No last days for anyone in the list (0293): this month's team member, or its manager on the scoring side.
+  const policy = forPeople(tatPolicy, submission?.employee_id, submission?.manager_id)
   // The last day to submit (0153): after it nothing more is entered.
   // A month opened on an approved request (0273) has its own later last day.
   const pastLastDay = isPastLastDay(month, 'tm', policy, undefined, submission?.reopen_tm_until)
@@ -188,6 +190,7 @@ export default function MonthlySubmission() {
   const esmsTotal = esmsRows.reduce((a, i) => a + liveScore(i), 0)
   const coreTotal = coreRows.reduce((a, i) => a + liveScore(i), 0)
   const hasEsms = esmsRows.length > 0
+  const notScored = submission?.deadline_outcome === 'not_scored'
 
   /*
     Whether the final figure is anything other than the manager's.
@@ -513,9 +516,10 @@ export default function MonthlySubmission() {
           />
           {/* On a phone only mine and the final (the user, 12 Nov: "only 2 grid enough"); the parts show from sm up. */}
           <div className="hidden sm:contents">
-            <StatTile label="Job role" value={(submission.mgr_job_role_score ?? 0).toFixed(2)} sub={`by manager, out of ${jobWeight}`} />
-            {hasEsms && <StatTile label="ESMS" value={(submission.mgr_esms_score ?? 0).toFixed(2)} sub={`by manager, out of ${esmsWeight}`} />}
-            <StatTile label="Core values" value={coreTotal.toFixed(2)} sub={`by manager, out of ${coreWeight}`} />
+            {/* The manager never scored (0153): no manager figures, not 0.00 (the user, 13 Nov: E2134 "why 100?"). */}
+            <StatTile label="Job role" value={notScored ? '—' : (submission.mgr_job_role_score ?? 0).toFixed(2)} sub={notScored ? 'not scored by manager' : `by manager, out of ${jobWeight}`} />
+            {hasEsms && <StatTile label="ESMS" value={notScored ? '—' : (submission.mgr_esms_score ?? 0).toFixed(2)} sub={notScored ? 'not scored by manager' : `by manager, out of ${esmsWeight}`} />}
+            <StatTile label="Core values" value={notScored ? '—' : coreTotal.toFixed(2)} sub={notScored ? 'not scored by manager' : `by manager, out of ${coreWeight}`} />
             {adjusted && (
               <StatTile label="Manager's total" value={<ScorePill value={submission.mgr_total_score} size="lg" />} sub="what your manager scored" />
             )}
@@ -528,9 +532,10 @@ export default function MonthlySubmission() {
                 {Number(submission.final_total_score).toFixed(2)}
               </span>
             )}
-            sub={[`Job ${(submission.mgr_job_role_score ?? 0).toFixed(2)}`,
-              hasEsms && `ESMS ${(submission.mgr_esms_score ?? 0).toFixed(2)}`,
-              `Core ${coreTotal.toFixed(2)}`].filter(Boolean).join(' · ')}
+            // The final's own parts: for a month the manager never scored, the own job role and full core values.
+            sub={[`Job ${Number(submission.final_job_role_score ?? submission.mgr_job_role_score ?? 0).toFixed(2)}`,
+              hasEsms && `ESMS ${Number(submission.final_esms_score ?? submission.mgr_esms_score ?? 0).toFixed(2)}`,
+              `Core ${Number(submission.final_core_score ?? coreTotal).toFixed(2)}`].filter(Boolean).join(' · ')}
             tone="brand"
           />
         </div>

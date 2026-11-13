@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Timer, Save, CalendarClock } from 'lucide-react'
+import { Timer, Save, CalendarClock, Plus, X } from 'lucide-react'
 import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
   currentFy, type TatPolicy,
@@ -36,6 +36,32 @@ export default function KpiTiming() {
   const [mgr, setMgr] = useState('5')
   const [notice, setNotice] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+
+  /*
+    No last days for these people (0293; the user, 13 Nov: HR, the directors — "add a field exclude option, so we can
+    type ecode and save" ... "anyone i type the ecode there"): none on their own months, none to score as the manager.
+  */
+  type Person = { ecode: string; full_name: string }
+  const [exempt, setExempt] = useState<Person[] | null>(null)
+  const [savedExempt, setSavedExempt] = useState<string>('')
+  const [code, setCode] = useState('')
+  const [codeErr, setCodeErr] = useState<string | null>(null)
+  useEffect(() => {
+    void supabase.rpc('kpi_last_days_exempt_people').then(({ data }) => {
+      const list = ((data ?? []) as Person[]).map(p => ({ ecode: p.ecode, full_name: p.full_name }))
+      setExempt(list); setSavedExempt(list.map(p => p.ecode).sort().join(','))
+    })
+  }, [])
+  const addCode = async () => {
+    const c = code.trim().toUpperCase()
+    if (!c) { setCodeErr('Type an ecode'); return }
+    if (exempt?.some(p => p.ecode.toUpperCase() === c)) { setCodeErr(`${c} is added already`); return }
+    const { data } = await supabase.from('employees').select('ecode, full_name').ilike('ecode', c).limit(1)
+    const hit = (data ?? [])[0] as Person | undefined
+    if (!hit) { setCodeErr(`No one with ecode ${c}`); return }
+    setExempt(l => [...(l ?? []), hit]); setCode(''); setCodeErr(null)
+  }
+  const exemptDirty = exempt !== null && exempt.map(p => p.ecode).sort().join(',') !== savedExempt
 
   useEffect(() => {
     if (!policy) return
@@ -123,11 +149,12 @@ export default function KpiTiming() {
     tmDays >= 1 && mgrDays >= 1 && tmDays <= 28 && mgrDays <= 28 &&
     mgrDays >= tmDays
 
-  const dirty =
+  const daysDirty =
     !!policy && (
       tmDays !== policy.tm_grace_days ||
       mgrDays !== policy.manager_grace_days
     )
+  const dirty = daysDirty || exemptDirty
 
   const submit = async () => {
     setNotice(null); setFailed(null)
@@ -139,10 +166,16 @@ export default function KpiTiming() {
       starts_from: policy?.deadlines_from ?? policy?.starts_from ?? null,
     }
     try {
-      await save.mutateAsync(next)
+      if (daysDirty) await save.mutateAsync(next)
+      if (exemptDirty) {
+        const { error } = await supabase.rpc('set_kpi_last_days_exempt', { p_ecodes: exempt!.map(p => p.ecode) })
+        if (error) throw new Error(error.message)
+        setSavedExempt(exempt!.map(p => p.ecode).sort().join(','))
+        await qc.invalidateQueries()
+      }
       setNotice(
         `Saved. Team members submit until the ${tmDays} and managers score until the ${mgrDays} ` +
-        'of the following month.',
+        `of the following month${exempt?.length ? `; no last days for ${exempt.map(p => p.full_name).join(', ')}` : ''}.`,
       )
     } catch (err) {
       setFailed(err instanceof Error ? err.message : 'Could not save that.')
@@ -209,6 +242,30 @@ export default function KpiTiming() {
             </div>
           </div>
         </div>
+
+        {rulesOn && (
+          <div>
+            <label className="label" htmlFor="exempt-code">No last days for</label>
+            <div className="flex max-w-sm gap-2">
+              <input id="exempt-code" className="input flex-1" placeholder="E1" value={code}
+                onChange={e => { setCode(e.target.value); setCodeErr(null) }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addCode() } }} />
+              <button type="button" className="btn-secondary" onClick={() => void addCode()}><Plus className="h-4 w-4" /> Add</button>
+            </div>
+            {codeErr && <p className="mt-1.5 text-sm font-medium text-cyrixRed-600">{codeErr}</p>}
+            {!!exempt?.length && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {exempt.map(p => (
+                  <span key={p.ecode} className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 py-1 pl-3 pr-1 text-sm font-medium text-violet-800 ring-1 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-500/30">
+                    {p.full_name} ({p.ecode})
+                    <button type="button" aria-label={`Remove ${p.ecode}`} className="rounded-md p-1 hover:bg-violet-100 dark:hover:bg-violet-500/25"
+                      onClick={() => setExempt(l => (l ?? []).filter(x => x.ecode !== p.ecode))}><X className="h-3.5 w-3.5" /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {mgrDays < tmDays && (
           <Alert kind="warning">

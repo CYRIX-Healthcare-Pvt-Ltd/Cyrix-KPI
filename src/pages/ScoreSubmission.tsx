@@ -15,7 +15,7 @@ import { useReveal } from '@/lib/useReveal'
 import {
   useSubmissionById, useSaveItemValues, useSaveCoreRatings, useSaveCoreParts,
   useSubmissionAction, useCoreValues, useOpenRequestFor, useRequestAction,
-  useSaveMonthlyTarget, useMonthClose, useScoreQueryState, useTatPolicy,
+  useSaveMonthlyTarget, useMonthClose, useScoreQueryState, useTatPolicy, forPeople,
 } from '@/lib/queries'
 import { isPastLastDay, lastDayLabel } from '@/lib/lastDay'
 import { TimeLeft } from '@/components/TimeLeft'
@@ -140,7 +140,9 @@ export default function ScoreSubmission() {
 
   const submission = data?.submission ?? null
   const items = data?.items ?? []
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // No last days for anyone in the list (0293): this month's team member, or its manager on the scoring side.
+  const policy = forPeople(tatPolicy, submission?.employee_id, submission?.manager_id)
   // The last days (0153). A first score is refused after the manager's;
   // a month already scored can still be revised while it is open.
   const period = submission?.period_month ?? ''

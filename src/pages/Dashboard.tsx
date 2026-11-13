@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
-  useSubmissionHistory, useTeamSubmissions, useTatPolicy,
+  useSubmissionHistory, useTeamSubmissions, useTatPolicy, forPeople,
   currentFy,
 } from '@/lib/queries'
 import { daysLeft, lastDayLabel } from '@/lib/lastDay'
@@ -66,7 +66,9 @@ export default function Dashboard() {
   // query My Team makes, so going from here to there costs nothing.
   const teamIds = useMemo(() => (teamData?.team ?? []).map(t => t.id), [teamData])
   const { data: teamSubs } = useTeamSubmissions(teamIds.length ? teamIds : undefined, fy)
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // My own last days: none if I am in the list (0293).
+  const policy = forPeople(tatPolicy, employee?.id, employee?.id)
 
   const startsFrom = assignment?.assignment?.starts_from ?? null
 

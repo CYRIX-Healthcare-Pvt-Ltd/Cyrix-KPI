@@ -1747,6 +1747,19 @@ export interface TatPolicy {
   starts_from: string | null
   /** First month the last days apply to (0153). Null = none. */
   deadlines_from?: string | null
+  /** Employee ids with no last days (0293): none on their own months, none to score as the manager. */
+  exempt?: string[]
+  /** Set by forPeople() for one month's team member and manager: that side has no last day. */
+  no_tm?: boolean
+  no_mgr?: boolean
+}
+
+/** The policy as it applies to one month's team member and manager (0293). */
+export function forPeople(p: TatPolicy | undefined, employeeId?: string | null, managerId?: string | null): TatPolicy | undefined {
+  if (!p?.exempt?.length) return p
+  const own = !!employeeId && p.exempt.includes(employeeId)
+  const boss = !!managerId && p.exempt.includes(managerId)
+  return { ...p, no_tm: own, no_mgr: own || boss }
 }
 
 export const TAT_POLICY_FALLBACK: TatPolicy = {
