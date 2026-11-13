@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import clsx from 'clsx'
 import { Plus, RotateCcw, Save, Search, Upload } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
+import { findPeople } from '@/lib/findPeople'
 import { useScoringRules, useCoreValues, type TemplateReach } from '@/lib/queries'
 import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import { monthLabel } from '@/lib/fy'
@@ -100,14 +101,11 @@ export default function KpiEdit() {
   const [matches, setMatches] = useState<Match[]>([])
   const [picking, setPicking] = useState(false)
   useEffect(() => {
-    const q = code.trim().replace(/[%,()*\\]/g, ' ').trim()
-    if (!picking || q.length < 2) { setMatches([]); return }
+    if (!picking || code.trim().length < 2) { setMatches([]); return }
     let live = true
     const t = window.setTimeout(async () => {
-      const { data } = await supabase.from('employees').select('ecode, full_name, designation, is_active')
-        .eq('account_type', 'employee').or(`full_name.ilike.%${q}%,ecode.ilike.${q}%`)
-        .order('is_active', { ascending: false }).order('full_name').limit(8)
-      if (live) setMatches((data ?? []) as Match[])
+      const found = await findPeople(code)
+      if (live) setMatches(found as Match[])
     }, 250)
     return () => { live = false; window.clearTimeout(t) }
   }, [code, picking])

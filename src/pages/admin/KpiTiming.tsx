@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { findPeople } from '@/lib/findPeople'
 import { Timer, Save, CalendarClock, Plus, X } from 'lucide-react'
 import {
   useTatPolicy, useSaveTatPolicy, useMonthClose, useSetMonthClose,
@@ -56,14 +57,11 @@ export default function KpiTiming() {
   type Match = Person & { designation: string | null; is_active: boolean }
   const [matches, setMatches] = useState<Match[]>([])
   useEffect(() => {
-    const q = code.trim().replace(/[%,()*\\]/g, ' ').trim()
-    if (q.length < 2) { setMatches([]); return }
+    if (code.trim().length < 2) { setMatches([]); return }
     let live = true
     const t = window.setTimeout(async () => {
-      const { data } = await supabase.from('employees').select('ecode, full_name, designation, is_active')
-        .eq('account_type', 'employee').or(`full_name.ilike.%${q}%,ecode.ilike.${q}%`)
-        .order('is_active', { ascending: false }).order('full_name').limit(8)
-      if (live) setMatches((data ?? []) as Match[])
+      const found = await findPeople(code)
+      if (live) setMatches(found as Match[])
     }, 250)
     return () => { live = false; window.clearTimeout(t) }
   }, [code])
