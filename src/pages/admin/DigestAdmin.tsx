@@ -136,9 +136,9 @@ interface Draft {
   /** Show until (0177): a date, or 'forever' — required (the user, 2 Nov: "show until mandatory ... date and forever"). */
   until: string
   /** Send to (0242): everyone, or the chosen functions, teams and people. */
-  to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]
+  to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]; exclude: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [] }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [], exclude: [] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
@@ -255,7 +255,7 @@ export default function DigestAdmin() {
       if (ue) throw new Error(friendlyError(ue))
       const chosen = d.to === 'chosen'
       const { error: ae } = await supabase.rpc('digest_set_audience', {
-        p_id: id, p_functions: chosen ? d.fns : [], p_managers: chosen ? d.mgrs : [], p_ecodes: chosen ? d.ecodes : [], p_direct: chosen ? d.direct : [],
+        p_id: id, p_functions: chosen ? d.fns : [], p_managers: chosen ? d.mgrs : [], p_ecodes: chosen ? d.ecodes : [], p_direct: chosen ? d.direct : [], p_exclude: d.exclude,
       })
       if (ae) throw new Error(friendlyError(ae))
       if (d.kind === 'vacancy') {
@@ -655,7 +655,7 @@ export default function DigestAdmin() {
           </div>
         )}
 
-        <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes }}
+        <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes, exclude: d.exclude }}
           onTo={to => set({ to })} onChange={a => set(a)} hue={solid(d.color)} />
 
         <div className="flex flex-wrap items-center gap-2 border-t border-ink-200 pt-4">
@@ -782,7 +782,7 @@ export default function DigestAdmin() {
                     : []
                   const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
                   setTesters(tested); setTesting(tested.length > 0)
-                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[] } | null
+                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[]; exclude?: string[]; everyone?: boolean } | null
                   setDraftSaved(false)
                   setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
                     date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
@@ -791,7 +791,7 @@ export default function DigestAdmin() {
                       subs: form.filter(x => 'parent_id' in x && x.parent_id === q.id).map(x => subFrom({ id: x.id, label: x.label, required: x.required, required_if: ('required_if' in x ? x.required_if : null) ?? null })) })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
                     anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
                     vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
-                    to: aud ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [] })
+                    to: aud && !aud.everyone ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [], exclude: aud?.exclude ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
                 {r.can_edit && r.published_at && !(r.show_until && r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)) && !(r.kind === 'meeting' && r.meet_at && new Date(r.meet_at).getTime() + (r.meet_minutes ?? 60) * 60_000 < Date.now()) && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}

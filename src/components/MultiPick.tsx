@@ -30,7 +30,17 @@ export default function MultiPick({ id, options, value, onChange, placeholder = 
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return t ? options.filter(o => `${o.label} ${o.value} ${o.hint ?? ''}`.toLowerCase().includes(t)) : options
+    if (!t) return options
+    // What was typed comes first (the user, 13 Nov): the exact code or name, then codes starting with it (shortest
+    // first, so "e1" finds E1 before E1092), then names starting with it, then a word starting with it, then the rest.
+    const rank = (o: PickOption) => {
+      const v = o.value.toLowerCase(), l = o.label.toLowerCase()
+      return v === t || l === t ? 0 : v.startsWith(t) ? 1 : l.startsWith(t) ? 2 : l.split(/\s+/).some(w => w.startsWith(t)) ? 3 : 4
+    }
+    return options.filter(o => `${o.label} ${o.value} ${o.hint ?? ''}`.toLowerCase().includes(t))
+      .map((o, i) => ({ o, i, r: rank(o) }))
+      .sort((a, b) => a.r - b.r || (a.r === 1 ? a.o.value.length - b.o.value.length : 0) || a.i - b.i)
+      .map(x => x.o)
   }, [options, q])
   const chosen = new Set(value)
   const flip = (v: string) => onChange(chosen.has(v) ? value.filter(x => x !== v) : [...value, v])

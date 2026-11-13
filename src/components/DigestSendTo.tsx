@@ -8,7 +8,7 @@ type Way = '' | 'direct' | 'fns' | 'mgrs' | 'people'
 // Each says whom it reaches (the user, 5 Nov: 'Managers direct reportees, managers whole team, Function, custom individuals').
 const WAYS: Array<[Exclude<Way, ''>, string]> = [['direct', "Manager's direct reportees"], ['mgrs', "Manager's whole team"], ['fns', 'Function'], ['people', 'Custom individuals']]
 
-export interface Audience { direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[] }
+export interface Audience { direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]; exclude: string[] }
 
 /**
  * Who a Digest post goes to (0242; the user, 2 Nov: "select function, reportees, ecode or name (multiple ecode or
@@ -26,7 +26,7 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
   // One of the four ways a post (the user, 2 Nov: "it should able to choose any of the 4, not more than that"):
   // another way starts the choice afresh. Blank until one is chosen (the user, 6 Nov: "default dropedown should be blank").
   const [way, setWay] = useState<Way>(value.fns.length ? 'fns' : value.mgrs.length ? 'mgrs' : value.ecodes.length ? 'people' : value.direct.length ? 'direct' : '')
-  const pickWay = (k: Way) => { if (k === way) return; setWay(k); setUpload(null); onChange({ direct: [], fns: [], mgrs: [], ecodes: [] }) }
+  const pickWay = (k: Way) => { if (k === way) return; setWay(k); setUpload(null); onChange({ direct: [], fns: [], mgrs: [], ecodes: [], exclude: value.exclude }) }
   const { data: opts } = useQuery({
     queryKey: ['digest_audience_options'],
     enabled: chosen,
@@ -37,16 +37,16 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
   })
   const { data: people = [] } = useQuery({
     queryKey: ['digest_people'],
-    enabled: chosen,
     staleTime: 10 * 60_000,
     queryFn: async () => ((await supabase.rpc('digest_people_options')).data ?? []) as Array<{ ecode: string; name: string }>,
   })
   const picked = value.direct.length + value.fns.length + value.mgrs.length + value.ecodes.length > 0
   const { data: reach, isFetching } = useQuery({
     queryKey: ['digest_audience_count', value],
-    enabled: chosen && picked,
+    enabled: (chosen && picked) || value.exclude.length > 0,
     queryFn: async () => ((await supabase.rpc('digest_audience_count', {
-      p_functions: value.fns, p_managers: value.mgrs, p_ecodes: value.ecodes, p_direct: value.direct,
+      p_functions: chosen ? value.fns : [], p_managers: chosen ? value.mgrs : [], p_ecodes: chosen ? value.ecodes : [],
+      p_direct: chosen ? value.direct : [], p_exclude: value.exclude,
     })).data ?? 0) as number,
   })
 
@@ -150,6 +150,19 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
           </p>
         </div>
       )}
+
+      {/* Exclude people, for Everyone and Chosen people alike (0294; the user, 13 Nov: "we need exclude people also,
+          add to all" ... "only option to type ecode and name, so suggestion should come"). */}
+      <div className="mt-3">
+        <span className="label">Exclude people</span>
+        <MultiPick id="dg-exclude" value={value.exclude} onChange={exclude => onChange({ ...value, exclude })} placeholder="Name or E-code"
+          options={people.map(p => ({ value: p.ecode, label: p.name, hint: p.ecode }))} />
+        {!chosen && value.exclude.length > 0 && (
+          <p className="mt-1.5 text-sm font-semibold text-ink-900">
+            {isFetching ? <Loader2 className="inline h-4 w-4 animate-spin" /> : `Reaches ${reach ?? 0} ${reach === 1 ? 'person' : 'people'}`}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
