@@ -31,26 +31,21 @@ export function WorkplaceAdmin() {
         <h3 className="text-sm font-semibold text-ink-800">Workplace</h3>
       </div>
       <div className="space-y-4 p-4">
-        <p className="text-sm text-ink-600">
-          The asset register and the IT service desk. Their settings are on Workplace's own page,
-          which only the software administrator can open.
-        </p>
-
-        <dl className="divide-y divide-ink-100 rounded-lg border border-ink-200 text-sm">
+        <dl className="space-y-2 text-sm">
           {WHERE.map(([what, where]) => (
-            <div key={what} className="grid gap-1 px-3 py-2 sm:grid-cols-2 sm:gap-3">
+            <div key={what} className="grid gap-1 rounded-lg border border-ink-200 px-3 py-2 sm:grid-cols-2 sm:gap-3">
               <dt className="text-ink-900">{what}</dt>
               <dd className="text-ink-600">{where}</dd>
             </div>
           ))}
         </dl>
 
-        <div className="flex flex-wrap gap-2">
-          <a className="btn-primary inline-flex items-center gap-1.5" href="/workplace/sw-admin" target="_blank" rel="noopener noreferrer">
-            Open Workplace settings <ExternalLink className="h-4 w-4" />
+        <div className="grid grid-cols-2 gap-2">
+          <a className="btn-primary inline-flex items-center justify-center gap-1.5" href="/workplace/sw-admin" target="_blank" rel="noopener noreferrer">
+            Workplace settings <ExternalLink className="h-4 w-4" />
           </a>
-          <a className="btn-secondary inline-flex items-center gap-1.5" href="/workplace/desk" target="_blank" rel="noopener noreferrer">
-            Open the service desk <ExternalLink className="h-4 w-4" />
+          <a className="btn-secondary inline-flex items-center justify-center gap-1.5" href="/workplace/desk" target="_blank" rel="noopener noreferrer">
+            Service desk <ExternalLink className="h-4 w-4" />
           </a>
         </div>
       </div>
