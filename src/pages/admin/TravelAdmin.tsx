@@ -7,6 +7,7 @@ import TravelReport from './TravelReport'
 import PolicyHistory from '@/pages/admin/PolicyHistory'
 import TravelLive from '@/pages/admin/TravelLive'
 import TravelWatch from '@/pages/admin/TravelWatch'
+import TravelFeedback from '@/pages/admin/TravelFeedback'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -71,7 +72,7 @@ export function TravelAdmin() {
       ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
     })),
   })
-  type Sub = typeof TABS[number][0] | 'photos' | 'copies' | 'reports' | 'delete' | 'history'
+  type Sub = typeof TABS[number][0] | 'photos' | 'copies' | 'reports' | 'feedback' | 'delete' | 'history'
   // The sub-tab is in the address beside SW Admin's own, so a reload stays on it (the user, 3 Nov).
   const [tab, setTabState] = useState<Sub>(() => (new URLSearchParams(window.location.search).get('sub') as Sub | null) ?? 'rules')
   const setTab = (t: Sub) => {
@@ -90,12 +91,19 @@ export function TravelAdmin() {
   }
   if (isLoading) return <PageLoader />
   if (error || !data) return <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
+  const subs: ReadonlyArray<readonly [Sub, string]> = data.sw
+    ? [...TABS.slice(0, 3), ['photos', 'Visit photos'], ...TABS.slice(3, 6), ['copies', 'Mail copies'], ...TABS.slice(6), ['reports', 'Reports'], ['feedback', 'Feedback'], ['history', 'History'], ['delete', 'Delete']]
+    : [...TABS.slice(0, 2), ['history', 'History']]
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
+      {/* Phone: one full-width dropdown (the user, 13 Nov: "make this dropdown, full width row"); a computer keeps the chips. */}
+      <select value={tab} onChange={e => setTab(e.target.value as Sub)} aria-label="Section" className="input w-full font-semibold sm:hidden">
+        {subs.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <div className="hidden flex-wrap gap-1.5 sm:flex">
         {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
         {/* Accounts admins get Allowances by grade, Settings and History only (the user, 3 Nov: "for them, till setting is enough"); SW Admin every tab. */}
-        {(data.sw ? [...TABS.slice(0, 3), ['photos', 'Visit photos'] as const, ...TABS.slice(3, 6), ['copies', 'Mail copies'] as const, ...TABS.slice(6), ['reports', 'Reports'] as const, ['history', 'History'] as const, ['delete', 'Delete'] as const] : [...TABS.slice(0, 2), ['history', 'History'] as const]).map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {subs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
@@ -115,6 +123,7 @@ export function TravelAdmin() {
       {tab === 'places' && <LearnedPlaces />}
       {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
       {tab === 'reports' && data.sw && <Reports />}
+      {tab === 'feedback' && data.sw && <TravelFeedback />}
       {tab === 'history' && <PolicyHistory names={Object.fromEntries([...RULE_COLS, ...POLICY])} />}
       {tab === 'delete' && data.sw && <DeleteClaim />}
     </div>
@@ -130,7 +139,7 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
     <div className="card overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead><tr className="border-b border-ink-200 text-left text-xs text-ink-500">
-          <th className="px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th className="px-2 py-2">Car needs approval</th><th />
+          <th className="sticky left-0 z-10 bg-surface px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th className="px-2 py-2">Car needs approval</th><th />
         </tr></thead>
         <tbody>
           {grades.map(g => {
@@ -138,9 +147,9 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
             const set = (p: Partial<Rule>) => setEdit({ ...edit, [g]: { ...r, ...p } })
             return (
               <tr key={g} className="border-b border-ink-100">
-                <td className="px-3 py-1.5 font-semibold text-ink-900">{g === '*' ? 'Others' : g}</td>
+                <td className="sticky left-0 z-10 bg-surface px-3 py-1.5 font-semibold text-ink-900">{g === '*' ? 'Others' : g}</td>
                 {RULE_COLS.map(([k]) => (
-                  <td key={k} className="px-1 py-1"><input type="number" className="input w-20 !px-2 !py-1 text-right" value={(r[k] as number | null) ?? ''}
+                  <td key={k} className="px-1 py-1"><input type="number" className="input w-[4.5rem] !px-2 !py-1 text-right" value={(r[k] as number | null) ?? ''}
                     onChange={e => set({ [k]: e.target.value === '' ? null : Number(e.target.value) } as Partial<Rule>)} /></td>
                 ))}
                 <td className="px-2"><input type="checkbox" checked={r.flight} onChange={e => set({ flight: e.target.checked })} /></td>
@@ -284,7 +293,7 @@ function ExpenseKinds({ list, call, sw }: { list: AdminData['expense_kinds']; ca
     <div className="card space-y-2 p-4">
       <h3 className="text-sm font-semibold text-ink-800">Expense types</h3>
       {list.map(k => (
-        <div key={k.id} className="space-y-1.5">
+        <div key={k.id} className="space-y-1.5 rounded-xl border border-ink-200 p-3 sm:rounded-none sm:border-0 sm:p-0">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             {editing?.id === k.id ? (
               <span className="flex min-w-[12rem] items-center gap-1.5">
@@ -294,14 +303,15 @@ function ExpenseKinds({ list, call, sw }: { list: AdminData['expense_kinds']; ca
                 <button type="button" className="btn-icon" aria-label="Cancel" title="Cancel" onClick={() => { setEditing(null); setErr(null) }}><X className="h-4 w-4" /></button>
               </span>
             ) : (
-              <span className="flex min-w-[12rem] items-center gap-1">
+              <span className="flex w-full min-w-[12rem] items-center gap-1 sm:w-auto">
                 <span className={clsx('font-medium', k.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{k.label}</span>
                 <button type="button" className="btn-icon" aria-label={`Rename ${k.label}`} title="Rename" onClick={() => { setEditing({ id: k.id, label: k.label }); setErr(null) }}><Pencil className="h-3.5 w-3.5" /></button>
+                {sw && <button type="button" className="btn-icon ml-auto text-cyrixRed-600 sm:hidden" aria-label={`Delete ${k.label}`} title="Delete" onClick={() => void remove(k)}><Trash2 className="h-3.5 w-3.5" /></button>}
               </span>
             )}
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={k.bill_always} onChange={e => void put(k, { bill: e.target.checked })} /> Bill always</label>
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={k.is_active} onChange={e => void put(k, { active: e.target.checked })} /> In use</label>
-            {sw && <button type="button" className="btn-icon text-cyrixRed-600" aria-label={`Delete ${k.label}`} title="Delete" onClick={() => void remove(k)}><Trash2 className="h-3.5 w-3.5" /></button>}
+            {sw && <button type="button" className="btn-icon hidden text-cyrixRed-600 sm:inline-flex" aria-label={`Delete ${k.label}`} title="Delete" onClick={() => void remove(k)}><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
           {err?.id === k.id && <Alert key={err.n} kind="error">{err.text}</Alert>}
         </div>
@@ -332,7 +342,7 @@ function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call;
     <div className="card space-y-2 p-4">
       <h3 className="text-sm font-semibold text-ink-800">Purposes</h3>
       {list.map(p => (
-        <div key={p.id} className="space-y-1.5">
+        <div key={p.id} className="space-y-1.5 rounded-xl border border-ink-200 p-3 sm:rounded-none sm:border-0 sm:p-0">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             {editing?.id === p.id ? (
               <span className="flex min-w-[12rem] items-center gap-1.5">
@@ -342,9 +352,10 @@ function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call;
                 <button type="button" className="btn-icon" aria-label="Cancel" title="Cancel" onClick={() => { setEditing(null); setErr(null) }}><X className="h-4 w-4" /></button>
               </span>
             ) : (
-              <span className="flex min-w-[12rem] items-center gap-1">
+              <span className="flex w-full min-w-[12rem] items-center gap-1 sm:w-auto">
                 <span className={clsx('font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
                 <button type="button" className="btn-icon" aria-label={`Rename ${p.label}`} title="Rename" onClick={() => { setEditing({ id: p.id, label: p.label }); setErr(null) }}><Pencil className="h-3.5 w-3.5" /></button>
+                {sw && <button type="button" className="btn-icon ml-auto text-cyrixRed-600 sm:hidden" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
               </span>
             )}
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
@@ -354,7 +365,7 @@ function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call;
             {/* The ride asks for the ticket ID (te_0105; the user, 3 Nov: "check box for ticket id enable option"). */}
             {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.needs_ticket} onChange={e => void call('te_set_purpose_ticket', { p_id: p.id, p_on: e.target.checked })} /> Ticket ID</label>}
             {/* Gone only while nothing names it; after that In use is unticked instead. */}
-            {sw && <button type="button" className="btn-icon text-cyrixRed-600" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
+            {sw && <button type="button" className="btn-icon hidden text-cyrixRed-600 sm:inline-flex" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
           {err?.id === p.id && <Alert key={err.n} kind="error">{err.text}</Alert>}
         </div>

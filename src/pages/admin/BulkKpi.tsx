@@ -66,12 +66,12 @@ export default function BulkKpi() {
     <div className="space-y-5">
       <div>
         <h3 className="font-semibold text-ink-900">Bulk KPI assignment</h3>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="hidden mt-0.5 text-sm text-ink-500 sm:block">
           One set of KRAs, applied to everybody listed in the file. FY {fy}.
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
           <p className="font-medium text-ink-900">These arrive approved</p>
@@ -115,7 +115,7 @@ export default function BulkKpi() {
             e.target.value = ''
           }}
         />
-        <p className="text-xs text-ink-500">
+        <p className="hidden text-xs text-ink-500 sm:block">
           Two sheets: <strong className="font-medium text-ink-700">Template</strong> with the KRA
           rows, and <strong className="font-medium text-ink-700">Ecode</strong> listing who gets
           them. Weightages as percentages — 40% or 40 — totalling {JOB_ROLE_TOTAL}% across Job Role.

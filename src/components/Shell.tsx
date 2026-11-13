@@ -520,7 +520,8 @@ export default function Shell() {
       */}
       <main
         style={scopeStyle}
-        className="mx-auto max-w-7xl px-4 py-6 pb-36 lg:pb-6"
+        // SW Admin takes the wide screen: its side list and the grade table's 17 columns (the user, 13 Nov: "see right end").
+        className={clsx('mx-auto px-4 py-6 pb-36 lg:pb-6', pathname.startsWith('/admin/logins') ? 'max-w-[120rem]' : 'max-w-7xl')}
       >
         <Outlet />
       </main>

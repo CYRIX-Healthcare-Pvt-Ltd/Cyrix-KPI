@@ -430,7 +430,7 @@ function LoginsTab() {
       <>
 {/* Said plainly rather than buried: this is the question people ask
           first, and the honest answer is that nobody can answer it. */}
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div className="text-ink-600">
           <p className="font-medium text-ink-900">Passwords cannot be displayed</p>
@@ -450,7 +450,7 @@ function LoginsTab() {
 
       {/* Sits above the table, because the Modules column is the one
           thing on this screen whose effect is somewhere else entirely. */}
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex">
         <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
         <div className="text-ink-600">
           <p className="font-medium text-ink-900">Modules decide what appears on app.cyrix.in</p>
@@ -786,7 +786,7 @@ function LoginsTab() {
         )}
       </div>
 
-      <p className="flex items-center gap-1.5 text-xs text-ink-400">
+      <p className="hidden items-center gap-1.5 text-xs text-ink-400 sm:flex">
         <KeyRound className="h-3.5 w-3.5" />
         Every reset and clear is written to the audit log against your account.
         Clearing KPI data works only while the system is in testing — after
@@ -845,7 +845,7 @@ function OtpSenderCard() {
         <Mail className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
         <div className="min-w-0">
           <p className="font-medium text-ink-900">Password codes come from</p>
-          <p className="mt-0.5 text-sm text-ink-500">
+          <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
             Shown in the inbox of anyone resetting or changing their password.
             The domain has to be verified with the mail provider — an
             unverified one is refused on every send.
@@ -876,13 +876,13 @@ function OtpSenderCard() {
           the safeguard: a free-text address here would be a way to send
           company mail to anywhere at all. A code can only reach somebody
           already on the payroll. */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
-        <label htmlFor="otp-test-target" className="text-sm text-ink-600">
-          Send a test to
+      <div className="flex items-center gap-2 border-t border-ink-100 pt-3 sm:flex-wrap">
+        <label htmlFor="otp-test-target" className="shrink-0 text-sm text-ink-600">
+          <span className="sm:hidden">Test to</span><span className="hidden sm:inline">Send a test to</span>
         </label>
         <input
           id="otp-test-target"
-          className="input w-32 uppercase"
+          className="input min-w-0 flex-1 uppercase sm:w-32 sm:flex-none"
           value={target}
           onChange={e => setTarget(e.target.value.toUpperCase())}
           placeholder="E1427"
@@ -897,14 +897,14 @@ function OtpSenderCard() {
           className="btn-secondary shrink-0"
         >
           {testing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          Send test
+          <span className="sm:hidden">Send</span><span className="hidden sm:inline">Send test</span>
         </button>
         {!target.trim() && (
-          <span className="text-xs text-ink-400">Blank sends it to you.</span>
+          <span className="hidden text-xs text-ink-400 sm:inline">Blank sends it to you.</span>
         )}
       </div>
 
-      <p className="text-xs text-ink-400">
+      <p className="hidden text-xs text-ink-400 sm:block">
         A name in front of the address is what people see —{' '}
         <span className="font-medium text-ink-600">Cyrix KPI</span> rather than
         the address itself. The test says plainly that it is a test, so it can
@@ -1147,7 +1147,7 @@ function KpiTab() {
             onClick={() => setView(t.key)}
             aria-current={view === t.key ? 'page' : undefined}
             className={clsx(
-              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              'flex-1 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4',
               view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
             )}
           >
@@ -1180,7 +1180,7 @@ function SpareTab() {
             onClick={() => setView(t.key)}
             aria-current={view === t.key ? 'page' : undefined}
             className={clsx(
-              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              'flex-1 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4',
               view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
             )}
           >
@@ -1333,7 +1333,7 @@ function SpareRolesView() {
         />
       )}
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
           <p className="font-medium text-ink-900">A role is not a tile</p>
@@ -1865,7 +1865,7 @@ function BemmpTab() {
 
       {subTabs}
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
           <p className="font-medium text-ink-900">Role, contract and area are three questions</p>
@@ -2083,7 +2083,7 @@ function BemmpTab() {
             <h3 className="text-base font-semibold text-ink-900">
               Districts for {picking.full_name}
             </h3>
-            <p className="mt-1 text-sm text-ink-500">
+            <p className="mt-1 hidden text-sm text-ink-500 sm:block">
               Choosing districts clears any zone. Ticking none is the same as
               Everything.
             </p>
@@ -2697,7 +2697,7 @@ export function SummaryTab() {
       {/* Five across on a wide screen, so the rollout reads as one row:
           who is here, who has signed in, which managers, who has a KPI,
           and who has been assessed on it. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
         <StatTile label="Active employees" value={stats.total.toLocaleString()} />
         <StatTile
           label="Have signed in"
@@ -2911,6 +2911,7 @@ export default function SwAdmin() {
     window.history.replaceState(window.history.state, '', u)
   }
   const active = TABS.find(t => t.id === tab) ?? TABS[0]
+  const stackRef = useStackLabels()
 
   /*
     How many people are waiting, on the tab rather than only inside it.
@@ -2922,8 +2923,10 @@ export default function SwAdmin() {
   const { data: waiting } = useOpenTicketCount(deskHere, isSwAdmin || isItAdmin)
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    <div className="space-y-5 lg:space-y-0">
+      {/* Phone: the heading row. A computer puts it at the head of the side list, so the section starts at the top
+          (the user, 13 Nov: "this much are wasted"). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:hidden">
         <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
           <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
           Administration
@@ -2931,83 +2934,133 @@ export default function SwAdmin() {
         <BuildStamp />
       </div>
 
-      {/* Desktop: a row under the heading, where tabs belong on a wide
-          screen. */}
-      <div className="hidden gap-1 overflow-x-auto border-b border-ink-200 lg:flex">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            aria-current={t.id === tab ? 'page' : undefined}
-            className={clsx(
-              'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              t.id === tab
-                ? 'border-cyrixRed-600 text-ink-900'
-                : 'border-transparent text-ink-400 hover:text-ink-700',
-            )}
-          >
-            {t.label}
-            {t.id === 'support' && !!waiting && (
-              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
-                {waiting > 99 ? '99+' : waiting}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* pb for the bar below, which is fixed and would otherwise sit over
-          the last row of whichever table is open. */}
-      <div className="pb-16 lg:pb-0">
-        {active.id === 'support' ? <SupportDeskQueue key={deskHere} desk={deskHere} enabled /> : active.render()}
-      </div>
-
       {/*
-        Phone: the same tabs as a bar along the bottom.
-
-        These are the only navigation an administrator has — the module bar
-        is gone, because with one destination it was a bar of one tab. So
-        they belong where every other module puts navigation on a phone,
-        under the thumb rather than at the top of a scrolling page you have
-        to return to in order to move.
-
-        No Modules cell. In the other modules that cell is how you leave for
-        a different one, but an administrator arrives here from the portal
-        and has no second module to leave for — it offered a round trip to
-        the page they just came from, and cost every real tab a fifth of
-        the bar to do it. The wordmark in the header still goes back.
+        Desktop: the sections down the side, as BEMMP (the user, 13 Nov: "should we make sw admin ... like bemmp?",
+        then "wow nice, build it"): fifteen names no longer scroll sideways under the heading.
       */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}
-        >
+      <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <nav className="nav-scroll sticky top-20 hidden max-h-[calc(100vh-6rem)] flex-col gap-0.5 self-start overflow-y-auto border-r border-ink-200 py-1 pr-3 lg:flex" aria-label="Sections">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               aria-current={t.id === tab ? 'page' : undefined}
               className={clsx(
-                'flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors',
-                t.id === tab ? 'text-[color:var(--page-strong)]' : 'text-ink-400',
+                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm font-medium transition-colors',
+                t.id === tab ? 'text-ink-900' : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800',
               )}
+              style={t.id === tab ? { background: `rgb(${tintOf(t.id)} / 0.14)` } : undefined}
             >
-              {/* The badge rides the icon here rather than the label:
-                  the cell is a fifth of a phone screen, and a number
-                  after "Support" is what pushes it to an ellipsis. */}
-              <span className="relative">
-                <t.icon className={clsx('h-5 w-5', t.id === tab ? '' : 'text-ink-400')} />
-                {t.id === 'support' && !!waiting && (
-                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">
-                    {waiting > 99 ? '99+' : waiting}
-                  </span>
-                )}
-              </span>
-              <span className="w-full truncate px-0.5 text-center">{t.short}</span>
+              <t.icon className="h-4.5 w-4.5 shrink-0" style={{ color: `rgb(${tintOf(t.id)})` }} />
+              <span className="min-w-0 flex-1 truncate">{t.label}</span>
+              {t.id === 'support' && !!waiting && (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
+                  {waiting > 99 ? '99+' : waiting}
+                </span>
+              )}
             </button>
           ))}
+          <div className="mt-4 px-3 [&_p]:!text-left"><BuildStamp /></div>
+        </nav>
+
+        {/* pb for the bar below, which is fixed and would otherwise sit over the last row of whichever table is open. */}
+        <div ref={stackRef} className="stack-phone min-w-0 pb-20 lg:pb-0">
+          {active.id === 'support' ? <SupportDeskQueue key={deskHere} desk={deskHere} enabled /> : active.render()}
         </div>
-      </nav>
+      </div>
+
+      <PhoneSections tabs={TABS} tab={active.id} waiting={waiting ?? 0} onPick={id => setTab(id as TabId)} />
     </div>
   )
+}
+
+/*
+  Phone: one bar at the bottom naming the open section; pressing it opens every section as a grid of named tiles
+  (the user, 13 Nov: fifteen icons in a row had become "L… A… S…"). A tile closes it; so does a press outside, or Escape.
+*/
+function PhoneSections({ tabs, tab, waiting, onPick }: {
+  tabs: ReadonlyArray<(typeof ADMIN_TABS)[number]>; tab: string; waiting: number; onPick: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const out = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', out)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', out); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const cur = tabs.find(t => t.id === tab) ?? tabs[0]
+  if (!cur) return null
+  const Badge = ({ id }: { id: string }) => id === 'support' && waiting > 0
+    ? <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">{waiting > 99 ? '99+' : waiting}</span>
+    : null
+  return (
+    <>
+      {open && <div className="fixed inset-0 z-20 bg-black/40 lg:hidden" aria-hidden="true" />}
+      <nav ref={box} className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 lg:hidden" aria-label="Sections">
+        {open && (
+          <div className="mb-2 grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto pb-1">
+            {tabs.map(t => (
+              <button key={t.id} type="button" onClick={() => { onPick(t.id); setOpen(false) }}
+                aria-current={t.id === tab ? 'page' : undefined}
+                className={clsx('flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-xs font-medium',
+                  t.id === tab ? 'text-ink-900' : 'border-ink-200 text-ink-600 active:bg-ink-100')}
+                style={t.id === tab ? { borderColor: `rgb(${tintOf(t.id)})`, background: `rgb(${tintOf(t.id)} / 0.14)` } : undefined}>
+                <span className="relative"><t.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(t.id)})` }} /><Badge id={t.id} /></span>
+                <span className="w-full truncate text-center">{t.short}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="flex w-full items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-ink-900"
+          style={{ background: `rgb(${tintOf(cur.id)} / 0.14)` }}>
+          <span className="relative"><cur.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(cur.id)})` }} />{!open && cur.id !== 'support' && waiting > 0 && <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{cur.label}</span>
+          <ChevronDown className={clsx('h-5 w-5 transition-transform', open && 'rotate-180')} />
+        </button>
+      </nav>
+    </>
+  )
+}
+
+/** Each section's colour: the portal tile's for a module (Platform index.css), its own for the rest (the user, 13 Nov). */
+const TINT: Record<string, string> = {
+  logins: '225 29 72', admins: '2 132 199', summary: '5 150 105', platform: '71 85 105', kpi: '217 119 6', spare: '147 51 234',
+  bemmp: '13 148 136', revive: '37 99 235', 'digest-history': '124 58 237', digest: '124 58 237', cyra: '220 38 38',
+  pulse: '8 145 178', travel: '219 39 119', workplace: '161 98 7', notify: '234 88 12', support: '79 70 229',
+}
+const tintOf = (id: string) => TINT[id] ?? '113 113 122'
+
+/**
+ * On a phone each table row is a box (.stack-phone in index.css); this writes each column's name onto its cells so
+ * the box can say what each value is. Watches the section, as its tables load and change after it opens.
+ */
+function useStackLabels() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    const label = () => {
+      root.querySelectorAll('table').forEach(t => {
+        const heads = [...t.querySelectorAll('thead th')].map(h => (h as HTMLElement).innerText.replace(/[↑↓↕⇅]/g, '').trim())
+        t.querySelectorAll('tbody > tr').forEach(tr => {
+          [...tr.children].forEach((td, i) => {
+            const want = heads[i] ?? ''
+            if (td.getAttribute('data-label') !== want) td.setAttribute('data-label', want)
+            // Dates are left to a computer (the user, 13 Nov: "in mobile that date columns not needed").
+            const dated = /^(added$|date$|when$|last |.*(updated|changed|sign-in|signed in|set on|created))/i.test(want)
+            if (dated !== td.hasAttribute('data-dated')) td.toggleAttribute('data-dated', dated)
+          })
+        })
+      })
+    }
+    label()
+    const mo = new MutationObserver(label)
+    mo.observe(root, { childList: true, subtree: true })
+    return () => mo.disconnect()
+  }, [])
+  return ref
 }

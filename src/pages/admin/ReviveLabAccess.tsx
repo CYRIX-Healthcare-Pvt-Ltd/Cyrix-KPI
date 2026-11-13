@@ -22,7 +22,7 @@
 import { useDeferredValue, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Hourglass, Layers, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, Users, Warehouse, X } from 'lucide-react'
+import { Building2, ChevronDown, Hourglass, Layers, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, Users, Warehouse, X } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert, EmptyState, Spinner, StatTile } from '@/components/ui'
 
@@ -126,7 +126,7 @@ export default function Access() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold text-ink-900">People &amp; Revive Labs</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
           Who works in Revive Lab, in which Revive Labs, doing what.
         </p>
       </div>
@@ -351,13 +351,21 @@ export function ReviveLabAccess() {
                       <p className="text-xs text-ink-500">{m.ecode}{m.designation ? ` · ${m.designation}` : ''}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {m.trc_ids.length === 0
-                          ? <span className="text-ink-300">—</span>
-                          : m.trc_ids.map(id => (
-                            <span key={id} className="badge bg-ink-100 text-ink-700">{trcName.get(id) ?? '?'}</span>
-                          ))}
-                      </div>
+                      {/* One line, as BEMMP's modules: the count and the names; pressed, the checkboxes to change them
+                          (the user, 13 Nov: "on click we have show checkbox pop up to select isnt?"). */}
+                      {(() => {
+                        const names = m.trc_ids.map(id => trcName.get(id) ?? '?')
+                        const line = names.length
+                          ? <><span className="font-semibold text-ink-900">{names.length}</span> · {names.join(', ')}</>
+                          : <span className="text-ink-400">None</span>
+                        return canEdit ? (
+                          <button type="button" onClick={() => startEdit(m)} title={names.join(', ') || 'No Revive Lab'}
+                            className="flex w-52 max-w-full items-center gap-2 rounded-lg border border-ink-200 px-2.5 py-1.5 text-left text-xs text-ink-700 hover:border-ink-400">
+                            <span className="min-w-0 flex-1 truncate">{line}</span>
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                          </button>
+                        ) : <span className="block max-w-52 truncate text-xs text-ink-700" title={names.join(', ')}>{line}</span>
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -848,7 +856,7 @@ function CloseLimits() {
           A field engineer with a spare left longer than this cannot raise a new ticket until they press Received back, or close it.
           Tickets the coordinator raised in their name count too.
         </p>
-        <p className="text-xs text-ink-500">
+        <p className="hidden text-xs text-ink-500 sm:block">
           In transit back counts from the dispatch date, Received back from the day they pressed Received back. Leave a box empty for no limit.
         </p>
         {isLoading ? <Spinner className="h-4 w-4 text-ink-400" /> : (
@@ -1402,7 +1410,7 @@ function EditRow({ draft, trcs, warehouses, busy, onChange, onSave, onCancel, on
       )}
       {/* What the box means, said while it is the only one ticked: it takes things away as well as giving them. */}
       {draft.is_observer && !(draft.is_engineer || draft.is_coordinator || draft.is_manager || draft.is_purchase || draft.is_admin) && (
-        <p className="text-xs text-ink-500">
+        <p className="hidden text-xs text-ink-500 sm:block">
           {draft.may_raise
             ? 'This Observer sees a dashboard and the tickets of the Revive Lab(s) ticked, and raises tickets as a field engineer does. Nothing else to press.'
             : 'An Observer only watches: a dashboard and the tickets of the Revive Lab(s) ticked, with nothing to press and no ticket to raise.'}

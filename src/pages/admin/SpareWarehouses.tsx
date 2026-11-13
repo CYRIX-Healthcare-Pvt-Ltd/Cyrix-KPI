@@ -120,12 +120,12 @@ export default function SpareWarehouses() {
     <div className="space-y-5">
       <div>
         <h3 className="font-semibold text-ink-900">Warehouses</h3>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="hidden mt-0.5 text-sm text-ink-500 sm:block">
           Where a spare sits. This is the only field the tag form insists on.
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
           <p className="font-medium text-ink-900">Turning one off is not deleting it</p>

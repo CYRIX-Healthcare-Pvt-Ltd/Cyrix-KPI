@@ -1210,3 +1210,25 @@
 .rm-km.up { transform: translateY(-4px) scale(1.12); box-shadow: 0 10px 18px rgb(0 0 0 / 0.35), 0 0 0 2px #fff; }
 .dim .rm-km, .dim.rm-km { opacity: 0.35; }
 .rm-line { transition: stroke-width 0.18s, opacity 0.18s; cursor: pointer; }
+
+/*
+  SW Admin on a phone (the user, 13 Nov: "check well and correct all in sw admin nice userfriendly mobile view"): every
+  table's row becomes its own box, each value under its column's name, the first cell as the box's title. The names are
+  copied from the table's head onto its cells by useStackLabels (SwAdmin). Cells hidden on a phone stay hidden.
+*/
+@media (max-width: 639px) {
+  .stack-phone table, .stack-phone tbody { display: block; width: 100%; }
+  .stack-phone thead { display: none; }
+  .stack-phone tbody { display: flex; flex-direction: column; gap: 0.5rem; border: 0; }
+  .stack-phone tbody > tr { display: block; border: 1px solid rgb(var(--ink-200)); border-radius: 0.75rem; padding: 0.75rem; }
+  .stack-phone tbody > tr > td:not(.hidden) { display: flex; align-items: center; gap: 0.75rem; padding: 0.25rem 0 !important; text-align: left !important; min-width: 0; max-width: 100%; }
+  .stack-phone tbody > tr > td[data-label]:not([data-label=""])::before {
+    content: attr(data-label); flex: 0 0 6.5rem; font-size: 0.75rem; color: rgb(var(--ink-500));
+  }
+  .stack-phone tbody > tr > td:first-child:not(.hidden) { display: block; font-size: 0.95rem; padding-bottom: 0.5rem !important; }
+  .stack-phone tbody > tr > td:first-child > * { display: block; margin-left: 0 !important; }
+  .stack-phone tbody > tr > td:first-child::before { display: none; }
+  .stack-phone tbody > tr > td[data-dated]:not(:first-child) { display: none; }
+  .stack-phone tbody > tr > td > * { min-width: 0; }
+  .stack-phone .overflow-x-auto:has(> table) { overflow: visible; border: 0; border-radius: 0; }
+}

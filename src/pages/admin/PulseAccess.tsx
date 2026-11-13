@@ -52,7 +52,7 @@ export default function Access() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold text-ink-900">Pulse roles</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
           Who is a Pulse admin, for people already granted the tile.
         </p>
       </div>
@@ -108,7 +108,7 @@ export function PulseAccess() {
         <StatTile label="Directors" value={(data ?? []).length - admins} />
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
         <div>
           <p className="font-medium text-ink-900">A role is not a tile</p>

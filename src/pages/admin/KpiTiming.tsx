@@ -207,7 +207,7 @@ export default function KpiTiming() {
           <Timer className="h-5 w-5 text-cyrixRed-600" />
           KPI timing
         </h2>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
           The last day to submit and to score each month, and when a month closes.
         </p>
       </div>
@@ -331,7 +331,7 @@ export default function KpiTiming() {
             )}
           </div>
           {closeDay === null ? (
-            <p className="mt-2 text-xs text-ink-500">
+            <p className="mt-2 hidden text-xs text-ink-500 sm:block">
               Nothing closes on its own. Managers finalise each month by hand,
               and a team member can query their scores for as long as it is
               open. <strong>This is what a backlog needs</strong> — an old month
@@ -340,7 +340,7 @@ export default function KpiTiming() {
               old months are done.
             </p>
           ) : (
-            <p className="mt-2 text-xs text-ink-500">
+            <p className="mt-2 hidden text-xs text-ink-500 sm:block">
               July's assessment closes at the end of {closeDay} August. Until
               then the team member can query their manager's scores; after it
               the month becomes <strong>Final</strong> on its own and nobody has

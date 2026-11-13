@@ -154,12 +154,12 @@ export default function SpareFields() {
     <div className="space-y-5">
       <div>
         <h3 className="font-semibold text-ink-900">Custom fields</h3>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="hidden mt-0.5 text-sm text-ink-500 sm:block">
           What an engineer is asked for when tagging a spare, in this order.
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
+      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
         <div>
           <p className="font-medium text-ink-900">Turning one off is not deleting it</p>
@@ -233,7 +233,7 @@ export default function SpareFields() {
           )}
         </div>
         {label.trim() && (
-          <p className="text-xs text-ink-500">
+          <p className="hidden text-xs text-ink-500 sm:block">
             Stored as <code className="font-mono">{slugify(label) || '—'}</code>, which is
             fixed once the field exists — renaming the label later leaves it alone, so
             answers already recorded stay findable.

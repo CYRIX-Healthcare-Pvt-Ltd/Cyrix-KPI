@@ -89,8 +89,27 @@ export default function AdminsTab() {
           <div className="p-4">
             <EmptyState icon={ShieldCheck} title={q || deskFilter ? 'Nobody matches that' : 'No admins set yet'} />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
+        ) : (<>
+          {/* Phone: each admin its own box — name and pencil, desk and date, then the modules (the user, 13 Nov). */}
+          <ul className="space-y-2 p-3 sm:hidden">
+            {shown.map(r => (
+              <li key={r.employee_id + r.desk} className="rounded-xl border border-ink-200 p-3">
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 text-sm font-semibold text-ink-900">{r.full_name} ({r.ecode})</p>
+                  <button type="button" className="btn-icon -m-1.5 shrink-0" aria-label={`Change ${r.full_name}`} onClick={() => setEditing(r)}>
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-ink-500">
+                  {DESKS[r.desk].label} · {new Date(r.set_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {r.modules.map(m => <span key={m} className="rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700">{m}</span>)}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-ink-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -128,7 +147,7 @@ export default function AdminsTab() {
               </tbody>
             </table>
           </div>
-        )}
+        </>)}
       </div>
 
       {editing && <AdminDialog row={editing === 'new' ? null : editing} taken={rows} onClose={() => setEditing(null)} />}
