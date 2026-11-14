@@ -223,7 +223,7 @@ Deno.serve(async req => {
 
   const ticket = String(asked.ticket ?? '').trim().toUpperCase()
   if (/^PMPT_\d{3,}$/.test(ticket)) return await pvtLookup(ticket)
-  if (!/^AP\d{3,}$/.test(ticket)) return json({ error: /^\d+$/.test(ticket) ? 'KL tickets are not connected yet' : 'Not a ticket ID' }, 400)
+  if (!/^AP\d+$/.test(ticket)) return json({ error: /^\d+$/.test(ticket) ? 'KL tickets are not connected yet' : 'Not a ticket ID' }, 400)
 
   let rows: Row[] | null = null
   try {
