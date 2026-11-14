@@ -36,6 +36,27 @@ const TEST = new Set(['E6666', 'E7777', 'E8888', 'E9999'])
 const AP = 'https://apcyrixbemp.com'
 const UA = 'Mozilla/5.0 (Cyrix Travel)'
 
+/**
+ * fetch, tried again when the connection drops (14 Nov: a kept-alive connection to the private BEMMP closed under a
+ * request, "connection closed before message completed"). Only a failed connection is tried again, never an answer.
+ */
+async function call(url: string, init?: RequestInit): Promise<Response> {
+  for (let i = 0; ; i++) {
+    try { return await fetch(url, init) } catch (e) {
+      if (i >= 2) throw e
+      await new Promise(r => setTimeout(r, 300 * (i + 1)))
+    }
+  }
+}
+
+/** What the engineer is told: our own words, never an address or the other software's name. */
+function told(e: unknown): string {
+  const m = (e as Error)?.message ?? ''
+  if (/^(Ticket look-up|Ticket )/.test(m)) return m
+  console.error('bemp-ticket:', m)
+  return 'Ticket look-up did not answer, try again'
+}
+
 let session: string | null = null // the BEMP cookie header while this instance is warm
 const PVT_API = 'https://privatebempapi.kaspontech.com/chpvtbemp/'
 const PVT_FILES = 'https://privatebempapi.kaspontech.com/'
@@ -55,9 +76,9 @@ async function signIn(): Promise<string> {
   const user = Deno.env.get('BEMP_AP_USERNAME'), pass = Deno.env.get('BEMP_AP_PASSWORD')
   if (!user || !pass) throw new Error('Ticket look-up is not set up yet')
   const jar = new Map<string, string>()
-  const first = await fetch(AP + '/', { headers: { 'User-Agent': UA } })
+  const first = await call(AP + '/', { headers: { 'User-Agent': UA } })
   keep(jar, first); await first.body?.cancel()
-  const res = await fetch(AP + '/index.php', {
+  const res = await call(AP + '/index.php', {
     method: 'POST', redirect: 'manual',
     headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded', Cookie: header(jar), Referer: AP + '/' },
     body: new URLSearchParams({ username: user, password: pass, login: 'Login' }),
@@ -67,13 +88,13 @@ async function signIn(): Promise<string> {
   const page = await res.text()
   // BEMP answers a refused sign-in with an alert on the sign-in page itself.
   const said = page.match(/alert\(\s*["']([^"']{3,120})["']/)?.[1]
-  if (!/dashboard/i.test(where) && !/dashboard/i.test(page.slice(0, 4000))) throw new Error(said ? `Ticket look-up: ${said}` : 'Ticket look-up could not sign in')
+  if (!/dashboard/i.test(where) && !/dashboard/i.test(page.slice(0, 4000))) { console.error('bemp-ticket AP sign-in:', said ?? res.status); throw new Error('Ticket look-up could not sign in, try again later') }
   return header(jar)
 }
 
 interface Row { [k: string]: unknown }
 async function search(cookie: string, ticket: string): Promise<Row[] | null> {
-  const res = await fetch(AP + '/controller/penalty_reload_ticket_master.php', {
+  const res = await call(AP + '/controller/penalty_reload_ticket_master.php', {
     method: 'POST',
     headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Cookie: cookie, Referer: AP + '/crm/ticket_master_report.php' },
     body: new URLSearchParams({
@@ -93,7 +114,7 @@ const s = (v: unknown) => (typeof v === 'string' && v.trim() && !/^0000-00-00/.t
 async function pvtSignIn(): Promise<string> {
   const user = Deno.env.get('BEMP_PVT_USERNAME'), pass = Deno.env.get('BEMP_PVT_PASSWORD')
   if (!user || !pass) throw new Error('Ticket look-up is not set up yet')
-  const res = await fetch(PVT_API + 'fp_sass_login/', {
+  const res = await call(PVT_API + 'fp_sass_login/', {
     method: 'POST',
     headers: { 'User-Agent': UA, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ username: user, password: pass, device_type: 'web', device_model: 'chrome', app_version: '1.0', device_os: 'Win32', device_token: null, login_flag: 1, dic_flag: 0 }),
@@ -101,7 +122,8 @@ async function pvtSignIn(): Promise<string> {
   const j = await res.json().catch(() => null) as { response?: { response_code?: unknown; token?: unknown; message?: unknown } } | null
   const r = j?.response
   if (String(r?.response_code) !== '200' || typeof r?.token !== 'string' || !r.token) {
-    throw new Error(`Ticket look-up: ${typeof r?.message === 'string' && r.message ? r.message : `could not sign in (${res.status})`}`)
+    console.error('bemp-ticket private sign-in:', r?.message ?? res.status)
+    throw new Error('Ticket look-up could not sign in, try again later')
   }
   return r.token
 }
@@ -110,7 +132,7 @@ const pvtHeaders = (token: string) => ({ 'User-Agent': UA, Accept: 'application/
 
 /** The job, 'none' when FieldPro has no such job, or null when the token was refused (sign in again). */
 async function pvtJob(token: string, ticket: string): Promise<Row | 'none' | null> {
-  const res = await fetch(`${PVT_API}get_ticket_details/?ticket_id=${encodeURIComponent(ticket)}`, { headers: pvtHeaders(token) })
+  const res = await call(`${PVT_API}get_ticket_details/?ticket_id=${encodeURIComponent(ticket)}`, { headers: pvtHeaders(token) })
   if (res.status === 401 || res.status === 403) { await res.body?.cancel(); return null }
   const j = await res.json().catch(() => null) as { response?: { response_code?: unknown; data?: unknown } } | null
   if (!j?.response) return null
@@ -131,7 +153,7 @@ async function pvtLookup(ticket: string): Promise<Response> {
   try {
     if (pvtToken) job = await pvtJob(pvtToken, ticket)
     if (job === null) { pvtToken = await pvtSignIn(); job = await pvtJob(pvtToken, ticket) }
-  } catch (e) { pvtToken = null; return json({ error: (e as Error).message }, 502) }
+  } catch (e) { pvtToken = null; return json({ error: told(e) }, 502) }
   if (job === null) { pvtToken = null; return json({ error: 'Ticket look-up did not answer, try again' }, 502) }
   if (job === 'none') return json({ error: `Ticket ${ticket} not found` }, 404)
 
@@ -146,7 +168,7 @@ async function pvtLookup(ticket: string): Promise<Response> {
     const url = /^https?:\/\//i.test(path) ? path : PVT_FILES + path.replace(/^\/+/, '')
     imageName = path.split('/').pop() ?? null
     try {
-      const res = await fetch(url, { headers: { ...pvtHeaders(pvtToken ?? ''), Accept: 'image/avif,image/webp,image/*,*/*;q=0.8' } })
+      const res = await call(url, { headers: { ...pvtHeaders(pvtToken ?? ''), Accept: 'image/avif,image/webp,image/*,*/*;q=0.8' } })
       const type = res.headers.get('content-type') ?? ''
       if (res.ok && /^image\//.test(type)) {
         const bytes = new Uint8Array(await res.arrayBuffer())
@@ -207,7 +229,7 @@ Deno.serve(async req => {
   try {
     if (session) rows = await search(session, ticket)
     if (rows === null) { session = await signIn(); rows = await search(session, ticket) }
-  } catch (e) { session = null; return json({ error: (e as Error).message }, 502) }
+  } catch (e) { session = null; return json({ error: told(e) }, 502) }
   if (rows === null) { session = null; return json({ error: 'Ticket look-up did not answer, try again' }, 502) }
 
   const row = rows.find(r => String(r.ticket_id ?? '').toUpperCase() === ticket)
@@ -218,7 +240,7 @@ Deno.serve(async req => {
   const shot = s(row.screenshot)
   if (shot && /^[\w.-]+$/.test(shot)) {
     // The image folder refuses a request that does not come from BEMP's own report page.
-    const res = await fetch(`${AP}/crm/tikcet_sr_image/${shot}`, { headers: { 'User-Agent': UA, Cookie: session ?? '', Referer: AP + '/crm/ticket_master_report.php', Accept: 'image/avif,image/webp,image/*,*/*;q=0.8' } })
+    const res = await call(`${AP}/crm/tikcet_sr_image/${shot}`, { headers: { 'User-Agent': UA, Cookie: session ?? '', Referer: AP + '/crm/ticket_master_report.php', Accept: 'image/avif,image/webp,image/*,*/*;q=0.8' } })
     const type = res.headers.get('content-type') ?? ''
     if (res.ok && /^image\//.test(type)) {
       const bytes = new Uint8Array(await res.arrayBuffer())
