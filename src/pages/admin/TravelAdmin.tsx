@@ -7,7 +7,7 @@ import TravelReport from './TravelReport'
 import PolicyHistory from '@/pages/admin/PolicyHistory'
 import TravelLive from '@/pages/admin/TravelLive'
 import TravelWatch from '@/pages/admin/TravelWatch'
-import TravelFeedback from '@/pages/admin/TravelFeedback'
+import TravelFeedback, { useNewFeedbackCount } from '@/pages/admin/TravelFeedback'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -81,6 +81,7 @@ export function TravelAdmin() {
     u.searchParams.set('sub', t)
     window.history.replaceState(window.history.state, '', u)
   }
+  const newFeedback = useNewFeedbackCount()
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
   // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
@@ -98,12 +99,12 @@ export function TravelAdmin() {
     <div className="space-y-4">
       {/* Phone: one full-width dropdown (the user, 13 Nov: "make this dropdown, full width row"); a computer keeps the chips. */}
       <select value={tab} onChange={e => setTab(e.target.value as Sub)} aria-label="Section" className="input w-full font-semibold sm:hidden">
-        {subs.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        {subs.map(([k, l]) => <option key={k} value={k}>{k === 'feedback' && newFeedback ? `${l} (${newFeedback} new)` : l}</option>)}
       </select>
       <div className="hidden flex-wrap gap-1.5 sm:flex">
         {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
         {/* Accounts admins get Allowances by grade, Settings and History only (the user, 3 Nov: "for them, till setting is enough"); SW Admin every tab. */}
-        {subs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+        {subs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}{k === 'feedback' && !!newFeedback && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">{newFeedback > 99 ? '99+' : newFeedback}</span>}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}

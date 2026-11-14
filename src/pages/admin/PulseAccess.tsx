@@ -108,17 +108,6 @@ export function PulseAccess() {
         <StatTile label="Directors" value={(data ?? []).length - admins} />
       </div>
 
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-        <div>
-          <p className="font-medium text-ink-900">A role is not a tile</p>
-          <p className="mt-1">
-            This decides what somebody can do inside Pulse once they're in. Whether
-            they're offered it at all is the Modules column on the Logins tab — a
-            person can hold a role here and never see the tile.
-          </p>
-        </div>
-      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}

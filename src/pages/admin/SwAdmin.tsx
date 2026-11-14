@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Search, ShieldAlert, ShieldCheck, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
+  Search, ShieldAlert, ShieldCheck, KeyRound, Download, RotateCcw, Eraser,
   LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
   Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown, Building2,
 } from 'lucide-react'
@@ -16,6 +16,7 @@ import CyraAccess from '@/pages/admin/CyraAccess'
 import { DigestHistory } from '@/pages/admin/DigestAdmin'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
+import { useNewFeedbackCount } from '@/pages/admin/TravelFeedback'
 import { WorkplaceAdmin } from '@/pages/admin/WorkplaceAdmin'
 import MissingLogins from '@/components/MissingLogins'
 import { supabase, friendlyError } from '@/lib/supabase'
@@ -27,10 +28,8 @@ import SpareFields from './SpareFields'
 import SupportDeskQueue from '@/components/SupportDeskQueue'
 import SpareWarehouses from './SpareWarehouses'
 import {
-  useOtpSender, useSaveOtpSender,
   useAppModules, useModuleGrants, useSetModuleAccess, useOpenTicketCount, useAccountTypes,
 } from '@/lib/queries'
-import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 import EditEmployee from '@/components/EditEmployee'
 import { useAuth } from '@/contexts/AuthContext'
@@ -425,49 +424,7 @@ function LoginsTab() {
         />
       )}
 
-      {/* Not for IT (0151; the user, 8 Oct: "DONT NEED THIS for it login"). */}
-      {!itOnly && (
-      <>
-{/* Said plainly rather than buried: this is the question people ask
-          first, and the honest answer is that nobody can answer it. */}
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div className="text-ink-600">
-          <p className="font-medium text-ink-900">Passwords cannot be displayed</p>
-          <p className="mt-1">
-            They are stored as one-way bcrypt hashes. Nobody can read one back —
-            not this screen, not the Supabase dashboard, not a database
-            administrator. What is shown instead is whether each person is still
-            on the code we issued them, or has set their own.
-          </p>
-          <p className="mt-1.5">
-            While the system is in testing everyone's password{' '}
-            <strong>is their employee code</strong>. To get someone in, use
-            Reset on their row — it puts the password back to their code.
-          </p>
-        </div>
-      </div>
-
-      {/* Sits above the table, because the Modules column is the one
-          thing on this screen whose effect is somewhere else entirely. */}
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex">
-        <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-        <div className="text-ink-600">
-          <p className="font-medium text-ink-900">Modules decide what appears on app.cyrix.in</p>
-          <p className="mt-1">
-            Everybody has <strong>KPI</strong> — everybody is appraised — and{' '}
-            <strong>My Task</strong>, where they keep their tasks. The rest
-            are handed out here: click the box in the Modules column to give or
-            take away the tile. It changes what a person is{' '}
-            <em>offered</em> on the portal, not what they are permitted to do
-            once inside — each module still checks that for itself.
-          </p>
-        </div>
-      </div>
-
-      <OtpSenderCard />
-      </>
-      )}
+      {/* The two notes and the password-code sender are gone, on a computer too (the user, 14 Nov: "remove this much from desktop also"); mail goes through Microsoft 365, the sender address stays on the server. */}
 
       {notice && <Alert kind="success">{notice}</Alert>}
       {resetError && <Alert kind="error">{resetError}</Alert>}
@@ -796,124 +753,6 @@ function LoginsTab() {
   )
 }
 
-/**
- * The address password codes come from.
- *
- * Here rather than in an edge-function secret, because changing a secret
- * needs the CLI, a Supabase login and a redeploy — and the moment this
- * needs changing is the moment somebody is locked out and the person who
- * can do all three is asleep.
- *
- * The test button is the point of the card. A From address the mail
- * provider has not verified is rejected on every send, and the way you
- * find out is that resets quietly stop working for the whole company:
- * nobody reports an email they were not expecting. One button, one real
- * message, to the only inbox the server will address — your own.
- */
-function OtpSenderCard() {
-  const { data: saved, isLoading } = useOtpSender()
-  const save = useSaveOtpSender()
-  const [draft, setDraft] = useState<string | null>(null)
-  const [target, setTarget] = useState('')
-  const [state, setState] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
-  const [testing, setTesting] = useState(false)
-
-  const value = draft ?? saved ?? ''
-  const dirty = draft !== null && draft !== saved
-
-  const onSave = async () => {
-    setState(null)
-    try {
-      await save.mutateAsync(value.trim())
-      setDraft(null)
-      setState({ kind: 'success', text: 'Saved. Send a test to prove it works.' })
-    } catch (err) {
-      setState({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' })
-    }
-  }
-
-  const onTest = async () => {
-    setState(null); setTesting(true)
-    const r = await sendOtpTest(target)
-    setTesting(false)
-    setState({ kind: r.ok ? 'success' : 'error', text: r.message })
-  }
-
-  return (
-    <div className="card space-y-3 p-4">
-      <div className="flex items-start gap-3">
-        <Mail className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
-        <div className="min-w-0">
-          <p className="font-medium text-ink-900">Password codes come from</p>
-          <p className="mt-0.5 hidden text-sm text-ink-500 sm:block">
-            Shown in the inbox of anyone resetting or changing their password.
-            The domain has to be verified with the mail provider — an
-            unverified one is refused on every send.
-          </p>
-        </div>
-      </div>
-
-      {state && <Alert kind={state.kind}>{state.text}</Alert>}
-
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="input min-w-0 flex-1"
-          value={isLoading ? '' : value}
-          placeholder={isLoading ? 'Loading…' : 'Cyrix KPI <no-reply@send.cyrix.in>'}
-          onChange={e => setDraft(e.target.value)}
-          aria-label="Sender address for password codes"
-        />
-        <button
-          onClick={onSave}
-          disabled={!dirty || save.isPending}
-          className="btn-primary shrink-0"
-        >
-          {save.isPending && <Spinner className="h-4 w-4" />} Save
-        </button>
-      </div>
-
-      {/* An employee code rather than an address, and the difference is
-          the safeguard: a free-text address here would be a way to send
-          company mail to anywhere at all. A code can only reach somebody
-          already on the payroll. */}
-      <div className="flex items-center gap-2 border-t border-ink-100 pt-3 sm:flex-wrap">
-        <label htmlFor="otp-test-target" className="shrink-0 text-sm text-ink-600">
-          <span className="sm:hidden">Test to</span><span className="hidden sm:inline">Send a test to</span>
-        </label>
-        <input
-          id="otp-test-target"
-          className="input min-w-0 flex-1 uppercase sm:w-32 sm:flex-none"
-          value={target}
-          onChange={e => setTarget(e.target.value.toUpperCase())}
-          placeholder="E1427"
-          autoCapitalize="characters"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <button
-          onClick={onTest}
-          disabled={testing || dirty}
-          title={dirty ? 'Save the address first' : undefined}
-          className="btn-secondary shrink-0"
-        >
-          {testing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          <span className="sm:hidden">Send</span><span className="hidden sm:inline">Send test</span>
-        </button>
-        {!target.trim() && (
-          <span className="hidden text-xs text-ink-400 sm:inline">Blank sends it to you.</span>
-        )}
-      </div>
-
-      <p className="hidden text-xs text-ink-400 sm:block">
-        A name in front of the address is what people see —{' '}
-        <span className="font-medium text-ink-600">Cyrix KPI</span> rather than
-        the address itself. The test says plainly that it is a test, so it can
-        go to a colleague without alarming them, and it uses the address on
-        their record — an employee code, never a typed address.
-      </p>
-    </div>
-  )
-}
 
 /* ---------------------------------------------------------------------
  * Spare Mapping
@@ -1333,22 +1172,6 @@ function SpareRolesView() {
         />
       )}
 
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">A role is not a tile</p>
-          <p className="mt-1">
-            This decides what somebody can do inside Spare. Whether they are
-            offered it at all is the Modules column on the Logins tab — a
-            person can hold a role here and never see the tile.
-          </p>
-          <p className="mt-1.5">
-            Names and employee codes cannot be edited here or in Spare. They
-            come from the HR employee record, and a change there reaches Spare
-            on its own.
-          </p>
-        </div>
-      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -1865,34 +1688,6 @@ function BemmpTab() {
 
       {subTabs}
 
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">Role, contract and area are three questions</p>
-          <p className="mt-1">
-            The role is what somebody can do. The contracts are which of them
-            they see at all. The area narrows a contract for people who work
-            one zone — leave it on <strong>Everything</strong> and they get the
-            whole contract, which is right for most.
-          </p>
-          <p className="mt-1.5">
-            Cyra, the assistant, is off for everybody until it is ticked
-            here. Without it BEMMP shows no Cyra button, and asking it
-            anyway is refused.
-          </p>
-          <p className="mt-1.5">
-            Whether the tile is offered at all is the Modules column on the
-            Logins tab. Names and employee codes come from the HR record.
-          </p>
-          {zoneOptions.length === 0 && (
-            <p className="mt-1.5">
-              No zones are listed yet — they are read from the published
-              ticket export, so they appear here once somebody publishes one
-              in BEMMP.
-            </p>
-          )}
-        </div>
-      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -2921,6 +2716,9 @@ export default function SwAdmin() {
     an administrator who did not think to look did not answer.
   */
   const { data: waiting } = useOpenTicketCount(deskHere, isSwAdmin || isItAdmin)
+  // New feedback on Travel Expense, as waiting tickets on Support (the user, 14 Nov: "anything is new, show a counter").
+  const newFeedback = useNewFeedbackCount(isSwAdmin)
+  const counts: Record<string, number> = { support: waiting ?? 0, travel: newFeedback }
 
   return (
     <div className="space-y-5 lg:space-y-0">
@@ -2953,9 +2751,9 @@ export default function SwAdmin() {
             >
               <t.icon className="h-4.5 w-4.5 shrink-0" style={{ color: `rgb(${tintOf(t.id)})` }} />
               <span className="min-w-0 flex-1 truncate">{t.label}</span>
-              {t.id === 'support' && !!waiting && (
+              {!!counts[t.id] && (
                 <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
-                  {waiting > 99 ? '99+' : waiting}
+                  {counts[t.id] > 99 ? '99+' : counts[t.id]}
                 </span>
               )}
             </button>
@@ -2969,7 +2767,7 @@ export default function SwAdmin() {
         </div>
       </div>
 
-      <PhoneSections tabs={TABS} tab={active.id} waiting={waiting ?? 0} onPick={id => setTab(id as TabId)} />
+      <PhoneSections tabs={TABS} tab={active.id} counts={counts} onPick={id => setTab(id as TabId)} />
     </div>
   )
 }
@@ -2978,8 +2776,8 @@ export default function SwAdmin() {
   Phone: one bar at the bottom naming the open section; pressing it opens every section as a grid of named tiles
   (the user, 13 Nov: fifteen icons in a row had become "L… A… S…"). A tile closes it; so does a press outside, or Escape.
 */
-function PhoneSections({ tabs, tab, waiting, onPick }: {
-  tabs: ReadonlyArray<(typeof ADMIN_TABS)[number]>; tab: string; waiting: number; onPick: (id: string) => void
+function PhoneSections({ tabs, tab, counts, onPick }: {
+  tabs: ReadonlyArray<(typeof ADMIN_TABS)[number]>; tab: string; counts: Record<string, number>; onPick: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLElement>(null)
@@ -2993,9 +2791,10 @@ function PhoneSections({ tabs, tab, waiting, onPick }: {
   }, [open])
   const cur = tabs.find(t => t.id === tab) ?? tabs[0]
   if (!cur) return null
-  const Badge = ({ id }: { id: string }) => id === 'support' && waiting > 0
-    ? <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">{waiting > 99 ? '99+' : waiting}</span>
+  const Badge = ({ id }: { id: string }) => (counts[id] ?? 0) > 0
+    ? <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">{counts[id] > 99 ? '99+' : counts[id]}</span>
     : null
+  const elsewhere = Object.entries(counts).some(([id, n]) => id !== cur.id && n > 0)
   return (
     <>
       {open && <div className="fixed inset-0 z-20 bg-black/40 lg:hidden" aria-hidden="true" />}
@@ -3017,8 +2816,9 @@ function PhoneSections({ tabs, tab, waiting, onPick }: {
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
           className="flex w-full items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-ink-900"
           style={{ background: `rgb(${tintOf(cur.id)} / 0.14)` }}>
-          <span className="relative"><cur.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(cur.id)})` }} />{!open && cur.id !== 'support' && waiting > 0 && <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />}</span>
+          <span className="relative"><cur.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(cur.id)})` }} />{!open && elsewhere && <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />}</span>
           <span className="min-w-0 flex-1 truncate text-left">{cur.label}</span>
+          {(counts[cur.id] ?? 0) > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">{counts[cur.id] > 99 ? '99+' : counts[cur.id]}</span>}
           <ChevronDown className={clsx('h-5 w-5 transition-transform', open && 'rotate-180')} />
         </button>
       </nav>

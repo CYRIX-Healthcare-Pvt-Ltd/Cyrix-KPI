@@ -37,6 +37,20 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'nume
 const mmss = (s: number | null) => s == null ? '' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const phone = (ua: string | null) => !ua ? '' : /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : ''
 
+/** How many are New: on SW Admin's Travel Expense and its Feedback tab (the user, 14 Nov). Checked every minute. */
+export function useNewFeedbackCount(enabled = true) {
+  const { data } = useQuery({
+    queryKey: ['te_feedback_new'],
+    enabled,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count } = await supabase.from('te_feedback').select('id', { count: 'exact', head: true }).eq('status', 'new')
+      return count ?? 0
+    },
+  })
+  return data ?? 0
+}
+
 export default function TravelFeedback() {
   const qc = useQueryClient()
   const { data, isLoading, error } = useQuery({
@@ -67,6 +81,7 @@ export default function TravelFeedback() {
     const { error } = await supabase.rpc('te_feedback_set', { p_id: id, p_status: status })
     if (error) { setErr({ id, text: friendlyError(error) }); return }
     await qc.invalidateQueries({ queryKey: ['te_feedback'] })
+    await qc.invalidateQueries({ queryKey: ['te_feedback_new'] })
   }
 
   if (isLoading) return <PageLoader />

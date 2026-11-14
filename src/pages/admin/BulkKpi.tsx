@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Upload, Download, Users, FileSpreadsheet, Info, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Upload, Download, Users, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Alert, Spinner } from '@/components/ui'
 import { currentFy } from '@/lib/queries'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
@@ -71,19 +71,6 @@ export default function BulkKpi() {
         </p>
       </div>
 
-      <div className="hidden gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm sm:flex text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">These arrive approved</p>
-          <p className="mt-1">
-            Rows uploaded here are active immediately — no manager approval, because the
-            manager is who this is being done on behalf of. Somebody who already has KPIs
-            for {fy} has them <strong className="font-medium text-ink-900">replaced</strong>.
-            Anyone with a month already scored is skipped, so a score already given keeps
-            meaning what it meant.
-          </p>
-        </div>
-      </div>
 
       {readError && <Alert kind="error">{readError}</Alert>}
 
