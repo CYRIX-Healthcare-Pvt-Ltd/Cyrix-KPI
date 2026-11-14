@@ -62,6 +62,8 @@ const POLICY: Array<[string, string]> = [
   ['bike_two_way_km', 'Bike two-way limit km'], ['car_two_way_km', 'Car two-way limit km'], ['submit_by_day', 'Submit by day of next month'], ['claim_within_days', 'Claim a day within (days)'],
   ['late_pct', 'Late deduction % (1, 2, 3 months)'], ['auto_per_km', 'Auto fare ₹ a km'], ['auto_min_fare', 'Auto minimum fare ₹'], ['auto_min_km', 'Auto minimum fare covers km'],
   ['home_changes_month', 'Home changes a month'], ['km_band_km', 'Km band for Google Maps screenshot'], ['km_band_extra_km', 'Km allowed over the map a band'],
+  // Within this of the saved home, a Start or End my day is Home (Travel te_0159; the user, 14 Nov: "add Home circle").
+  ['home_km', 'Home circle, km'],
 ]
 
 export function TravelAdmin() {
