@@ -31,6 +31,8 @@ type Req = {
   comp_vendor: string | null; comp_rate: number | null; comp_tax: number | null
   warranty: string | null; lead_days: number | null; purchase_note: string | null; picked: string | null
   quote_date: string | null; file: string | null; signed: boolean; step: string
+  /** Filled here: what is attached, and what did not fit (BEMMP 0055; the user, 14 Nov: "attach all quotations in the mail"). */
+  attached?: string[]; left?: string[]
 }
 type Job = {
   ids: number[]; kind: 'raised' | 'tl_ok' | 'quote_ok' | 'rates' | 'transfer'; to: string[]; cc: string[]
@@ -92,7 +94,10 @@ function words(j: Job) {
     const pick = r.picked === 'original' ? ['Original', r.orig_vendor, withTax(r.orig_rate, r.orig_tax)] : r.picked === 'compatible' ? ['Compatible', r.comp_vendor, withTax(r.comp_rate, r.comp_tax)] : null
     if (pick && pick[2]) rows.push(['Quotation', esc(`${pick[0]} · ${pick[1] ?? ''} · ${inr(pick[2] as number)} with tax${r.quote_date ? ' · ' + day(r.quote_date) : ''}`)])
     else if (r.quote_date) rows.push(['Quotation date', esc(day(r.quote_date))])
-    if (r.file) extra = `<p style="margin:12px 0 0;font-size:12px;color:#555">📎 ${r.signed ? 'The signed quotation is attached.' : 'The quotation is attached.'}</p>`
+    if (r.attached?.length) {
+      extra = `<p style="margin:12px 0 0;font-size:12px;color:#555">📎 Attached: ${r.attached.map(esc).join(' · ')}</p>`
+        + (r.left?.length ? `<p style="margin:4px 0 0;font-size:12px;color:#555">Too big to attach, in the Quotation tracker: ${r.left.map(esc).join(' · ')}</p>` : '')
+    }
   } else {
     title = `Rates from Purchase · ${r.no}`
     subject = `[${r.no}] Rates from Purchase · ${r.spare} · ${j.hospital}`
@@ -157,11 +162,27 @@ Deno.serve(async req => {
         { name: 'cyrix-logo.png', type: 'image/png', base64: LOGO_WHITE_PNG, cid: 'cyrixlogo' },
       ]
       const r = j.requests[0]
-      if (j.kind === 'quote_ok' && r.file) {
-        const { data: blob, error: fe } = await db.storage.from('qt-photos').download(r.file)
-        if (fe || !blob) throw new Error(`Quotation file not found: ${fe?.message ?? r.file}`)
-        const ext = (r.file.split('.').pop() ?? 'pdf').toLowerCase()
-        attachments.push({ name: `${r.no} ${r.signed ? 'signed quotation' : 'quotation'}.${ext}`, type: blob.type || (ext === 'pdf' ? 'application/pdf' : 'image/jpeg'), base64: b64(new Uint8Array(await blob.arrayBuffer())) })
+      if (j.kind === 'quote_ok') {
+        // Every quotation, then every signed copy (BEMMP 0055); the old single file when there are no rows.
+        const { data: rows } = await db.from('qt_quote_files').select('kind, path, qtn_no').eq('request_id', r.id).order('created_at')
+        const list = (rows?.length ? rows : r.file ? [{ kind: r.signed ? 'signed' : 'quote', path: r.file, qtn_no: null }] : []) as Array<{ kind: string; path: string; qtn_no: string | null }>
+        list.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'quote' ? -1 : 1))
+        const seen = new Map<string, number>()
+        let room = 2_800_000 // Microsoft 365 refuses a mail over about 4 MB once encoded
+        r.attached = []; r.left = []
+        for (const f of list) {
+          const base = `${f.qtn_no ?? r.no} ${f.kind === 'signed' ? 'signed' : 'quotation'}`.replace(/[\/:*?"<>|]+/g, '-')
+          const n = (seen.get(base) ?? 0) + 1; seen.set(base, n)
+          const ext = (f.path.split('.').pop() ?? 'pdf').toLowerCase()
+          const name = `${base}${n > 1 ? ` (${n})` : ''}.${ext}`
+          const { data: blob, error: fe } = await db.storage.from('qt-photos').download(f.path)
+          if (fe || !blob) throw new Error(`Quotation file not found: ${fe?.message ?? f.path}`)
+          const bytes = new Uint8Array(await blob.arrayBuffer())
+          if (bytes.length > room) { r.left.push(name); continue }
+          room -= bytes.length
+          attachments.push({ name, type: blob.type || (ext === 'pdf' ? 'application/pdf' : 'image/jpeg'), base64: b64(bytes) })
+          r.attached.push(name)
+        }
       }
       const to = j.to.length ? j.to : j.cc
       const cc = j.to.length ? j.cc : []
