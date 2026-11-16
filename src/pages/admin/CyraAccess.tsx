@@ -3,7 +3,8 @@
  * cyra, in that for each user, we need check box, extra option ie review and
  * admin", "defaultly review and admin should be disabled").
  *
- * Everyone who holds the CYRA module, with two boxes. CYRA itself keeps its own
+ * Everyone who holds the CYRA module, with three boxes (Observer since 0295, 16 Nov:
+ * sees the summary of everyone below them in Cyra Assist and downloads it). CYRA itself keeps its own
  * accounts in another project; its engine reads these boxes through
  * cyra_whoami() whenever the person opens CYRA from the portal, and gives or
  * takes CYRA's review and admin roles to match — so a change shows at their
@@ -18,7 +19,7 @@ import { Alert, EmptyState, Spinner, StatTile } from '@/components/ui'
 interface Row {
   employee_id: string; ecode: string; full_name: string; designation: string | null
   function_name: string | null; location: string | null
-  review: boolean; admin: boolean; updated_at: string | null; updated_by_name: string | null
+  review: boolean; admin: boolean; observer: boolean; updated_at: string | null; updated_by_name: string | null
 }
 
 export default function CyraAccess() {
@@ -36,9 +37,9 @@ export default function CyraAccess() {
   const [failed, setFailed] = useState<string | null>(null)
 
   const save = useMutation({
-    mutationFn: async (r: Pick<Row, 'employee_id' | 'review' | 'admin'>) => {
+    mutationFn: async (r: Pick<Row, 'employee_id' | 'review' | 'admin' | 'observer'>) => {
       const { error } = await supabase.rpc('set_cyra_access', {
-        p_employee_id: r.employee_id, p_review: r.review, p_admin: r.admin,
+        p_employee_id: r.employee_id, p_review: r.review, p_admin: r.admin, p_observer: r.observer,
       })
       if (error) throw new Error(friendlyError(error))
     },
@@ -48,7 +49,7 @@ export default function CyraAccess() {
       await qc.cancelQueries({ queryKey: ['cyra', 'access'] })
       const before = qc.getQueryData<Row[]>(['cyra', 'access'])
       qc.setQueryData<Row[]>(['cyra', 'access'], rows =>
-        rows?.map(x => (x.employee_id === r.employee_id ? { ...x, review: r.review, admin: r.admin } : x)))
+        rows?.map(x => (x.employee_id === r.employee_id ? { ...x, review: r.review, admin: r.admin, observer: r.observer } : x)))
       return { before }
     },
     onError: (e, _r, ctx) => {
@@ -68,10 +69,11 @@ export default function CyraAccess() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="People with Cyra Assist" value={rows.length} />
         <StatTile label="Review" value={rows.filter(r => r.review).length} />
         <StatTile label="Admin" value={rows.filter(r => r.admin).length} />
+        <StatTile label="Observer" value={rows.filter(r => r.observer).length} />
       </div>
 
       {failed && <Alert kind="error">{failed}</Alert>}
@@ -99,6 +101,7 @@ export default function CyraAccess() {
                   <th className="px-4 py-2.5 font-medium">Employee</th>
                   <th className="px-4 py-2.5 text-center font-medium">Review</th>
                   <th className="px-4 py-2.5 text-center font-medium">Admin</th>
+                  <th className="px-4 py-2.5 text-center font-medium">Observer</th>
                   <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Last updated</th>
                 </tr>
               </thead>
@@ -109,14 +112,27 @@ export default function CyraAccess() {
                       <p className="font-medium text-ink-900">{r.full_name}</p>
                       <p className="text-xs text-ink-500">{r.ecode}{r.designation ? ` · ${r.designation}` : ''}</p>
                     </td>
-                    {(['review', 'admin'] as const).map(k => (
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-cyrixRed-600"
+                        aria-label={`Review for ${r.full_name}`}
+                        checked={r.review}
+                        onChange={e => save.mutate({ employee_id: r.employee_id, review: e.target.checked, admin: r.admin, observer: r.observer })}
+                      />
+                    </td>
+                    {/* Admin or Observer, one of the two (the user, 16 Nov: "observer and admin in radio button"); pressing the chosen one again clears it. */}
+                    {(['admin', 'observer'] as const).map(k => (
                       <td key={k} className="px-4 py-3 text-center">
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name={`cyra-role-${r.employee_id}`}
                           className="h-4 w-4 cursor-pointer accent-cyrixRed-600"
-                          aria-label={`${k === 'review' ? 'Review' : 'Admin'} for ${r.full_name}`}
+                          aria-label={`${k === 'admin' ? 'Admin' : 'Observer'} for ${r.full_name}`}
                           checked={r[k]}
-                          onChange={e => save.mutate({ employee_id: r.employee_id, review: r.review, admin: r.admin, [k]: e.target.checked })}
+                          onChange={() => {}}
+                          onClick={() => save.mutate({ employee_id: r.employee_id, review: r.review,
+                            admin: k === 'admin' ? !r.admin : false, observer: k === 'observer' ? !r.observer : false })}
                         />
                       </td>
                     ))}
