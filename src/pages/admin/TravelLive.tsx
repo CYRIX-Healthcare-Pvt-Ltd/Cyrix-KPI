@@ -17,6 +17,8 @@ interface Usage {
   functions: Array<{ function: string; people: number; started: number; sent: number; photos: number }>
   people: Person[]
   skip_limit?: number
+  google?: number
+  google_month?: number
   at: string
 }
 
@@ -79,6 +81,8 @@ export default function TravelLive() {
     ['Advances', by.advance ?? 0, 'default', `${t.advances} asked`],
     ['Deputations', by.deputation ?? 0, 'default', `${t.deputations} asked`],
     ['Vehicle requests', by.vehicle ?? 0, 'default', `${t.vehicles} asked`],
+    // Google's road lookups, each one billed; free up to 70,000 a month on India billing (te_0161; the user, 18 Nov).
+    ['Google routes', data?.google ?? 0, 'default', `${(data?.google_month ?? 0).toLocaleString('en-IN')} / 70,000 free`],
   ] : []
 
   return (
@@ -110,7 +114,7 @@ export default function TravelLive() {
       {isLoading ? <PageLoader />
         : error || !data ? <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
         : <>
-          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-7">
             {tiles.map(([l, v, tone, sub]) => (
               <div key={l} className={clsx('rounded-lg border px-2.5 py-1.5', tone === 'brand' ? 'row-span-2 flex flex-col justify-center border-ink-200 bg-surface' : 'border-ink-200 bg-surface')}>
                 <p className="truncate text-[11px] font-medium text-ink-500" title={l}>{l}</p>
