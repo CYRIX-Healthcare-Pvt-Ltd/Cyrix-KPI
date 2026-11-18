@@ -96,13 +96,28 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
 
   return (
     // Set off so the desks notice it (the user, 2 Nov: "show this send to field emphasised").
-    <div className="rounded-xl border-2 p-4" style={{ borderColor: `${hue}b3`, background: `${hue}1a` }}>
-      <div className="flex items-center gap-2">
-        <span className="label">Send to <span className="text-red-600">*</span></span>
-      </div>
-      <div className="mt-1 grid max-w-sm grid-cols-2 gap-2">
+    <div className="h-full rounded-xl border-2 p-4" style={{ borderColor: `${hue}b3`, background: `${hue}1a` }}>
+      {/* Send to and Exclude people in one row on a computer (the user, 18 Nov: "can be in same row"). */}
+      <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
+      <div>
+      <span className="label">Send to <span className="text-red-600">*</span></span>
+      <div className="mt-1 grid grid-cols-2 gap-2 whitespace-nowrap">
         {choice('all', 'Everyone', Globe)}
         {choice('chosen', 'Chosen people', Users)}
+      </div>
+      </div>
+      {/* Exclude people, for Everyone and Chosen people alike (0294; the user, 13 Nov: "we need exclude people also,
+          add to all" ... "only option to type ecode and name, so suggestion should come"). */}
+      <div className="min-w-0">
+        <span className="label">Exclude people</span>
+        <MultiPick id="dg-exclude" value={value.exclude} onChange={exclude => onChange({ ...value, exclude })} placeholder="Name or E-code"
+          options={people.map(p => ({ value: p.ecode, label: p.name, hint: p.ecode }))} />
+        {!chosen && value.exclude.length > 0 && (
+          <p className="mt-1.5 text-sm font-semibold text-ink-900">
+            {isFetching ? <Loader2 className="inline h-4 w-4 animate-spin" /> : `Reaches ${reach ?? 0} ${reach === 1 ? 'person' : 'people'}`}
+          </p>
+        )}
+      </div>
       </div>
       {chosen && (
         <div className="mt-2 space-y-3 rounded-xl border border-ink-200 bg-ink-50/60 p-3">
@@ -151,18 +166,6 @@ export default function DigestSendTo({ to, value, onTo, onChange, hue = '#7c3aed
         </div>
       )}
 
-      {/* Exclude people, for Everyone and Chosen people alike (0294; the user, 13 Nov: "we need exclude people also,
-          add to all" ... "only option to type ecode and name, so suggestion should come"). */}
-      <div className="mt-3">
-        <span className="label">Exclude people</span>
-        <MultiPick id="dg-exclude" value={value.exclude} onChange={exclude => onChange({ ...value, exclude })} placeholder="Name or E-code"
-          options={people.map(p => ({ value: p.ecode, label: p.name, hint: p.ecode }))} />
-        {!chosen && value.exclude.length > 0 && (
-          <p className="mt-1.5 text-sm font-semibold text-ink-900">
-            {isFetching ? <Loader2 className="inline h-4 w-4 animate-spin" /> : `Reaches ${reach ?? 0} ${reach === 1 ? 'person' : 'people'}`}
-          </p>
-        )}
-      </div>
     </div>
   )
 }

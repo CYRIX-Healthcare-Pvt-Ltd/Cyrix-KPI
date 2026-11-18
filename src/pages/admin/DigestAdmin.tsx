@@ -138,11 +138,11 @@ interface Draft {
   /** Send to (0242): everyone, or the chosen functions, teams and people. */
   to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]; exclude: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [], exclude: [] }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [], exclude: ['E1', 'E2', 'E3'] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
-const fmtAmPm = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/(am|pm)/i, m => m.toUpperCase())
+const fmtAmPm = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\b(am|pm)\b/i, m => m.toUpperCase())
 
 /** A photo, made no bigger than it needs to be, into the public digest bucket. */
 async function upload(file: File): Promise<string> {
@@ -604,11 +604,13 @@ export default function DigestAdmin() {
           </div>
         )}
 
+        {/* Settings and Send to side by side on a computer (the user, 18 Nov: "do we need to use this much space?"). */}
+        <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
         {/* Every setting together, the same way for every kind (the user, 5 Nov: "tidy the area not only in quiz, all are messed up"). */}
         {(d.kind === 'poll' || ASKS(d.kind) || (d.kind !== 'vacancy' && d.kind !== 'meeting')) && (
           <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
             <span className="label">Settings</span>
-            <div className="mt-1 grid gap-4 sm:grid-cols-2">
+            <div className="mt-1 grid gap-4 sm:auto-cols-max sm:grid-flow-col">
               {(d.kind === 'poll' || ASKS(d.kind)) ? (
                 <div>
                   <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
@@ -627,7 +629,7 @@ export default function DigestAdmin() {
                       </button>
                     })}
                   </div>
-                  {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2" value={d.until}
+                  {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2 max-w-xs" value={d.until}
                     min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
                     onChange={e => set({ until: e.target.value || d.until })} />}
                 </div>
@@ -655,8 +657,11 @@ export default function DigestAdmin() {
           </div>
         )}
 
+        <div className={clsx('min-w-0', !(d.kind === 'poll' || ASKS(d.kind) || (d.kind !== 'vacancy' && d.kind !== 'meeting')) && 'lg:col-span-2')}>
         <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes, exclude: d.exclude }}
           onTo={to => set({ to })} onChange={a => set(a)} hue={solid(d.color)} />
+        </div>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-ink-200 pt-4">
         <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}

@@ -55,7 +55,8 @@ export default function MultiPick({ id, options, value, onChange, placeholder = 
         <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" />
       </button>
 
-      {value.length > 1 && (
+      {/* A chip with its cross from the first pick (the user, 18 Nov: "why on 1 selected like this? no remove option?"). */}
+      {value.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {value.map(v => (
             <span key={v} className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2.5 py-1 text-xs text-ink-700">
