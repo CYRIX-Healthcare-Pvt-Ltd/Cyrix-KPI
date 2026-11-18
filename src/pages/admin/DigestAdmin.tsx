@@ -87,7 +87,7 @@ const grad = (h: Hue) => {
 interface Row {
   id: string; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
-  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
+  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
   /** This desk may edit it: it posted it, or the poster shared it (0183). */
@@ -216,7 +216,7 @@ export default function DigestAdmin() {
   // Which desk this is, for "posted by" in the preview.
   const { data: desk } = useQuery({
     queryKey: ['digest', 'desk'],
-    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | null) ?? 'hr',
+    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw' | null) ?? 'hr',
   })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
@@ -1023,7 +1023,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
-      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt'} author={row.author} mine={row.mine} />
+      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'} author={row.author} mine={row.mine} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
@@ -1192,13 +1192,13 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   deleted ones too, so a post a desk deletes stays here as history. Read only; Details as the desks see it.
 */
 interface SwRow {
-  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt' | 'mgmt'; author: string | null
+  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null
   created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
   meet_at: string | null; likes: number; comments: number; opened: number; joined: number
   /** Over: a meeting that ended, a form or poll that closed, a post past its last day (0210). */
   ended?: boolean
 }
-const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' } as const
+const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management', sw: 'Software admin' } as const
 
 export function DigestHistory() {
   const [find, setFind] = useState('')

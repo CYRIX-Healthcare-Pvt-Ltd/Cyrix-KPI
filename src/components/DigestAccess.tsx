@@ -13,8 +13,8 @@ import { supabase, friendlyError } from '@/lib/supabase'
  * Since 0270 (the user, 9 Nov: "ya change desk to person"): a post is the person's who posted it, and they share it
  * with people — everyone who can post on the Digest, listed under their desk ("first dept and then person").
  */
-type Desk = 'hr' | 'it' | 'mkt' | 'mgmt'
-const DESK: Record<Desk, string> = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' }
+type Desk = 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'
+const DESK: Record<Desk, string> = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management', sw: 'Software admin' }
 /** The post's fields as the form names them. */
 const FIELD: Record<string, string> = {
   title: 'Title', body: 'Description', image_url: 'Photo', color: 'Colour', kind: 'Kind',
@@ -29,7 +29,7 @@ const ACTION: Record<string, string> = {
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
 
 type Person = { employee_id: string; ecode: string; full_name: string; desk: Desk; ticked: boolean }
-const ORDER: Desk[] = ['mgmt', 'hr', 'it', 'mkt']
+const ORDER: Desk[] = ['mgmt', 'hr', 'it', 'mkt', 'sw']
 
 export default function DigestAccess({ postId, owner, author, mine }: {
   postId: string

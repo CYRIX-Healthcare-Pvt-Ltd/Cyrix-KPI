@@ -14,7 +14,7 @@ import MultiPick from '@/components/MultiPick'
 import { EmptyState, SortHeader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
-type Desk = 'hr' | 'it' | 'mkt' | 'mgmt' | 'acc' | 'travel'
+type Desk = 'hr' | 'it' | 'mkt' | 'mgmt' | 'acc' | 'travel' | 'sw'
 
 /** Each desk and the modules it can administer, as desk_modules() has them. */
 const DESKS: Record<Desk, { label: string; modules: string[] }> = {
@@ -25,6 +25,8 @@ const DESKS: Record<Desk, { label: string; modules: string[] }> = {
   mgmt: { label: 'Management', modules: ['Digest'] },
   acc: { label: 'Accounts', modules: ['Travel Expense'] },
   travel: { label: 'Travel Desk', modules: ['Travel Expense'] },
+  /** Posts to Cyrix Digest as "Software admin" (0297; the user, 18 Nov). */
+  sw: { label: 'Software admin', modules: ['Digest'] },
 }
 
 interface Row {
@@ -214,7 +216,7 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
   }
 
   return (
-    <Dialog title={row ? `Change ${row.full_name}` : 'Add admin'} icon={<ShieldCheck className="h-5 w-5 text-ink-500" />} onClose={onClose}>
+    <Dialog title={row ? `Change ${row.full_name}` : 'Add admin'} icon={<ShieldCheck className="h-5 w-5 text-ink-500" />} onClose={onClose} wide>
       <div className="space-y-4">
         <div>
           <span className="label">Person <span className="text-cyrixRed-600">*</span></span>
@@ -227,10 +229,10 @@ function AdminDialog({ row, taken, onClose }: { row: Row | null; taken: Row[]; o
         </div>
         <div>
           <span className="label">Desk <span className="text-cyrixRed-600">*</span></span>
-          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-12">
             {(Object.keys(DESKS) as Desk[]).map(d => (
               <button key={d} type="button" onClick={() => pickDesk(d)} aria-pressed={desk === d}
-                className={clsx('justify-center', desk === d ? 'btn-primary' : 'btn-secondary')}>
+                className={clsx('justify-center whitespace-nowrap', d === 'hr' || d === 'it' ? 'sm:col-span-2' : 'sm:col-span-4', d === 'sw' && 'max-sm:col-span-2', desk === d ? 'btn-primary' : 'btn-secondary')}>
                 {DESKS[d].label}{row && holds(d) && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-green-500" aria-label="holds this desk" />}
               </button>
             ))}
