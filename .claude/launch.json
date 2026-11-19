@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "cyra-ears",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/d9sfb/AppData/Local/Temp/claude/00c74031d9c68320/b8f720a9-42b1-4afb-8199-049976cf081e/scratchpad/cyra/app", "run", "dev", "--", "--port", "5193", "--strictPort"],
+      "port": 5193
+    },
+    {
       "name": "cyrix-kpi",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -55,6 +61,65 @@
         "--strictPort"
       ],
       "port": 5176
+    },
+    {
+      "name": "cyrix-revive-lab",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix Revive Lab/node_modules/vite/bin/vite.js",
+        "D:/Cyrix Revive Lab",
+        "--port",
+        "5177",
+        "--strictPort"
+      ],
+      "port": 5177
+    },
+    {
+      "name": "cyrix-travel",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix Travel/node_modules/vite/bin/vite.js",
+        "D:/Cyrix Travel",
+        "--port",
+        "5178",
+        "--strictPort"
+      ],
+      "port": 5178
+    },
+    {
+      "name": "cyrix-tasks",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix Tasks/node_modules/vite/bin/vite.js",
+        "D:/Cyrix Tasks",
+        "--port",
+        "5179",
+        "--strictPort"
+      ],
+      "port": 5179
+    },
+    {
+      "name": "cyra-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/d9sfb/AppData/Local/Temp/claude/D--Cyrix-KPI/26b0acd7-e025-40e4-bd1c-7d0e4acdaae8/scratchpad/Cyrix-Cyra/app",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5191",
+        "--strictPort"
+      ],
+      "port": 5191
+    },
+    {
+      "name": "bemmp-live",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/Cyrix KPI/.claude/bemmp_live_dev.mjs"
+      ],
+      "port": 5199
     }
   ]
 }

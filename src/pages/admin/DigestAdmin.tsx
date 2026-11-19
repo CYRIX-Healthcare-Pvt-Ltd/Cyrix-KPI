@@ -88,7 +88,7 @@ interface Row {
   id: string; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
   posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
-  /** Waiting for SW Admin, or sent back with SW Admin's reason (0298). */
+  /** Waiting for SW Admin, or sent back with SW Admin's reason (0299). */
   approval?: 'pending' | 'returned' | null; approval_note?: string | null
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
@@ -220,7 +220,7 @@ export default function DigestAdmin() {
     queryKey: ['digest', 'desk'],
     queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw' | null) ?? 'hr',
   })
-  // SW Admin publishes at once; everybody else's first publishing waits for SW Admin (0298).
+  // SW Admin publishes at once; everybody else's first publishing waits for SW Admin (0299).
   const { data: isSw = false } = useQuery({ queryKey: ['is_sw_admin'], staleTime: 10 * 60_000, queryFn: async () => !!(await supabase.rpc('is_sw_admin')).data })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
@@ -340,7 +340,7 @@ export default function DigestAdmin() {
       setDraftSaved(false)
     },
   })
-  /** A post opened for changing: the poster's own, or one waiting for SW Admin (0298). */
+  /** A post opened for changing: the poster's own, or one waiting for SW Admin (0299). */
   const loadEdit = async (r: Row) => {
                   const form = r.kind === 'form'
                     ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number; parent_id?: string | null; required_if?: string | null }> | null) ?? []
@@ -371,7 +371,7 @@ export default function DigestAdmin() {
                     to: aud && !aud.everyone ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [], exclude: aud?.exclude ?? [] })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  // Opened from SW Admin → Digest → Approvals with ?edit= (0298): that post, once the list is in.
+  // Opened from SW Admin → Digest → Approvals with ?edit= (0299): that post, once the list is in.
   const editAsked = useRef(false)
   useEffect(() => {
     if (editAsked.current || !rows) return
@@ -845,7 +845,7 @@ function NotifyDialog({ row, isSw, onClose }: { row: Pick<Row, 'id' | 'title'> &
   const [err, setErr] = useState<string | null>(null)
   const send = async () => {
     setBusy(true); setErr(null)
-    // A desk's notification waits for SW Admin (0298).
+    // A desk's notification waits for SW Admin (0299).
     if (!isSw) {
       const { error } = await supabase.rpc('push_ask', { p_kind: 'digest', p_as: row.posted_as ?? 'hr', p_payload: { post_id: row.id, subtitle: sub.trim() }, p_title: row.title, p_body: sub.trim() })
       setBusy(false)
@@ -1236,7 +1236,7 @@ interface SwRow {
 const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management', sw: 'Software admin' } as const
 
 /*
-  SW Admin approves what goes out (0298; the user, 19 Nov, Joy sir: "whoever posts something, before posting, they need
+  SW Admin approves what goes out (0299; the user, 19 Nov, Joy sir: "whoever posts something, before posting, they need
   to take sw admin approval ... notification also need approval"): Approvals first, then every post.
 */
 export function DigestHistory() {

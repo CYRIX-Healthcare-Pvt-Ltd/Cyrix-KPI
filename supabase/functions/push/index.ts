@@ -195,7 +195,7 @@ Deno.serve(async req => {
   try { input = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   const db = admin()
 
-  // SW Admin sends what a desk asked for (0298; the user, 19 Nov: "notification also need approval"): the request's
+  // SW Admin sends what a desk asked for (0299; the user, 19 Nov: "notification also need approval"): the request's
   // own words, as that desk, from whoever asked. Taken first, so a second press sends nothing.
   let approved: { asked_by: string | null; sent_as: string } | null = null
   if (input.action === 'approve_request') {
@@ -365,7 +365,7 @@ Deno.serve(async req => {
     if (!desk && !approved) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
     const { data: post } = await db.from('digest_posts').select('*').eq('id', String(input.post_id ?? '')).is('deleted_at', null).maybeSingle()
     if (!post) return json({ error: 'That post is not there' }, 404)
-    // Waiting for SW Admin (0298): nobody is told until it is out.
+    // Waiting for SW Admin (0299): nobody is told until it is out.
     if (!post.published_at) return json({ people: 0, devices: 0, delivered: 0, failed: 0, waiting: true })
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
@@ -419,7 +419,7 @@ Deno.serve(async req => {
     if (!body) return json({ error: 'Type the message first' }, 400)
     // Sent as HR or as SW Admin (0159): only that desk sees it afterwards.
     const as = approved ? approved.sent_as : input.as === 'sw' ? 'sw' : 'hr'
-    // HR's message waits for SW Admin (0298); SW Admin's own goes at once.
+    // HR's message waits for SW Admin (0299); SW Admin's own goes at once.
     if (!approved && as !== 'sw') return json({ error: 'SW Admin approves this first' }, 403)
     const { data: ok } = await user.rpc('push_desk_ok', { p_as: approved ? 'sw' : as })
     if (!ok) return json({ error: as === 'sw' ? 'Only SW Admin can send from here' : 'Only HR Admin can send from here' }, 403)

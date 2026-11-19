@@ -1,5 +1,5 @@
 -- =====================================================================
--- Cyrix KPI  ·  0298  ·  SW Admin approves Digest posts and notifications
+-- Cyrix KPI  ·  0299  ·  SW Admin approves Digest posts and notifications
 --
 -- The user, 19 Nov (Joy sir): "for all posts, whoever posts something,
 -- before posting, they need to take sw admin approval ... same all edit

@@ -133,7 +133,7 @@ function SendForm({ desk }: { desk: Desk; onSent: () => void }) {
     },
   })
 
-  // HR's message waits for SW Admin (0298; the user, 19 Nov: "notification also need approval"); SW Admin's goes at once.
+  // HR's message waits for SW Admin (0299; the user, 19 Nov: "notification also need approval"); SW Admin's goes at once.
   const { data: mine = [] } = useQuery({
     queryKey: ['push_my_requests'],
     enabled: desk !== 'sw',
