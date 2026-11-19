@@ -148,7 +148,7 @@ function firstPath(v: unknown): string | null {
   return null
 }
 
-async function pvtLookup(ticket: string): Promise<Response> {
+async function pvtLookup(ticket: string, withImage = true): Promise<Response> {
   let job: Row | 'none' | null = null
   try {
     if (pvtToken) job = await pvtJob(pvtToken, ticket)
@@ -164,7 +164,7 @@ async function pvtLookup(ticket: string): Promise<Response> {
 
   let image: string | null = null, imageType: string | null = null, imageNote: string | null = null, imageName: string | null = null
   const path = firstPath(done?.resolution_image) ?? firstPath(job.resolution_image)
-  if (path) {
+  if (path && withImage) {
     const url = /^https?:\/\//i.test(path) ? path : PVT_FILES + path.replace(/^\/+/, '')
     imageName = path.split('/').pop() ?? null
     try {
@@ -210,7 +210,17 @@ Deno.serve(async req => {
   const { data: me } = service ? { data: null } : await db.auth.getUser()
   if (!service && !me?.user) return json({ error: 'Sign in first' }, 401)
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-  const asked = await req.json().catch(() => ({})) as { ticket?: unknown; claim?: unknown }
+  const asked = await req.json().catch(() => ({})) as { ticket?: unknown; claim?: unknown; from?: unknown }
+  // BEMMP's spare request (BEMMP 0068; the user, 19 Nov): anybody raising requests on the quotation tracker, Care 360
+  // tickets only, no picture.
+  if (!service && asked.from === 'quotation') {
+    const { data: emp } = await db.rpc('current_employee_id')
+    const { data: qp } = emp ? await admin.from('qt_people').select('role').eq('employee_id', emp).maybeSingle() : { data: null }
+    if (!qp || !['engineer', 'team_lead'].includes(String(qp.role))) return json({ error: 'Ticket lookup is not open for you' }, 403)
+    const t = String(asked.ticket ?? '').trim().toUpperCase()
+    if (!/^PMPT_\d{3,}$/.test(t)) return json({ error: 'Type a Care 360 ticket ID, like PMPT_000023' }, 400)
+    return await pvtLookup(t, false)
+  }
   const { data: prof } = service ? { data: null } : await admin.from('profiles').select('ecode').eq('id', me!.user!.id).maybeSingle()
   let open = service || TEST.has(String(prof?.ecode ?? '').toUpperCase())
   if (!open && typeof asked.claim === 'string' && /^[0-9a-f-]{36}$/i.test(asked.claim)) {
