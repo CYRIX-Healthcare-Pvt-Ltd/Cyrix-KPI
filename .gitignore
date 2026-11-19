@@ -29,4 +29,3 @@ tsconfig.tsbuildinfo
 
 # Machine-local Claude Code permissions
 .claude/settings.local.json
-.vercel
