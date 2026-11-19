@@ -189,6 +189,8 @@ async function pvtLookup(ticket: string, withImage = true): Promise<Response> {
       id: ticket, source: 'pvt', status: done ? 'completed' : s(finished?.status_name) ?? s(job.ticket_type_name),
       hospital: s(job.customer_name), city: s(job.location) ?? s(job.location_name), state: s(job.zone_name), department: s(job.facility_department_name),
       equipment: s(job.equipment_name), model: s(job.part_number), make: s(job.model), barcode: s(job.serial_no),
+      // serial_no is Care 360's Barcode column; the maker's serial is equipment_serial (BEMMP 0070; the user, 19 Nov).
+      serial: s(job.equipment_serial),
       // The assigned BME, as FieldPro's Job Report shows it; else whoever visited.
       engineer: s(job.technician) ?? s(visit?.technician_name), engineer_code: s(job.technician_code),
       logged: s(done?.raised_date) ?? s(job.raised_date_time) ?? s(job.job_logged_date),
