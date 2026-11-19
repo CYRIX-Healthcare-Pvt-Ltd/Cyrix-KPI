@@ -2800,6 +2800,9 @@ export default function SwAdmin() {
   }
   const active = TABS.find(t => t.id === tab) ?? TABS[0]
   const stackRef = useStackLabels()
+  // Posts and notifications waiting for SW Admin, on the Digest tab (0298).
+  const { data: digestWaiting = 0 } = useQuery({ queryKey: ['digest_waiting_count'], enabled: isSwAdmin, refetchInterval: 60_000,
+    queryFn: async () => ((await supabase.rpc('digest_waiting_count')).data as number | null) ?? 0 })
 
   /*
     How many people are waiting, on the tab rather than only inside it.
@@ -2811,7 +2814,7 @@ export default function SwAdmin() {
   const { data: waiting } = useOpenTicketCount(deskHere, isSwAdmin || isItAdmin)
   // New feedback on Travel Expense, as waiting tickets on Support (the user, 14 Nov: "anything is new, show a counter").
   const newFeedback = useNewFeedbackCount(isSwAdmin)
-  const counts: Record<string, number> = { support: waiting ?? 0, travel: newFeedback }
+  const counts: Record<string, number> = { support: waiting ?? 0, travel: newFeedback, 'digest-history': digestWaiting }
 
   return (
     <div className="space-y-5 lg:space-y-0">

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { htmlToMd } from '@/lib/htmlToMd'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
@@ -11,7 +11,7 @@ import { buildDigestWorkbook, type QuizScore } from '@/lib/digestExcel'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff, Shuffle, RotateCcw,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff, Shuffle, RotateCcw, Check, Undo2, ChevronLeft,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -88,6 +88,8 @@ interface Row {
   id: string; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
   posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
+  /** Waiting for SW Admin, or sent back with SW Admin's reason (0298). */
+  approval?: 'pending' | 'returned' | null; approval_note?: string | null
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
   /** This desk may edit it: it posted it, or the poster shared it (0183). */
@@ -186,7 +188,7 @@ export default function DigestAdmin() {
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
-  const [notify, setNotify] = useState<Pick<Row, 'id' | 'title'> | null>(null)
+  const [notify, setNotify] = useState<(Pick<Row, 'id' | 'title'> & { posted_as?: string }) | null>(null)
   /*
     A draft sent as a test to a few people first (0187; the user, 13 Oct: "they want to test the
     link, whether it is opening or not … select the participants entering name or ecode").
@@ -218,6 +220,8 @@ export default function DigestAdmin() {
     queryKey: ['digest', 'desk'],
     queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw' | null) ?? 'hr',
   })
+  // SW Admin publishes at once; everybody else's first publishing waits for SW Admin (0298).
+  const { data: isSw = false } = useQuery({ queryKey: ['is_sw_admin'], staleTime: 10 * 60_000, queryFn: async () => !!(await supabase.rpc('is_sw_admin')).data })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
   const [q, setQ] = useState('')
@@ -319,7 +323,7 @@ export default function DigestAdmin() {
       // Publishing tells everybody, a new post or an edit alike, in the same words (the user,
       // 12 Oct: "for editing also notification should go", "updated title not needed").
       const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id, link_added: linkAdded } })
-      return { publish, id: id as string, isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
+      return { publish, id: id as string, isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0, waiting: !!(sent as { waiting?: boolean } | null)?.waiting }
     },
     onSuccess: r => {
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
@@ -330,11 +334,54 @@ export default function DigestAdmin() {
         setDraftSaved(true)
         return
       }
+      if (r.waiting) { setDone('Sent to SW Admin for approval. It goes out once approved.'); setD(EMPTY); setDraftSaved(false); return }
       setDone(r.linkAdded ? `Published. ${r.people} people were told the meeting link is ready.` : `Published. ${r.people} people were notified.`)
       setD(EMPTY)
       setDraftSaved(false)
     },
   })
+  /** A post opened for changing: the poster's own, or one waiting for SW Admin (0298). */
+  const loadEdit = async (r: Row) => {
+                  const form = r.kind === 'form'
+                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number; parent_id?: string | null; required_if?: string | null }> | null) ?? []
+                    : r.kind === 'quiz'
+                    ? (((await supabase.rpc('digest_quiz', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; correct: string[] | null }> | null) ?? [])
+                        .map(q => ({ ...q, required: true, answered: 0, right: q.options.flatMap((o, k) => (q.correct?.includes(o) ? [k] : [])), accepted: q.qtype === 'short' ? q.correct ?? [''] : undefined }))
+                    : []
+                  const anonymous = r.kind === 'form' && !!(await supabase.rpc('digest_form_is_anonymous', { p_id: r.id })).data
+                  const again = ASKS(r.kind) && !!(await supabase.rpc('digest_allow_again', { p_id: r.id })).data
+                  const qset = r.kind === 'quiz' ? (await supabase.rpc('digest_quiz_settings', { p_id: r.id })).data as { shuffle: boolean; seconds: number | null } | null : null
+                  const answered = r.kind === 'quiz'
+                    ? !!((await supabase.rpc('digest_quiz_scores', { p_id: r.id })).data as unknown[] | null)?.length
+                    : (form[0]?.answered ?? 0) > 0
+                  const poll = r.kind === 'poll'
+                    ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
+                    : []
+                  const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
+                  setTesters(tested); setTesting(tested.length > 0)
+                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[]; exclude?: string[]; everyone?: boolean } | null
+                  setDraftSaved(false)
+                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
+                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
+                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
+                    questions: form.length ? form.filter(q => !('parent_id' in q && q.parent_id)).map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted,
+                      subs: form.filter(x => 'parent_id' in x && x.parent_id === q.id).map(x => subFrom({ id: x.id, label: x.label, required: x.required, required_if: ('required_if' in x ? x.required_if : null) ?? null })) })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+                    anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
+                    to: aud && !aud.everyone ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [], exclude: aud?.exclude ?? [] })
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  // Opened from SW Admin → Digest → Approvals with ?edit= (0298): that post, once the list is in.
+  const editAsked = useRef(false)
+  useEffect(() => {
+    if (editAsked.current || !rows) return
+    const id = new URLSearchParams(window.location.search).get('edit')
+    if (!id) return
+    editAsked.current = true
+    const r = rows.find(x => x.id === id)
+    if (r) void loadEdit(r)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.rpc('digest_remove', { p_id: id })
@@ -671,7 +718,7 @@ export default function DigestAdmin() {
         </button>
         <button type="button" className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate(true) }}>
           {save.isPending && save.variables === true ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {ready ? 'Publish' : `Fill in ${missing.join(', ')}`}
+          {ready ? (isSw || d.wasPublished ? 'Publish' : 'Send for approval') : `Fill in ${missing.join(', ')}`}
         </button>
         <button type="button" className="btn-secondary" onClick={() => setPreviewing(true)}>
           <Eye className="h-4 w-4" /> Preview
@@ -680,7 +727,7 @@ export default function DigestAdmin() {
           <FlaskConical className="h-4 w-4" /> Send test
         </button>
         {d.id && d.wasPublished && (
-          <button type="button" className="btn-secondary" onClick={() => setNotify({ id: d.id!, title: d.title })}>
+          <button type="button" className="btn-secondary" onClick={() => setNotify({ id: d.id!, title: d.title, posted_as: rows?.find(x => x.id === d.id)?.posted_as })}>
             <BellRing className="h-4 w-4 text-amber-500" /> Send notification
           </button>
         )}
@@ -748,7 +795,9 @@ export default function DigestAdmin() {
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink-900">
-                      {!r.published_at && <span className="badge mr-1.5 bg-amber-100 text-amber-800">Draft</span>}
+                      {r.approval === 'pending' ? <span className="badge mr-1.5 bg-sky-100 text-sky-800">Waiting for SW Admin</span>
+                        : r.approval === 'returned' ? <span className="badge mr-1.5 bg-cyrixRed-50 text-cyrixRed-700">Sent back</span>
+                        : !r.published_at && <span className="badge mr-1.5 bg-amber-100 text-amber-800">Draft</span>}
                       {r.title}
                     </span>
                     <span className="block text-xs text-ink-500">
@@ -760,6 +809,7 @@ export default function DigestAdmin() {
                         // A meeting already says its date.
                         : r.kind !== 'meeting' && <span className="ml-1.5">· Until {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>)}
                     </span>
+                    {r.approval === 'returned' && r.approval_note && <span className="block text-xs font-medium text-cyrixRed-700">SW Admin: {r.approval_note}</span>}
                   </span>
                 </button>
                 <span className="hidden shrink-0 items-center gap-3 text-xs text-ink-600 sm:flex">
@@ -769,36 +819,7 @@ export default function DigestAdmin() {
                   <span className="inline-flex items-center gap-1" title="Opened"><Eye className="h-3.5 w-3.5" /> {r.opened ?? 0}</span>
                 </span>
                 {/* A labelled button, not a bare pencil (the user, 6 Nov: "edit button not clearly visible for users"). */}
-                {r.can_edit && <button type="button" className="btn-secondary shrink-0 !gap-1.5 !px-3 !py-1.5 text-sm" onClick={async () => {
-                  const form = r.kind === 'form'
-                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number; parent_id?: string | null; required_if?: string | null }> | null) ?? []
-                    : r.kind === 'quiz'
-                    ? (((await supabase.rpc('digest_quiz', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; correct: string[] | null }> | null) ?? [])
-                        .map(q => ({ ...q, required: true, answered: 0, right: q.options.flatMap((o, k) => (q.correct?.includes(o) ? [k] : [])), accepted: q.qtype === 'short' ? q.correct ?? [''] : undefined }))
-                    : []
-                  const anonymous = r.kind === 'form' && !!(await supabase.rpc('digest_form_is_anonymous', { p_id: r.id })).data
-                  const again = ASKS(r.kind) && !!(await supabase.rpc('digest_allow_again', { p_id: r.id })).data
-                  const qset = r.kind === 'quiz' ? (await supabase.rpc('digest_quiz_settings', { p_id: r.id })).data as { shuffle: boolean; seconds: number | null } | null : null
-                  const answered = r.kind === 'quiz'
-                    ? !!((await supabase.rpc('digest_quiz_scores', { p_id: r.id })).data as unknown[] | null)?.length
-                    : (form[0]?.answered ?? 0) > 0
-                  const poll = r.kind === 'poll'
-                    ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
-                    : []
-                  const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
-                  setTesters(tested); setTesting(tested.length > 0)
-                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[]; exclude?: string[]; everyone?: boolean } | null
-                  setDraftSaved(false)
-                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
-                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
-                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
-                    questions: form.length ? form.filter(q => !('parent_id' in q && q.parent_id)).map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted,
-                      subs: form.filter(x => 'parent_id' in x && x.parent_id === q.id).map(x => subFrom({ id: x.id, label: x.label, required: x.required, required_if: ('required_if' in x ? x.required_if : null) ?? null })) })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
-                    anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
-                    to: aud && !aud.everyone ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [], exclude: aud?.exclude ?? [] })
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
+                {r.can_edit && <button type="button" className="btn-secondary shrink-0 !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => void loadEdit(r)}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
                 {r.can_edit && r.published_at && !(r.show_until && r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)) && !(r.kind === 'meeting' && r.meet_at && new Date(r.meet_at).getTime() + (r.meet_minutes ?? 60) * 60_000 < Date.now()) && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
                   onClick={() => { if (confirm(`Delete "${r.title}" from Cyrix Digest?`)) remove.mutate(r.id) }}><Trash2 className="h-4 w-4" /></button>}
@@ -808,7 +829,7 @@ export default function DigestAdmin() {
           ))}
         </div>
       )}
-      {notify && <NotifyDialog row={notify} onClose={() => setNotify(null)} />}
+      {notify && <NotifyDialog row={notify} isSw={isSw} onClose={() => setNotify(null)} />}
     </div>
   )
 }
@@ -817,13 +838,21 @@ export default function DigestAdmin() {
   A push notification for a post already out (the user, 17 Oct): the post's heading as it is, and
   an optional second line of the desk's own. Sent to everybody's devices.
 */
-function NotifyDialog({ row, onClose }: { row: Pick<Row, 'id' | 'title'>; onClose: () => void }) {
+function NotifyDialog({ row, isSw, onClose }: { row: Pick<Row, 'id' | 'title'> & { posted_as?: string }; isSw: boolean; onClose: () => void }) {
   const [sub, setSub] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const send = async () => {
     setBusy(true); setErr(null)
+    // A desk's notification waits for SW Admin (0298).
+    if (!isSw) {
+      const { error } = await supabase.rpc('push_ask', { p_kind: 'digest', p_as: row.posted_as ?? 'hr', p_payload: { post_id: row.id, subtitle: sub.trim() }, p_title: row.title, p_body: sub.trim() })
+      setBusy(false)
+      if (error) { setErr(friendlyError(error)); return }
+      setSent('Sent to SW Admin for approval. It goes out once approved.')
+      return
+    }
     const { data, error } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: row.id, subtitle: sub.trim() } })
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -847,7 +876,7 @@ function NotifyDialog({ row, onClose }: { row: Pick<Row, 'id' | 'title'>; onClos
           <button type="button" className="btn-secondary" onClick={onClose}>{sent ? 'Close' : 'Cancel'}</button>
           {!sent && (
             <button type="button" className="btn-primary" disabled={busy} onClick={() => void send()}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} Send to everyone
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} {isSw ? 'Send to everyone' : 'Send for approval'}
             </button>
           )}
         </div>
@@ -891,7 +920,7 @@ function Tick({ on, onChange, label, icon: Icon, disabled }: { on: boolean; onCh
   )
 }
 
-function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
+export function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
   // Whoever opened it last first (the user, 9 Nov: "default sorting should be first recently opened").
@@ -1200,12 +1229,185 @@ interface SwRow {
   id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null
   created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
   meet_at: string | null; likes: number; comments: number; opened: number; joined: number
+  approval: 'pending' | 'returned' | null; approval_note: string | null; approval_at: string | null
   /** Over: a meeting that ended, a form or poll that closed, a post past its last day (0210). */
   ended?: boolean
 }
 const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management', sw: 'Software admin' } as const
 
+/*
+  SW Admin approves what goes out (0298; the user, 19 Nov, Joy sir: "whoever posts something, before posting, they need
+  to take sw admin approval ... notification also need approval"): Approvals first, then every post.
+*/
 export function DigestHistory() {
+  const [view, setView] = useState<'approvals' | 'all' | 'edit'>('approvals')
+  const { data: waiting = 0 } = useQuery({ queryKey: ['digest_waiting_count'], refetchInterval: 60_000, queryFn: async () => ((await supabase.rpc('digest_waiting_count')).data as number | null) ?? 0 })
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-5 border-b border-ink-200" role="tablist">
+        {([['approvals', 'Approvals'], ['all', 'All posts']] as const).map(([k, word]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+            className={clsx('-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2 text-sm font-medium', view === k ? 'border-violet-600 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-800')}>
+            {word}
+            {k === 'approvals' && waiting > 0 && <span className="rounded-full bg-cyrixRed-600 px-1.5 text-xs font-semibold text-white">{waiting}</span>}
+          </button>
+        ))}
+      </div>
+      {view === 'edit' ? (
+        <div className="space-y-3">
+          <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => setView('approvals')}><ChevronLeft className="h-4 w-4" /> Approvals</button>
+          <DigestAdmin />
+        </div>
+      ) : view === 'approvals' ? <DigestApprovals onEdit={() => setView('edit')} /> : <DigestAllPosts />}
+    </div>
+  )
+}
+
+interface AskRow {
+  id: string; kind: 'send' | 'digest'; sent_as: string; payload: Record<string, unknown>; title: string; body: string; people: number | null
+  asked_by: string | null; asked_at: string; status: 'pending' | 'sent' | 'returned'; note: string | null; decided_by: string | null; decided_at: string | null
+}
+
+function DigestApprovals({ onEdit }: { onEdit: () => void }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState<string | null>(null)
+  /** The one decision being asked about: approve, or send back with a reason (decisions ask first). */
+  const [asking, setAsking] = useState<{ id: string; what: 'post' | 'note'; how: 'approve' | 'back' } | null>(null)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<{ id: string; text: string } | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const { data: posts = [], isLoading } = useQuery({
+    queryKey: ['digest_sw_list'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('digest_sw_list')
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as SwRow[]
+    },
+  })
+  const { data: asks = [] } = useQuery({
+    queryKey: ['push_request_list'],
+    refetchInterval: 60_000,
+    queryFn: async () => ((await supabase.rpc('push_request_list')).data ?? []) as AskRow[],
+  })
+  const waitingPosts = posts.filter(r => r.approval === 'pending' && !r.deleted_at)
+  const waitingAsks = asks.filter(a => a.status === 'pending')
+  const when = (t: string) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  const refresh = () => {
+    for (const k of ['digest_sw_list', 'push_request_list', 'digest_waiting_count', 'digest_admin']) void qc.invalidateQueries({ queryKey: [k] })
+  }
+
+  const decide = async () => {
+    if (!asking) return
+    if (asking.how === 'back' && !reason.trim()) { setErr({ id: asking.id, text: 'Type the reason' }); return }
+    setBusy(true); setErr(null)
+    let failed: string | null = null
+    if (asking.what === 'post') {
+      const { error } = asking.how === 'approve'
+        ? await supabase.rpc('digest_approve', { p_id: asking.id })
+        : await supabase.rpc('digest_send_back', { p_id: asking.id, p_reason: reason.trim() })
+      if (error) failed = friendlyError(error)
+      // Out: everybody it is for is told, as on publishing.
+      else if (asking.how === 'approve') await supabase.functions.invoke('push', { body: { action: 'digest', post_id: asking.id } })
+    } else if (asking.how === 'approve') {
+      const { error } = await supabase.functions.invoke('push', { body: { action: 'approve_request', request_id: asking.id } })
+      if (error) {
+        const ctx = (error as { context?: Response }).context
+        failed = (ctx ? (await ctx.json().catch(() => null))?.error : null) ?? 'It could not be sent. Try again.'
+      }
+    } else {
+      const { error } = await supabase.rpc('push_request_send_back', { p_id: asking.id, p_reason: reason.trim() })
+      if (error) failed = friendlyError(error)
+    }
+    setBusy(false)
+    if (failed) { setErr({ id: asking.id, text: failed }); return }
+    setDone(asking.how === 'approve' ? 'Approved and sent out.' : 'Sent back with your reason.')
+    setAsking(null); setReason('')
+    refresh()
+  }
+
+  const edit = (id: string) => {
+    const u = new URL(window.location.href)
+    u.searchParams.set('edit', id)
+    window.history.replaceState(window.history.state, '', u)
+    onEdit()
+  }
+
+  const confirmBox = (id: string, title: string, who: string | null) => asking?.id === id && (
+    <div className={clsx('mt-3 rounded-lg border p-3', asking.how === 'approve' ? 'border-emerald-200 bg-emerald-50' : 'border-cyrixRed-200 bg-cyrixRed-50')}>
+      <p className="text-sm font-medium text-ink-900">
+        {asking.how === 'approve' ? `Approve "${title}"${who ? ` from ${who}` : ''}? It goes out now.` : `Send "${title}" back${who ? ` to ${who}` : ''}?`}
+      </p>
+      {asking.how === 'back' && (
+        <textarea className="input mt-2 min-h-[64px]" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason" maxLength={300} data-autofocus />
+      )}
+      {err?.id === id && <p className="mt-2 text-sm text-cyrixRed-700" role="alert">{err.text}</p>}
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-xs">
+        <button type="button" className="btn-secondary justify-center" onClick={() => { setAsking(null); setErr(null) }}>Cancel</button>
+        <button type="button" disabled={busy} onClick={() => void decide()}
+          className={clsx('btn-primary justify-center', asking.how === 'approve' ? '!bg-[#217346] hover:!bg-[#1a5c38]' : '!bg-cyrixRed-600')}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : asking.how === 'approve' ? <Check className="h-4 w-4" /> : <Undo2 className="h-4 w-4" />}
+          {asking.how === 'approve' ? 'Approve' : 'Send back'}
+        </button>
+      </div>
+    </div>
+  )
+  const buttons = (id: string, what: 'post' | 'note') => (
+    <div className="flex shrink-0 gap-2">
+      {what === 'post' && <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => edit(id)}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
+      <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => { setAsking({ id, what, how: 'back' }); setReason(''); setErr(null) }}><Undo2 className="h-4 w-4 text-cyrixRed-600" /> Send back</button>
+      <button type="button" className="btn-primary !gap-1.5 !bg-[#217346] !px-3 !py-1.5 text-sm hover:!bg-[#1a5c38]" onClick={() => { setAsking({ id, what, how: 'approve' }); setErr(null) }}><Check className="h-4 w-4" /> Approve</button>
+    </div>
+  )
+
+  if (isLoading) return <Loader2 className="h-5 w-5 animate-spin text-ink-400" />
+  return (
+    <div className="space-y-3">
+      {done && <Alert kind="success">{done}</Alert>}
+      {!waitingPosts.length && !waitingAsks.length && <p className="text-sm text-ink-500">Nothing waiting</p>}
+      {waitingPosts.map(r => {
+        const [, word, Icon] = kindOf(r.kind)
+        return (
+          <div key={r.id} className="card p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
+                {open === r.id ? <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />}
+                <Icon className="h-5 w-5 shrink-0 text-ink-500" />
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-ink-900">{r.title}</p>
+                  <p className="text-xs text-ink-500">{word} · {DESK_WORD[r.posted_as]}{r.author ? ` · ${r.author}` : ''} · asked {when(r.approval_at ?? r.created_at)}</p>
+                </div>
+              </button>
+              {buttons(r.id, 'post')}
+            </div>
+            {confirmBox(r.id, r.title, r.author)}
+            {open === r.id && <div className="mt-3"><Details readOnly row={{ ...r, mine: false, editors: [] } as unknown as Row} /></div>}
+          </div>
+        )
+      })}
+      {waitingAsks.map(a => (
+        <div key={a.id} className="card p-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <BellRing className="h-5 w-5 shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-ink-900">{a.title}</p>
+              {a.body && <p className="text-sm text-ink-700">{a.body}</p>}
+              <p className="text-xs text-ink-500">
+                Notification · {a.kind === 'digest' ? 'for a Digest post' : DESK_WORD[a.sent_as as keyof typeof DESK_WORD] ?? a.sent_as}
+                {a.people ? ` · ${a.people} people` : ''}{a.asked_by ? ` · ${a.asked_by}` : ''} · asked {when(a.asked_at)}
+              </p>
+            </div>
+            {buttons(a.id, 'note')}
+          </div>
+          {confirmBox(a.id, a.title, a.asked_by)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DigestAllPosts() {
   const [find, setFind] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const { data: rows = [], isLoading, error } = useQuery({
@@ -1240,6 +1442,8 @@ export function DigestHistory() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {r.deleted_at ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Deleted</span>
+                      : r.approval === 'pending' ? <span className="badge bg-sky-100 text-sky-800">Waiting for approval</span>
+                      : r.approval === 'returned' ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Sent back</span>
                       : !r.published_at ? <span className="badge bg-amber-100 text-amber-800">Draft</span>
                       : r.ended ? <span className="badge bg-ink-100 text-ink-600">Ended</span>
                       : <span className="badge bg-emerald-50 text-emerald-700">Live</span>}

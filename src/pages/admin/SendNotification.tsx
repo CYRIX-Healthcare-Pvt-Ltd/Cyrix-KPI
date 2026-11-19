@@ -133,6 +133,25 @@ function SendForm({ desk }: { desk: Desk; onSent: () => void }) {
     },
   })
 
+  // HR's message waits for SW Admin (0298; the user, 19 Nov: "notification also need approval"); SW Admin's goes at once.
+  const { data: mine = [] } = useQuery({
+    queryKey: ['push_my_requests'],
+    enabled: desk !== 'sw',
+    queryFn: async () => ((await supabase.rpc('push_my_requests')).data ?? []) as Array<{ id: string; title: string; body: string; asked_at: string; status: 'pending' | 'returned'; note: string | null }>,
+  })
+  const ask = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('push_ask', { p_kind: 'send', p_as: desk, p_payload: { as: desk, target, title: title.trim(), body: body.trim() },
+        p_title: title.trim() || 'Cyrix', p_body: body.trim(), p_people: preview?.people ?? null })
+      if (error) throw new Error(friendlyError(error))
+    },
+    onSuccess: () => {
+      setDone('Sent to SW Admin for approval. It goes out once approved.')
+      setBody(''); setTitle('')
+      qc.invalidateQueries({ queryKey: ['push_my_requests'] })
+    },
+  })
+
   const send = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('push', {
@@ -158,6 +177,22 @@ function SendForm({ desk }: { desk: Desk; onSent: () => void }) {
     <div className="space-y-4">
       {done && <Alert kind="success">{done}</Alert>}
       {send.error && <Alert kind="error">{(send.error as Error).message}</Alert>}
+      {mine.length > 0 && (
+        <div className="card divide-y divide-ink-100 overflow-hidden">
+          {mine.map(m => (
+            <div key={m.id} className="flex items-start gap-3 px-4 py-3">
+              <span className={clsx('badge shrink-0', m.status === 'pending' ? 'bg-sky-100 text-sky-800' : 'bg-cyrixRed-50 text-cyrixRed-700')}>
+                {m.status === 'pending' ? 'Waiting for SW Admin' : 'Sent back'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink-900">{m.title}</p>
+                <p className="truncate text-xs text-ink-500">{m.body}</p>
+                {m.note && <p className="text-xs font-medium text-cyrixRed-700">SW Admin: {m.note}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card space-y-4 p-5">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -195,11 +230,12 @@ function SendForm({ desk }: { desk: Desk; onSent: () => void }) {
 
         <div className="flex flex-wrap items-center gap-3">
           {/* One click (the user, 10 Oct: "why after 1 send another send button?"). */}
-          <button className="btn-primary" disabled={send.isPending || !ready || !body.trim() || !preview || preview.people === 0}
-            onClick={() => { setDone(null); send.mutate() }}>
-            {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {preview?.people ? `Send to ${plural(preview.people, 'person', 'people')}` : 'Send notification'}
+          <button className="btn-primary" disabled={send.isPending || ask.isPending || !ready || !body.trim() || !preview || preview.people === 0}
+            onClick={() => { setDone(null); if (desk === 'sw') send.mutate(); else ask.mutate() }}>
+            {send.isPending || ask.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {desk !== 'sw' ? 'Send for approval' : preview?.people ? `Send to ${plural(preview.people, 'person', 'people')}` : 'Send notification'}
           </button>
+          {ask.error && <span className="text-sm text-cyrixRed-700">{(ask.error as Error).message}</span>}
           {ready && previewError && <span className="text-sm text-cyrixRed-700">{(previewError as Error).message}</span>}
           {ready && preview && (
             <button type="button" onClick={() => setShowWho(s => !s)} disabled={preview.people === 0}

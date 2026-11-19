@@ -195,6 +195,23 @@ Deno.serve(async req => {
   try { input = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   const db = admin()
 
+  // SW Admin sends what a desk asked for (0298; the user, 19 Nov: "notification also need approval"): the request's
+  // own words, as that desk, from whoever asked. Taken first, so a second press sends nothing.
+  let approved: { asked_by: string | null; sent_as: string } | null = null
+  if (input.action === 'approve_request') {
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    })
+    const { data: sw } = await user.rpc('is_sw_admin')
+    if (!sw) return json({ error: 'Only SW Admin approves' }, 403)
+    const { data: me } = await user.rpc('current_employee_id')
+    const { data: r } = await db.from('push_requests').update({ status: 'sent', decided_by: me ?? null, decided_at: new Date().toISOString() })
+      .eq('id', String(input.request_id ?? '')).eq('status', 'pending').select('*').maybeSingle()
+    if (!r) return json({ error: 'It is not waiting for approval' }, 404)
+    approved = { asked_by: r.asked_by, sent_as: r.sent_as }
+    input = { ...(r.payload as Record<string, unknown>), action: r.kind }
+  }
+
   // Switched off by SW Admin (0161): nothing reaches a phone or desktop.
   // The app itself carries on — a message still lands in the bell (the
   // user: "when disabled means only device notification, not in app").
@@ -345,9 +362,11 @@ Deno.serve(async req => {
       auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     })
     const { data: desk } = await user.rpc('digest_can_post')
-    if (!desk) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
+    if (!desk && !approved) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
     const { data: post } = await db.from('digest_posts').select('*').eq('id', String(input.post_id ?? '')).is('deleted_at', null).maybeSingle()
     if (!post) return json({ error: 'That post is not there' }, 404)
+    // Waiting for SW Admin (0298): nobody is told until it is out.
+    if (!post.published_at) return json({ people: 0, devices: 0, delivered: 0, failed: 0, waiting: true })
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
@@ -361,6 +380,10 @@ Deno.serve(async req => {
     const subtitle = String(input.subtitle ?? '').trim().slice(0, 140)
     const resend = typeof input.subtitle === 'string'
     if (resend && !post.published_at) return json({ error: 'Publish it first' }, 400)
+    if (resend && !approved) {
+      const { data: sw } = await user.rpc('is_sw_admin')
+      if (!sw) return json({ error: 'SW Admin approves this first' }, 403)
+    }
     const body = subtitle ? subtitle
       : linkAdded
       ? `${when} · Join from Cyrix Digest.`
@@ -374,7 +397,7 @@ Deno.serve(async req => {
     // Sent to chosen people (0242): them alone.
     const people: string[] = post.audience_ids ?? await everyone(db)
     const { data: row } = await db.from('push_messages').insert({
-      kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
+      kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: approved ? approved.asked_by : me ?? null, sent_as: approved?.sent_as ?? post.posted_as ?? desk,
     }).select('id').single()
     // Not into the in-app bell (0176; the user, 12 Oct: "keep digest out of kpi bell"):
     // the post is on the portal home, and goes to devices.
@@ -395,8 +418,10 @@ Deno.serve(async req => {
     const body = String(input.body ?? '').trim().slice(0, 400)
     if (!body) return json({ error: 'Type the message first' }, 400)
     // Sent as HR or as SW Admin (0159): only that desk sees it afterwards.
-    const as = input.as === 'sw' ? 'sw' : 'hr'
-    const { data: ok } = await user.rpc('push_desk_ok', { p_as: as })
+    const as = approved ? approved.sent_as : input.as === 'sw' ? 'sw' : 'hr'
+    // HR's message waits for SW Admin (0298); SW Admin's own goes at once.
+    if (!approved && as !== 'sw') return json({ error: 'SW Admin approves this first' }, 403)
+    const { data: ok } = await user.rpc('push_desk_ok', { p_as: approved ? 'sw' : as })
     if (!ok) return json({ error: as === 'sw' ? 'Only SW Admin can send from here' : 'Only HR Admin can send from here' }, 403)
     // A thousand at a time, as `everyone` reads them: "Everyone" is more than 1,000 people.
     const people: string[] = []
@@ -408,7 +433,7 @@ Deno.serve(async req => {
     }
     const { data: me } = await user.rpc('current_employee_id')
     const { data: row } = await db.from('push_messages').insert({
-      kind: 'manual', title, body, url: '/', target: input.target, sent_by: me ?? null, sent_as: as,
+      kind: 'manual', title, body, url: '/', target: input.target, sent_by: approved ? approved.asked_by : me ?? null, sent_as: as,
     }).select('id').single()
     // Into everybody's bell first (0158), devices or not.
     if (row) {
