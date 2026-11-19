@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: 'The PDF server did not answer. Try again in a minute.' }, 504)
   }
-  if (!res.ok) return json({ error: 'The PDF could not be made.' }, 502)
+  if (!res.ok) { console.error('qt-pdf upstream', res.status); return json({ error: 'The PDF could not be made.', upstream: res.status }, 502) }
   const pdf = new Uint8Array(await res.arrayBuffer())
   if (pdf.length < 500 || new TextDecoder().decode(pdf.slice(0, 4)) !== '%PDF') return json({ error: 'The PDF could not be made.' }, 502)
   return new Response(pdf, { headers: { ...CORS, 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } })

@@ -3,7 +3,9 @@
 # share. Without them LibreOffice used look-alikes: same widths, but lines sat a little differently (SIGNATURE 17 pt lower
 # on Giri Pushp, 19 Nov). Calibri and Cambria cannot be shared; their same-width twins Carlito and Caladea are already in
 # the image. Render builds this folder (Root Directory: pdf-server); basic auth comes from the service's environment.
-FROM gotenberg/gotenberg:8
+# The LibreOffice-only edition (no Chromium, never used here): it fits Render's free 512 MB (the full one with the extra
+# fonts kept restarting there, 19 Nov).
+FROM gotenberg/gotenberg:8-libreoffice
 
 USER root
 # The fonts come from Debian's "contrib" part: added to whichever kind of sources file the image has.
@@ -23,4 +25,4 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 USER gotenberg
 
-CMD ["gotenberg", "--api-port-from-env=PORT", "--api-enable-basic-auth", "--api-timeout=90s"]
+CMD ["gotenberg", "--api-port-from-env=PORT", "--api-enable-basic-auth", "--api-timeout=90s", "--libreoffice-restart-after=5", "--libreoffice-max-queue-size=3"]
