@@ -85,17 +85,36 @@ export default function PlatformAdmin() {
 /*
   "Cyra is under maintenance" (0303, the user, 20 Nov): on now or From a date and time, To shown as "Back by", all apps
   or chosen ones; a notice bar before From, as long before as chosen here (0304); stays on until turned off here. Every app's lib/maintenance.ts
-  draws the screen. SW Admin still gets in.
+  draws the screen. SW Admin and the Ops admins still get in, and may use this card (0305).
+  Who is online now and the quietest hours (0303_ops_active_users) sit above the form, so a window is picked
+  from the numbers rather than a guess.
 */
 const APPS: { code: string; name: string }[] = [
   { code: 'portal', name: 'Portal' }, { code: 'kpi', name: 'KPI' }, { code: 'travel', name: 'Travel' },
   { code: 'bemmp', name: 'BEMMP' }, { code: 'revive', name: 'Revive Lab' }, { code: 'tasks', name: 'My Task' }, { code: 'cyra', name: 'Cyra' },
+  { code: 'workplace', name: 'Workplace' }, { code: 'projects', name: 'Projects' }, { code: 'pulse', name: 'Pulse' },
 ]
 type Maint = { on?: boolean; from?: string | null; to?: string | null; apps?: string[]; notice_min?: number; by?: string; at?: string }
 const NOTICE: { min: number; label: string }[] = [
   { min: 15, label: '15 minutes' }, { min: 30, label: '30 minutes' }, { min: 60, label: '1 hour' },
   { min: 120, label: '2 hours' }, { min: 180, label: '3 hours' }, { min: 1440, label: '1 day' },
 ]
+type Online = { users_60?: number; users_15?: number; by_hour?: { hour: number; weekend: boolean; avg: number }[] }
+/** The quietest 3-hour block (IST) on weekdays or weekends, once at least 12 hours have samples. */
+function quietest(rows: Online['by_hour'], weekend: boolean): string | null {
+  const avg = new Map((rows ?? []).filter(r => r.weekend === weekend).map(r => [r.hour, r.avg]))
+  if (avg.size < 12) return null
+  let best = -1, low = Infinity
+  for (let h = 0; h < 24; h++) {
+    const hs = [h, (h + 1) % 24, (h + 2) % 24]
+    if (!hs.every(x => avg.has(x))) continue
+    const v = hs.reduce((a, x) => a + (avg.get(x) ?? 0), 0) / 3
+    if (v < low) { low = v; best = h }
+  }
+  if (best < 0) return null
+  const t = (h: number) => `${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'}`
+  return `${t(best)}–${t((best + 3) % 24)} (about ${Math.round(low)} online)`
+}
 const noticeLabel = (min?: number) => NOTICE.find(n => n.min === (min ?? 15))?.label ?? `${min} minutes`
 const shown = (iso?: string | null) => iso
   ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
@@ -118,6 +137,15 @@ function MaintenanceCard() {
   const [asking, setAsking] = useState<'on' | 'off' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const { data: online } = useQuery({
+    queryKey: ['platform', 'online'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('ops_active_now')
+      if (error) return null   // only Ops admins may read it; the card works without
+      return data as Online
+    },
+    refetchInterval: 5 * 60_000,
+  })
   const on = !!m?.on
   const appNames = (list?: string[]) => !list?.length ? 'all apps' : APPS.filter(a => list.includes(a.code)).map(a => a.name).join(', ')
   const toggle = (code: string) => setApps(a => a.includes(code) ? a.filter(x => x !== code) : [...a, code])
@@ -154,6 +182,14 @@ function MaintenanceCard() {
         <h3 className="text-sm font-semibold text-ink-800">Maintenance</h3>
       </div>
       <div className="space-y-3 p-4">
+        {online && (
+          <div className="rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700">
+            <span className="font-semibold text-ink-900">{online.users_60 ?? 0}</span> online now
+            {' · '}<span className="font-semibold text-ink-900">{online.users_15 ?? 0}</span> in the last 15 minutes
+            {quietest(online.by_hour, false) && <span className="block text-xs text-ink-500">Quietest weekdays: {quietest(online.by_hour, false)}</span>}
+            {quietest(online.by_hour, true) && <span className="block text-xs text-ink-500">Quietest weekends: {quietest(online.by_hour, true)}</span>}
+          </div>
+        )}
         {isLoading ? <Spinner className="h-4 w-4 text-ink-400" /> : on ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -213,6 +249,9 @@ function MaintenanceCard() {
                 ? `Turn off maintenance for ${appNames(m?.apps)}?`
                 : `Turn on maintenance for ${appNames(apps)}${from ? ` from ${shown(new Date(from).toISOString())}` : ' now'}?`}
             </p>
+            {asking === 'on' && !from && (online?.users_15 ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-amber-800">{online?.users_15} people were active in the last 15 minutes and will see the screen straight away, with no notice bar. Setting a From gives them warning.</p>
+            )}
             <div className="mt-2 flex gap-2">
               <button type="button" className="btn-primary" disabled={save.isPending} onClick={() => save.mutate(asking === 'on')}>
                 {save.isPending ? <Spinner className="h-4 w-4" /> : asking === 'on' ? 'Yes, turn on' : 'Yes, turn off'}
