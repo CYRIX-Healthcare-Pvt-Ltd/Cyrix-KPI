@@ -184,14 +184,14 @@ function MaintenanceCard() {
                 <input type="datetime-local" className="input mt-1 w-full" value={to} min={from || undefined} onChange={e => setTo(e.target.value)} />
               </label>
             </div>
-            {from && (
-              <label className="block">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block min-w-0">
                 <span className="text-xs font-medium text-ink-600">Notice before</span>
                 <select className="input mt-1 w-full" value={notice} onChange={e => setNotice(Number(e.target.value))}>
                   {NOTICE.map(n => <option key={n.min} value={n.min}>{n.label}</option>)}
                 </select>
               </label>
-            )}
+            </div>
             <div>
               <span className="text-xs font-medium text-ink-600">Apps</span>
               <div className="mt-1 flex flex-wrap gap-1.5">
