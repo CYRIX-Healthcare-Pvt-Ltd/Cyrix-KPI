@@ -2363,7 +2363,7 @@ export function useAppModules() {
  * Accounts that are not employees (0203): test logins and the *_ADMIN logins, by id. Everyone
  * else is an employee. Reports and lists leave them out unless asked (the user, 15 Oct).
  */
-export type AccountType = 'employee' | 'test' | 'admin'
+export type AccountType = 'employee' | 'test' | 'admin' | 'director'
 export function useAccountTypes() {
   return useQuery({
     queryKey: ['non_employee_ids'],

@@ -145,7 +145,8 @@ function LoginsTab() {
   // Employees by default; test and admin logins on request (0203; the user, 15 Oct).
   const [kind, setKind] = useState<'employee' | 'test' | 'admin' | 'all'>('employee')
   const { data: typeOf } = useAccountTypes()
-  const kindOk = (id: string) => kind === 'all' || (typeOf ? typeOf(id) : 'employee') === kind
+  // A director is an employee in this filter (0306).
+  const kindOk = (id: string) => { const t = typeOf ? typeOf(id) : 'employee'; return kind === 'all' || (t === 'director' ? 'employee' : t) === kind }
   const setType = useMutation({
     mutationFn: async (a: { id: string; type: string }) => {
       const { error } = await supabase.rpc('set_account_type', { p_employee_id: a.id, p_type: a.type })
@@ -193,7 +194,10 @@ function LoginsTab() {
     const isSelf = (r: LoginStatusRow) =>
       r.ecode.toLowerCase().includes(q) ||
       r.full_name.toLowerCase().includes(q) ||
-      (r.login_email ?? '').toLowerCase().includes(q)
+      (r.login_email ?? '').toLowerCase().includes(q) ||
+      // Function and designation too (the user, 20 Nov: "aurum" found nobody).
+      (r.function_name ?? '').toLowerCase().includes(q) ||
+      (r.designation ?? '').toLowerCase().includes(q)
     const rows = data.filter(r => {
       if (!kindOk(r.employee_id)) return false
       if (!includeInactive && !r.is_active) return false
@@ -649,12 +653,13 @@ function LoginsTab() {
                     {/* Employee, test or admin login (0203; the user, 15 Oct), in place of the state badge. */}
                     <select aria-label={`Role of ${r.full_name}`}
                       // Admin red, test yellow, employee green (the user, 15 Oct).
-                      className={clsx('input !w-auto !py-1.5 text-xs font-semibold', ({ admin: '!border-red-300 !bg-red-100 !text-red-800', test: '!border-amber-300 !bg-amber-100 !text-amber-800', employee: '!border-emerald-300 !bg-emerald-100 !text-emerald-800' } as const)[typeOf ? typeOf(r.employee_id) : 'employee'])}
+                      className={clsx('input !w-auto !py-1.5 text-xs font-semibold', ({ admin: '!border-red-300 !bg-red-100 !text-red-800', test: '!border-amber-300 !bg-amber-100 !text-amber-800', director: '!border-violet-300 !bg-violet-100 !text-violet-800', employee: '!border-emerald-300 !bg-emerald-100 !text-emerald-800' } as const)[typeOf ? typeOf(r.employee_id) : 'employee'])}
                       title={r.login_state}
                       value={typeOf ? typeOf(r.employee_id) : 'employee'}
                       disabled={!typeOf || setType.isPending || itOnly}
                       onChange={e => setType.mutate({ id: r.employee_id, type: e.target.value })}>
                       <option value="employee">Employee</option>
+                      <option value="director">Director</option>
                       <option value="test">Test</option>
                       <option value="admin">Admin</option>
                     </select>
