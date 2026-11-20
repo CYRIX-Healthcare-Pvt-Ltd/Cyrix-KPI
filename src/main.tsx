@@ -2,6 +2,7 @@
 import './lib/safeStorage'
 import { startSessionGuard } from '@/lib/sessionGuard'
 import { startIdleSignOut } from '@/lib/idleSignOut'
+import { startMaintenance } from '@/lib/maintenance'
 import { supabase } from '@/lib/supabase'
 import { startErrorReporting } from '@/lib/reportErrors'
 import React from 'react'
@@ -53,6 +54,7 @@ const queryClient = new QueryClient({
 startSessionGuard()
 // Signed out after 3 hours with nothing done, across every Cyrix app.
 startIdleSignOut(supabase)
+startMaintenance(supabase, 'kpi')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
