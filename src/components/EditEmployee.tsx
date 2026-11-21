@@ -61,6 +61,22 @@ export default function EditEmployee({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // The functions already in use, for the dropdown (the user, 21 Nov), read in pages past the 1,000-row cap.
+  const [functions, setFunctions] = useState<string[]>([])
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const seen = new Set<string>()
+      for (let from = 0; ; from += 1000) {
+        const { data } = await supabase.from('employees').select('function_name').not('function_name', 'is', null).order('id').range(from, from + 999)
+        for (const x of data ?? []) if (x.function_name?.trim()) seen.add(x.function_name.trim())
+        if (!data || data.length < 1000) break
+      }
+      if (alive) setFunctions([...seen].sort((a, b) => a.localeCompare(b)))
+    })()
+    return () => { alive = false }
+  }, [])
+
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -231,7 +247,13 @@ export default function EditEmployee({
               <div className="grid gap-3 sm:grid-cols-2">
                 {/* The business unit — RJBEMP, Care 360, TCQAS. What the
                     KPI report groups by. */}
-                <Field label="Function" value={row.function_name ?? ''} onChange={set('function_name')} />
+                <label className="block">
+                  <span className="label">Function</span>
+                  <select className="input mt-1" value={row.function_name ?? ''} onChange={e => set('function_name')(e.target.value)}>
+                    <option value="">Choose…</option>
+                    {[...new Set([...(row.function_name ? [row.function_name] : []), ...functions])].map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </label>
                 <Field
                   label="Manager's employee code"
                   value={managerCode}
