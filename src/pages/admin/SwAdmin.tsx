@@ -1581,7 +1581,18 @@ function BemmpTab() {
   })
 
   // Sub-tabs (the user, 11 Nov): BEMMP's own access, then each sub-module's settings.
-  const [sub, setSub] = useState<'access' | 'qt' | 'makers' | 'templates'>('access')
+  // The sub-tab is in the address too, so a reload stays on it (the user, 25 Nov).
+  type BemmpSub = 'access' | 'qt' | 'makers' | 'templates'
+  const [sub, setSubState] = useState<BemmpSub>(() => {
+    const v = new URLSearchParams(window.location.search).get('sub')
+    return (['access', 'qt', 'makers', 'templates'].includes(v ?? '') ? v : 'access') as BemmpSub
+  })
+  const setSub = (v: BemmpSub) => {
+    setSubState(v)
+    const u = new URL(window.location.href)
+    u.searchParams.set('sub', v)
+    window.history.replaceState(window.history.state, '', u)
+  }
   const [makerCode, setMakerCode] = useState('')
   const [makerOff, setMakerOff] = useState<string | null>(null)
   const [qtRole, setQtRole] = useState('all')
