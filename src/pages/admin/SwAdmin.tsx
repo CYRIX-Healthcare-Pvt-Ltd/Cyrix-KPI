@@ -1581,7 +1581,7 @@ function BemmpTab() {
   })
 
   // Sub-tabs (the user, 11 Nov): BEMMP's own access, then each sub-module's settings.
-  const [sub, setSub] = useState<'access' | 'qt' | 'makers'>('access')
+  const [sub, setSub] = useState<'access' | 'qt' | 'makers' | 'templates'>('access')
   const [makerCode, setMakerCode] = useState('')
   const [makerOff, setMakerOff] = useState<string | null>(null)
   const [qtRole, setQtRole] = useState('all')
@@ -1591,7 +1591,7 @@ function BemmpTab() {
 
   const subTabs = (
     <div className="flex gap-1.5 overflow-x-auto">
-      {([['access', 'Access'], ['qt', 'Quotation tracker'], ['makers', 'Quotation makers']] as const).map(([id, label]) => (
+      {([['access', 'Access'], ['qt', 'Quotation tracker'], ['makers', 'Quotation makers'], ['templates', 'Templates']] as const).map(([id, label]) => (
         <button key={id} type="button" aria-pressed={sub === id} onClick={() => setSub(id)}
           className={clsx('badge shrink-0 cursor-pointer px-3 py-1.5 text-sm transition-colors',
             sub === id ? 'bg-ink-900 text-onInk' : 'bg-ink-100 text-ink-500 hover:bg-ink-200')}>
@@ -1605,6 +1605,17 @@ function BemmpTab() {
    * Quotation makers (BEMMP 0060/0061; the user, 16 Nov: "only sw admin need that access, move to sw admin"): people who
    * only make quotations, not in the tracker's workflow. Given here by E-code; they get BEMMP with the Quotations page.
    */
+  if (sub === 'templates') return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
+        <p className="mt-0.5 text-sm text-ink-500">Quotation templates</p>
+      </div>
+      {subTabs}
+      <QtTemplatesLog />
+    </div>
+  )
+
   if (sub === 'makers') {
     const q = search.trim().toLowerCase()
     const makers = (qtPeople ?? []).filter(p => p.role === 'maker')
@@ -2967,4 +2978,78 @@ function useStackLabels() {
     return () => mo.disconnect()
   }, [])
   return ref
+}
+
+/*
+ * BEMMP → Templates (KPI 0311; the user, 25 Nov): each quotation template, who uploaded it, and whether Gemini read it
+ * — the model that answered, or every reason it did not. SW Admin only; the people uploading never see this.
+ */
+type QtTemplateRow = { id: string; name: string; kind: string; by_name: string | null; by_ecode: string | null; created_at: string; updated_at: string; ai: string | null }
+function QtTemplatesLog() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['qt_templates_log'],
+    queryFn: async () => { const { data, error } = await supabase.rpc('qt_templates_log'); if (error) throw error; return (data ?? []) as QtTemplateRow[] },
+  })
+  const [q, setQ] = useState('')
+  const [gem, setGem] = useState<'all' | 'read' | 'not'>('all')
+  const [sort, setSort] = useState<{ key: 'name' | 'by' | 'at'; asc: boolean }>({ key: 'at', asc: false })
+  if (isLoading) return <PageLoader />
+  if (error) return <p className="text-sm text-cyrixRed-600">{friendlyError(error)}</p>
+  const read = (r: QtTemplateRow) => !!r.ai && r.ai.startsWith('ok')
+  const s = q.trim().toLowerCase()
+  const rows = (data ?? [])
+    .filter(r => !s || r.name.toLowerCase().includes(s) || (r.by_name ?? '').toLowerCase().includes(s) || (r.by_ecode ?? '').toLowerCase().includes(s))
+    .filter(r => gem === 'all' || (gem === 'read') === read(r))
+    .sort((a, b) => {
+      const v = (x: QtTemplateRow) => sort.key === 'name' ? x.name : sort.key === 'by' ? (x.by_name ?? '') : x.updated_at
+      return (sort.asc ? 1 : -1) * v(a).localeCompare(v(b))
+    })
+  const head = (k: typeof sort.key, label: string) => (
+    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort(o => ({ key: k, asc: o.key === k ? !o.asc : k !== 'at' }))}>
+      {label}<span className="text-[10px]">{sort.key === k ? (sort.asc ? '▲' : '▼') : '↕'}</span>
+    </button>
+  )
+  const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+          <input className="input pl-9" placeholder="Search by template, name or employee code" value={q} onChange={e => setQ(e.target.value)} />
+        </div>
+        <select className="input" value={gem} onChange={e => setGem(e.target.value as typeof gem)} aria-label="Gemini">
+          <option value="all">Gemini: all</option>
+          <option value="read">Read by Gemini</option>
+          <option value="not">Not read</option>
+        </select>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-ink-200">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-left text-xs font-semibold uppercase tracking-wider text-ink-500">
+            <tr>
+              <th className="px-4 py-3">{head('name', 'Template')}</th>
+              <th className="px-4 py-3">{head('by', 'Uploaded by')}</th>
+              <th className="px-4 py-3">{head('at', 'Uploaded')}</th>
+              <th className="px-4 py-3">Gemini</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id} className="border-t border-ink-100 align-top">
+                <td className="px-4 py-3 font-medium text-ink-900">{r.name}</td>
+                <td className="px-4 py-3 text-ink-700">{r.by_name ?? '—'}{r.by_ecode && <span className="text-ink-400"> ({r.by_ecode})</span>}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-ink-600">{when(r.updated_at)}</td>
+                <td className="px-4 py-3">
+                  {read(r) ? <span className="badge bg-green-100 text-green-800">{r.ai!.replace(/^ok\s*/, '') || 'Read'}</span>
+                    : r.ai ? <span className="text-xs text-cyrixRed-700">{r.ai}</span>
+                    : <span className="text-xs text-ink-400">Before Gemini</span>}
+                </td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan={4} className="px-4 py-6 text-center text-ink-400">No templates</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
