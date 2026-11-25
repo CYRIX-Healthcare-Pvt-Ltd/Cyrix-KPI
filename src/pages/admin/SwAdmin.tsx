@@ -1346,6 +1346,9 @@ const CONTRACTS: { id: string; label: string }[] = [
   { id: 'pm', label: 'PM checklist' },
   // A module like the others (KPI 0279; the user, 11 Nov): ticked here, roles on the Quotation tracker sub-tab.
   { id: 'qt', label: 'Quotation tracker' },
+  // Care 360 module (BEMMP 62756ae, 25 Nov): two contracts under one tile.
+  { id: 'c360', label: 'Care 360' },
+  { id: 'pvt', label: 'Private BEMMP' },
 ]
 
 /** BEMMP's Quotation tracker (BEMMP 0015, 0027; the user, 11 Nov): one role each, engineers under a Team Lead. */
