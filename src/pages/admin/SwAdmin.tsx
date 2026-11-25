@@ -2991,6 +2991,22 @@ function useStackLabels() {
   return ref
 }
 
+// Gemini's long refusals in one short line (the user, 25 Nov: "too much"): "no free quota: 3.1-pro · busy: 3.8-flash, 3.7-flash".
+function shortAi(ai: string): { model: string; why: string } {
+  const ok = ai.startsWith('ok')
+  const [head, tried = ''] = ai.replace(/^ok\s*/, '').split(' · tried ')
+  const failed = ok ? tried : ai
+  const groups = new Map<string, Set<string>>()
+  for (const m of failed.matchAll(/(gemini-[\w.-]+):\s*([^·]*)/g)) {
+    const why = /quota/i.test(m[2]) ? 'no free quota' : /demand|overload|busy|unavailable/i.test(m[2]) ? 'busy' : /timeout|abort/i.test(m[2]) ? 'too slow' : 'failed'
+    const name = m[1].replace(/^gemini-/, '').replace(/-preview.*$/, '')
+    if (!groups.has(why)) groups.set(why, new Set())
+    groups.get(why)!.add(name)
+  }
+  const why = [...groups].map(([w, s]) => `${w}: ${[...s].join(', ')}`).join(' · ')
+  return { model: ok ? head : '', why: why || (ok ? '' : ai.slice(0, 80)) }
+}
+
 /*
  * BEMMP → Templates (KPI 0311; the user, 25 Nov): each quotation template, who uploaded it, and whether Gemini read it
  * — the model that answered, or every reason it did not. SW Admin only; the people uploading never see this.
@@ -3051,8 +3067,8 @@ function QtTemplatesLog() {
                 <td className="px-4 py-3 text-ink-700">{r.by_name ?? '—'}{r.by_ecode && <span className="text-ink-400"> ({r.by_ecode})</span>}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-ink-600">{when(r.updated_at)}</td>
                 <td className="px-4 py-3">
-                  {read(r) ? <span className="badge bg-green-100 text-green-800">{r.ai!.replace(/^ok\s*/, '') || 'Read'}</span>
-                    : r.ai ? <span className="text-xs text-cyrixRed-700">{r.ai}</span>
+                  {read(r) ? <><span className="badge bg-green-100 text-green-800">{shortAi(r.ai!).model || 'Read'}</span>{shortAi(r.ai!).why && <div className="mt-1 text-xs text-ink-400">{shortAi(r.ai!).why}</div>}</>
+                    : r.ai ? <span className="text-xs text-cyrixRed-700">{shortAi(r.ai).why}</span>
                     : <span className="text-xs text-ink-400">Before Gemini</span>}
                 </td>
               </tr>
