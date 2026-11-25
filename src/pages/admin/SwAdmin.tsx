@@ -2997,9 +2997,9 @@ function shortAi(ai: string): { model: string; why: string } {
   const [head, tried = ''] = ai.replace(/^ok\s*/, '').split(' · tried ')
   const failed = ok ? tried : ai
   const groups = new Map<string, Set<string>>()
-  for (const m of failed.matchAll(/(gemini-[\w.-]+):\s*([^·]*)/g)) {
+  for (const m of failed.matchAll(/((?:gemini-|openai\/)[\w.-]+):\s*([^·]*)/g)) {
     const why = /quota/i.test(m[2]) ? 'no free quota' : /demand|overload|busy|unavailable/i.test(m[2]) ? 'busy' : /timeout|abort/i.test(m[2]) ? 'too slow' : 'failed'
-    const name = m[1].replace(/^gemini-/, '').replace(/-preview.*$/, '')
+    const name = m[1].replace(/^gemini-|^openai\//, '').replace(/-preview.*$/, '')
     if (!groups.has(why)) groups.set(why, new Set())
     groups.get(why)!.add(name)
   }
