@@ -107,7 +107,7 @@ export function words(r: AdvanceRow, app = 'https://app.cyrix.in') {
 }
 
 /** Who it goes to: the person; copies to the manager and the Travel Desk — each once, and only addresses on record. */
-export function recipients(r: AdvanceRow) {
+export function recipients(r: Pick<AdvanceRow, 'email' | 'manager_email' | 'desk_emails'>) {
   const clean = (s: string | null | undefined) => (s ?? '').trim().toLowerCase() || null
   const to = [clean(r.email)].filter((x): x is string => !!x)
   const cc = [...new Set([clean(r.manager_email), ...(r.desk_emails ?? []).map(clean)].filter((x): x is string => !!x && !to.includes(x)))]

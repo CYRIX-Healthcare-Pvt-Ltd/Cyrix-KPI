@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Info } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { PageLoader, Alert, Spinner } from '@/components/ui'
 
@@ -120,24 +120,11 @@ export default function SpareWarehouses() {
     <div className="space-y-5">
       <div>
         <h3 className="font-semibold text-ink-900">Warehouses</h3>
-        <p className="mt-0.5 text-sm text-ink-500">
+        <p className="hidden mt-0.5 text-sm text-ink-500 sm:block">
           Where a spare sits. This is the only field the tag form insists on.
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">Turning one off is not deleting it</p>
-          <p className="mt-1">
-            An inactive warehouse stops being offered for new spares and keeps
-            every spare already filed there. A warehouse that holds any spare
-            cannot be deleted at all — the spares would be left pointing at
-            nothing — so turning it off is how a site that has closed is
-            retired.
-          </p>
-        </div>
-      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 

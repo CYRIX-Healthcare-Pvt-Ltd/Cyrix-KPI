@@ -25,7 +25,7 @@ export interface TrendPoint {
  * them can drift back to clipping.
  */
 export function ScoreLabel({
-  x, y, value, fill = 'currentColor', dy = -12, index, count,
+  x, y, value, fill = 'currentColor', dy = -12, index, count, fontSize = 11,
 }: {
   x?: number
   y?: number
@@ -35,6 +35,8 @@ export function ScoreLabel({
   /** Injected by recharts when it clones this element per point. */
   index?: number
   count?: number
+  /** Smaller on a phone, so seven months of labels fit (the user, 12 Nov). */
+  fontSize?: number
 }) {
   if (value === null || value === undefined || x === undefined || y === undefined) return null
   const n = typeof value === 'number' ? value : Number(value)
@@ -48,7 +50,7 @@ export function ScoreLabel({
       x={x + (isLast ? 4 : isFirst ? -4 : 0)}
       y={y + dy}
       fill={fill}
-      fontSize={11}
+      fontSize={fontSize}
       fontWeight={600}
       textAnchor={isLast ? 'end' : isFirst ? 'start' : 'middle'}
     >

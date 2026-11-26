@@ -330,6 +330,9 @@ export interface KpiSubmission {
    * moves the day later.
    */
   deadline_outcome?: DeadlineOutcome | null
+  /** Opened again on an approved request (0273): the month's own last days, to the end of the day in India. */
+  reopen_tm_until?: string | null
+  reopen_mgr_until?: string | null
 }
 
 export type DeadlineOutcome = 'not_submitted' | 'not_scored'
@@ -366,6 +369,24 @@ export interface CoreValueRating {
   self_remarks?: string | null
   manager_rating: string | null
   manager_remarks: string | null
+  /** The average of its parts' points, when the core value is rated in parts (0225). */
+  self_points?: number | null
+  manager_points?: number | null
+}
+
+/** One part of a core value in a month (0225): rated by both, averaged into the core value. */
+export interface CorePartRating {
+  id: string
+  submission_id: string
+  rating_id: string
+  part_id: string | null
+  label: string
+  /** A learning goal: the team member writes the goal itself each month. */
+  is_goal: boolean
+  sort_order: number
+  goal: string | null
+  self_rating: string | null
+  manager_rating: string | null
 }
 
 export interface AnnualSummary {
@@ -426,6 +447,8 @@ interface TwoStageRequest {
 export interface DeletionRequest extends TwoStageRequest {
   submission_id: string
   period_month: string
+  /** A request to open a month a last day closed (kind 'reopen' in the table, 0273): whose last day it was. */
+  closed_as?: DeadlineOutcome | null
 }
 
 export interface RevisionRequest extends TwoStageRequest {
@@ -435,6 +458,7 @@ export interface RevisionRequest extends TwoStageRequest {
 
 export type RecordRequest =
   | ({ kind: 'deletion' } & DeletionRequest)
+  | ({ kind: 'reopen' } & DeletionRequest)
   | ({ kind: 'revision' } & RevisionRequest)
 
 /**

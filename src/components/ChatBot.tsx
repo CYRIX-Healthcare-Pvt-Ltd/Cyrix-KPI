@@ -9,7 +9,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   useAnnualSummary, useSubmissionHistory, useMyAssignment, usePendingCounts,
-  useTeamMonth, useTeamSubmissions, useTatPolicy, useMonthClose,
+  useTeamMonth, useTeamSubmissions, useTatPolicy, forPeople, useMonthClose,
   useKraAttainment, useMyCoreValueTrend, useCoreValues, useRaiseTicket,
   useKpiRanking, usePushEnabled, currentFy,
 } from '@/lib/queries'
@@ -26,7 +26,7 @@ import { videoFor } from '@/lib/manualVideos'
 import { pickTip } from '@/lib/tips'
 import { pickStanding, type TeamStanding } from '@/lib/standing'
 import { greetingKey } from '@/lib/greeting'
-import { shouldPeek, dayKey } from '@/lib/peek'
+import { dayKey } from '@/lib/peek'
 import { SCORED_STATUSES } from '@/lib/bands'
 import { forecastYear, biggestLever, averageRows, weakestOf } from '@/lib/forecast'
 import { ratingToPoints } from '@/lib/scoring'
@@ -202,7 +202,9 @@ export default function ChatBot() {
   // The manual states deadlines as {tmDays} and {mgrDays}, filled from
   // live settings. The Help page has always done this; the panel quoted
   // the same sentences without them and printed the braces at people.
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // My own last days: none if I am in the list (0293).
+  const policy = forPeople(tatPolicy, employee?.id, employee?.id)
   const closingDay = useMonthClose().data ?? null
 
   /**
@@ -280,7 +282,7 @@ export default function ChatBot() {
   const idleOpening = useMemo<{ key: string; vars: Record<string, string | number> } | null>(() => {
     const names = new Map((coreValues ?? []).map(v => [v.id, v.name]))
     const weakCore = weakestOf(
-      (coreTrend ?? []).map(r => ({ id: r.core_value_id, value: ratingToPoints(r.rating) })),
+      (coreTrend ?? []).map(r => ({ id: r.core_value_id, value: r.points ?? ratingToPoints(r.rating) })),
     )
     // Only worth raising below Good. Asking somebody's plan for a core
     // value they are already scoring 80 on is a question with no answer.
@@ -591,16 +593,8 @@ export default function ChatBot() {
 
   const [peek, setPeek] = useState(false)
 
-  useEffect(() => {
-    let dismissed: string | null = null
-    try { dismissed = localStorage.getItem(mine(PEEK_KEY, employee?.id)) } catch { /* private window */ }
-    if (!shouldPeek({ waiting, unread, dismissed, systemAccount, panelOpen: open })) {
-      setPeek(false)
-      return
-    }
-    const show = setTimeout(() => setPeek(true), 2_000)
-    return () => clearTimeout(show)
-  }, [waiting, unread, systemAccount, open, employee?.id])
+  // No greeting bubble on any screen (the user, 12 Nov: "close this, we dont need pop ups"; phones since
+  // earlier the same day). The red count on the button says what is waiting; one press opens it.
 
   /*
     Greeted by name and told what is waiting.

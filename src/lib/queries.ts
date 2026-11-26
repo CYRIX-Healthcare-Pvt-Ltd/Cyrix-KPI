@@ -4,7 +4,7 @@ import { fyForDate } from './fy'
 import { notifyHr } from './notifyHr'
 import type {
   Employee, KpiAssignment, KpiAssignmentItem, KpiSubmission, KpiSubmissionItem,
-  CoreValueDefinition, CoreValueRating, KpiTemplate, KpiTemplateItem,
+  CoreValueDefinition, CoreValueRating, CorePartRating, KpiTemplate, KpiTemplateItem,
   ScoringRuleMeta, AnnualSummary, JobRole, KpiRowDefinition,
   OrgKpiStatusRow, OrgKpiStatusAllRow, ManagerCompletionRow, ManagerTatRow, KraAttainmentRow,
   WeakAreaRow, TmRemovalRequest, DeletionRequest, RevisionRequest, RecordRequest,
@@ -13,6 +13,7 @@ import type {
   KraBenchmarkRow, SupportTicket, SupportDesk, DeskTicket, VisibleTemplate,
 } from '@/types/db'
 import type { TemplateRowInput } from './templates'
+import { corePoints } from './scoring'
 
 /** Unwraps a PostgREST result, turning its error into a readable message. */
 async function unwrap<T>(p: PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -729,9 +730,9 @@ export function useSubmission(employeeId: string | undefined, month: string) {
       )
       const submission = subs[0] ?? null
       if (!submission) {
-        return { submission: null, items: [] as KpiSubmissionItem[], ratings: [] as CoreValueRating[] }
+        return { submission: null, items: [] as KpiSubmissionItem[], ratings: [] as CoreValueRating[], parts: [] as CorePartRating[] }
       }
-      const [items, ratings] = await Promise.all([
+      const [items, ratings, parts] = await Promise.all([
         unwrap<KpiSubmissionItem[]>(
           supabase.from('kpi_submission_items').select('*')
             .eq('submission_id', submission.id).order('sort_order'),
@@ -740,8 +741,13 @@ export function useSubmission(employeeId: string | undefined, month: string) {
           supabase.from('core_value_ratings').select('*')
             .eq('submission_id', submission.id),
         ),
+        // The parts of each core value, on a KPI that rates them in parts (0225).
+        unwrap<CorePartRating[]>(
+          supabase.from('core_value_part_ratings').select('*')
+            .eq('submission_id', submission.id).order('sort_order'),
+        ),
       ])
-      return { submission, items, ratings }
+      return { submission, items, ratings, parts }
     },
   })
 }
@@ -754,7 +760,7 @@ export function useSubmissionById(submissionId: string | undefined) {
       const submission = await unwrap<KpiSubmission>(
         supabase.from('kpi_submissions').select('*').eq('id', submissionId!).single(),
       )
-      const [items, ratings, employee] = await Promise.all([
+      const [items, ratings, parts, employee] = await Promise.all([
         unwrap<KpiSubmissionItem[]>(
           supabase.from('kpi_submission_items').select('*')
             .eq('submission_id', submissionId!).order('sort_order'),
@@ -762,11 +768,14 @@ export function useSubmissionById(submissionId: string | undefined) {
         unwrap<CoreValueRating[]>(
           supabase.from('core_value_ratings').select('*').eq('submission_id', submissionId!),
         ),
+        unwrap<CorePartRating[]>(
+          supabase.from('core_value_part_ratings').select('*').eq('submission_id', submissionId!).order('sort_order'),
+        ),
         unwrap<Employee>(
           supabase.from('employees').select('*').eq('id', submission.employee_id).single(),
         ),
       ])
-      return { submission, items, ratings, employee }
+      return { submission, items, ratings, parts, employee }
     },
   })
 }
@@ -834,6 +843,28 @@ export function useSaveCoreRatings() {
         if (args.role === 'self' && u.remarks !== undefined) patch.self_remarks = u.remarks
         const { error } = await supabase
           .from('core_value_ratings').update(patch).eq('id', u.id)
+        if (error) throw new Error(friendlyError(error))
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submission'] })
+      qc.invalidateQueries({ queryKey: ['submission_by_id'] })
+    },
+  })
+}
+
+/** The parts of the core values (0225): the team member's rating and learning goal, or the manager's rating. */
+export function useSaveCoreParts() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      role: 'self' | 'manager'
+      updates: Array<{ id: string; rating: string | null; goal?: string | null }>
+    }) => {
+      for (const u of args.updates) {
+        const patch: Record<string, string | null> = args.role === 'self' ? { self_rating: u.rating } : { manager_rating: u.rating }
+        if (args.role === 'self' && u.goal !== undefined) patch.goal = u.goal
+        const { error } = await supabase.from('core_value_part_ratings').update(patch).eq('id', u.id)
         if (error) throw new Error(friendlyError(error))
       }
     },
@@ -1716,6 +1747,19 @@ export interface TatPolicy {
   starts_from: string | null
   /** First month the last days apply to (0153). Null = none. */
   deadlines_from?: string | null
+  /** Employee ids with no last days (0293): none on their own months, none to score as the manager. */
+  exempt?: string[]
+  /** Set by forPeople() for one month's team member and manager: that side has no last day. */
+  no_tm?: boolean
+  no_mgr?: boolean
+}
+
+/** The policy as it applies to one month's team member and manager (0293). */
+export function forPeople(p: TatPolicy | undefined, employeeId?: string | null, managerId?: string | null): TatPolicy | undefined {
+  if (!p?.exempt?.length) return p
+  const own = !!employeeId && p.exempt.includes(employeeId)
+  const boss = !!managerId && p.exempt.includes(managerId)
+  return { ...p, no_tm: own, no_mgr: own || boss }
 }
 
 export const TAT_POLICY_FALLBACK: TatPolicy = {
@@ -1840,7 +1884,7 @@ export function useRecordRequests() {
     queryKey: ['record_requests'],
     queryFn: async () => {
       const [deletions, revisions] = await Promise.all([
-        unwrap<DeletionRequest[]>(
+        unwrap<Array<DeletionRequest & { kind?: string }>>(
           supabase.from('record_deletion_requests').select('*')
             .order('created_at', { ascending: false }),
         ),
@@ -1851,7 +1895,10 @@ export function useRecordRequests() {
       ])
 
       const rows: RecordRequest[] = [
-        ...deletions.map(r => ({ kind: 'deletion' as const, ...r })),
+        // One table holds both: a month to remove, and a month a last day closed to open again (0273).
+        ...deletions.map(r => r.kind === 'reopen'
+          ? { ...r, kind: 'reopen' as const }
+          : { ...r, kind: 'deletion' as const }),
         ...revisions.map(r => ({ kind: 'revision' as const, ...r })),
       ].sort((a, b) => b.created_at.localeCompare(a.created_at))
 
@@ -1889,6 +1936,24 @@ export function usePendingRecordRequests(enabled: boolean) {
   })
 }
 
+/**
+ * The request to open this month (0273), whatever became of it: a month is
+ * asked about once, so a decided one still takes the button's place.
+ */
+export function useReopenRequest(submissionId: string | undefined) {
+  return useQuery({
+    enabled: !!submissionId,
+    queryKey: ['open_request', 'reopen', submissionId],
+    queryFn: async () => {
+      const rows = await unwrap<Array<{ status: string }>>(
+        supabase.from('record_deletion_requests').select('status')
+          .eq('submission_id', submissionId!).eq('kind', 'reopen').limit(1),
+      )
+      return rows[0] ?? null
+    },
+  })
+}
+
 /** Is there already an open request against this month or this KPI? */
 export function useOpenRequestFor(
   kind: 'deletion' | 'revision',
@@ -1914,7 +1979,7 @@ export function useRequestAction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (args: {
-      kind: 'deletion' | 'revision'
+      kind: 'deletion' | 'reopen' | 'revision'
       action: 'request' | 'review'
       /** submission_id for a deletion, assignment_id for a revision. */
       subjectId?: string
@@ -1924,11 +1989,12 @@ export function useRequestAction() {
       note?: string
     }) => {
       const fn = args.action === 'request'
-        ? (args.kind === 'deletion' ? 'request_record_deletion' : 'request_kpi_revision')
-        : (args.kind === 'deletion' ? 'review_record_deletion' : 'review_kpi_revision')
+        ? (args.kind === 'deletion' ? 'request_record_deletion'
+          : args.kind === 'reopen' ? 'request_kpi_reopen' : 'request_kpi_revision')
+        : (args.kind === 'revision' ? 'review_kpi_revision' : 'review_record_deletion')
 
       const params: Record<string, unknown> = args.action === 'request'
-        ? args.kind === 'deletion'
+        ? args.kind !== 'revision'
           ? { p_submission_id: args.subjectId, p_reason: args.reason ?? '' }
           : { p_assignment_id: args.subjectId, p_reason: args.reason ?? '' }
         : {
@@ -1940,7 +2006,8 @@ export function useRequestAction() {
       const { data, error } = await supabase.rpc(fn, params)
       if (error) throw new Error(friendlyError(error))
       // Only a new one. Reviewing is HR acting on it, not being told.
-      if (args.action === 'request') {
+      // A request to open waits in HR's queue and round-up; it has no mail of its own.
+      if (args.action === 'request' && args.kind !== 'reopen') {
         notifyHr(
           args.kind === 'deletion' ? 'record' : 'revision',
           (data as { id?: string } | null)?.id,
@@ -2030,7 +2097,7 @@ export function useSetPushEnabled() {
 }
 
 /** Messages from HR or SW Admin, in the bell (0158). */
-export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean }
+export interface InboxMessage { id: string; title: string; body: string; created_at: string; unread: boolean; image?: string | null }
 
 export function useMyMessages(employeeId: string | undefined, enabled: boolean) {
   return useQuery({
@@ -2038,7 +2105,7 @@ export function useMyMessages(employeeId: string | undefined, enabled: boolean) 
     queryKey: ['my_messages', employeeId],
     refetchInterval: 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('my_messages')
+      const { data, error } = await supabase.rpc('my_app_messages', { p_app: 'kpi' })
       if (error) throw new Error(friendlyError(error))
       return (data ?? []) as InboxMessage[]
     },
@@ -2050,7 +2117,7 @@ export function useMessageActions() {
   const done = () => qc.invalidateQueries({ queryKey: ['my_messages'] })
   return {
     read: useMutation({
-      mutationFn: async () => { const { error } = await supabase.rpc('mark_messages_read'); if (error) throw new Error(friendlyError(error)) },
+      mutationFn: async () => { const { error } = await supabase.rpc('mark_app_messages_read', { p_app: 'kpi' }); if (error) throw new Error(friendlyError(error)) },
       onSuccess: done,
     }),
     dismiss: useMutation({
@@ -2229,7 +2296,7 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
       // submission. The generated types do not describe the join, hence
       // the cast — the shape is asserted by the rows it returns.
       const { data, error } = await supabase.from('core_value_ratings')
-        .select('core_value_id, self_rating, manager_rating,'
+        .select('core_value_id, self_rating, manager_rating, self_points, manager_points,'
               + ' kpi_submissions!inner(period_month, employee_id, financial_year)')
         .eq('kpi_submissions.employee_id', employeeId!)
         .eq('kpi_submissions.financial_year', fy)
@@ -2238,6 +2305,8 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
         core_value_id: string
         self_rating: string | null
         manager_rating: string | null
+        self_points: number | null
+        manager_points: number | null
         kpi_submissions: { period_month: string } | null
       }>
       return rows
@@ -2248,6 +2317,8 @@ export function useMyCoreValueTrend(employeeId: string | undefined, fy: string) 
           // The manager's is the one that counts; theirs is the fallback
           // while a month is still being reviewed.
           rating: r.manager_rating ?? r.self_rating,
+          // A core value rated in parts (0225) has points and no one rating.
+          points: corePoints(r.manager_points, r.manager_rating) ?? corePoints(r.self_points, r.self_rating),
         }))
     },
   })
@@ -2292,7 +2363,7 @@ export function useAppModules() {
  * Accounts that are not employees (0203): test logins and the *_ADMIN logins, by id. Everyone
  * else is an employee. Reports and lists leave them out unless asked (the user, 15 Oct).
  */
-export type AccountType = 'employee' | 'test' | 'admin'
+export type AccountType = 'employee' | 'test' | 'admin' | 'director'
 export function useAccountTypes() {
   return useQuery({
     queryKey: ['non_employee_ids'],

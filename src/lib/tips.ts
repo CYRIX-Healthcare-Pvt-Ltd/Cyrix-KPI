@@ -52,7 +52,7 @@ const notHr = (c: TipContext) => !c.isHrAdmin
 export const TIPS: Tip[] = [
   // ---- your own record
   { key: 'tip.photo', to: '/me', toLabel: 'My profile', when: notHr },
-  { key: 'tip.rank', to: '/me', toLabel: 'My profile', when: scored },
+  { key: 'tip.rank', to: '/', toLabel: 'Dashboard', when: scored },
   { key: 'tip.language', to: null, toLabel: '', when: anyone },
   { key: 'tip.manual', to: '/help', toLabel: 'The manual', when: anyone },
   // Not HR: the videos are the steps of one's own KPI and one's own team,
@@ -64,6 +64,10 @@ export const TIPS: Tip[] = [
   { key: 'tip.query', to: '/history', toLabel: 'Assessments', when: scored },
   { key: 'tip.split', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
   { key: 'tip.startmonth', to: '/my-kpi', toLabel: 'My KPI', when: hasKpi },
+  // 0273: whoever missed a last day asks, once.
+  { key: 'tip.reopen', to: '/history', toLabel: 'Assessments', when: c => c.hasKpi || c.isManager },
+  // HR's read-only look at one person (the user, 10 Nov).
+  { key: 'tip.assess', to: '/admin/reports', toLabel: 'Reports', when: c => c.isHrAdmin },
 
   // ---- the app itself
   // The install icon is in the portal, above this app's basename: the sentence says where.

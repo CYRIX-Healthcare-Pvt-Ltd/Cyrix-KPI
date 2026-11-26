@@ -1,8 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { LegendLine } from '@/components/LegendCrest'
+import { ChampionStage } from '@/components/ChampionStage'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy, Users,
+  TrendingUp, TrendingDown, Minus, AlertTriangle, Trophy, Users, Crown,
 } from 'lucide-react'
 import {
   bandFor, isWeak, trendOf, bandScaleGradient, BAND_SCALE, WEAK_THRESHOLD,
@@ -29,22 +31,26 @@ export function ScoreHeader({
   score,
   scoreLabel = 'Average',
   children,
+  legend,
 }: {
   title: string
   subtitle?: string
   score: number | null | undefined
   scoreLabel?: string
   children?: ReactNode
+  /** Team rank 1 in the month being assessed: the header turns gold (the user, 10 Nov). */
+  legend?: { month: string; of: number; team: string; play: boolean } | null
 }) {
   const band = bandFor(score)
   // The same 1-5 slab the rankings run on, so the hero and a leaderboard
   // can never disagree about what somebody's rating is.
   const rating = ratingFor(score)
   const pct = Math.max(0, Math.min(100, score ?? 0))
+  const scale = SCALE
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl bg-shade text-white"
+      className={clsx('relative overflow-hidden rounded-2xl bg-shade text-white', legend && 'lc-hero', legend?.play && 'lc-hero-play')}
       // The wash takes its colour from THIS header's band, not the page
       // tint. They diverge whenever a screen reports on someone other than
       // the reader — a team average, a report's year — and a green glow
@@ -64,6 +70,7 @@ export function ScoreHeader({
           <div className="score-aurora score-aurora-alt animate-score-drift-slow opacity-80" />
         </div>
       )}
+      {legend && <ChampionStage play={legend.play} />}
 
       {/* Side by side once there is room, stacked before that.
 
@@ -74,7 +81,13 @@ export function ScoreHeader({
           with nothing. Left on a phone, right beside the title. */}
       <div className="relative flex flex-wrap items-end justify-between gap-4 p-6 sm:gap-6 sm:p-7">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">{title}</h1>
+          {/* Rank 1: "Hello," gold and still, the name gold and shining (the user, 10 Nov: "always name is imp"). */}
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">
+            {/* "Hello," a size under the name for everybody (the user, 10 Nov: "for all hello should be 20 px"). */}
+            {typeof title === 'string' && title.includes(', ')
+              ? <><span className={clsx('text-xl sm:text-2xl', legend && 'lc-gold-still')}>{title.slice(0, title.indexOf(', ') + 2)}</span><span className={clsx(legend && 'lc-gold-name')}>{title.slice(title.indexOf(', ') + 2)}</span></>
+              : <span className={clsx(legend && 'lc-gold-name')}>{title}</span>}
+          </h1>
           {subtitle && (
             <p className="mt-1.5 text-sm text-white/50">{subtitle}</p>
           )}
@@ -88,7 +101,7 @@ export function ScoreHeader({
             <p
               className={clsx(
                 'mt-1 text-5xl font-bold leading-none tabular-nums sm:text-6xl',
-                band.onDark.text,
+                legend ? 'lc-gold-num' : band.onDark.text,
               )}
             >
               {score.toFixed(1)}
@@ -111,7 +124,7 @@ export function ScoreHeader({
             <span
               className={clsx(
                 'mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-label',
-                band.onDark.chip,
+                legend ? 'lc-gold-chip' : band.onDark.chip,
               )}
             >
               {/*
@@ -131,6 +144,7 @@ export function ScoreHeader({
                 band out of step with the word. That is the small half of
                 the mismatch and it is visible here in the harness.
               */}
+              {legend && <Crown className="h-3.5 w-3.5" aria-hidden />}
               {rating === null ? band.label : ratingLabel(rating)}
               {rating !== null && (
                 <>
@@ -141,6 +155,8 @@ export function ScoreHeader({
                 </>
               )}
             </span>
+            {/* Team rank 1, in gold under the band (the user, 10 Nov). */}
+            {legend && <LegendLine {...legend} />}
           </div>
         ) : (
           <div className="text-left sm:text-right">
@@ -170,7 +186,7 @@ export function ScoreHeader({
           {/* The rest of the scale, dimmed — where this score could go. */}
           <div
             className="absolute inset-0 opacity-25"
-            style={{ backgroundImage: SCALE }}
+            style={{ backgroundImage: scale }}
             aria-hidden
           />
           {band && (
@@ -181,7 +197,7 @@ export function ScoreHeader({
                 // whole track and clipped at the score. Clipped rather
                 // than scaled: scaling would drag the band boundaries off
                 // the tick marks that mark them.
-                backgroundImage: SCALE,
+                backgroundImage: scale,
                 ['--fill-rest' as string]: `${100 - pct}%`,
                 clipPath: 'inset(0 var(--fill-rest) 0 0)',
                 transition: 'clip-path var(--dur-ui) var(--ease-out)',
@@ -425,7 +441,7 @@ export function TeamBands({
     <div className="card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-800">{label}</h3>
-        <p className="text-xs text-ink-500">
+        <p className="hidden text-xs text-ink-500 sm:block">
           {share.people === 0
             ? 'Nobody scored yet'
             : `Averaged across ${share.people} scored ${

@@ -7,13 +7,13 @@ import { lastDayEnds, timeLeftText, type Side } from '@/lib/lastDay'
  * submit", and inside the last 24 hours with seconds, "5 hr 12 min 33 sec
  * left to submit" (the user, 10 Oct).
  */
-export function TimeLeft({ period, side, policy }: { period: string; side: Side; policy: TatPolicy | undefined }) {
+export function TimeLeft({ period, side, policy, reopen }: { period: string; side: Side; policy: TatPolicy | undefined; reopen?: string | null }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
-  const end = lastDayEnds(period, side, policy)
+  const end = lastDayEnds(period, side, policy, reopen)
   if (!end || end.getTime() <= now) return null
   return <span className="tabular-nums">{timeLeftText(end.getTime() - now, side)}</span>
 }

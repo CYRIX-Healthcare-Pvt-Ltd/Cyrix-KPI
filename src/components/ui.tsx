@@ -238,7 +238,7 @@ export function StatusBadge({
     return <span className="badge bg-red-100 text-red-800">Not submitted</span>
   }
   if (outcome === 'not_scored') {
-    return <span className="badge bg-amber-100 text-amber-800">Not scored · self score</span>
+    return <span className="badge bg-amber-100 text-amber-800">Manager didn't score</span>
   }
   if (!status) {
     // ink-600, not ink-500: the lighter grey measured 4.4:1 on its own

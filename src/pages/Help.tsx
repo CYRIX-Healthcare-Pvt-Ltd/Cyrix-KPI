@@ -376,6 +376,7 @@ export default function Help() {
               { what: t('s2.p5.what'), how: t('s2.p5.how') },
               { what: t('s2.dir.what'), how: t('s2.dir.how') },
               { what: t('s2.coreself.what'), how: t('s2.coreself.how') },
+              { what: t('s2.reopen.what'), how: t('s2.reopen.how'), to: '/history', cta: 'Open assessments' },
               {
                 what: t(closingDay === null ? 's2.p6.what.open' : 's2.p6.what.day'),
                 how: t(closingDay === null ? 's2.p6.how.open' : 's2.p6.how.day',
@@ -448,6 +449,7 @@ export default function Help() {
           points={[
             { what: t('team.p1.what'), how: t('team.p1.how'), to: '/approvals', cta: 'Open approvals', video: MANUAL_VIDEOS.approve },
             { what: t('team.p2.what'), how: t('team.p2.how'), to: '/approvals', cta: 'Open approvals' },
+            { what: t('team.reopen.what'), how: t('team.reopen.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p3.what'), how: t('team.p3.how'), to: '/team', cta: 'Open my team', video: MANUAL_VIDEOS.score },
             { what: t('team.p4.what'), how: t('team.p4.how'), to: '/team', cta: 'Open my team' },
             { what: t('team.p5.what'), how: t('team.p5.how'), to: '/queries', cta: 'Open queries' },
@@ -486,6 +488,7 @@ export default function Help() {
             { what: t('hr.p2.what'), how: t('hr.p2.how'), to: '/admin/employees', cta: 'Open employees' },
             { what: t('hr.p3.what'), how: t('hr.p3.how'), to: '/admin/queries', cta: 'Open queries' },
             { what: t('hr.p4.what'), how: t('hr.p4.how'), to: '/deletions', cta: 'Open records' },
+            { what: t('hr.assess.what'), how: t('hr.assess.how'), to: '/admin/reports', cta: 'Open reports' },
             { what: t('hr.p5.what'), how: t('hr.p5.how'), to: '/admin/requests', cta: 'Open leavers' },
             { what: t('hr.p6.what'), how: t('hr.p6.how'), to: '/admin/reports', cta: 'Open reports' },
             { what: t('hr.p7.what'), how: t('hr.p7.how'), to: '/admin/employees', cta: 'Open employees' },
@@ -508,6 +511,8 @@ export default function Help() {
             { what: t('sw.p5.what'), how: t('sw.p5.how'), to: '/admin/logins', cta: 'Open SW Admin' },
             { what: t('sw.p6.what'), how: t('sw.p6.how'), to: '/admin/logins', cta: 'Open SW Admin' },
             { what: t('sw.p7.what'), how: t('sw.p7.how'), to: '/admin/logins', cta: 'Open SW Admin' },
+            { what: t('sw.p8.what'), how: t('sw.p8.how'), to: '/admin/logins?tab=admins', cta: 'Open Admins' },
+            { what: t('sw.p9.what'), how: t('sw.p9.how'), to: '/admin/logins?tab=modules', cta: 'Open Module summary' },
           ]}
         />
       )}
@@ -596,6 +601,7 @@ export default function Help() {
             { what: t('ask.p5.what'), how: t('ask.p5.how'), to: '/history', cta: 'Open assessments' },
             { what: t('ask.p6.what'), how: t('ask.p6.how') },
             { what: t('ask.p7.what'), how: t('ask.p7.how') },
+            { what: t('ask.p14.what'), how: t('ask.p14.how'), to: '/history', cta: 'Open assessments' },
           ] : []),
           { what: t('ask.p8.what'), how: t('ask.p8.how') },
           { what: t('ask.p10.what'), how: t('ask.p10.how'), to: '/', cta: 'Open dashboard' },

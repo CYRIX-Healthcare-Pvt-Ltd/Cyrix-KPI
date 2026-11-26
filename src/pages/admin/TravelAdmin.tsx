@@ -1,7 +1,13 @@
-import { lazy, Suspense, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Hospital, Map as MapIcon, Trash2 } from 'lucide-react'
+import { Camera, Check, ExternalLink, Pencil, Search, Timer, Trash2, X } from 'lucide-react'
+import LearnedPlacesTable from '@/components/LearnedPlacesTable'
+import TravelReport from './TravelReport'
+import PolicyHistory from '@/pages/admin/PolicyHistory'
+import TravelLive from '@/pages/admin/TravelLive'
+import TravelWatch from '@/pages/admin/TravelWatch'
+import TravelFeedback, { useNewFeedbackCount } from '@/pages/admin/TravelFeedback'
 import { Alert, PageLoader, Spinner } from '@/components/ui'
 import { supabase, friendlyError } from '@/lib/supabase'
 
@@ -10,11 +16,21 @@ const rpc = async <T,>(fn: string, args?: Record<string, unknown>) => {
   if (error) throw new Error(friendlyError(error))
   return data as T
 }
+/** Purposes and expense types read A to Z, "Other" last (the user, 2 Nov), as in Travel. */
+const az = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
+const alphabetical = <T,>(list: readonly T[], label: (x: T) => string): T[] =>
+  [...list].sort((a, b) => Number(label(a) === 'Other') - Number(label(b) === 'Other') || az.compare(label(a), label(b)))
 interface Rule {
   grade: string; da_in_district: number; da_out_district: number; da_out_state: number; da_out_state_stay: number
   hotel_in_single: number; hotel_in_double: number; hotel_out_single: number; hotel_out_double: number
   bike_rate: number | null; bike_km_month: number | null; car_rate: number | null; car_km_month: number | null
   flight: boolean; taxi: boolean
+  /** Aurum E1–E3 (te_0122): the car is paid, with a vehicle request first. */
+  car_approval?: boolean
+  /** The room limit in a metro city (Aurum). */
+  hotel_metro?: number | null
+  /** Aurum (te_0123). */
+  per_diem?: number | null; misc_day?: number | null; day_trip_metro?: number | null; day_trip_other?: number | null
 }
 
 /*
@@ -25,7 +41,8 @@ interface Rule {
 type AdminData = {
   rules: Rule[]
   policy: Record<string, unknown>
-  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean }>
+  purposes: Array<{ id: number; label: string; gives_da: boolean; is_active: boolean; photo_needed: boolean; needs_ticket: boolean }>
+  expense_kinds: Array<{ id: number; label: string; role: string | null; bill_always: boolean; is_active: boolean }>
   projects: Array<{ id: number; label: string; is_active: boolean }>
   coordinators: Array<{ ecode: string; name: string; coordinator_ecode: string; coordinator: string }>
   desk: Array<{ ecode: string; name: string }>
@@ -35,47 +52,93 @@ type AdminData = {
 const TABS = [['rules', 'Allowances by grade'], ['policy', 'Settings'], ['purposes', 'Purposes'], ['projects', 'Projects'], ['coord', 'Coordinators'], ['desk', 'Travel Desk'], ['places', 'Places']] as const
 const RULE_COLS: Array<[keyof Rule, string]> = [
   ['da_in_district', 'DA in district'], ['da_out_district', 'DA out of district'], ['da_out_state', 'DA out of state'], ['da_out_state_stay', 'DA out of state, staying'],
-  ['hotel_in_single', 'Hotel in state S'], ['hotel_in_double', 'Hotel in state D'], ['hotel_out_single', 'Hotel out of state S'], ['hotel_out_double', 'Hotel out of state D'],
+  ['hotel_in_single', 'Room in state S'], ['hotel_in_double', 'Room in state D'], ['hotel_out_single', 'Room out of state S'], ['hotel_out_double', 'Room out of state D'], ['hotel_metro', 'Room metro'],
   ['bike_rate', 'Bike ₹/km'], ['bike_km_month', 'Bike km/month'], ['car_rate', 'Car ₹/km'], ['car_km_month', 'Car km/month'],
+  ['per_diem', 'Per diem'], ['misc_day', 'Misc a day'], ['day_trip_metro', 'Day trip metro'], ['day_trip_other', 'Day trip other'],
 ]
-const POLICY: Array<[string, string]> = [
-  ['km_tolerance_pct', 'Km over the map allowed, %'], ['bill_over', 'Bill needed above ₹'], ['auto_month', 'Auto allowance a month ₹'],
-  ['phone_month', 'Phone allowance a month ₹'], ['tool_max', 'Tools above ₹ go to petty cash'], ['metro_extra_pct', 'Metro city hotel extra %'],
-  ['bike_two_way_km', 'Bike two-way limit km'], ['car_two_way_km', 'Car two-way limit km'], ['submit_by_day', 'Submit by day of next month'],
-  ['late_pct', 'Late deduction % (1, 2, 3 months)'], ['auto_per_km', 'Auto fare ₹ a km'], ['auto_min_fare', 'Auto minimum fare ₹'],
+/* Settings in rows of what belongs together (the user, 18 Nov: "group same related rules in single row"). */
+const POLICY_GROUPS: Array<{ title: string; items: Array<[string, string]> }> = [
+  { title: 'Km over the map', items: [['km_tolerance_pct', 'Allowed, %'], ['km_band_km', 'Screenshot band, km'], ['km_band_extra_km', 'Km over, a band']] },
+  // Google's roads and our own map alike (te_0166): the most that may be claimed, and when "Why this road?" is asked.
+  { title: 'Longer road', items: [['road_pct', 'Why asked over, %'], ['road_pct_from_km', '% added from, km'], ['road_extra_km', 'Km added']] },
+  { title: 'Allowances', items: [['auto_month', 'Auto a month, ₹'], ['phone_month', 'Phone a month, ₹'], ['deputation_da', 'Deputation DA a day, ₹']] },
+  { title: 'Bills and rooms', items: [['bill_over', 'Bill needed above, ₹'], ['tool_max', 'Tools to petty cash above, ₹'], ['metro_extra_pct', 'Metro room extra, %']] },
+  { title: 'Auto fare', items: [['auto_per_km', '₹ a km'], ['auto_min_fare', 'Minimum, ₹'], ['auto_min_km', 'Minimum covers, km']] },
+  { title: 'Dates', items: [['submit_by_day', 'Submit by day of next month'], ['claim_within_days', 'Claim a day within, days'], ['late_pct', 'Late deduction, % (1, 2, 3 months)']] },
+  // Home (Travel te_0159; the user, 14 Nov: "add Home circle")
+  { title: 'Home', items: [['home_changes_month', 'Changes a month'], ['home_km', 'Circle, km']] },
 ]
+const POLICY: Array<[string, string]> = POLICY_GROUPS.flatMap(g => g.items.map(([k, l]) => [k, `${g.title}: ${l}`] as [string, string]))
 
 export function TravelAdmin() {
   const qc = useQueryClient()
-  const { data, isLoading, error } = useQuery({ queryKey: ['te_admin'], queryFn: () => rpc<AdminData>('te_admin_data') })
-  const [tab, setTab] = useState<typeof TABS[number][0] | 'delete'>('rules')
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['te_admin'],
+    queryFn: () => rpc<AdminData>('te_admin_data').then(d => ({
+      ...d, purposes: alphabetical(d.purposes, p => p.label), expense_kinds: d.expense_kinds && alphabetical(d.expense_kinds, k => k.label),
+    })),
+  })
+  type Sub = typeof TABS[number][0] | 'photos' | 'copies' | 'reports' | 'feedback' | 'delete' | 'history'
+  // The sub-tab is in the address beside SW Admin's own, so a reload stays on it (the user, 3 Nov).
+  const [tab, setTabState] = useState<Sub>(() => (new URLSearchParams(window.location.search).get('sub') as Sub | null) ?? 'rules')
+  const setTab = (t: Sub) => {
+    setTabState(t)
+    const u = new URL(window.location.href)
+    u.searchParams.set('sub', t)
+    window.history.replaceState(window.history.state, '', u)
+  }
+  const newFeedback = useNewFeedbackCount()
   const [msg, setMsg] = useState<string | null>(null)
   const [fail, setFail] = useState<string | null>(null)
-  const call = async (fn: string, args: Record<string, unknown>, done = 'Saved.') => {
+  // A tab that shows its own refusal beside the button pressed passes here, and gets the message back.
+  const call = async (fn: string, args: Record<string, unknown>, done = 'Saved.', here = false) => {
     setMsg(null); setFail(null)
-    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_admin'] }); setMsg(done) } catch (e) { setFail((e as Error).message) }
+    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_admin'] }); setMsg(done); return null }
+    catch (e) { if (!here) setFail((e as Error).message); return (e as Error).message }
   }
   if (isLoading) return <PageLoader />
   if (error || !data) return <Alert kind="error">{(error as Error)?.message ?? 'Could not open.'}</Alert>
+  const subs: ReadonlyArray<readonly [Sub, string]> = data.sw
+    ? [...TABS.slice(0, 3), ['photos', 'Visit photos'], ...TABS.slice(3, 6), ['copies', 'Mail copies'], ...TABS.slice(6), ['reports', 'Reports'], ['feedback', 'Feedback'], ['history', 'History'], ['delete', 'Delete']]
+    : [...TABS.slice(0, 2), ['history', 'History']]
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {[...TABS, ...(data.sw ? [['delete', 'Delete'] as const] : [])].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}</button>)}
+      {/* Phone: one full-width dropdown (the user, 13 Nov: "make this dropdown, full width row"); a computer keeps the chips. */}
+      <select value={tab} onChange={e => setTab(e.target.value as Sub)} aria-label="Section" className="input w-full font-semibold sm:hidden">
+        {subs.map(([k, l]) => <option key={k} value={k}>{k === 'feedback' && newFeedback ? `${l} (${newFeedback} new)` : l}</option>)}
+      </select>
+      <div className="hidden flex-wrap gap-1.5 sm:flex">
+        {/* Visit photos are SW Admin's alone (Travel te_0084; the user, 28 Oct: "i told only sw admin"). */}
+        {/* Accounts admins get Allowances by grade, Settings and History only (the user, 3 Nov: "for them, till setting is enough"); SW Admin every tab. */}
+        {subs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium', tab === k ? 'bg-violet-600 text-white' : 'bg-ink-100 text-ink-700 hover:bg-ink-200')}>{l}{k === 'feedback' && !!newFeedback && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">{newFeedback > 99 ? '99+' : newFeedback}</span>}</button>)}
       </div>
       {msg && <Alert kind="success">{msg}</Alert>}
       {fail && <Alert kind="error">{fail}</Alert>}
 
       {tab === 'rules' && <Rules rules={data.rules} onSave={r => void call('te_set_rule', { p_rule: r })} />}
       {tab === 'policy' && (
-        <div className="card grid gap-3 p-4 sm:grid-cols-2">
-          {POLICY.map(([k, l]) => <PolicyField key={k} label={l} value={data.policy[k]} onSave={v => void call('te_set_policy', { p_key: k, p_value: v })} />)}
+        <div className="space-y-3">
+          {POLICY_GROUPS.map(g => (
+            <div key={g.title} className="card p-4">
+              <p className="text-sm font-semibold text-ink-900">{g.title}</p>
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {g.items.map(([k, l]) => <PolicyField key={k} label={l} value={data.policy[k]} onSave={v => void call('te_set_policy', { p_key: k, p_value: v })} />)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
-      {tab === 'purposes' && <Purposes list={data.purposes} call={call} />}
+      {tab === 'purposes' && <div className="space-y-4"><Purposes list={data.purposes} call={call} sw={!!data.sw} /><ExpenseKinds list={data.expense_kinds ?? []} call={call} sw={!!data.sw} /></div>}
+      {tab === 'photos' && data.sw && <VisitPhotoSettings policy={data.policy} purposes={data.purposes} call={call} />}
       {tab === 'projects' && <Projects list={data.projects} call={call} />}
       {tab === 'coord' && <Coordinators list={data.coordinators} call={call} />}
       {tab === 'desk' && <Desk list={data.desk} call={call} />}
+      {tab === 'copies' && data.sw && <MailCopies />}
       {tab === 'places' && <LearnedPlaces />}
+      {/* Km against the map and the signs worth a look, SW Admin's alone (te_0095; the user, 2 Nov). */}
+      {tab === 'reports' && data.sw && <Reports />}
+      {tab === 'feedback' && data.sw && <TravelFeedback />}
+      {tab === 'history' && <PolicyHistory names={Object.fromEntries([...RULE_COLS, ...POLICY])} />}
       {tab === 'delete' && data.sw && <DeleteClaim />}
     </div>
   )
@@ -90,7 +153,7 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
     <div className="card overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead><tr className="border-b border-ink-200 text-left text-xs text-ink-500">
-          <th className="px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th />
+          <th className="sticky left-0 z-10 bg-surface px-3 py-2">Grade</th>{RULE_COLS.map(([, l]) => <th key={l} className="px-2 py-2">{l}</th>)}<th className="px-2 py-2">Flight</th><th className="px-2 py-2">Taxi</th><th className="px-2 py-2">Car needs approval</th><th />
         </tr></thead>
         <tbody>
           {grades.map(g => {
@@ -98,13 +161,14 @@ function Rules({ rules, onSave }: { rules: Rule[]; onSave: (r: Rule) => void }) 
             const set = (p: Partial<Rule>) => setEdit({ ...edit, [g]: { ...r, ...p } })
             return (
               <tr key={g} className="border-b border-ink-100">
-                <td className="px-3 py-1.5 font-semibold text-ink-900">{g === '*' ? 'Others' : g}</td>
+                <td className="sticky left-0 z-10 bg-surface px-3 py-1.5 font-semibold text-ink-900">{g === '*' ? 'Others' : g}</td>
                 {RULE_COLS.map(([k]) => (
-                  <td key={k} className="px-1 py-1"><input type="number" className="input w-20 !px-2 !py-1 text-right" value={(r[k] as number | null) ?? ''}
+                  <td key={k} className="px-1 py-1"><input type="number" className="input w-[4.5rem] !px-2 !py-1 text-right" value={(r[k] as number | null) ?? ''}
                     onChange={e => set({ [k]: e.target.value === '' ? null : Number(e.target.value) } as Partial<Rule>)} /></td>
                 ))}
                 <td className="px-2"><input type="checkbox" checked={r.flight} onChange={e => set({ flight: e.target.checked })} /></td>
                 <td className="px-2"><input type="checkbox" checked={r.taxi} onChange={e => set({ taxi: e.target.checked })} /></td>
+                <td className="px-2"><input type="checkbox" checked={!!r.car_approval} onChange={e => set({ car_approval: e.target.checked })} /></td>
                 <td className="px-2">{dirty && <button type="button" className="btn-primary !px-2.5 !py-1 text-xs" onClick={() => { onSave(r); const n = { ...edit }; delete n[g]; setEdit(n) }}>Save</button>}</td>
               </tr>
             )
@@ -132,16 +196,192 @@ function PolicyField({ label, value, onSave }: { label: string; value: unknown; 
   )
 }
 
-type Call = (fn: string, args: Record<string, unknown>, done?: string) => Promise<void>
-function Purposes({ list, call }: { list: AdminData['purposes']; call: Call }) {
+type Call = (fn: string, args: Record<string, unknown>, done?: string, here?: boolean) => Promise<string | null>
+
+/*
+  The travel time check between a day's visit photos (te_0089; the user, 30 Oct: "sw admin can change km/h"): on or
+  off, and the km/h each way of travel can do. Faster than that between two photos is an observation on the claim.
+*/
+const SPEED_MODES: Array<[string, string]> = [['bike', 'Bike'], ['car', 'Car'], ['bus', 'Bus'], ['train', 'Train'], ['metro', 'Metro'], ['auto', 'Auto'], ['taxi', 'Taxi · Car'], ['taxi_bike', 'Taxi · Bike']]
+function TravelTime({ policy, call }: { policy: Record<string, unknown>; call: Call }) {
+  const on = policy.photo_speed_on !== false
+  const saved = (policy.photo_speeds ?? {}) as Record<string, number>
+  const [v, setV] = useState<Record<string, string>>(() => Object.fromEntries(SPEED_MODES.map(([m]) => [m, String(saved[m] ?? '')])))
+  const [err, setErr] = useState<string | null>(null)
+  const changed = SPEED_MODES.some(([m]) => v[m] !== String(saved[m] ?? ''))
+  const save = async () => setErr(await call('te_set_policy', { p_key: 'photo_speeds', p_value: Object.fromEntries(SPEED_MODES.map(([m]) => [m, Number(v[m])])) }, 'Speeds saved.', true))
+  return (
+    <div className="space-y-3 border-t border-ink-100 pt-4">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700"><Timer className="h-4 w-4" /></span>
+        <p className="min-w-0 flex-1 font-semibold text-ink-900">Travel time between photos</p>
+        <button type="button" role="switch" aria-checked={on} aria-label="Travel time check on or off" onClick={() => void call('te_set_policy', { p_key: 'photo_speed_on', p_value: !on }, on ? 'Travel time check is off.' : 'Travel time check is on.')}
+          className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-emerald-600' : 'bg-ink-300')}>
+          <span className={clsx('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+        </button>
+      </div>
+      <div className={clsx('grid grid-cols-2 gap-2 sm:grid-cols-4', !on && 'opacity-60')}>
+        {SPEED_MODES.map(([m, label]) => (
+          <label key={m} className="block"><span className="label">{label}</span>
+            <span className="relative mt-1 block">
+              <input className="input pr-12" inputMode="numeric" value={v[m]} onChange={e => { setErr(null); setV(x => ({ ...x, [m]: e.target.value.replace(/\D/g, '').slice(0, 3) })) }} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-xs text-ink-500">km/h</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {err && <span className="text-sm text-cyrixRed-700">{err}</span>}
+        <button type="button" className="btn-primary !py-1.5 text-sm" disabled={!changed || SPEED_MODES.some(([m]) => !v[m])} onClick={() => void save()}>Save speeds</button>
+      </div>
+    </div>
+  )
+}
+
+/*
+  Visit photos, SW Admin's alone (Travel te_0082, te_0084; the user, 28 Oct: "sw admin need option to enable and disable
+  this feature", "let sw admin decide it block or send", "i told only sw admin"): on or off, which purposes need a
+  photo, what happens past the Photo not possible limit, the limit, how near, how long pictures stay after payment.
+*/
+function VisitPhotoSettings({ policy, purposes, call }: { policy: Record<string, unknown>; purposes: AdminData['purposes']; call: Call }) {
+  const on = policy.visit_photos === true, after = policy.photo_after === 'send' ? 'send' : 'block'
+  const seg = (active: boolean) => clsx('rounded-lg px-3 py-1.5 text-sm font-semibold', active ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')
+  return (
+    <div className="space-y-3">
+      <div className="card flex items-center gap-3 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700"><Camera className="h-5 w-5" /></span>
+        <p className="min-w-0 flex-1 font-semibold text-ink-900">Visit photos</p>
+        <button type="button" role="switch" aria-checked={on} aria-label="Visit photos on or off" onClick={() => void call('te_set_policy', { p_key: 'visit_photos', p_value: !on }, on ? 'Visit photos are off.' : 'Visit photos are on.')}
+          className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-emerald-600' : 'bg-ink-300')}>
+          <span className={clsx('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+        </button>
+      </div>
+      <div className={clsx('card space-y-4 p-4', !on && 'opacity-60')}>
+        <div>
+          <span className="label">Photo needed for</span>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {purposes.filter(p => p.is_active).map(p => (
+              <button key={p.id} type="button" aria-pressed={p.photo_needed} onClick={() => void call('te_set_purpose_photo', { p_id: p.id, p_on: !p.photo_needed })}
+                className={clsx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1', p.photo_needed ? 'bg-rose-600 text-white ring-rose-600' : 'bg-surface text-ink-700 ring-ink-200 hover:bg-ink-50')}>
+                {p.photo_needed && <Check className="h-3.5 w-3.5" />}{p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span className="label">After the Photo not possible limit</span>
+          <div className="mt-1.5 inline-flex rounded-xl bg-ink-100 p-1">
+            <button type="button" className={seg(after === 'block')} onClick={() => void call('te_set_policy', { p_key: 'photo_after', p_value: 'block' })}>Block</button>
+            <button type="button" className={seg(after === 'send')} onClick={() => void call('te_set_policy', { p_key: 'photo_after', p_value: 'send' })}>Send, manager decides</button>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <PolicyField label="Photo not possible a month" value={policy.photo_skips} onSave={v => void call('te_set_policy', { p_key: 'photo_skips', p_value: v })} />
+          <PolicyField label="Photo within, metres" value={policy.photo_near_m} onSave={v => void call('te_set_policy', { p_key: 'photo_near_m', p_value: v })} />
+          <PolicyField label="Keep photos after paid, days" value={policy.photo_keep_days} onSave={v => void call('te_set_policy', { p_key: 'photo_keep_days', p_value: v })} />
+        </div>
+        <TravelTime policy={policy} call={call} />
+      </div>
+    </div>
+  )
+}
+
+/* Expense types, kept with the purposes (te_0091; the user, 30 Oct: "sw admin can add / delete or edit, add in purpose itself bcz many subtabs making it confusing"). */
+function ExpenseKinds({ list, call, sw }: { list: AdminData['expense_kinds']; call: Call; sw: boolean }) {
   const [label, setLabel] = useState('')
+  const [editing, setEditing] = useState<{ id: number; label: string } | null>(null)
+  const [err, setErr] = useState<{ id: number; text: string; n: number } | null>(null)
+  type K = AdminData['expense_kinds'][number]
+  const put = (k: K, p: { label?: string; bill?: boolean; active?: boolean }, done?: string, here = false) =>
+    call('te_set_expense_kind', { p_id: k.id, p_label: p.label ?? k.label, p_bill_always: p.bill ?? k.bill_always, p_active: p.active ?? k.is_active }, done, here)
+  const rename = async (k: K) => {
+    const e = await put(k, { label: editing!.label }, 'Renamed.', true)
+    if (e) setErr(x => ({ id: k.id, text: e, n: (x?.n ?? 0) + 1 })); else { setEditing(null); setErr(null) }
+  }
+  const remove = async (k: K) => {
+    if (!(confirm(`Delete ${k.label}? It goes from the list of expense types.`))) return
+    const e = await call('te_delete_expense_kind', { p_id: k.id }, 'Expense type deleted.', true)
+    setErr(e ? x => ({ id: k.id, text: e, n: (x?.n ?? 0) + 1 }) : null)
+  }
   return (
     <div className="card space-y-2 p-4">
+      <h3 className="text-sm font-semibold text-ink-800">Expense types</h3>
+      {list.map(k => (
+        <div key={k.id} className="space-y-1.5 rounded-xl border border-ink-200 p-3 sm:rounded-none sm:border-0 sm:p-0">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            {editing?.id === k.id ? (
+              <span className="flex min-w-[12rem] items-center gap-1.5">
+                <input className="input !py-1 max-w-[14rem]" value={editing.label} autoFocus onChange={e => setEditing({ id: k.id, label: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') void rename(k); if (e.key === 'Escape') setEditing(null) }} />
+                <button type="button" className="btn-icon text-green-700" aria-label="Save" title="Save" disabled={!editing.label.trim()} onClick={() => void rename(k)}><Check className="h-4 w-4" /></button>
+                <button type="button" className="btn-icon" aria-label="Cancel" title="Cancel" onClick={() => { setEditing(null); setErr(null) }}><X className="h-4 w-4" /></button>
+              </span>
+            ) : (
+              <span className="flex w-full min-w-[12rem] items-center gap-1 sm:w-auto">
+                <span className={clsx('font-medium', k.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{k.label}</span>
+                <button type="button" className="btn-icon" aria-label={`Rename ${k.label}`} title="Rename" onClick={() => { setEditing({ id: k.id, label: k.label }); setErr(null) }}><Pencil className="h-3.5 w-3.5" /></button>
+                {sw && <button type="button" className="btn-icon ml-auto text-cyrixRed-600 sm:hidden" aria-label={`Delete ${k.label}`} title="Delete" onClick={() => void remove(k)}><Trash2 className="h-3.5 w-3.5" /></button>}
+              </span>
+            )}
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={k.bill_always} onChange={e => void put(k, { bill: e.target.checked })} /> Bill always</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={k.is_active} onChange={e => void put(k, { active: e.target.checked })} /> In use</label>
+            {sw && <button type="button" className="btn-icon hidden text-cyrixRed-600 sm:inline-flex" aria-label={`Delete ${k.label}`} title="Delete" onClick={() => void remove(k)}><Trash2 className="h-3.5 w-3.5" /></button>}
+          </div>
+          {err?.id === k.id && <Alert key={err.n} kind="error">{err.text}</Alert>}
+        </div>
+      ))}
+      <div className="flex gap-2 pt-2">
+        <input className="input max-w-xs" placeholder="New expense type" value={label} onChange={e => setLabel(e.target.value)} />
+        <button type="button" className="btn-secondary" disabled={!label.trim()} onClick={() => { void call('te_set_expense_kind', { p_id: null, p_label: label, p_bill_always: false, p_active: true }, 'Expense type added.'); setLabel('') }}>Add</button>
+      </div>
+    </div>
+  )
+}
+
+/* Purposes, renamed in place too (Travel te_0063; the user, 30 Oct: "need option to edit also if any name correction"). */
+function Purposes({ list, call, sw }: { list: AdminData['purposes']; call: Call; sw: boolean }) {
+  const [label, setLabel] = useState('')
+  const [editing, setEditing] = useState<{ id: number; label: string } | null>(null)
+  const [err, setErr] = useState<{ id: number; text: string; n: number } | null>(null)
+  const remove = async (p: AdminData['purposes'][number]) => {
+    if (!confirm(`Delete ${p.label}? It goes from the list of purposes.`)) return
+    const e = await call('te_delete_purpose', { p_id: p.id }, 'Purpose deleted.', true)
+    setErr(e ? x => ({ id: p.id, text: e, n: (x?.n ?? 0) + 1 }) : null)
+  }
+  const rename = async (p: AdminData['purposes'][number]) => {
+    const e = await call('te_set_purpose', { p_id: p.id, p_label: editing!.label, p_gives_da: p.gives_da, p_active: p.is_active }, 'Renamed.', true)
+    if (e) setErr(x => ({ id: p.id, text: e, n: (x?.n ?? 0) + 1 })); else { setEditing(null); setErr(null) }
+  }
+  return (
+    <div className="card space-y-2 p-4">
+      <h3 className="text-sm font-semibold text-ink-800">Purposes</h3>
       {list.map(p => (
-        <div key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
-          <span className={clsx('min-w-[12rem] font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
+        <div key={p.id} className="space-y-1.5 rounded-xl border border-ink-200 p-3 sm:rounded-none sm:border-0 sm:p-0">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            {editing?.id === p.id ? (
+              <span className="flex min-w-[12rem] items-center gap-1.5">
+                <input className="input !py-1 max-w-[14rem]" value={editing.label} autoFocus onChange={e => setEditing({ id: p.id, label: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') void rename(p); if (e.key === 'Escape') setEditing(null) }} />
+                <button type="button" className="btn-icon text-green-700" aria-label="Save" title="Save" disabled={!editing.label.trim()} onClick={() => void rename(p)}><Check className="h-4 w-4" /></button>
+                <button type="button" className="btn-icon" aria-label="Cancel" title="Cancel" onClick={() => { setEditing(null); setErr(null) }}><X className="h-4 w-4" /></button>
+              </span>
+            ) : (
+              <span className="flex w-full min-w-[12rem] items-center gap-1 sm:w-auto">
+                <span className={clsx('font-medium', p.is_active ? 'text-ink-900' : 'text-ink-400 line-through')}>{p.label}</span>
+                <button type="button" className="btn-icon" aria-label={`Rename ${p.label}`} title="Rename" onClick={() => { setEditing({ id: p.id, label: p.label }); setErr(null) }}><Pencil className="h-3.5 w-3.5" /></button>
+                {sw && <button type="button" className="btn-icon ml-auto text-cyrixRed-600 sm:hidden" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
+              </span>
+            )}
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.gives_da} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: e.target.checked, p_active: p.is_active })} /> Gives DA</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.is_active} onChange={e => void call('te_set_purpose', { p_id: p.id, p_label: p.label, p_gives_da: p.gives_da, p_active: e.target.checked })} /> In use</label>
+            {/* The ride needs a visit photo (Travel te_0082; the user, 28 Oct: "image mandatory check box"). */}
+            {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.photo_needed} onChange={e => void call('te_set_purpose_photo', { p_id: p.id, p_on: e.target.checked })} /> Photo needed</label>}
+            {/* The ride asks for the ticket ID (te_0105; the user, 3 Nov: "check box for ticket id enable option"). */}
+            {sw && <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.needs_ticket} onChange={e => void call('te_set_purpose_ticket', { p_id: p.id, p_on: e.target.checked })} /> Ticket ID</label>}
+            {/* Gone only while nothing names it; after that In use is unticked instead. */}
+            {sw && <button type="button" className="btn-icon hidden text-cyrixRed-600 sm:inline-flex" aria-label={`Delete ${p.label}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>}
+          </div>
+          {err?.id === p.id && <Alert key={err.n} kind="error">{err.text}</Alert>}
         </div>
       ))}
       <div className="flex gap-2 pt-2">
@@ -192,6 +432,95 @@ function Desk({ list, call }: { list: AdminData['desk']; call: Call }) {
   )
 }
 
+/*
+  Mail copies (Travel te_0132; the user, 6 Nov: "accounts team told, ... if a advance is approved, they need cc for other
+  custom persons also", then "add check box, ie claim, advance, vehicle, deputation"): people by E-code, each ticked for
+  the Travel mails they get a copy of.
+*/
+type Copy = { employee_id: string; ecode: string; name: string; email: string | null; claim: boolean; advance: boolean; vehicle: boolean; deputation: boolean; added_by: string | null; added_at: string }
+const COPY_KINDS = [['claim', 'Claim'], ['advance', 'Advance'], ['vehicle', 'Vehicle'], ['deputation', 'Deputation']] as const
+function MailCopies() {
+  const qc = useQueryClient()
+  const { data, isLoading, error } = useQuery({ queryKey: ['te_mail_copies'], queryFn: () => rpc<Copy[]>('te_mail_copies_list', {}) })
+  const [e, setE] = useState('')
+  const [q, setQ] = useState('')
+  const [err, setErr] = useState<{ at: string; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  // A name or an E-code (the user, 6 Nov: "need name search also"): active people matching what is typed, a press adds.
+  type Match = { ecode: string; full_name: string; designation: string | null }
+  const [matches, setMatches] = useState<Match[]>([])
+  useEffect(() => {
+    const t0 = e.trim().replace(/[%,()*\\]/g, ' ').trim()
+    if (t0.length < 2) { setMatches([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const { data } = await supabase.from('employees').select('ecode, full_name, designation')
+        .eq('account_type', 'employee').eq('is_active', true).or(`full_name.ilike.%${t0}%,ecode.ilike.${t0}%`).order('full_name').limit(8)
+      if (live) setMatches((data ?? []) as Match[])
+    }, 250)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [e])
+  const add = (code: string) => void run('add', 'te_mail_copies_set', { p_ecode: code }).then(ok => { if (ok) { setE(''); setMatches([]) } })
+  const run = async (at: string, fn: string, args: Record<string, unknown>) => {
+    setErr(null); setBusy(true)
+    try { await rpc(fn, args); await qc.invalidateQueries({ queryKey: ['te_mail_copies'] }); return true }
+    catch (x) { setErr({ at, text: (x as Error).message }); return false }
+    finally { setBusy(false) }
+  }
+  if (isLoading) return <div className="grid place-items-center py-10"><Spinner className="h-6 w-6" /></div>
+  if (error) return <Alert kind="error">{(error as Error).message}</Alert>
+  const list = (data ?? []).filter(c => !q.trim() || `${c.name} ${c.ecode} ${c.email ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <div className="card space-y-3 p-4">
+      {(data?.length ?? 0) > 5 && <input className="input max-w-xs" placeholder="Search name or E-code" value={q} onChange={x => setQ(x.target.value)} />}
+      {list.map(c => (
+        <div key={c.employee_id} className="border-t border-ink-100 pt-3 first:border-t-0 first:pt-0">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="min-w-[12rem] text-sm">
+              <span className="font-medium text-ink-900">{c.name}</span> <span className="text-ink-500">{c.ecode}</span>
+              <span className="block text-xs text-ink-500">{c.email ?? 'No work email'}</span>
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {COPY_KINDS.map(([k, l]) => (
+                <label key={k} className={clsx('flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm', c[k] ? 'border-violet-500 text-ink-900' : 'border-ink-200 text-ink-600')}>
+                  <input type="checkbox" className="h-4 w-4 accent-violet-600" checked={c[k]} disabled={busy}
+                    onChange={x => void run(c.employee_id, 'te_mail_copies_set', { p_ecode: c.ecode, [`p_${k}`]: x.target.checked })} />
+                  {l}
+                </label>
+              ))}
+            </div>
+            <button type="button" className="btn-icon text-cyrixRed-600" aria-label="Remove" disabled={busy}
+              onClick={() => void run(c.employee_id, 'te_mail_copies_remove', { p_employee: c.employee_id })}><Trash2 className="h-4 w-4" /></button>
+          </div>
+          {err?.at === c.employee_id && <p className="mt-1 text-sm text-cyrixRed-700">{err.text}</p>}
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2 border-t border-ink-100 pt-3">
+        <div className="relative w-full max-w-xs">
+          <input className="input w-full" placeholder="Name or E-code" value={e} onChange={x => { setE(x.target.value); setErr(null) }}
+            onKeyDown={x => { if (x.key === 'Enter' && e.trim()) add(matches.length === 1 ? matches[0].ecode : e.trim()) }} />
+          {matches.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-surface shadow-lg">
+              {matches.map(m => (
+                <li key={m.ecode}>
+                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100" onClick={() => add(m.ecode)}>
+                    <span className="font-medium text-ink-900">{m.full_name}</span>
+                    <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
+                    {m.designation && <span className="ml-auto truncate text-xs text-ink-400">{m.designation}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button type="button" className="btn-secondary" disabled={!e.trim() || busy}
+          onClick={() => add(matches.length === 1 ? matches[0].ecode : e.trim())}>Add</button>
+      </div>
+      {err?.at === 'add' && <p className="text-sm text-cyrixRed-700">{err.text}</p>}
+    </div>
+  )
+}
+
 /** The projects a claim chooses from (te_0022; the user, 17 Oct: "project need dropdown, that sw or acc admin will set"). */
 function Projects({ list, call }: { list: AdminData['projects']; call: Call }) {
   const [label, setLabel] = useState('')
@@ -215,61 +544,107 @@ const STATUS_WORD: Record<string, string> = {
   draft: 'Draft', with_manager: 'With manager', with_coordinator: 'With coordinator', with_desk: 'With Travel Desk',
   approved: 'Approved', paid: 'Paid', returned: 'Sent back', recalled: 'Recalled',
 }
+const ADVANCE_WORD: Record<string, string> = { with_manager: 'With manager', with_desk: 'With Travel Desk', given: 'Approved', declined: 'Declined', cancelled: 'Withdrawn' }
+const DEP_WORD: Record<string, string> = { with_manager: 'With manager', approved: 'Approved', returned: 'Sent back', withdrawn: 'Withdrawn', replaced: 'Changed', edited: 'Edited' }
 /*
   Delete a claim (Travel te_0028; the user, 18 Oct: "for sw_admin like in revive lab also need option to
   delete claim" — "only for swadmin"), as Revive Lab deletes a ticket: type its number, see whose it
   is, confirm. Its bills go first, then the claim with its days and history; one audit line keeps what
   it was. The tab shows only for SW Admin, and the database refuses anybody else.
+  An advance is deleted the same way by its EA number (te_0066; the user, 24 Oct: "for deletion also need
+  ea tickets"); what claims took of it goes with it, so those claims no longer have it taken off.
+  A deputation by its DP number (te_0090; the user, 30 Oct: "give deputation no so can sw admin can remove"): every
+  request of it, then its letters; a claim day that took its DA is then outside any deputation, said in Observations.
+  The same box in KPI's SW Admin and Travel's admin page.
 */
+type FoundClaim = { kind: 'claim'; id: string; number: string; name: string; ecode: string; month: string; status: string; total: number; days: number; paths: string[] }
+type FoundAdvance = { kind: 'advance'; id: string; number: string; name: string; ecode: string; month: string; status: string; amount: number; dest: string; used: number; claims: string[] }
+type FoundDeputation = { kind: 'deputation'; id: string; number: string; name: string; ecode: string; state: string; from_day: string; to_day: string; status: string; requests: number; claims: string[] }
 function DeleteClaim() {
   const qc = useQueryClient()
   const [typed, setTyped] = useState('')
-  const [found, setFound] = useState<{ id: string; number: string; name: string; ecode: string; month: string; status: string; total: number; days: number; paths: string[] } | null>(null)
+  const [found, setFound] = useState<FoundClaim | FoundAdvance | FoundDeputation | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ at: 'find' | 'delete'; text: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const lookUp = async () => {
     setError(null); setNotice(null); setFound(null); setBusy(true)
-    try { setFound(await rpc('te_find_claim', { p_number: typed })) } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+    try {
+      setFound(/^\s*ea/i.test(typed)
+        ? { kind: 'advance', ...(await rpc<Omit<FoundAdvance, 'kind'>>('te_find_advance', { p_number: typed })) }
+        : /^\s*dp/i.test(typed)
+          ? { kind: 'deputation', ...(await rpc<Omit<FoundDeputation, 'kind'>>('te_find_deputation', { p_number: typed })) }
+          : { kind: 'claim', ...(await rpc<Omit<FoundClaim, 'kind'>>('te_find_claim', { p_number: typed })) })
+    } catch (e) { setError({ at: 'find', text: (e as Error).message }) } finally { setBusy(false) }
   }
   const remove = async () => {
     if (!found) return
     setBusy(true); setError(null)
     try {
-      if (found.paths.length) {
-        const { error: rm } = await supabase.storage.from('te-bills').remove(found.paths)
-        if (rm) throw new Error(rm.message)
+      if (found.kind === 'advance') await rpc('te_delete_advance', { p_advance: found.id })
+      else if (found.kind === 'deputation') {
+        const letters = await rpc<string[]>('te_delete_deputation', { p_root: found.id })
+        // The letters go after: one left behind names no deputation and harms nothing.
+        if (letters?.length) await supabase.storage.from('te-letters').remove(letters)
+      } else {
+        if (found.paths.length) {
+          const { error: rm } = await supabase.storage.from('te-bills').remove(found.paths)
+          if (rm) throw new Error(rm.message)
+        }
+        await rpc('te_delete_claim', { p_claim: found.id })
       }
-      await rpc('te_delete_claim', { p_claim: found.id })
       setNotice(`Deleted ${found.number}.`); setFound(null); setTyped('')
       void qc.invalidateQueries()
-    } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+    } catch (e) { setError({ at: 'delete', text: (e as Error).message }) } finally { setBusy(false) }
   }
   const mon = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return `${d.toLocaleDateString('en-GB', { month: 'short' })}-${String(d.getFullYear()).slice(2)}` }
+  const date = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const rupees = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
         <Trash2 className="h-4 w-4 text-cyrixRed-600" />
-        <h3 className="text-sm font-semibold text-ink-800">Delete a claim</h3>
+        <h3 className="text-sm font-semibold text-ink-800">Delete a claim, advance or deputation</h3>
       </div>
       <div className="space-y-3 p-4">
-        {error && <Alert kind="error">{error}</Alert>}
         {notice && <Alert kind="success">{notice}</Alert>}
         <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); void lookUp() }}>
-          <label className="block w-44"><span className="label">Claim number</span>
-            <input className="input mt-1 h-11 font-mono" value={typed} onChange={e => { setTyped(e.target.value); setFound(null) }} placeholder="TE-02" /></label>
+          <label className="block w-44"><span className="label">Number</span>
+            <input className="input mt-1 h-11 font-mono" value={typed} onChange={e => { setTyped(e.target.value); setFound(null); setError(null) }} placeholder="TE-02, EA-01, DP-01" /></label>
           <button type="submit" className="btn-secondary h-11 !text-cyrixRed-700" disabled={busy || !typed.trim()}>
             {busy && !found ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />} Delete
           </button>
         </form>
+        {error?.at === 'find' && <Alert kind="error">{error.text}</Alert>}
         {found && (
           <div className="rounded-xl border border-cyrixRed-200 bg-cyrixRed-50 p-3">
-            <p className="text-sm font-medium text-cyrixRed-900">Delete {found.number} · {found.name} ({found.ecode}) · {mon(found.month)} · ₹{Math.round(found.total).toLocaleString('en-IN')} for good?</p>
-            <p className="mt-0.5 text-xs text-cyrixRed-800">{STATUS_WORD[found.status] ?? found.status} · {found.days} day{found.days === 1 ? '' : 's'}. Its days, bills and history go with it. This cannot be undone.</p>
+            {found.kind === 'claim' ? <>
+              <p className="text-sm font-medium text-cyrixRed-900">Delete {found.number} · {found.name} ({found.ecode}) · {mon(found.month)} · {rupees(found.total)} for good?</p>
+              <p className="mt-0.5 text-xs text-cyrixRed-800">{STATUS_WORD[found.status] ?? found.status} · {found.days} day{found.days === 1 ? '' : 's'}. Its days, bills and history go with it. This cannot be undone.</p>
+            </> : found.kind === 'advance' ? <>
+              <p className="text-sm font-medium text-cyrixRed-900">Delete advance {found.number} · {found.name} ({found.ecode}) · {mon(found.month)} · {rupees(found.amount)} for good?</p>
+              <p className="mt-0.5 text-xs text-cyrixRed-800">
+                {ADVANCE_WORD[found.status] ?? found.status} · to {found.dest}.{' '}
+                {found.used > 0
+                  ? `${rupees(found.used)} of it is taken off ${found.claims.join(', ')}; ${found.claims.length === 1 ? 'that claim' : 'those claims'} will no longer have it taken off.`
+                  : 'Its approvals go with it.'}{' '}
+                This cannot be undone.
+              </p>
+            </> : <>
+              <p className="text-sm font-medium text-cyrixRed-900">Delete deputation {found.number} · {found.name} ({found.ecode}) · {found.state} · {date(found.from_day)} – {date(found.to_day)} for good?</p>
+              <p className="mt-0.5 text-xs text-cyrixRed-800">
+                {DEP_WORD[found.status] ?? found.status}{found.requests > 1 ? ` · ${found.requests} requests` : ''}.{' '}
+                {found.claims.length > 0
+                  ? `Deputation DA is claimed on ${found.claims.join(', ')}; those days will show as outside any deputation.`
+                  : 'Its letter and history go with it.'}{' '}
+                This cannot be undone.
+              </p>
+            </>}
             <div className="mt-2 flex gap-2">
               <button type="button" className="btn-danger" onClick={() => void remove()} disabled={busy}>{busy && <Spinner className="h-4 w-4" />} Yes, delete {found.number}</button>
-              <button type="button" className="btn-secondary" onClick={() => setFound(null)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => { setFound(null); setError(null) }}>Cancel</button>
             </div>
+            {error?.at === 'delete' && <div className="mt-2"><Alert kind="error">{error.text}</Alert></div>}
           </div>
         )}
       </div>
@@ -278,51 +653,82 @@ function DeleteClaim() {
 }
 
 /*
-  Places learned from tickets (Travel te_0038; the user, 21 Oct): every hospital a ticket was saved
-  against, offered to everyone who searches. Nobody keeps this list; a wrong one is taken off here.
+  A claim as its manager sees it (the user, 6 Nov: "give sw admin to check the claim like manager does, just searching
+  claim id"): the number is found as Delete finds it, and the claim opens on its own page in Travel, which SW Admin
+  already sees whole — the days, map, visit photos, bills, observations and history.
 */
-// The map only when a place is opened on it, so this page does not carry it otherwise.
-const PlaceMapDialog = lazy(() => import('@/components/PlaceMapDialog'))
-function LearnedPlaces() {
-  const qc = useQueryClient()
-  
-  const { data, isLoading, error } = useQuery({ queryKey: ['te_admin_places'], queryFn: () => rpc<Array<{ id: string; name: string; full_name: string; district: string | null; visits: number; first_by: string | null; created_at: string; lat: number; lng: number }>>('te_admin_places') })
-  const [onMap, setOnMap] = useState<{ id: string; name: string; full_name: string; lat: number; lng: number } | null>(null)
-  const [q, setQ] = useState('')
-  const [fail, setFail] = useState<string | null>(null)
-  const remove = async (id: string, name: string) => {
-    if (!(confirm(`Remove ${name}? It is no longer offered when engineers search. Claims that used it keep it.`))) return
-    try { await rpc('te_hide_place', { p_id: id }); await qc.invalidateQueries({ queryKey: ['te_admin_places'] }) } catch (e) { setFail((e as Error).message) }
+const TRAVEL = import.meta.env.DEV ? 'http://localhost:5178' : ''
+function CheckClaim() {
+  const [typed, setTyped] = useState('')
+  const [found, setFound] = useState<FoundClaim | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const lookUp = async () => {
+    setError(null); setFound(null); setBusy(true)
+    try { setFound({ kind: 'claim', ...(await rpc<Omit<FoundClaim, 'kind'>>('te_find_claim', { p_number: typed })) }) }
+    catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
-  if (isLoading) return <PageLoader />
-  const list = (data ?? []).filter(p => !q.trim() || `${p.name} ${p.full_name} ${p.district ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+  const mon = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return `${d.toLocaleDateString('en-GB', { month: 'short' })}-${String(d.getFullYear()).slice(2)}` }
+  const rupees = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
   return (
     <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-800"><Hospital className="h-4 w-4 text-cyrixRed-600" /> Learned places <span className="font-normal text-ink-500">· {data?.length ?? 0}</span></h3>
-        <input className="input h-9 w-full sm:w-56" placeholder="Search" value={q} onChange={e => setQ(e.target.value)} />
+      <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5">
+        <Search className="h-4 w-4 text-violet-600" />
+        <h3 className="text-sm font-semibold text-ink-800">Check a claim</h3>
       </div>
-      {(fail || error) && <div className="p-3"><Alert kind="error">{fail ?? (error as Error).message}</Alert></div>}
-      {list.length === 0 ? <p className="p-6 text-center text-sm text-ink-500">No places yet.</p> : (
-        <div className="divide-y divide-ink-100">
-          {list.map(p => (
-            <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-ink-900">{p.name}{p.district && <span className="font-normal text-ink-500"> · {p.district}</span>}</p>
-                <p className="truncate text-xs text-ink-500">{p.visits} visit{p.visits === 1 ? '' : 's'} · first by {p.first_by ?? '—'} · {new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-              </div>
-              <button type="button" className="btn-icon text-teal-600" aria-label={`${p.name} on the map`} title="See and move on the map" onClick={() => setOnMap(p)}><MapIcon className="h-4 w-4" /></button>
-              <button type="button" className="btn-icon text-cyrixRed-600" aria-label={`Remove ${p.name}`} title="Remove" onClick={() => void remove(p.id, p.name)}><Trash2 className="h-4 w-4" /></button>
+      <div className="space-y-3 p-4">
+        <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); void lookUp() }}>
+          <label className="block w-44"><span className="label">Claim number</span>
+            <input className="input mt-1 h-11 font-mono" value={typed} onChange={e => { setTyped(e.target.value); setFound(null); setError(null) }} placeholder="TE-17" /></label>
+          <button type="submit" className="btn-primary h-11" disabled={busy || !typed.trim()}>
+            {busy ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} Find
+          </button>
+        </form>
+        {error && <Alert kind="error">{error}</Alert>}
+        {found && (
+          <div className="flex flex-col gap-3 rounded-xl border border-ink-200 bg-ink-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium text-ink-900">{found.number} · {found.name} ({found.ecode})</p>
+              <p className="mt-0.5 text-xs text-ink-600">{mon(found.month)} · {rupees(found.total)} · {STATUS_WORD[found.status] ?? found.status} · {found.days} day{found.days === 1 ? '' : 's'}</p>
             </div>
-          ))}
-        </div>
-      )}
-      {onMap && (
-        <Suspense fallback={null}>
-          <PlaceMapDialog place={onMap} onClose={() => setOnMap(null)}
-            onSave={async p => { await rpc('te_edit_place', { p_id: onMap.id, p_name: p.name, p_lat: p.lat, p_lng: p.lng }); setOnMap(null); await qc.invalidateQueries({ queryKey: ['te_admin_places'] }) }} />
-        </Suspense>
-      )}
+            <a href={`${TRAVEL}/travel/claim/${found.id}`} target="_blank" rel="noopener" className="btn-primary h-11 shrink-0">
+              <ExternalLink className="h-4 w-4" /> Open {found.number}
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Places our engineers taught the search, put right here (Travel te_0038, te_0071): the list shared with Travel's admin page.
+function LearnedPlaces() {
+  return <LearnedPlacesTable call={rpc} confirmRemove={async name => confirm(`Remove ${name}? It is no longer offered when engineers search. Claims that used it keep it.`)} />
+}
+
+/*
+  Reports holds Live and Km vs map as its own two tabs, so SW Admin's row of tabs stays as it was (the user, 3 Nov:
+  "can you make live under reports, subtab? bcz our sw admin id is crowded with tabs"). Kept in the address too.
+  Check claim beside them (the user, 6 Nov).
+*/
+type Rep = 'live' | 'watch' | 'km' | 'check'
+function Reports() {
+  const [rep, setRepState] = useState<Rep>(() => { const v = new URLSearchParams(window.location.search).get('rep'); return v === 'km' || v === 'watch' || v === 'check' ? v : 'live' })
+  const setRep = (v: Rep) => {
+    setRepState(v)
+    const u = new URL(window.location.href)
+    u.searchParams.set('rep', v)
+    window.history.replaceState(window.history.state, '', u)
+  }
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-ink-100 p-1" role="tablist">
+        {([['live', 'Live'], ['watch', 'Watch'], ['km', 'Km vs map'], ['check', 'Check claim']] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={rep === k} onClick={() => setRep(k)}
+            className={clsx('shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold sm:px-4', rep === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}>{l}</button>
+        ))}
+      </div>
+      {rep === 'live' ? <TravelLive /> : rep === 'watch' ? <TravelWatch /> : rep === 'check' ? <CheckClaim /> : <TravelReport />}
     </div>
   )
 }

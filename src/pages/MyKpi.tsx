@@ -1,4 +1,5 @@
 import KpiStatusNote from '@/components/KpiStatusNote'
+import RecallKpi from '@/components/RecallKpi'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, FileSpreadsheet, PencilRuler, Shuffle } from 'lucide-react'
@@ -88,6 +89,7 @@ export default function MyKpi() {
       {assignment.status === 'pending_approval' && (
         <Alert kind="info" title="Waiting for your manager to approve">
           You cannot start monthly assessments until this is approved.
+          <div><RecallKpi assignmentId={assignment.id} fy={fy} /></div>
         </Alert>
       )}
       {assignment.status === 'active' && (

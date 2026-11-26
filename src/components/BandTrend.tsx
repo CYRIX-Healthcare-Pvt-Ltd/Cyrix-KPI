@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { monthLabel } from '@/lib/fy'
 import { useIsDark } from '@/lib/isDark'
+import { useNarrow } from '@/lib/useNarrow'
 import { ScoreLabel } from './ScoreTrend'
 
 export interface BandTrendPoint {
@@ -41,12 +42,15 @@ const MARGIN = { top: 28, right: 20, left: 0, bottom: 8 }
  * presentation attribute and those do not accept var(). This is one of
  * the few places a colour has to be decided in JavaScript.
  */
+// The Assessments graph's colours (the user, 12 Nov): job role blue, core values teal, the total green / yellow / red by
+// how each month moved.
 const seriesFor = (dark: boolean) => ({
   total: { name: 'Total', colour: dark ? '#f4f5f7' : '#141519', width: 2.5 },
-  job:   { name: 'Job role', colour: '#e30613', width: 1.5 },
+  job:   { name: 'Job role', colour: dark ? '#60a5fa' : '#2563eb', width: 1.5 },
   esms:  { name: 'ESMS', colour: '#7c3aed', width: 1.5 },
-  core:  { name: 'Core values', colour: '#8a8d97', width: 1.5 },
+  core:  { name: 'Core values', colour: dark ? '#2dd4bf' : '#0d9488', width: 1.5 },
 }) as const
+const RISE = '#22c55e', FLAT = '#eab308', FALL = '#ef4444'
 
 /**
  * A score month by month, and what it was made of.
@@ -77,6 +81,9 @@ export default function BandTrend({
   emptyMessage?: string
 }) {
   const SERIES = seriesFor(useIsDark())
+  const narrow = useNarrow()
+  const lf = narrow ? 9 : 11
+  const tick = { fontSize: narrow ? 10 : 11, fill: '#6b6e79' }
 
   const data = points.map(p => ({
     month: monthLabel(p.month).split('-')[0],
@@ -98,21 +105,39 @@ export default function BandTrend({
     )
   }
 
+  // Each stretch of the total green up, yellow held (within half a point), red down; a point the colour of the stretch
+  // that reached it.
+  const pts = data.map((d, i) => ({ i, v: d.total })).filter((x): x is { i: number; v: number } => x.v !== null)
+  const move = (a: number, b: number) => (b - a > 0.5 ? RISE : a - b > 0.5 ? FALL : FLAT)
+  const seg = pts.slice(1).map((x, k) => ({ from: pts[k].i, to: x.i, c: move(pts[k].v, x.v) }))
+  const dotColour = new Map<number, string>()
+  seg.forEach(g => dotColour.set(g.to, g.c))
+  if (seg.length) dotColour.set(pts[0].i, seg[0].c)
+  const span = pts.length > 1 ? pts[pts.length - 1].i - pts[0].i : 1
+  const at = (i: number) => `${((i - (pts[0]?.i ?? 0)) / span) * 100}%`
+  const ink = SERIES.total.colour
+  const TotalDot = (p: { cx?: number; cy?: number; value?: number | null; index?: number }) => {
+    if (p.cx == null || p.cy == null || p.value == null) return <g key={p.index} />
+    return <circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={dotColour.get(p.index ?? -1) ?? ink} stroke={ink} strokeWidth={1} />
+  }
+
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={MARGIN}>
+        <LineChart data={data} margin={narrow ? { ...MARGIN, right: 12 } : MARGIN}>
           <CartesianGrid vertical={false} stroke="#eeeef0" />
           <XAxis
             dataKey="month"
-            tick={{ fontSize: 11, fill: '#6b6e79' }}
+            tick={tick}
+            interval={0}
             axisLine={{ stroke: '#d8d9dd' }}
             tickLine={false}
           />
           <YAxis
             domain={[0, 100]}
             ticks={[0, 20, 40, 60, 80, 100]}
-            tick={{ fontSize: 11, fill: '#6b6e79' }}
+            tick={tick}
+            width={narrow ? 26 : 40}
             axisLine={false}
             tickLine={false}
           />
@@ -127,7 +152,7 @@ export default function BandTrend({
             ]}
           />
           <Legend
-            wrapperStyle={{ fontSize: 11 }}
+            wrapperStyle={{ fontSize: narrow ? 10 : 11 }}
             formatter={key => SERIES[key as keyof typeof SERIES]?.name ?? String(key)}
           />
 
@@ -135,20 +160,25 @@ export default function BandTrend({
               the two closest lines push their numbers apart rather than
               stacking them. Core values sits far enough down that above
               is safe and reads better. */}
+          <defs>
+            <linearGradient id="bt-total" x1="0" y1="0" x2="1" y2="0">
+              {seg.flatMap(g => [<stop key={`${g.from}a`} offset={at(g.from)} stopColor={g.c} />, <stop key={`${g.to}b`} offset={at(g.to)} stopColor={g.c} />])}
+            </linearGradient>
+          </defs>
           <Line
             type="monotone" dataKey="total"
-            stroke={SERIES.total.colour} strokeWidth={SERIES.total.width}
-            dot={{ r: 3, fill: SERIES.total.colour, strokeWidth: 0 }}
-            activeDot={{ r: 6, fill: SERIES.total.colour, stroke: '#fff', strokeWidth: 2 }}
+            stroke={seg.length ? 'url(#bt-total)' : ink} strokeWidth={SERIES.total.width}
+            dot={TotalDot}
+            activeDot={{ r: 5 }}
             connectNulls isAnimationActive={false}
-            label={<ScoreLabel count={data.length} fill={SERIES.total.colour} dy={-12} />}
+            label={<ScoreLabel count={data.length} fill={ink} dy={-12} fontSize={lf} />}
           />
           <Line
             type="monotone" dataKey="job"
             stroke={SERIES.job.colour} strokeWidth={SERIES.job.width}
             dot={{ r: 2.5, fill: SERIES.job.colour, strokeWidth: 0 }}
             connectNulls isAnimationActive={false}
-            label={<ScoreLabel count={data.length} fill={SERIES.job.colour} dy={16} />}
+            label={<ScoreLabel count={data.length} fill={SERIES.job.colour} dy={16} fontSize={lf} />}
           />
           {hasEsms && (
             <Line
@@ -163,7 +193,7 @@ export default function BandTrend({
             stroke={SERIES.core.colour} strokeWidth={SERIES.core.width}
             dot={{ r: 2.5, fill: SERIES.core.colour, strokeWidth: 0 }}
             connectNulls isAnimationActive={false}
-            label={<ScoreLabel count={data.length} fill={SERIES.core.colour} dy={-10} />}
+            label={<ScoreLabel count={data.length} fill={SERIES.core.colour} dy={-10} fontSize={lf} />}
           />
         </LineChart>
       </ResponsiveContainer>

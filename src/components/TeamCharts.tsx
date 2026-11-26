@@ -225,7 +225,8 @@ export default function TeamCharts({
         )}
       </div>
 
-      <p className="mb-3 mt-3 text-xs text-ink-500">
+      {/* Desktop only: on a phone the chart says it (the user, 12 Nov). */}
+      <p className="mb-3 mt-3 hidden text-xs text-ink-500 sm:block">
         {chartTab === 'trend'
           ? 'Everyone who was scored that month, averaged, on the band scale.'
           : `Where the team sits on ${METRIC_LABEL[bellMetric].toLowerCase()}` +

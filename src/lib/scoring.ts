@@ -401,19 +401,23 @@ export function averageCoreValueRatings(
  * the sum of points x weight over the sum of the weights. Without weights, the plain average.
  */
 export function weightedCoreValueRatings(
-  ratings: Array<{ core_value_id: string; label: string | null | undefined }>,
+  // points: a core value rated in parts (0225) scores its parts' average instead of one rating.
+  ratings: Array<{ core_value_id: string; label: string | null | undefined; points?: number | null }>,
   weights: Record<string, number> | null | undefined,
 ): number | null {
-  if (!weights) return averageCoreValueRatings(ratings.map(r => r.label))
   let sum = 0, w = 0
   for (const r of ratings) {
-    const p = ratingToPoints(r.label)
+    const p = r.points ?? ratingToPoints(r.label)
     if (p === null) continue
-    const k = Number(weights[r.core_value_id] ?? 0)
+    const k = weights ? Number(weights[r.core_value_id] ?? 0) : 1
     sum += p * k; w += k
   }
   return w > 0 ? round4(sum / w) : null
 }
+
+/** A core value's points: its parts' average when it has parts (0225), else its one rating. */
+export const corePoints = (points: number | string | null | undefined, label: string | null | undefined): number | null =>
+  points !== null && points !== undefined ? Number(points) : ratingToPoints(label)
 
 /**
  * How self and manager scores blend.

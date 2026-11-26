@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import clsx from 'clsx'
-import { Plus, RotateCcw, Save, Search } from 'lucide-react'
+import { Plus, RotateCcw, Save, Search, Upload } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
+import { findPeople } from '@/lib/findPeople'
 import { useScoringRules, useCoreValues, type TemplateReach } from '@/lib/queries'
 import { ESMS_WEIGHT, JOB_ROLE_TOTAL } from '@/lib/sections'
 import { monthLabel } from '@/lib/fy'
@@ -94,19 +95,75 @@ export default function KpiEdit() {
     return f
   }
 
-  const find = async (e: FormEvent) => {
-    e.preventDefault()
-    setError(null); setNotice(null); setFound(null)
-    if (!code.trim()) return
+  // A name or an employee code (the user, 5 Nov: "need option to search name also"): names matching what is typed
+  // show under the box, a press opens that person.
+  type Match = { ecode: string; full_name: string; designation: string | null; is_active: boolean }
+  const [matches, setMatches] = useState<Match[]>([])
+  const [picking, setPicking] = useState(false)
+  useEffect(() => {
+    if (!picking || code.trim().length < 2) { setMatches([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const found = await findPeople(code)
+      if (live) setMatches(found as Match[])
+    }, 250)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [code, picking])
+  const open = async (ecode: string) => {
+    setError(null); setNotice(null); setFound(null); setMatches([]); setPicking(false)
     setBusy(true)
-    try { await load(code.trim()) }
+    try { await load(ecode) }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not find that person.') }
     finally { setBusy(false) }
+  }
+  const find = async (e: FormEvent) => {
+    e.preventDefault()
+    const q = code.trim()
+    if (!q) return
+    // A typed name opens the one person it matches; an employee code opens as before.
+    if (!/^[A-Za-z]{0,3}\d+$/.test(q) && matches.length === 1) { setCode(matches[0].ecode); return open(matches[0].ecode) }
+    if (!/^[A-Za-z]{0,3}\d+$/.test(q)) { setError(matches.length ? 'Choose the person from the list.' : 'Nobody by that name.'); return }
+    return open(q)
   }
 
   const job = Number(found?.assignment?.job_role_weight ?? JOB_ROLE_TOTAL)
   const named = rows.filter(r => r.kra.trim() !== '')
   const total = named.reduce((a, r) => a + (Number(r.weightage) || 0), 0)
+  /*
+    The Job Role rows from an Excel sheet (the user, 4 Nov: "edit kpi, need excel upload option also"), the same reader
+    as a manager's template upload. A row whose KRA and KPI match one already there keeps its id, so the months keep
+    what was typed against it. Nothing is saved until Save and apply.
+  */
+  const fileRef = useRef<HTMLInputElement>(null)
+  const onFile = async (file: File) => {
+    setError(null); setNotice(null)
+    try {
+      const { parseKpiWorkbook } = await import('@/lib/excel')
+      const parsed = parseKpiWorkbook(await file.arrayBuffer())
+      const jobRows = parsed.rows.filter(r => r.section === 'job_role')
+      if (jobRows.length === 0) { setError(parsed.errors[0] ?? 'No Job Role rows were found in that file.'); return }
+      const key = (kra: string, kpi: string | null | undefined) => `${kra.trim().toLowerCase()}|${(kpi ?? '').trim().toLowerCase()}`
+      const had = new Map((rows as Array<Draft & { id?: string }>).filter(r => r.id).map(r => [key(r.kra, r.kpi_description), r.id]))
+      setRows(jobRows.map((r, idx) => ({
+        id: had.get(key(r.kra, r.kpi_description)),
+        _key: crypto.randomUUID(),
+        section: 'job_role' as const,
+        kra: r.kra,
+        kpi_description: r.kpi_description,
+        weightage: r.weightage,
+        target_value: r.target_value,
+        target_unit: r.target_unit,
+        scoring_rule: r.scoring_rule,
+        rule_params: r.rule_params,
+        sort_order: idx + 1,
+        alternates: [],
+        _inferred: r.rule_inferred,
+      }) as Draft))
+      setNotice(`Read ${jobRows.length} Job Role row${jobRows.length === 1 ? '' : 's'} from “${parsed.sheetName}”. Check them, then Save and apply.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that file.')
+    }
+  }
   const update = (key: string, patch: Partial<Draft>) => setRows(rows.map(r => (r._key === key ? { ...r, ...patch } : r)))
 
   const save = async () => {
@@ -170,9 +227,25 @@ export default function KpiEdit() {
   return (
     <div className="space-y-4">
       <form onSubmit={find} className="flex flex-wrap items-end gap-2">
-        <label className="block w-44">
-          <span className="label">Employee code</span>
-          <input className="input mt-1 font-mono uppercase" value={code} onChange={e => setCode(e.target.value)} placeholder="E1427" />
+        <label className="relative block w-full sm:w-80">
+          <span className="label">Name or employee code</span>
+          <input className="input mt-1" value={code} autoComplete="off" placeholder="Name or E1427"
+            onChange={e => { setCode(e.target.value); setPicking(true) }} />
+          {matches.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink-200 bg-surface shadow-lg">
+              {matches.map(m => (
+                <li key={m.ecode}>
+                  <button type="button" className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100"
+                    onClick={() => { setCode(m.ecode); void open(m.ecode) }}>
+                    <span className="font-medium text-ink-900">{m.full_name}</span>
+                    <span className="font-mono text-xs text-ink-500">{m.ecode}</span>
+                    {!m.is_active && <span className="text-xs text-cyrixRed-600">left</span>}
+                    {m.designation && <span className="ml-auto truncate text-xs text-ink-400">{m.designation}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </label>
         <button type="submit" className="btn-secondary" disabled={busy || !code.trim()}>
           {busy && !found ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} Find
@@ -250,8 +323,15 @@ export default function KpiEdit() {
               <h3 className="text-sm font-semibold text-ink-800">
                 Job Role rows <span className="font-normal text-ink-500">— {job}%</span>
               </h3>
+              <span className="flex items-center gap-2">
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void onFile(f) }} />
+              <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary h-8 px-3 text-xs">
+                <Upload className="h-3.5 w-3.5" /> Upload Excel
+              </button>
               <span className={clsx('badge', total === job ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
                 {total}% of {job}%
+              </span>
               </span>
             </div>
             <div className="divide-y divide-ink-100">

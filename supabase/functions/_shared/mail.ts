@@ -52,6 +52,8 @@ export interface Mail {
   /** Used by Resend only; Graph takes the HTML. */
   text: string
   html: string
+  /** Files, base64. inline + cid: an image the HTML shows as <img src="cid:..."> (the quotation mails' logo). */
+  attachments?: Array<{ name: string; type: string; base64: string; cid?: string }>
 }
 
 export interface Sent {
@@ -154,6 +156,12 @@ async function viaGraph(mail: Mail): Promise<Sent> {
           body: { contentType: 'HTML', content: mail.html },
           toRecipients: mail.to.map(recipient),
           ccRecipients: (mail.cc ?? []).map(recipient),
+          ...(mail.attachments?.length
+            ? { attachments: mail.attachments.map(a => ({
+                '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.type, contentBytes: a.base64,
+                ...(a.cid ? { isInline: true, contentId: a.cid } : {}),
+              })) }
+            : {}),
           ...(from.name
             ? { from: { emailAddress: { address: from.address, name: from.name } } }
             : {}),
@@ -184,6 +192,9 @@ async function viaResend(db: Db, mail: Mail): Promise<Sent> {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      ...(mail.attachments?.length
+        ? { attachments: mail.attachments.map(a => ({ filename: a.name, content: a.base64, ...(a.cid ? { content_id: a.cid } : {}) })) }
+        : {}),
     }),
   })
   if (!res.ok) throw new MailRefused(res.status, (await res.text()).slice(0, 500))

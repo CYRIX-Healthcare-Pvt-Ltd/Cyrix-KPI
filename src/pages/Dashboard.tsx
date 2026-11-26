@@ -1,4 +1,6 @@
-import { useMemo, useState, lazy, Suspense } from 'react'
+import { useMemo, useState, Suspense } from 'react'
+import { useLegendArrival } from '@/components/LegendCrest'
+import { lazyRoute } from '@/lib/lazyRoute'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { Users, Target, LineChart, BookOpen, ArrowRight } from 'lucide-react'
@@ -6,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   useMyAssignment, useSubmission, useAnnualSummary, useTeamMonth,
   usePendingApprovals, useWeakAreas, useKraAttainment, useKraBenchmark,
-  useSubmissionHistory, useTeamSubmissions, useTatPolicy,
+  useSubmissionHistory, useTeamSubmissions, useTatPolicy, forPeople,
   currentFy,
 } from '@/lib/queries'
 import { daysLeft, lastDayLabel } from '@/lib/lastDay'
@@ -16,6 +18,7 @@ import { waitingForScore, waitingCaption } from '@/lib/waiting'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import { hasSeenHelp, manualOffer } from '@/lib/seenHelp'
 import { READY_LANGS } from '@/lib/i18n'
+import { useTeamStanding, teamCardShows } from '@/lib/teamStanding'
 import { Alert, PageLoader, ScorePill, StatTile, StatusBadge } from '@/components/ui'
 import {
   ScoreHeader, WeakAreas, KraBars, ActionRequired,
@@ -26,7 +29,8 @@ const SCORED = new Set(['scored', 'finalized'])
 // This screen is not code-split — it is the first thing everyone loads —
 // so the chart is, or recharts lands in the bundle a service engineer
 // downloads on 4G just to sign in.
-const ScoreTrend = lazy(() => import('@/components/ScoreTrend'))
+const ScoreTrend = lazyRoute(() => import('@/components/ScoreTrend'))
+const TeamStanding = lazyRoute(() => import('@/components/TeamStanding'))
 
 const ChartFallback = () => (
   <div className="h-[200px] animate-pulse rounded-lg bg-ink-50" />
@@ -62,13 +66,23 @@ export default function Dashboard() {
   // query My Team makes, so going from here to there costs nothing.
   const teamIds = useMemo(() => (teamData?.team ?? []).map(t => t.id), [teamData])
   const { data: teamSubs } = useTeamSubmissions(teamIds.length ? teamIds : undefined, fy)
-  const { data: policy } = useTatPolicy()
+  const { data: tatPolicy } = useTatPolicy()
+  // My own last days: none if I am in the list (0293).
+  const policy = forPeople(tatPolicy, employee?.id, employee?.id)
 
   const startsFrom = assignment?.assignment?.starts_from ?? null
 
   // Read once per mount. Opening the manual is a navigation away from
   // here and back, so the card is gone the next time this screen loads.
   const [seenHelp] = useState(() => hasSeenHelp(employee?.id))
+  // Hidden while the team answer loads, then only when the team card shows (no flash on a reload).
+  const team = useTeamStanding(fy)
+  const teamShown = !team.isError && (!team.data || teamCardShows(team.data))
+  // Team rank 1 in the month being assessed (the user, 10 Nov: "current month means, now running kpi month";
+  // "we need only in team"): the header turns gold.
+  // Ties are broken in kpi_team_standing (0275); one person scored is no contest (the user, 10 Nov).
+  const champ = team.data?.find(r => r.is_me && r.period_month?.slice(0, 10) === month && r.team_rank === 1 && (r.team_of ?? 0) > 1) ?? null
+  const legendPlay = useLegendArrival(champ ? month : null)
   // Named in their own scripts, and built from the list rather than
   // typed out, so adding a language cannot leave this sentence stale.
   const otherLangs = READY_LANGS
@@ -144,6 +158,10 @@ export default function Dashboard() {
         subtitle={`FY ${fy} · reporting on ${monthLabel(month)}`}
         score={annual?.avg_total_score}
         scoreLabel="My year average"
+        legend={champ ? {
+          month: monthLabel(month), of: champ.team_of ?? 0, play: legendPlay,
+          team: `${(champ.manager_name ?? '').split(' ')[0]}'s team`,
+        } : null}
       />
 
       {kpiStatus === null && (
@@ -294,7 +312,9 @@ export default function Dashboard() {
         </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
+      {/* Not with the team card, which has the month's score and the split (the user, 10 Nov: "that oct status not
+          needed ... oct scored already we have in that my place container"). Without it, the tiles stay. */}
+      {!teamShown && <div className="grid grid-cols-2 gap-3 grid-pairs lg:grid-cols-4">
         <StatTile
           label={`${monthLabel(month)} status`}
           value={monthInScope
@@ -361,9 +381,11 @@ export default function Dashboard() {
             ? `out of ${JOB_ROLE_TOTAL}, ${esmsWeight} and ${coreWeight}`
             : `out of ${JOB_ROLE_TOTAL} and ${coreWeight}`}
         />
-      </div>
+      </div>}
 
-      {(kpiStatus === 'active' || (annual?.months_scored ?? 0) > 0) && (
+      {/* Hidden while the team card below shows my line month by month (the user, 9 Nov: "already we are showing my
+          graph twice so better remove top line graph"); somebody without the team card keeps it. */}
+      {!teamShown && (kpiStatus === 'active' || (annual?.months_scored ?? 0) > 0) && (
         <div className="card p-4">
           <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-ink-800">
             <LineChart className="h-4 w-4 text-ink-400" /> My score, month by month
@@ -379,6 +401,17 @@ export default function Dashboard() {
           </Suspense>
         </div>
       )}
+
+      {/* Where I stand in my manager's team (0262–0268); back from its draft on the user's word, 6 Nov: "bring back the
+          team card on dashboard". */}
+      <Suspense fallback={null}>
+        <TeamStanding fy={fy} hasEsms={hasEsms}
+          yearSplit={annual ? { job: annual.avg_job_role_score, esms: annual.avg_esms_score, core: annual.avg_core_values_score } : null}
+          monthSplit={mo => {
+            const s = (history ?? []).find(h => h.period_month === mo && SCORED.has(h.status))
+            return s ? { job: s.final_job_role_score, esms: s.final_esms_score, core: s.final_core_score } : null
+          }} />
+      </Suspense>
 
       {/* ---- what to work on ---- */}
       {(annual?.months_scored ?? 0) > 0 && (

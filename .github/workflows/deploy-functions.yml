@@ -54,7 +54,9 @@ jobs:
       - name: Deploy every function under supabase/functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: emuvmihfbnndhbpsndvc
+          # The shared project. Set the repository variable SUPABASE_PROJECT_REF when
+          # the database moves; the default is Mumbai (moved from Tokyo 21 Nov 2026).
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ejtylrqwvxatbrifksbb' }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
@@ -72,7 +74,10 @@ jobs:
             name="$(basename "$dir")"
             [ -f "$dir/index.ts" ] || continue
             echo "--- deploying $name"
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF"
+            # Webhooks, cron and mail callers send no sign-in: these stay open (as live, 21 Nov 2026).
+            open=""
+            case " task-mail travel-mail travel-photos bemp-ticket place-link qt-mail push mail-events whatsapp-webhook " in *" $name "*) open="--no-verify-jwt";; esac
+            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --yes $open
             found=$((found + 1))
           done
 

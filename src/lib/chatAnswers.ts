@@ -78,7 +78,7 @@ export interface AnswerContext {
     attainment_pct: number | null
   }>
   /** The five core values rated separately, month by month. */
-  coreTrend?: Array<{ core_value_id: string; period_month: string; rating: string | null }>
+  coreTrend?: Array<{ core_value_id: string; period_month: string; rating: string | null; points?: number | null }>
   coreValues?: Array<{ id: string; name: string }>
   /**
    * From kpi_ranking. The team rank is counted against the manager's
@@ -419,12 +419,12 @@ export function answerFact(id: FactId, ctx: AnswerContext): string {
 
     case 'core.weakest':
     case 'core.declining': {
-      const trend = (ctx.coreTrend ?? []).filter(r => r.rating)
+      const trend = (ctx.coreTrend ?? []).filter(r => r.rating || r.points != null)
       const names = new Map((ctx.coreValues ?? []).map(v => [v.id, v.name]))
       if (trend.length === 0) return t('core.none')
       const points = trend.map(r => ({
         id: r.core_value_id, period_month: r.period_month,
-        value: ratingToPoints(r.rating) ?? 0,
+        value: r.points ?? ratingToPoints(r.rating) ?? 0,
       }))
       const ids = [...new Set(points.map(p => p.id))]
 

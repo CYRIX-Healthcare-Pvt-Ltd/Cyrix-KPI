@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { htmlToMd } from '@/lib/htmlToMd'
 import clsx from 'clsx'
 import DurationPicker from '@/components/DurationPicker'
 import DigestPreview, { type PreviewPost } from '@/components/DigestPreview'
-import FormBuilder, { blankQuestion, type Question } from '@/components/FormBuilder'
+import FormBuilder, { blankQuestion, blankQuizQuestion, subFrom, subRule, type Question } from '@/components/FormBuilder'
 import DigestAccess from '@/components/DigestAccess'
 import MultiPick from '@/components/MultiPick'
+import DigestSendTo from '@/components/DigestSendTo'
+import { buildDigestWorkbook, type QuizScore } from '@/lib/digestExcel'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Newspaper, Video, ImagePlus, Loader2, Send, Pencil, Trash2, ChevronDown, ChevronRight, Heart, MessageCircle, MousePointerClick, X, Search, BarChart3, Plus,
-  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing,
+  Megaphone, TriangleAlert, Pin, Briefcase, Eye, ClipboardList, FileText, PlayCircle, FlaskConical, BellRing, Trophy, EyeOff, Shuffle, RotateCcw, Check, Undo2, ChevronLeft,
 } from 'lucide-react'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { Alert } from '@/components/ui'
@@ -21,13 +23,32 @@ import { Alert } from '@/components/ui'
  * post shows its likes and comments, and a meeting shows who clicked Join,
  * how often, first and last.
  */
-type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form' | 'video'
+type Kind = 'news' | 'announcement' | 'alert' | 'notice' | 'vacancy' | 'meeting' | 'poll' | 'form' | 'video' | 'quiz'
 /** Every kind, its word and its icon (0170; the user: "announcement, alerts, notice, vacancy"). */
 const KINDS: Array<[Kind, string, typeof Newspaper]> = [
   ['news', 'News', Newspaper], ['announcement', 'Announcement', Megaphone], ['alert', 'Alert', TriangleAlert],
   ['notice', 'Notice', Pin], ['vacancy', 'Vacancy', Briefcase], ['meeting', 'Meeting', Video], ['poll', 'Poll', BarChart3],
-  ['form', 'Form', ClipboardList], ['video', 'Video', PlayCircle],
+  ['form', 'Form', ClipboardList], ['quiz', 'Quiz', Trophy], ['video', 'Video', PlayCircle],
 ]
+/** Each kind starts in a colour of its own (the user, 5 Nov: "every modules default color is purple, for each make it unique"). */
+const KIND_COLOR: Record<Kind, string> = {
+  news: 'blue', announcement: 'orange', alert: 'red', notice: 'amber', vacancy: 'teal', meeting: 'green',
+  poll: 'pink', form: 'violet', quiz: '#4f46e5', video: '#0891b2',
+}
+/** A quiz timer as typed, in minutes.seconds (0258; the user, 5 Nov: "0.2 mins means 20 secs"): seconds, or null for none, or NaN. */
+const timerSeconds = (t: string): number | null => {
+  const v = t.trim()
+  if (!v) return null
+  const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(v)
+  if (!m) return NaN
+  const sec = m[2] === undefined ? 0 : m[2].length === 1 ? Number(m[2]) * 10 : Number(m[2])
+  const total = Number(m[1]) * 60 + sec
+  return sec < 60 && total >= 5 && total <= 36000 ? total : NaN
+}
+const timerText = (sec: number) => [Math.floor(sec / 60) && `${Math.floor(sec / 60)} min`, sec % 60 && `${sec % 60} sec`].filter(Boolean).join(' ')
+const timerTyped = (sec: number | null) => (sec == null ? '' : `${Math.floor(sec / 60)}${sec % 60 ? '.' + (sec % 10 === 0 ? sec % 60 / 10 : String(sec % 60).padStart(2, '0')) : ''}`)
+/** A form or a quiz: questions, answers, a closing time (0181, 0253). */
+const ASKS = (k: Kind) => k === 'form' || k === 'quiz'
 const kindOf = (k: Kind) => KINDS.find(([x]) => x === k) ?? KINDS[0]
 /** The kinds that are like news: words, a picture, likes. */
 const LIKABLE = new Set<Kind>(['news', 'announcement', 'alert', 'notice', 'vacancy', 'video'])
@@ -51,6 +72,8 @@ const HUES: Array<[Hue, string, string]> = [
 ]
 /** More ready-made ones, stored as their colour. */
 const MORE: Hue[] = ['#4f46e5', '#0891b2', '#65a30d', '#a16207', '#be123c', '#334155']
+/** A colour as one solid #rrggbb: a named one's deeper end, or the colour itself. */
+const solid = (h: Hue) => HUES.find(([k]) => k === h)?.[2] ?? (/^#[0-9a-f]{6}$/i.test(h) ? h : '#7c3aed')
 const grad = (h: Hue) => {
   const x = HUES.find(([k]) => k === h)
   if (x) return `linear-gradient(135deg, ${x[1]}, ${x[2]})`
@@ -64,7 +87,9 @@ const grad = (h: Hue) => {
 interface Row {
   id: string; kind: Kind; title: string; body: string; image_url: string | null; color: Hue
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
-  posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
+  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null; created_at: string; likes: number; comments: number; joined: number; clicks: number
+  /** Waiting for SW Admin, or sent back with SW Admin's reason (0299). */
+  approval?: 'pending' | 'returned' | null; approval_note?: string | null
   /** Posted by this desk: only then can it be edited or deleted (0165). */
   mine: boolean
   /** This desk may edit it: it posted it, or the poster shared it (0183). */
@@ -94,6 +119,12 @@ interface Draft {
   hadLink: boolean
   /** A form's questions (0181). Its closing time is `closes`, as a poll's is. */
   questions: Question[]
+  /** A form that keeps no names with its answers (0254), and whether people have sent it (the choice is then fixed). */
+  anonymous: boolean; answered: boolean
+  /** Each person may submit again until it closes (0256; the user, 5 Nov: default off). */
+  again: boolean
+  /** A quiz's order per person and its timer as typed, minutes.seconds (0258). */
+  shuffle: boolean; timer: string
   /** Already out to people (0182): publishing it again is an edit, and a link added to it is news. */
   wasPublished: boolean
   /** Minutes before the start that Join opens (0185). */
@@ -104,14 +135,16 @@ interface Draft {
   options: string[]; multi: boolean; closes: string
   /** A vacancy (0170): where, apply by, and how to apply. */
   vloc: string; vby: string; vlink: string
-  /** Show until (0177; the user, 12 Oct: "till which date this post should be there", optional). */
+  /** Show until (0177): a date, or 'forever' — required (the user, 2 Nov: "show until mandatory ... date and forever"). */
   until: string
+  /** Send to (0242): everyone, or the chosen functions, teams and people. */
+  to: 'all' | 'chosen'; direct: string[]; fns: string[]; mgrs: string[]; ecodes: string[]; exclude: string[]
 }
-const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: 'violet', date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '' }
+const EMPTY: Draft = { id: null, kind: 'news', title: '', body: '', image_url: null, pdf_url: null, pdf_name: null, color: KIND_COLOR.news, date: '', minutes: 60, link: '', place: '', hasLink: false, hadLink: false, questions: [blankQuestion()], anonymous: false, answered: false, again: false, shuffle: false, timer: '', wasPublished: false, joinEarly: 15, video: '', options: ['', ''], multi: false, closes: '', vloc: '', vby: '', vlink: '', until: '', to: 'all', direct: [], fns: [], mgrs: [], ecodes: [], exclude: ['E1', 'E2', 'E3'] }
 const local = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const fmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 // On screen with am/pm (the user, 15 Oct); the download keeps 24-hour fmt.
-const fmtAmPm = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/(am|pm)/i, m => m.toUpperCase())
+const fmtAmPm = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\b(am|pm)\b/i, m => m.toUpperCase())
 
 /** A photo, made no bigger than it needs to be, into the public digest bucket. */
 async function upload(file: File): Promise<string> {
@@ -155,7 +188,7 @@ export default function DigestAdmin() {
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
-  const [notify, setNotify] = useState<Pick<Row, 'id' | 'title'> | null>(null)
+  const [notify, setNotify] = useState<(Pick<Row, 'id' | 'title'> & { posted_as?: string }) | null>(null)
   /*
     A draft sent as a test to a few people first (0187; the user, 13 Oct: "they want to test the
     link, whether it is opening or not … select the participants entering name or ecode").
@@ -185,8 +218,10 @@ export default function DigestAdmin() {
   // Which desk this is, for "posted by" in the preview.
   const { data: desk } = useQuery({
     queryKey: ['digest', 'desk'],
-    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | null) ?? 'hr',
+    queryFn: async () => ((await supabase.rpc('digest_can_post')).data as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw' | null) ?? 'hr',
   })
+  // SW Admin publishes at once; everybody else's first publishing waits for SW Admin (0299).
+  const { data: isSw = false } = useQuery({ queryKey: ['is_sw_admin'], staleTime: 10 * 60_000, queryFn: async () => !!(await supabase.rpc('is_sw_admin')).data })
   const [open, setOpen] = useState<string | null>(null)
   // Finding a post (the user, 10 Oct: "search and filter dates also").
   const [q, setQ] = useState('')
@@ -217,11 +252,16 @@ export default function DigestAdmin() {
       if (error) throw new Error(friendlyError(error))
       // A poll ends when it closes, a vacancy on its Apply by (0178), a meeting once it is over (0179):
       // no Show until for them.
-      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || d.kind === 'form'
+      const ownEnd = d.kind === 'poll' || d.kind === 'vacancy' || d.kind === 'meeting' || ASKS(d.kind)
       const { error: pe0 } = await supabase.rpc('digest_set_pdf', { p_id: id, p_url: d.pdf_url ?? '', p_name: d.pdf_name ?? '' })
       if (pe0) throw new Error(friendlyError(pe0))
-      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd ? null : d.until || null })
+      const { error: ue } = await supabase.rpc('digest_set_until', { p_id: id, p_until: ownEnd || d.until === 'forever' ? null : d.until || null })
       if (ue) throw new Error(friendlyError(ue))
+      const chosen = d.to === 'chosen'
+      const { error: ae } = await supabase.rpc('digest_set_audience', {
+        p_id: id, p_functions: chosen ? d.fns : [], p_managers: chosen ? d.mgrs : [], p_ecodes: chosen ? d.ecodes : [], p_direct: chosen ? d.direct : [], p_exclude: d.exclude,
+      })
+      if (ae) throw new Error(friendlyError(ae))
       if (d.kind === 'vacancy') {
         const { error: ve } = await supabase.rpc('digest_set_vacancy', {
           p_id: id, p_location: d.vloc, p_apply_by: d.vby || null, p_apply_link: d.vlink,
@@ -239,10 +279,33 @@ export default function DigestAdmin() {
       if (d.kind === 'form') {
         const { error: fe } = await supabase.rpc('digest_set_form', {
           p_id: id,
-          p_questions: d.questions.map(q => ({ ...q, label: q.label.trim(), options: q.options.map(o => o.trim()).filter(Boolean) })),
+          p_questions: d.questions.map(q => ({ ...q, label: q.label.trim(), options: q.options.map(o => o.trim()).filter(Boolean),
+            subs: (q.subs ?? []).map(sq => ({ id: sq.id, label: sq.label.trim(), ...subRule(sq, q.qtype) })) })),
           p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
         })
         if (fe) throw new Error(friendlyError(fe))
+        const { error: ne } = await supabase.rpc('digest_set_form_anonymous', { p_id: id, p_on: d.anonymous })
+        if (ne) throw new Error(friendlyError(ne))
+      }
+      if (ASKS(d.kind)) {
+        const { error: ge } = await supabase.rpc('digest_set_allow_again', { p_id: id, p_on: d.again && !(d.kind === 'form' && d.anonymous) })
+        if (ge) throw new Error(friendlyError(ge))
+      }
+      if (d.kind === 'quiz') {
+        const { error: qe } = await supabase.rpc('digest_set_quiz', {
+          p_id: id,
+          p_questions: d.questions.map(q => {
+            const opts = q.options.map(o => o.trim())
+            return q.qtype === 'short'
+              ? { id: q.id, label: q.label.trim(), qtype: q.qtype, options: [], correct: (q.accepted ?? []).map(a => a.trim()).filter(Boolean), points: q.points ?? 1 }
+              : { id: q.id, label: q.label.trim(), qtype: q.qtype, options: opts.filter(Boolean),
+                  correct: (q.right ?? []).map(k => opts[k]).filter(Boolean), points: q.points ?? 1 }
+          }),
+          p_closes_at: d.closes ? new Date(d.closes).toISOString() : null,
+        })
+        if (qe) throw new Error(friendlyError(qe))
+        const { error: oe } = await supabase.rpc('digest_set_quiz_options', { p_id: id, p_shuffle: d.shuffle, p_seconds: timerSeconds(d.timer) })
+        if (oe) throw new Error(friendlyError(oe))
       }
       if (d.kind === 'poll') {
         const { error: pe } = await supabase.rpc('digest_set_poll', {
@@ -260,7 +323,7 @@ export default function DigestAdmin() {
       // Publishing tells everybody, a new post or an edit alike, in the same words (the user,
       // 12 Oct: "for editing also notification should go", "updated title not needed").
       const { data: sent } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: id, link_added: linkAdded } })
-      return { publish, id: id as string, isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0 }
+      return { publish, id: id as string, isNew, linkAdded, people: (sent as { people?: number } | null)?.people ?? 0, waiting: !!(sent as { waiting?: boolean } | null)?.waiting }
     },
     onSuccess: r => {
       qc.invalidateQueries({ queryKey: ['digest_admin'] })
@@ -271,11 +334,54 @@ export default function DigestAdmin() {
         setDraftSaved(true)
         return
       }
+      if (r.waiting) { setDone('Sent to SW Admin for approval. It goes out once approved.'); setD(EMPTY); setDraftSaved(false); return }
       setDone(r.linkAdded ? `Published. ${r.people} people were told the meeting link is ready.` : `Published. ${r.people} people were notified.`)
       setD(EMPTY)
       setDraftSaved(false)
     },
   })
+  /** A post opened for changing: the poster's own, or one waiting for SW Admin (0299). */
+  const loadEdit = async (r: Row) => {
+                  const form = r.kind === 'form'
+                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; answered: number; parent_id?: string | null; required_if?: string | null }> | null) ?? []
+                    : r.kind === 'quiz'
+                    ? (((await supabase.rpc('digest_quiz', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null; correct: string[] | null }> | null) ?? [])
+                        .map(q => ({ ...q, required: true, answered: 0, right: q.options.flatMap((o, k) => (q.correct?.includes(o) ? [k] : [])), accepted: q.qtype === 'short' ? q.correct ?? [''] : undefined }))
+                    : []
+                  const anonymous = r.kind === 'form' && !!(await supabase.rpc('digest_form_is_anonymous', { p_id: r.id })).data
+                  const again = ASKS(r.kind) && !!(await supabase.rpc('digest_allow_again', { p_id: r.id })).data
+                  const qset = r.kind === 'quiz' ? (await supabase.rpc('digest_quiz_settings', { p_id: r.id })).data as { shuffle: boolean; seconds: number | null } | null : null
+                  const answered = r.kind === 'quiz'
+                    ? !!((await supabase.rpc('digest_quiz_scores', { p_id: r.id })).data as unknown[] | null)?.length
+                    : (form[0]?.answered ?? 0) > 0
+                  const poll = r.kind === 'poll'
+                    ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
+                    : []
+                  const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
+                  setTesters(tested); setTesting(tested.length > 0)
+                  const aud = (await supabase.rpc('digest_audience', { p_id: r.id })).data as { functions: string[]; managers: string[]; ecodes: string[]; direct?: string[]; exclude?: string[]; everyone?: boolean } | null
+                  setDraftSaved(false)
+                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
+                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
+                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
+                    questions: form.length ? form.filter(q => !('parent_id' in q && q.parent_id)).map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required, right: q.right, points: q.points, accepted: q.accepted,
+                      subs: form.filter(x => 'parent_id' in x && x.parent_id === q.id).map(x => subFrom({ id: x.id, label: x.label, required: x.required, required_if: ('required_if' in x ? x.required_if : null) ?? null })) })) : [r.kind === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+                    anonymous, answered, again, shuffle: !!qset?.shuffle, timer: timerTyped(qset?.seconds ?? null),
+                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || ASKS(r.kind) ? '' : r.show_until ?? 'forever',
+                    to: aud && !aud.everyone ? 'chosen' : 'all', direct: aud?.direct ?? [], fns: aud?.functions ?? [], mgrs: aud?.managers ?? [], ecodes: aud?.ecodes ?? [], exclude: aud?.exclude ?? [] })
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  // Opened from SW Admin → Digest → Approvals with ?edit= (0299): that post, once the list is in.
+  const editAsked = useRef(false)
+  useEffect(() => {
+    if (editAsked.current || !rows) return
+    const id = new URLSearchParams(window.location.search).get('edit')
+    if (!id) return
+    editAsked.current = true
+    const r = rows.find(x => x.id === id)
+    if (r) void loadEdit(r)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.rpc('digest_remove', { p_id: id })
@@ -316,7 +422,15 @@ export default function DigestAdmin() {
   if (d.kind === 'video' && !youTubeId(d.video)) missing.push('YouTube link')
   if (d.kind === 'form') {
     if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
+    if (d.questions.some(q => (q.subs ?? []).some(sq => !sq.label.trim()))) missing.push('every sub-question')
     if (d.questions.some(q => (q.qtype === 'one' || q.qtype === 'many') && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
+    if (!d.closes) missing.push('Closes')
+  }
+  if (d.kind === 'quiz') {
+    if (Number.isNaN(timerSeconds(d.timer))) missing.push('Timer')
+    if (!d.questions.length || d.questions.some(q => !q.label.trim())) missing.push('every question')
+    if (d.questions.some(q => q.qtype !== 'short' && q.options.filter(o => o.trim()).length < 2)) missing.push('two choices for each choice question')
+    if (d.questions.some(q => q.qtype === 'short' ? !(q.accepted ?? []).some(a => a.trim()) : !(q.right ?? []).some(k => q.options[k]?.trim()))) missing.push('the correct answer for each question')
     if (!d.closes) missing.push('Closes')
   }
   if (d.kind === 'meeting') {
@@ -324,6 +438,8 @@ export default function DigestAdmin() {
     if (!(d.minutes >= 5 && d.minutes <= 600)) missing.push('Duration')
     if (d.hasLink && !/^https:\/\//.test(d.link.trim())) missing.push('Meeting link')
   }
+  if (d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && !ASKS(d.kind) && !d.until) missing.push('Show until')
+  if (d.to === 'chosen' && !d.direct.length && !d.fns.length && !d.mgrs.length && !d.ecodes.length) missing.push('Send to')
   const ready = missing.length === 0
 
   const previewPost: PreviewPost = {
@@ -354,9 +470,15 @@ export default function DigestAdmin() {
       <div className="card space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
           {KINDS.map(([k, word, Icon]) => (
-            <button key={k} type="button" onClick={() => set({ kind: k })}
+            <button key={k} type="button" onClick={() => set({
+              kind: k,
+              color: d.color === KIND_COLOR[d.kind] ? KIND_COLOR[k] : d.color,
+              questions: (k === 'quiz') === (d.kind === 'quiz') ? d.questions : [k === 'quiz' ? blankQuizQuestion() : blankQuestion()],
+            })}
+              // The chosen kind in its own colour (the user, 5 Nov: "the default color should come in tab selection also").
+              style={d.kind === k ? { background: grad(KIND_COLOR[k]) } : undefined}
               className={clsx('inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium',
-                d.kind === k ? 'border-violet-600 bg-violet-600 text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-violet-400 hover:text-violet-700')}>
+                d.kind === k ? 'border-transparent text-white shadow-sm' : 'border-ink-300 text-ink-700 hover:border-ink-500 hover:text-ink-900')}>
               <Icon className="h-4 w-4" />
               {word}
             </button>
@@ -378,6 +500,53 @@ export default function DigestAdmin() {
           <textarea id="dg-body" className="input min-h-[110px]" maxLength={4000} value={d.body} onChange={e => set({ body: e.target.value })}
             onPaste={e => { const h = e.clipboardData.getData('text/html'); if (!h) return; e.preventDefault(); const t = e.currentTarget, md = htmlToMd(h), v = t.value.slice(0, t.selectionStart) + md + t.value.slice(t.selectionEnd); set({ body: v.slice(0, 4000) }) }}
             placeholder={d.kind === 'meeting' ? 'Q2 results, new modules and questions' : d.kind === 'vacancy' ? 'Two years in equipment repair; field travel' : 'Lunch, rangoli and prizes on 30 Oct'} />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <span className="label">Colour</span>
+            <div className="flex flex-wrap gap-2">
+              {[...HUES.map(([h]) => h), ...MORE].map(h => (
+                <button key={h} type="button" onClick={() => set({ color: h })} aria-label={h}
+                  className={clsx('h-8 w-8 rounded-full transition-transform hover:scale-110', d.color === h && 'ring-2 ring-offset-2 ring-offset-surface')}
+                  style={{ background: grad(h), ['--tw-ring-color' as string]: solid(h) }} />
+              ))}
+              {/* Any colour at all. */}
+              <label title="Custom colour"
+                className={clsx('relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border-2 border-dashed border-ink-400 transition-transform hover:scale-110',
+                  d.color.startsWith('#') && !MORE.includes(d.color) && 'ring-2 ring-offset-2 ring-offset-surface')}
+                style={d.color.startsWith('#') && !MORE.includes(d.color) ? { background: grad(d.color), borderStyle: 'solid', ['--tw-ring-color' as string]: solid(d.color) } : undefined}>
+                <Plus className="h-4 w-4 text-ink-500" />
+                <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={d.color.startsWith('#') ? d.color : '#7c3aed'}
+                  onChange={e => set({ color: e.target.value })} />
+              </label>
+            </div>
+          </div>
+          {/*
+            One button for a photo or a file (the user, 17 Oct): a picture becomes the post's photo,
+            anything else (PDF, Word, Excel...) is attached to open from the post.
+          */}
+          <div>
+            <span className="label">Photo or file</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg" style={{ background: d.image_url ? `center/cover url(${d.image_url})` : grad(d.color) }} />
+              <label className="btn-secondary cursor-pointer !px-3 !py-2 text-sm">
+                {uploading || pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                Add file
+                <input type="file" accept={'image/*,' + Object.keys(FILE_TYPES).map(x => '.' + x).join(',')} className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f?.type.startsWith('image/')) void pick(f); else void pickPdf(f) }} />
+              </label>
+              {d.image_url && <button type="button" onClick={() => set({ image_url: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove photo</button>}
+              {d.pdf_url && (
+                <span className="inline-flex items-center gap-2">
+                  <a href={d.pdf_url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 truncate text-sm text-violet-700 hover:underline">
+                    <FileText className="h-4 w-4 shrink-0" /> {d.pdf_name ?? 'File'}
+                  </a>
+                  <button type="button" onClick={() => set({ pdf_url: null, pdf_name: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         {d.kind === 'vacancy' && (
@@ -412,10 +581,12 @@ export default function DigestAdmin() {
         {d.kind === 'form' && (
           <div className="space-y-3">
             <FormBuilder questions={d.questions} onChange={questions => set({ questions })} />
-            <div className="max-w-xs">
-              <label className="label" htmlFor="dg-fcloses">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-              <input id="dg-fcloses" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
-            </div>
+          </div>
+        )}
+
+        {d.kind === 'quiz' && (
+          <div className="space-y-3">
+            <FormBuilder quiz locked={d.answered} questions={d.questions} onChange={questions => set({ questions })} />
           </div>
         )}
 
@@ -436,16 +607,6 @@ export default function DigestAdmin() {
                 <Plus className="h-4 w-4" /> Add option
               </button>
             )}
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="inline-flex items-center gap-2 text-sm text-ink-800">
-                <input type="checkbox" checked={d.multi} onChange={e => set({ multi: e.target.checked })} />
-                Multiple answers
-              </label>
-              <div>
-                <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
-                <input id="dg-closes" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
-              </div>
-            </div>
           </div>
         )}
 
@@ -490,61 +651,66 @@ export default function DigestAdmin() {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <span className="label">Colour</span>
-            <div className="flex flex-wrap gap-2">
-              {[...HUES.map(([h]) => h), ...MORE].map(h => (
-                <button key={h} type="button" onClick={() => set({ color: h })} aria-label={h}
-                  className={clsx('h-8 w-8 rounded-full transition-transform hover:scale-110', d.color === h && 'ring-2 ring-violet-500 ring-offset-2 ring-offset-surface')}
-                  style={{ background: grad(h) }} />
-              ))}
-              {/* Any colour at all. */}
-              <label title="Custom colour"
-                className={clsx('relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border-2 border-dashed border-ink-400 transition-transform hover:scale-110',
-                  d.color.startsWith('#') && !MORE.includes(d.color) && 'ring-2 ring-violet-500 ring-offset-2 ring-offset-surface')}
-                style={d.color.startsWith('#') && !MORE.includes(d.color) ? { background: grad(d.color), borderStyle: 'solid' } : undefined}>
-                <Plus className="h-4 w-4 text-ink-500" />
-                <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={d.color.startsWith('#') ? d.color : '#7c3aed'}
-                  onChange={e => set({ color: e.target.value })} />
-              </label>
-            </div>
-          </div>
-          {/*
-            One button for a photo or a file (the user, 17 Oct): a picture becomes the post's photo,
-            anything else (PDF, Word, Excel...) is attached to open from the post.
-          */}
-          <div>
-            <span className="label">Photo or file</span>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg" style={{ background: d.image_url ? `center/cover url(${d.image_url})` : grad(d.color) }} />
-              <label className="btn-secondary cursor-pointer !px-3 !py-2 text-sm">
-                {uploading || pdfBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                Add file
-                <input type="file" accept={'image/*,' + Object.keys(FILE_TYPES).map(x => '.' + x).join(',')} className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f?.type.startsWith('image/')) void pick(f); else void pickPdf(f) }} />
-              </label>
-              {d.image_url && <button type="button" onClick={() => set({ image_url: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove photo</button>}
-              {d.pdf_url && (
-                <span className="inline-flex items-center gap-2">
-                  <a href={d.pdf_url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 truncate text-sm text-violet-700 hover:underline">
-                    <FileText className="h-4 w-4 shrink-0" /> {d.pdf_name ?? 'File'}
-                  </a>
-                  <button type="button" onClick={() => set({ pdf_url: null, pdf_name: null })} className="text-sm text-ink-500 hover:text-ink-800">Remove</button>
-                </span>
+        {/* Settings and Send to side by side on a computer (the user, 18 Nov: "do we need to use this much space?"). */}
+        <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
+        {/* Every setting together, the same way for every kind (the user, 5 Nov: "tidy the area not only in quiz, all are messed up"). */}
+        {(d.kind === 'poll' || ASKS(d.kind) || (d.kind !== 'vacancy' && d.kind !== 'meeting')) && (
+          <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
+            <span className="label">Settings</span>
+            <div className="mt-1 grid gap-4 sm:auto-cols-max sm:grid-flow-col">
+              {(d.kind === 'poll' || ASKS(d.kind)) ? (
+                <div>
+                  <label className="label" htmlFor="dg-closes">Closes <span className="text-cyrixRed-600" aria-hidden>*</span></label>
+                  <input id="dg-closes" type="datetime-local" className="input" value={d.closes} onChange={e => set({ closes: e.target.value })} />
+                </div>
+              ) : (
+                <div>
+                  <span className="label">Show until <span className="text-red-600">*</span></span>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(['date', 'forever'] as const).map(m => {
+                      const on = m === 'forever' ? d.until === 'forever' : d.until !== '' && d.until !== 'forever'
+                      return <button key={m} type="button" aria-pressed={on}
+                        className={on ? 'btn-primary justify-center' : 'btn-secondary justify-center'}
+                        onClick={() => set({ until: m === 'forever' ? 'forever' : on ? d.until : new Date(Date.now() + 330 * 60_000 + 7 * 86_400_000).toISOString().slice(0, 10) })}>
+                        {m === 'date' ? 'Date' : 'Forever'}
+                      </button>
+                    })}
+                  </div>
+                  {d.until !== '' && d.until !== 'forever' && <input id="dg-until" type="date" className="input mt-2 max-w-xs" value={d.until}
+                    min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
+                    onChange={e => set({ until: e.target.value || d.until })} />}
+                </div>
+              )}
+              {d.kind === 'quiz' && (
+                <div>
+                  <label className="label" htmlFor="dg-timer">
+                    Timer · minutes{timerSeconds(d.timer) ? <span className="ml-1 normal-case tracking-normal text-ink-500">= {timerText(timerSeconds(d.timer)!)}</span> : null}
+                  </label>
+                  <input id="dg-timer" className={clsx('input', Number.isNaN(timerSeconds(d.timer)) && '!border-cyrixRed-500')} inputMode="decimal" placeholder="No timer" value={d.timer}
+                    disabled={d.answered}
+                    // Minutes, then seconds after the dot: 0.2 is 20 sec, 1.45 is 1 min 45 sec; .6 and over cannot be typed.
+                    onChange={e => { const v = e.target.value.replace(',', '.'); if (/^\d{0,3}(\.([0-5]\d?)?)?$/.test(v)) set({ timer: v }) }} />
+                </div>
               )}
             </div>
+            {(d.kind === 'poll' || ASKS(d.kind)) && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {d.kind === 'poll' && <Tick on={d.multi} onChange={multi => set({ multi })} label="Multiple answers" />}
+                {d.kind === 'form' && <Tick on={d.anonymous} disabled={d.answered} onChange={anonymous => set({ anonymous })} label="Anonymous · no name or E-code kept" icon={EyeOff} />}
+                {d.kind === 'quiz' && <Tick on={d.shuffle} onChange={shuffle => set({ shuffle })} label="Shuffle questions and choices" icon={Shuffle} />}
+                {ASKS(d.kind) && !(d.kind === 'form' && d.anonymous) && <Tick on={d.again} onChange={again => set({ again })} label="Allow submitting again" icon={RotateCcw} />}
+              </div>
+            )}
           </div>
+        )}
+
+        <div className={clsx('min-w-0', !(d.kind === 'poll' || ASKS(d.kind) || (d.kind !== 'vacancy' && d.kind !== 'meeting')) && 'lg:col-span-2')}>
+        <DigestSendTo to={d.to} value={{ direct: d.direct, fns: d.fns, mgrs: d.mgrs, ecodes: d.ecodes, exclude: d.exclude }}
+          onTo={to => set({ to })} onChange={a => set(a)} hue={solid(d.color)} />
+        </div>
         </div>
 
-        {d.kind !== 'poll' && d.kind !== 'vacancy' && d.kind !== 'meeting' && d.kind !== 'form' && <div className="max-w-xs">
-          <label className="label" htmlFor="dg-until">Show until · optional</label>
-          <input id="dg-until" type="date" className="input" value={d.until}
-            min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)}
-            onChange={e => set({ until: e.target.value })} />
-        </div>}
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-ink-200 pt-4">
         <button type="button" className="btn-secondary" disabled={!ready || draftSaved || save.isPending || uploading}
           onClick={() => { setDone(null); save.mutate(false) }}>
           {save.isPending && save.variables === false ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
@@ -552,7 +718,7 @@ export default function DigestAdmin() {
         </button>
         <button type="button" className="btn-primary" disabled={!ready || save.isPending || uploading} onClick={() => { setDone(null); save.mutate(true) }}>
           {save.isPending && save.variables === true ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {ready ? 'Publish' : `Fill in ${missing.join(', ')}`}
+          {ready ? (isSw || d.wasPublished ? 'Publish' : 'Send for approval') : `Fill in ${missing.join(', ')}`}
         </button>
         <button type="button" className="btn-secondary" onClick={() => setPreviewing(true)}>
           <Eye className="h-4 w-4" /> Preview
@@ -561,7 +727,7 @@ export default function DigestAdmin() {
           <FlaskConical className="h-4 w-4" /> Send test
         </button>
         {d.id && d.wasPublished && (
-          <button type="button" className="btn-secondary" onClick={() => setNotify({ id: d.id!, title: d.title })}>
+          <button type="button" className="btn-secondary" onClick={() => setNotify({ id: d.id!, title: d.title, posted_as: rows?.find(x => x.id === d.id)?.posted_as })}>
             <BellRing className="h-4 w-4 text-amber-500" /> Send notification
           </button>
         )}
@@ -583,8 +749,8 @@ export default function DigestAdmin() {
         )}
         {previewing && (
           <DigestPreview post={previewPost} options={d.options.filter(o => o.trim())} multi={d.multi}
-            closes={(d.kind === 'poll' || d.kind === 'form') && d.closes ? new Date(d.closes).toISOString() : null}
-            questions={d.kind === 'form' ? d.questions : []}
+            closes={(d.kind === 'poll' || ASKS(d.kind)) && d.closes ? new Date(d.closes).toISOString() : null}
+            questions={ASKS(d.kind) ? d.questions : []} anonymous={d.kind === 'form' && d.anonymous} again={d.again && !(d.kind === 'form' && d.anonymous)} quiz={d.kind === 'quiz' ? { shuffle: d.shuffle, seconds: timerSeconds(d.timer) || null } : undefined}
             onClose={() => setPreviewing(false)} />
         )}
       </div>
@@ -629,18 +795,21 @@ export default function DigestAdmin() {
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink-900">
-                      {!r.published_at && <span className="badge mr-1.5 bg-amber-100 text-amber-800">Draft</span>}
+                      {r.approval === 'pending' ? <span className="badge mr-1.5 bg-sky-100 text-sky-800">Waiting for SW Admin</span>
+                        : r.approval === 'returned' ? <span className="badge mr-1.5 bg-cyrixRed-50 text-cyrixRed-700">Sent back</span>
+                        : !r.published_at && <span className="badge mr-1.5 bg-amber-100 text-amber-800">Draft</span>}
                       {r.title}
                     </span>
                     <span className="block text-xs text-ink-500">
-                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {r.posted_as === 'it' ? 'IT' : r.posted_as === 'mkt' ? 'Marketing' : 'HR'} · {fmt(r.created_at)}
+                      {r.kind === 'meeting' ? `Meeting · ${fmt(r.meet_at!)}` : kindOf(r.kind)[1]} · {DESK_WORD[r.posted_as] ?? 'HR'} · {fmt(r.created_at)}
                       {!r.mine && <span className="ml-1.5 font-medium text-violet-700">· Shared with you</span>}
-                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => (x === 'it' ? 'IT' : x === 'mkt' ? 'Marketing' : 'HR')).join(', ')}</span>}
+                      {r.mine && r.editors.length > 0 && <span className="ml-1.5">· Shared with {r.editors.map(x => DESK_WORD[x as keyof typeof DESK_WORD] ?? x).join(', ')}</span>}
                       {r.show_until && (r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
                         ? <span className="ml-1.5 font-medium text-ink-500">· Ended {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                         // A meeting already says its date.
                         : r.kind !== 'meeting' && <span className="ml-1.5">· Until {new Date(r.show_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>)}
                     </span>
+                    {r.approval === 'returned' && r.approval_note && <span className="block text-xs font-medium text-cyrixRed-700">SW Admin: {r.approval_note}</span>}
                   </span>
                 </button>
                 <span className="hidden shrink-0 items-center gap-3 text-xs text-ink-600 sm:flex">
@@ -649,23 +818,8 @@ export default function DigestAdmin() {
                   {r.kind === 'meeting' && <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3.5 w-3.5" /> {r.joined}</span>}
                   <span className="inline-flex items-center gap-1" title="Opened"><Eye className="h-3.5 w-3.5" /> {r.opened ?? 0}</span>
                 </span>
-                {r.can_edit && <button type="button" title="Edit" className="btn-icon" onClick={async () => {
-                  const form = r.kind === 'form'
-                    ? ((await supabase.rpc('digest_form', { p_id: r.id })).data as Array<Question & { id: string; closes_at: string | null }> | null) ?? []
-                    : []
-                  const poll = r.kind === 'poll'
-                    ? ((await supabase.rpc('digest_poll', { p_id: r.id })).data as Array<{ label: string; multi: boolean; closes_at: string | null }> | null) ?? []
-                    : []
-                  const tested = r.published_at ? [] : ((await supabase.rpc('digest_testers', { p_id: r.id })).data as string[] | null) ?? []
-                  setTesters(tested); setTesting(tested.length > 0)
-                  setDraftSaved(false)
-                  setD({ id: r.id, kind: r.kind, title: r.title, body: r.body, image_url: r.image_url, pdf_url: r.pdf_url, pdf_name: r.pdf_name, color: r.color,
-                    date: r.meet_at ? local(r.meet_at) : '', minutes: r.meet_minutes ?? 60, link: r.meet_link ?? '', place: r.meet_place ?? '', hasLink: !!r.meet_link, hadLink: !!r.meet_link, wasPublished: !!r.published_at, joinEarly: r.join_early ?? 15, video: r.video_id ? `https://youtu.be/${r.video_id}` : '',
-                    options: poll.length ? poll.map(o => o.label) : ['', ''], multi: !!poll[0]?.multi, closes: poll[0]?.closes_at ? local(poll[0].closes_at) : form[0]?.closes_at ? local(form[0].closes_at) : '',
-                    questions: form.length ? form.map(q => ({ id: q.id, label: q.label, qtype: q.qtype, options: q.options ?? [], required: q.required })) : [blankQuestion()],
-                    vloc: r.vac_location ?? '', vby: r.apply_by ? r.apply_by.slice(0, 10) : '', vlink: r.apply_link ?? '', until: r.kind === 'poll' || r.kind === 'vacancy' || r.kind === 'meeting' || r.kind === 'form' ? '' : r.show_until ?? '' })
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}><Pencil className="h-4 w-4" /></button>}
+                {/* A labelled button, not a bare pencil (the user, 6 Nov: "edit button not clearly visible for users"). */}
+                {r.can_edit && <button type="button" className="btn-secondary shrink-0 !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => void loadEdit(r)}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
                 {r.can_edit && r.published_at && !(r.show_until && r.show_until < new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)) && !(r.kind === 'meeting' && r.meet_at && new Date(r.meet_at).getTime() + (r.meet_minutes ?? 60) * 60_000 < Date.now()) && <button type="button" title="Send notification" className="btn-icon text-amber-500 hover:text-amber-600" onClick={() => setNotify(r)}><BellRing className="h-4 w-4" /></button>}
                 {r.mine && <button type="button" title="Delete" className="btn-icon text-cyrixRed-600"
                   onClick={() => { if (confirm(`Delete "${r.title}" from Cyrix Digest?`)) remove.mutate(r.id) }}><Trash2 className="h-4 w-4" /></button>}
@@ -675,7 +829,7 @@ export default function DigestAdmin() {
           ))}
         </div>
       )}
-      {notify && <NotifyDialog row={notify} onClose={() => setNotify(null)} />}
+      {notify && <NotifyDialog row={notify} isSw={isSw} onClose={() => setNotify(null)} />}
     </div>
   )
 }
@@ -684,13 +838,21 @@ export default function DigestAdmin() {
   A push notification for a post already out (the user, 17 Oct): the post's heading as it is, and
   an optional second line of the desk's own. Sent to everybody's devices.
 */
-function NotifyDialog({ row, onClose }: { row: Pick<Row, 'id' | 'title'>; onClose: () => void }) {
+function NotifyDialog({ row, isSw, onClose }: { row: Pick<Row, 'id' | 'title'> & { posted_as?: string }; isSw: boolean; onClose: () => void }) {
   const [sub, setSub] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const send = async () => {
     setBusy(true); setErr(null)
+    // A desk's notification waits for SW Admin (0299).
+    if (!isSw) {
+      const { error } = await supabase.rpc('push_ask', { p_kind: 'digest', p_as: row.posted_as ?? 'hr', p_payload: { post_id: row.id, subtitle: sub.trim() }, p_title: row.title, p_body: sub.trim() })
+      setBusy(false)
+      if (error) { setErr(friendlyError(error)); return }
+      setSent('Sent to SW Admin for approval. It goes out once approved.')
+      return
+    }
     const { data, error } = await supabase.functions.invoke('push', { body: { action: 'digest', post_id: row.id, subtitle: sub.trim() } })
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -714,7 +876,7 @@ function NotifyDialog({ row, onClose }: { row: Pick<Row, 'id' | 'title'>; onClos
           <button type="button" className="btn-secondary" onClick={onClose}>{sent ? 'Close' : 'Cancel'}</button>
           {!sent && (
             <button type="button" className="btn-primary" disabled={busy} onClick={() => void send()}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} Send to everyone
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} {isSw ? 'Send to everyone' : 'Send for approval'}
             </button>
           )}
         </div>
@@ -746,10 +908,23 @@ type Person = {
 }
 type Lens = 'opened' | 'not_opened' | 'liked' | 'not_liked' | 'commented' | 'joined' | 'not_joined' | 'voted' | 'not_voted' | 'answered' | 'not_answered' | 'watched' | 'not_watched'
 
-function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
+/** A setting as a tile with its tick box (0256, 0258): the same size and look for each. */
+function Tick({ on, onChange, label, icon: Icon, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; icon?: typeof EyeOff; disabled?: boolean }) {
+  return (
+    <label className={clsx('flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-lg border bg-surface px-3 py-2 text-sm font-medium',
+      on ? 'border-ink-500 text-ink-900' : 'border-ink-200 text-ink-700', disabled && 'cursor-not-allowed opacity-60')}>
+      <input type="checkbox" className="h-4 w-4 shrink-0 accent-violet-600" checked={on} disabled={disabled} onChange={e => onChange(e.target.checked)} />
+      {Icon && <Icon className="h-4 w-4 shrink-0 text-ink-500" />}
+      {label}
+    </label>
+  )
+}
+
+export function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   const qc = useQueryClient()
   const [lens, setLens] = useState<Lens>('opened')
-  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>(null)
+  // Whoever opened it last first (the user, 9 Nov: "default sorting should be first recently opened").
+  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>({ key: 'opened', asc: false })
   const [find, setFind] = useState('')
   const { data: people } = useQuery({
     queryKey: ['digest_people', row.id],
@@ -776,8 +951,36 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   // A form's questions, for its columns.
   const { data: questions = [] } = useQuery({
     queryKey: ['digest_form_q', row.id],
+    enabled: ASKS(row.kind),
+    // A sub-question's column carries its question's wording first (0278).
+    queryFn: async () => {
+      const rows = ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string; parent_id?: string | null }>
+      return rows.map(q => (q.parent_id ? { ...q, label: `${rows.find(x => x.id === q.parent_id)?.label ?? ''} — ${q.label}` } : q))
+    },
+  })
+  // A quiz's scores (0253), by E-code.
+  const { data: scores } = useQuery({
+    queryKey: ['digest_quiz_scores', row.id],
+    enabled: row.kind === 'quiz',
+    staleTime: 0, refetchOnMount: 'always', refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('digest_quiz_scores', { p_id: row.id })
+      if (error) throw new Error(friendlyError(error))
+      return new Map(((data ?? []) as QuizScore[]).map(x => [x.ecode, x]))
+    },
+  })
+  const scoreOf = (p: Person) => scores?.get(p.ecode)
+  // An anonymous form (0254): who has answered is known, what they said comes without names.
+  const { data: anonymous = false } = useQuery({
+    queryKey: ['digest_form_anon_flag', row.id],
     enabled: row.kind === 'form',
-    queryFn: async () => ((await supabase.rpc('digest_form', { p_id: row.id })).data ?? []) as Array<{ id: string; label: string }>,
+    queryFn: async () => !!(await supabase.rpc('digest_form_is_anonymous', { p_id: row.id })).data,
+  })
+  const { data: anonAnswers = [] } = useQuery({
+    queryKey: ['digest_form_anon', row.id],
+    enabled: row.kind === 'form' && anonymous,
+    staleTime: 0, refetchOnMount: 'always', refetchInterval: 60_000,
+    queryFn: async () => (((await supabase.rpc('digest_form_anon_answers', { p_id: row.id })).data ?? []) as Array<{ answers: Record<string, unknown> }>).map(x => x.answers),
   })
   const { data: comments } = useQuery({
     queryKey: ['digest_comments', row.id],
@@ -820,7 +1023,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     ['commented', 'Commented', all.filter(test.commented).length],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join', all.filter(test.joined).length] as [Lens, string, number]] : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted', all.filter(test.voted).length] as [Lens, string, number]] : []),
-    ...(row.kind === 'form' ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
+    ...(ASKS(row.kind) ? [['answered', 'Answered', all.filter(test.answered).length] as [Lens, string, number]] : []),
     ...(row.kind === 'video' ? [['watched', 'Watched', all.filter(test.watched).length] as [Lens, string, number]] : []),
   ]
   const lenses: Array<[Lens, string]> = [
@@ -829,7 +1032,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
     ['commented', 'Commented'],
     ...(row.kind === 'meeting' ? [['joined', 'Clicked Join'], ['not_joined', 'Did not join']] as Array<[Lens, string]> : []),
     ...(row.kind === 'poll' ? [['voted', 'Voted'], ['not_voted', 'Not voted']] as Array<[Lens, string]> : []),
-    ...(row.kind === 'form' ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
+    ...(ASKS(row.kind) ? [['answered', 'Answered'], ['not_answered', 'Not answered']] as Array<[Lens, string]> : []),
     ...(row.kind === 'video' ? [['watched', 'Watched'], ['not_watched', 'Not watched']] as Array<[Lens, string]> : []),
   ]
   const f = find.trim().toLowerCase()
@@ -838,38 +1041,23 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   /** How much of the video they watched, as a whole percent, or blank. */
   const pct = (p: Person) => (p.watched_seconds && p.video_seconds ? `${Math.min(100, Math.round((p.watched_seconds / p.video_seconds) * 100))}%` : '')
   const mins = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
-  // Watch time as h:mm:ss, and everyone's together in hours (the user, 15 Oct).
-  const hms = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(Math.round(sec % 60)).padStart(2, '0')}`
   const totalWatch = all.reduce((t, p) => t + (p.watched_seconds ?? 0), 0)
-  const download = () => {
-    const yn = (b: boolean) => (b ? 'Yes' : 'No')
-    const head = ['E-code', 'Name', 'Department', 'Function', 'Reporting manager', 'Manager E-code', 'Opened', 'First opened', 'Last opened', 'Times opened',
-      ...(LIKABLE.has(row.kind) ? ['Liked', 'Liked at'] : []),
-      'Commented', 'Comments',
-      ...(row.kind === 'meeting' ? ['Clicked Join', 'Join clicks', 'First joined', 'Last joined'] : []),
-      ...(row.kind === 'poll' ? ['Voted', 'Answer'] : []),
-      ...(row.kind === 'form' ? ['Answered', 'Answered at', ...questions.map(q => q.label)] : []),
-      ...(row.kind === 'video' ? ['Watched', 'Watch time (h:mm:ss)', 'Minutes watched', 'Video minutes', 'Percent watched', 'Started'] : [])]
-    const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const lines = [head, ...all.map(p => [p.ecode, p.full_name, p.department, p.function_name, p.manager_name ?? '', p.manager_ecode ?? '',
-      yn(!!p.opened_at), p.opened_at ? fmt(p.opened_at) : '', p.last_opened ? fmt(p.last_opened) : '', p.opens,
-      ...(LIKABLE.has(row.kind) ? [yn(!!p.liked_at), p.liked_at ? fmt(p.liked_at) : ''] : []),
-      yn(p.comments > 0), p.comments,
-      ...(row.kind === 'meeting' ? [yn(p.joins > 0), p.joins, p.joined_at ? fmt(p.joined_at) : '', p.last_joined ? fmt(p.last_joined) : ''] : []),
-      ...(row.kind === 'poll' ? [yn(!!p.voted), p.voted ?? ''] : []),
-      ...(row.kind === 'form' ? [yn(!!p.answered_at), p.answered_at ? fmt(p.answered_at) : '',
-        ...questions.map(q => { const v = p.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? '' })] : []),
-      ...(row.kind === 'video' ? [yn(!!p.watched_seconds), p.watched_seconds ? hms(p.watched_seconds) : '', p.watched_seconds ? (p.watched_seconds / 60).toFixed(1) : '',
-        p.video_seconds ? (p.video_seconds / 60).toFixed(1) : '', pct(p), p.watched_at ? fmt(p.watched_at) : ''] : [])])]
+  // An Excel file in the grid and colours of the KPI and Travel exports (the user, 5 Nov: "in download, the wrapping
+  // is not proper ... make the excel format good"): long answers wrap in wide columns, everything sits at the top.
+  const download = async () => {
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = buildDigestWorkbook(new ExcelJS.Workbook(), { row, all, questions, anonymous, anonAnswers, scoreOf })
+    const buf = await wb.xlsx.writeBuffer()
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }))
-    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40)}.csv`
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    a.download = `${row.title.replace(/[^\w ]+/g, '').slice(0, 40) || 'Digest'}.xlsx`
     a.click()
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
   }
 
   return (
     <div className="space-y-4 bg-ink-50/60 px-4 py-4">
-      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt'} mine={row.mine} editors={row.editors ?? []} />
+      <DigestAccess postId={row.id} owner={row.posted_as as 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'} author={row.author} mine={row.mine} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map(([k, label, v]) => (
           <button key={k} type="button" onClick={() => setLens(k)}
@@ -910,22 +1098,23 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[12rem] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-          <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code or department" />
+          <input className="input !pl-9" value={find} onChange={e => setFind(e.target.value)} placeholder="Name, E-code, department or function" />
         </div>
         <button type="button" className="btn-secondary" onClick={() => setShowList(v => !v)}>
           {showList ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           {showList ? 'Hide names' : `Show names · ${list.length}`}
         </button>
-        <button type="button" className="btn-secondary" onClick={download} disabled={!all.length}>Download all</button>
+        <button type="button" className="btn-secondary" onClick={() => void download()} disabled={!all.length}>Download all</button>
       </div>
       {showList && (() => {
         // Every column sorts (the user, 15 Oct): click once for A–Z / earliest / fewest, again to reverse.
-        const lastKey = row.kind === 'video' ? 'watched' : LIKABLE.has(row.kind) ? 'liked' : row.kind === 'poll' ? 'voted' : row.kind === 'form' ? 'answered' : 'joins'
+        const lastKey = row.kind === 'video' ? 'watched' : LIKABLE.has(row.kind) ? 'liked' : row.kind === 'poll' ? 'voted' : ASKS(row.kind) ? 'answered' : 'joins'
         const val = (p: Person, k: string): string | number => {
           switch (k) {
             case 'name': return p.full_name.toLowerCase()
             case 'ecode': return p.ecode.toLowerCase()
             case 'dept': return (p.department ?? '').toLowerCase()
+            case 'func': return (p.function_name ?? '').toLowerCase()
             case 'opened': return p.opened_at ?? ''
             case 'last': return p.last_opened ?? ''
             case 'watched': return p.watched_seconds ?? 0
@@ -953,9 +1142,9 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-ink-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-              <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" />
+              <Th k="name" label="Name" /><Th k="ecode" label="E-code" /><Th k="dept" label="Department" /><Th k="func" label="Function" />
               <Th k="opened" label="First opened" /><Th k="last" label="Last opened" />
-              <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
+              <Th k={lastKey} label={{ watched: 'Watched', liked: 'Liked', voted: 'Answer', answered: row.kind === 'quiz' ? 'Score' : 'Answered', joins: 'Join clicks' }[lastKey]!} right={lastKey === 'joins'} />
               {lastKey === 'joins' && <><Th k="firstjoin" label="First joined" /><Th k="lastjoin" label="Last joined" /></>}
             </tr>
           </thead>
@@ -965,6 +1154,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                 <td className="px-3 py-1.5 text-ink-900">{p.full_name}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.ecode}</td>
                 <td className="px-3 py-1.5 text-ink-600">{p.department ?? '—'}</td>
+                <td className="px-3 py-1.5 text-ink-600">{p.function_name ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.opened_at ? `${fmtAmPm(p.opened_at)}${p.opens > 1 ? ` · ×${p.opens}` : ''}` : '—'}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.last_opened && p.opens > 1 ? fmtAmPm(p.last_opened) : '—'}</td>
                 {row.kind === 'video'
@@ -975,6 +1165,8 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                   ? <td className="px-3 py-1.5 text-ink-700">{p.voted ?? '—'}</td>
                   : row.kind === 'form'
                   ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? fmtAmPm(p.answered_at) : '—'}</td>
+                  : row.kind === 'quiz'
+                  ? <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.answered_at ? <><span className="font-semibold text-ink-900">{scoreOf(p)?.score ?? '…'} of {scoreOf(p)?.max_score ?? '…'}</span> · {fmtAmPm(p.answered_at)}</> : '—'}</td>
                   : <td className="px-3 py-1.5 text-right tabular-nums">{p.joins || '—'}</td>}
                 {lastKey === 'joins' && <>
                   <td className="whitespace-nowrap px-3 py-1.5 text-ink-600">{p.joined_at ? fmtAmPm(p.joined_at) : '—'}</td>
@@ -999,7 +1191,7 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
                 <p className="text-ink-700">{c.body}</p>
                 {c.reply && replying?.id !== c.id && (
                   <div className="mt-1.5 rounded-lg border-l-2 border-violet-500 bg-violet-50 px-2.5 py-1.5 dark:bg-violet-500/10">
-                    <p className="text-xs font-semibold text-violet-700">{({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Reply'}{c.reply_at ? <span className="font-normal text-ink-500"> · {fmtAmPm(c.reply_at)}</span> : null}</p>
+                    <p className="text-xs font-semibold text-violet-700">{(DESK_WORD as Record<string, string>)[c.reply_desk ?? ''] ?? 'Reply'}{c.reply_at ? <span className="font-normal text-ink-500"> · {fmtAmPm(c.reply_at)}</span> : null}</p>
                     <p className="text-ink-800">{c.reply}</p>
                   </div>
                 )}
@@ -1034,15 +1226,188 @@ function Details({ row, readOnly }: { row: Row; readOnly?: boolean }) {
   deleted ones too, so a post a desk deletes stays here as history. Read only; Details as the desks see it.
 */
 interface SwRow {
-  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt'; author: string | null
+  id: string; kind: Kind; title: string; body: string; posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null
   created_at: string; published_at: string | null; deleted_at: string | null; deleted_by: string | null
   meet_at: string | null; likes: number; comments: number; opened: number; joined: number
+  approval: 'pending' | 'returned' | null; approval_note: string | null; approval_at: string | null
   /** Over: a meeting that ended, a form or poll that closed, a post past its last day (0210). */
   ended?: boolean
 }
-const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing' } as const
+const DESK_WORD = { hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management', sw: 'Software admin' } as const
 
+/*
+  SW Admin approves what goes out (0299; the user, 19 Nov, Joy sir: "whoever posts something, before posting, they need
+  to take sw admin approval ... notification also need approval"): Approvals first, then every post.
+*/
 export function DigestHistory() {
+  const [view, setView] = useState<'approvals' | 'all' | 'edit'>('approvals')
+  const { data: waiting = 0 } = useQuery({ queryKey: ['digest_waiting_count'], refetchInterval: 60_000, queryFn: async () => ((await supabase.rpc('digest_waiting_count')).data as number | null) ?? 0 })
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-5 border-b border-ink-200" role="tablist">
+        {([['approvals', 'Approvals'], ['all', 'All posts']] as const).map(([k, word]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+            className={clsx('-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2 text-sm font-medium', view === k ? 'border-violet-600 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-800')}>
+            {word}
+            {k === 'approvals' && waiting > 0 && <span className="rounded-full bg-cyrixRed-600 px-1.5 text-xs font-semibold text-white">{waiting}</span>}
+          </button>
+        ))}
+      </div>
+      {view === 'edit' ? (
+        <div className="space-y-3">
+          <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => setView('approvals')}><ChevronLeft className="h-4 w-4" /> Approvals</button>
+          <DigestAdmin />
+        </div>
+      ) : view === 'approvals' ? <DigestApprovals onEdit={() => setView('edit')} /> : <DigestAllPosts />}
+    </div>
+  )
+}
+
+interface AskRow {
+  id: string; kind: 'send' | 'digest'; sent_as: string; payload: Record<string, unknown>; title: string; body: string; people: number | null
+  asked_by: string | null; asked_at: string; status: 'pending' | 'sent' | 'returned'; note: string | null; decided_by: string | null; decided_at: string | null
+}
+
+function DigestApprovals({ onEdit }: { onEdit: () => void }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState<string | null>(null)
+  /** The one decision being asked about: approve, or send back with a reason (decisions ask first). */
+  const [asking, setAsking] = useState<{ id: string; what: 'post' | 'note'; how: 'approve' | 'back' } | null>(null)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<{ id: string; text: string } | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const { data: posts = [], isLoading } = useQuery({
+    queryKey: ['digest_sw_list'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('digest_sw_list')
+      if (error) throw new Error(friendlyError(error))
+      return (data ?? []) as SwRow[]
+    },
+  })
+  const { data: asks = [] } = useQuery({
+    queryKey: ['push_request_list'],
+    refetchInterval: 60_000,
+    queryFn: async () => ((await supabase.rpc('push_request_list')).data ?? []) as AskRow[],
+  })
+  const waitingPosts = posts.filter(r => r.approval === 'pending' && !r.deleted_at)
+  const waitingAsks = asks.filter(a => a.status === 'pending')
+  const when = (t: string) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  const refresh = () => {
+    for (const k of ['digest_sw_list', 'push_request_list', 'digest_waiting_count', 'digest_admin']) void qc.invalidateQueries({ queryKey: [k] })
+  }
+
+  const decide = async () => {
+    if (!asking) return
+    if (asking.how === 'back' && !reason.trim()) { setErr({ id: asking.id, text: 'Type the reason' }); return }
+    setBusy(true); setErr(null)
+    let failed: string | null = null
+    if (asking.what === 'post') {
+      const { error } = asking.how === 'approve'
+        ? await supabase.rpc('digest_approve', { p_id: asking.id })
+        : await supabase.rpc('digest_send_back', { p_id: asking.id, p_reason: reason.trim() })
+      if (error) failed = friendlyError(error)
+      // Out: everybody it is for is told, as on publishing.
+      else if (asking.how === 'approve') await supabase.functions.invoke('push', { body: { action: 'digest', post_id: asking.id } })
+    } else if (asking.how === 'approve') {
+      const { error } = await supabase.functions.invoke('push', { body: { action: 'approve_request', request_id: asking.id } })
+      if (error) {
+        const ctx = (error as { context?: Response }).context
+        failed = (ctx ? (await ctx.json().catch(() => null))?.error : null) ?? 'It could not be sent. Try again.'
+      }
+    } else {
+      const { error } = await supabase.rpc('push_request_send_back', { p_id: asking.id, p_reason: reason.trim() })
+      if (error) failed = friendlyError(error)
+    }
+    setBusy(false)
+    if (failed) { setErr({ id: asking.id, text: failed }); return }
+    setDone(asking.how === 'approve' ? 'Approved and sent out.' : 'Sent back with your reason.')
+    setAsking(null); setReason('')
+    refresh()
+  }
+
+  const edit = (id: string) => {
+    const u = new URL(window.location.href)
+    u.searchParams.set('edit', id)
+    window.history.replaceState(window.history.state, '', u)
+    onEdit()
+  }
+
+  const confirmBox = (id: string, title: string, who: string | null) => asking?.id === id && (
+    <div className={clsx('mt-3 rounded-lg border p-3', asking.how === 'approve' ? 'border-emerald-200 bg-emerald-50' : 'border-cyrixRed-200 bg-cyrixRed-50')}>
+      <p className="text-sm font-medium text-ink-900">
+        {asking.how === 'approve' ? `Approve "${title}"${who ? ` from ${who}` : ''}? It goes out now.` : `Send "${title}" back${who ? ` to ${who}` : ''}?`}
+      </p>
+      {asking.how === 'back' && (
+        <textarea className="input mt-2 min-h-[64px]" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason" maxLength={300} data-autofocus />
+      )}
+      {err?.id === id && <p className="mt-2 text-sm text-cyrixRed-700" role="alert">{err.text}</p>}
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-xs">
+        <button type="button" className="btn-secondary justify-center" onClick={() => { setAsking(null); setErr(null) }}>Cancel</button>
+        <button type="button" disabled={busy} onClick={() => void decide()}
+          className={clsx('btn-primary justify-center', asking.how === 'approve' ? '!bg-[#217346] hover:!bg-[#1a5c38]' : '!bg-cyrixRed-600')}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : asking.how === 'approve' ? <Check className="h-4 w-4" /> : <Undo2 className="h-4 w-4" />}
+          {asking.how === 'approve' ? 'Approve' : 'Send back'}
+        </button>
+      </div>
+    </div>
+  )
+  const buttons = (id: string, what: 'post' | 'note') => (
+    <div className="flex shrink-0 gap-2">
+      {what === 'post' && <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => edit(id)}><Pencil className="h-4 w-4 text-violet-600" /> Edit</button>}
+      <button type="button" className="btn-secondary !gap-1.5 !px-3 !py-1.5 text-sm" onClick={() => { setAsking({ id, what, how: 'back' }); setReason(''); setErr(null) }}><Undo2 className="h-4 w-4 text-cyrixRed-600" /> Send back</button>
+      <button type="button" className="btn-primary !gap-1.5 !bg-[#217346] !px-3 !py-1.5 text-sm hover:!bg-[#1a5c38]" onClick={() => { setAsking({ id, what, how: 'approve' }); setErr(null) }}><Check className="h-4 w-4" /> Approve</button>
+    </div>
+  )
+
+  if (isLoading) return <Loader2 className="h-5 w-5 animate-spin text-ink-400" />
+  return (
+    <div className="space-y-3">
+      {done && <Alert kind="success">{done}</Alert>}
+      {!waitingPosts.length && !waitingAsks.length && <p className="text-sm text-ink-500">Nothing waiting</p>}
+      {waitingPosts.map(r => {
+        const [, word, Icon] = kindOf(r.kind)
+        return (
+          <div key={r.id} className="card p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
+                {open === r.id ? <ChevronDown className="h-4 w-4 shrink-0 text-ink-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />}
+                <Icon className="h-5 w-5 shrink-0 text-ink-500" />
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-ink-900">{r.title}</p>
+                  <p className="text-xs text-ink-500">{word} · {DESK_WORD[r.posted_as]}{r.author ? ` · ${r.author}` : ''} · asked {when(r.approval_at ?? r.created_at)}</p>
+                </div>
+              </button>
+              {buttons(r.id, 'post')}
+            </div>
+            {confirmBox(r.id, r.title, r.author)}
+            {open === r.id && <div className="mt-3"><Details readOnly row={{ ...r, mine: false, editors: [] } as unknown as Row} /></div>}
+          </div>
+        )
+      })}
+      {waitingAsks.map(a => (
+        <div key={a.id} className="card p-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <BellRing className="h-5 w-5 shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-ink-900">{a.title}</p>
+              {a.body && <p className="text-sm text-ink-700">{a.body}</p>}
+              <p className="text-xs text-ink-500">
+                Notification · {a.kind === 'digest' ? 'for a Digest post' : DESK_WORD[a.sent_as as keyof typeof DESK_WORD] ?? a.sent_as}
+                {a.people ? ` · ${a.people} people` : ''}{a.asked_by ? ` · ${a.asked_by}` : ''} · asked {when(a.asked_at)}
+              </p>
+            </div>
+            {buttons(a.id, 'note')}
+          </div>
+          {confirmBox(a.id, a.title, a.asked_by)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DigestAllPosts() {
   const [find, setFind] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const { data: rows = [], isLoading, error } = useQuery({
@@ -1077,6 +1442,8 @@ export function DigestHistory() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {r.deleted_at ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Deleted</span>
+                      : r.approval === 'pending' ? <span className="badge bg-sky-100 text-sky-800">Waiting for approval</span>
+                      : r.approval === 'returned' ? <span className="badge bg-cyrixRed-50 text-cyrixRed-700">Sent back</span>
                       : !r.published_at ? <span className="badge bg-amber-100 text-amber-800">Draft</span>
                       : r.ended ? <span className="badge bg-ink-100 text-ink-600">Ended</span>
                       : <span className="badge bg-emerald-50 text-emerald-700">Live</span>}

@@ -2,18 +2,23 @@ import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Search, ShieldAlert, KeyRound, Download, Info, RotateCcw, Eraser, Mail, Send,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
-  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown,
+  Search, ShieldAlert, ShieldCheck, KeyRound, Download, RotateCcw, Eraser,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, PieChart, Wrench, Stethoscope,
+  Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown, Building2,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
+import AdminsTab from './AdminsTab'
+import PlatformAdmin from './PlatformAdmin'
+import ModuleSummary from './ModuleSummary'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import CyraAccess from '@/pages/admin/CyraAccess'
 import { DigestHistory } from '@/pages/admin/DigestAdmin'
 import { PulseAccess } from '@/pages/admin/PulseAccess'
 import { TravelAdmin } from '@/pages/admin/TravelAdmin'
+import { useNewFeedbackCount } from '@/pages/admin/TravelFeedback'
+import { WorkplaceAdmin } from '@/pages/admin/WorkplaceAdmin'
 import MissingLogins from '@/components/MissingLogins'
 import { supabase, friendlyError } from '@/lib/supabase'
 import { exportOrgStatus, exportSheets } from '@/lib/export'
@@ -24,10 +29,8 @@ import SpareFields from './SpareFields'
 import SupportDeskQueue from '@/components/SupportDeskQueue'
 import SpareWarehouses from './SpareWarehouses'
 import {
-  useOtpSender, useSaveOtpSender,
   useAppModules, useModuleGrants, useSetModuleAccess, useOpenTicketCount, useAccountTypes,
 } from '@/lib/queries'
-import { sendOtpTest } from '@/lib/passwordOtp'
 import { PageLoader, Alert, StatTile, Spinner } from '@/components/ui'
 import EditEmployee from '@/components/EditEmployee'
 import { useAuth } from '@/contexts/AuthContext'
@@ -143,7 +146,8 @@ function LoginsTab() {
   // Employees by default; test and admin logins on request (0203; the user, 15 Oct).
   const [kind, setKind] = useState<'employee' | 'test' | 'admin' | 'all'>('employee')
   const { data: typeOf } = useAccountTypes()
-  const kindOk = (id: string) => kind === 'all' || (typeOf ? typeOf(id) : 'employee') === kind
+  // A director is an employee in this filter (0306).
+  const kindOk = (id: string) => { const t = typeOf ? typeOf(id) : 'employee'; return kind === 'all' || (t === 'director' ? 'employee' : t) === kind }
   const setType = useMutation({
     mutationFn: async (a: { id: string; type: string }) => {
       const { error } = await supabase.rpc('set_account_type', { p_employee_id: a.id, p_type: a.type })
@@ -191,7 +195,10 @@ function LoginsTab() {
     const isSelf = (r: LoginStatusRow) =>
       r.ecode.toLowerCase().includes(q) ||
       r.full_name.toLowerCase().includes(q) ||
-      (r.login_email ?? '').toLowerCase().includes(q)
+      (r.login_email ?? '').toLowerCase().includes(q) ||
+      // Function and designation too (the user, 20 Nov: "aurum" found nobody).
+      (r.function_name ?? '').toLowerCase().includes(q) ||
+      (r.designation ?? '').toLowerCase().includes(q)
     const rows = data.filter(r => {
       if (!kindOk(r.employee_id)) return false
       if (!includeInactive && !r.is_active) return false
@@ -422,49 +429,7 @@ function LoginsTab() {
         />
       )}
 
-      {/* Not for IT (0151; the user, 8 Oct: "DONT NEED THIS for it login"). */}
-      {!itOnly && (
-      <>
-{/* Said plainly rather than buried: this is the question people ask
-          first, and the honest answer is that nobody can answer it. */}
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div className="text-ink-600">
-          <p className="font-medium text-ink-900">Passwords cannot be displayed</p>
-          <p className="mt-1">
-            They are stored as one-way bcrypt hashes. Nobody can read one back —
-            not this screen, not the Supabase dashboard, not a database
-            administrator. What is shown instead is whether each person is still
-            on the code we issued them, or has set their own.
-          </p>
-          <p className="mt-1.5">
-            While the system is in testing everyone's password{' '}
-            <strong>is their employee code</strong>. To get someone in, use
-            Reset on their row — it puts the password back to their code.
-          </p>
-        </div>
-      </div>
-
-      {/* Sits above the table, because the Modules column is the one
-          thing on this screen whose effect is somewhere else entirely. */}
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm">
-        <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-        <div className="text-ink-600">
-          <p className="font-medium text-ink-900">Modules decide what appears on app.cyrix.in</p>
-          <p className="mt-1">
-            Everybody has <strong>KPI</strong> — everybody is appraised — and{' '}
-            <strong>My Task</strong>, where they keep their tasks. The rest
-            are handed out here: click the box in the Modules column to give or
-            take away the tile. It changes what a person is{' '}
-            <em>offered</em> on the portal, not what they are permitted to do
-            once inside — each module still checks that for itself.
-          </p>
-        </div>
-      </div>
-
-      <OtpSenderCard />
-      </>
-      )}
+      {/* The two notes and the password-code sender are gone, on a computer too (the user, 14 Nov: "remove this much from desktop also"); mail goes through Microsoft 365, the sender address stays on the server. */}
 
       {notice && <Alert kind="success">{notice}</Alert>}
       {resetError && <Alert kind="error">{resetError}</Alert>}
@@ -689,12 +654,13 @@ function LoginsTab() {
                     {/* Employee, test or admin login (0203; the user, 15 Oct), in place of the state badge. */}
                     <select aria-label={`Role of ${r.full_name}`}
                       // Admin red, test yellow, employee green (the user, 15 Oct).
-                      className={clsx('input !w-auto !py-1.5 text-xs font-semibold', ({ admin: '!border-red-300 !bg-red-100 !text-red-800', test: '!border-amber-300 !bg-amber-100 !text-amber-800', employee: '!border-emerald-300 !bg-emerald-100 !text-emerald-800' } as const)[typeOf ? typeOf(r.employee_id) : 'employee'])}
+                      className={clsx('input !w-auto !py-1.5 text-xs font-semibold', ({ admin: '!border-red-300 !bg-red-100 !text-red-800', test: '!border-amber-300 !bg-amber-100 !text-amber-800', director: '!border-violet-300 !bg-violet-100 !text-violet-800', employee: '!border-emerald-300 !bg-emerald-100 !text-emerald-800' } as const)[typeOf ? typeOf(r.employee_id) : 'employee'])}
                       title={r.login_state}
                       value={typeOf ? typeOf(r.employee_id) : 'employee'}
                       disabled={!typeOf || setType.isPending || itOnly}
                       onChange={e => setType.mutate({ id: r.employee_id, type: e.target.value })}>
                       <option value="employee">Employee</option>
+                      <option value="director">Director</option>
                       <option value="test">Test</option>
                       <option value="admin">Admin</option>
                     </select>
@@ -783,7 +749,7 @@ function LoginsTab() {
         )}
       </div>
 
-      <p className="flex items-center gap-1.5 text-xs text-ink-400">
+      <p className="hidden items-center gap-1.5 text-xs text-ink-400 sm:flex">
         <KeyRound className="h-3.5 w-3.5" />
         Every reset and clear is written to the audit log against your account.
         Clearing KPI data works only while the system is in testing — after
@@ -793,124 +759,6 @@ function LoginsTab() {
   )
 }
 
-/**
- * The address password codes come from.
- *
- * Here rather than in an edge-function secret, because changing a secret
- * needs the CLI, a Supabase login and a redeploy — and the moment this
- * needs changing is the moment somebody is locked out and the person who
- * can do all three is asleep.
- *
- * The test button is the point of the card. A From address the mail
- * provider has not verified is rejected on every send, and the way you
- * find out is that resets quietly stop working for the whole company:
- * nobody reports an email they were not expecting. One button, one real
- * message, to the only inbox the server will address — your own.
- */
-function OtpSenderCard() {
-  const { data: saved, isLoading } = useOtpSender()
-  const save = useSaveOtpSender()
-  const [draft, setDraft] = useState<string | null>(null)
-  const [target, setTarget] = useState('')
-  const [state, setState] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
-  const [testing, setTesting] = useState(false)
-
-  const value = draft ?? saved ?? ''
-  const dirty = draft !== null && draft !== saved
-
-  const onSave = async () => {
-    setState(null)
-    try {
-      await save.mutateAsync(value.trim())
-      setDraft(null)
-      setState({ kind: 'success', text: 'Saved. Send a test to prove it works.' })
-    } catch (err) {
-      setState({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' })
-    }
-  }
-
-  const onTest = async () => {
-    setState(null); setTesting(true)
-    const r = await sendOtpTest(target)
-    setTesting(false)
-    setState({ kind: r.ok ? 'success' : 'error', text: r.message })
-  }
-
-  return (
-    <div className="card space-y-3 p-4">
-      <div className="flex items-start gap-3">
-        <Mail className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
-        <div className="min-w-0">
-          <p className="font-medium text-ink-900">Password codes come from</p>
-          <p className="mt-0.5 text-sm text-ink-500">
-            Shown in the inbox of anyone resetting or changing their password.
-            The domain has to be verified with the mail provider — an
-            unverified one is refused on every send.
-          </p>
-        </div>
-      </div>
-
-      {state && <Alert kind={state.kind}>{state.text}</Alert>}
-
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="input min-w-0 flex-1"
-          value={isLoading ? '' : value}
-          placeholder={isLoading ? 'Loading…' : 'Cyrix KPI <no-reply@send.cyrix.in>'}
-          onChange={e => setDraft(e.target.value)}
-          aria-label="Sender address for password codes"
-        />
-        <button
-          onClick={onSave}
-          disabled={!dirty || save.isPending}
-          className="btn-primary shrink-0"
-        >
-          {save.isPending && <Spinner className="h-4 w-4" />} Save
-        </button>
-      </div>
-
-      {/* An employee code rather than an address, and the difference is
-          the safeguard: a free-text address here would be a way to send
-          company mail to anywhere at all. A code can only reach somebody
-          already on the payroll. */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
-        <label htmlFor="otp-test-target" className="text-sm text-ink-600">
-          Send a test to
-        </label>
-        <input
-          id="otp-test-target"
-          className="input w-32 uppercase"
-          value={target}
-          onChange={e => setTarget(e.target.value.toUpperCase())}
-          placeholder="E1427"
-          autoCapitalize="characters"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <button
-          onClick={onTest}
-          disabled={testing || dirty}
-          title={dirty ? 'Save the address first' : undefined}
-          className="btn-secondary shrink-0"
-        >
-          {testing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          Send test
-        </button>
-        {!target.trim() && (
-          <span className="text-xs text-ink-400">Blank sends it to you.</span>
-        )}
-      </div>
-
-      <p className="text-xs text-ink-400">
-        A name in front of the address is what people see —{' '}
-        <span className="font-medium text-ink-600">Cyrix KPI</span> rather than
-        the address itself. The test says plainly that it is a test, so it can
-        go to a colleague without alarming them, and it uses the address on
-        their record — an employee code, never a typed address.
-      </p>
-    </div>
-  )
-}
 
 /* ---------------------------------------------------------------------
  * Spare Mapping
@@ -1144,7 +992,7 @@ function KpiTab() {
             onClick={() => setView(t.key)}
             aria-current={view === t.key ? 'page' : undefined}
             className={clsx(
-              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              'flex-1 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4',
               view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
             )}
           >
@@ -1177,7 +1025,7 @@ function SpareTab() {
             onClick={() => setView(t.key)}
             aria-current={view === t.key ? 'page' : undefined}
             className={clsx(
-              'flex-1 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+              'flex-1 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4',
               view === t.key ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-900',
             )}
           >
@@ -1330,22 +1178,6 @@ function SpareRolesView() {
         />
       )}
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">A role is not a tile</p>
-          <p className="mt-1">
-            This decides what somebody can do inside Spare. Whether they are
-            offered it at all is the Modules column on the Logins tab — a
-            person can hold a role here and never see the tile.
-          </p>
-          <p className="mt-1.5">
-            Names and employee codes cannot be edited here or in Spare. They
-            come from the HR employee record, and a change there reaches Spare
-            on its own.
-          </p>
-        </div>
-      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -1497,6 +1329,8 @@ const BEMMP_ROLES: { value: string; label: string }[] = [
   { value: 'project_head', label: 'Project head' },
   { value: 'coordinator', label: 'Coordinator' },
   { value: 'purchase', label: 'Purchase' },
+  // Fills the PM checklists; every other role reads them (BEMMP 0014; the user, 31 Oct: "add engineer").
+  { value: 'engineer', label: 'Engineer' },
 ]
 
 /**
@@ -1508,7 +1342,111 @@ const CONTRACTS: { id: string; label: string }[] = [
   { id: 'ap', label: 'Andhra' },
   // The user, 23 Sep: "up also should come".
   { id: 'up', label: 'Uttar Pradesh' },
+  // A project of its own in BEMMP, not a contract export (BEMMP 0012; the user, 31 Oct).
+  { id: 'mt', label: 'Medtronic' },
+  { id: 'pm', label: 'PM checklist' },
+  // A module like the others (KPI 0279; the user, 11 Nov): ticked here, roles on the Quotation tracker sub-tab.
+  { id: 'qt', label: 'Quotation tracker' },
+  // Care 360 module (BEMMP 62756ae, 25 Nov): two contracts under one tile.
+  { id: 'c360', label: 'Care 360' },
+  { id: 'pvt', label: 'Private Service' },
 ]
+
+/** BEMMP's Quotation tracker (BEMMP 0015, 0027; the user, 11 Nov): one role each, engineers under a Team Lead. */
+const QT_ROLES: { value: string; label: string }[] = [
+  { value: '', label: 'Off' },
+  { value: 'engineer', label: 'Engineer' },
+  { value: 'team_lead', label: 'Team Lead' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'purchase', label: 'Purchase' },
+  { value: 'pv', label: 'PV' },
+  { value: 'observer', label: 'Observer' },
+  { value: 'maker', label: 'Quotation maker' },
+]
+
+interface QtPerson {
+  employee_id: string
+  ecode: string
+  name: string
+  role: string
+  lead: boolean
+  team_lead_ecode: string | null
+  observes?: string | null
+}
+
+function QuotationCell({ code, person, teamLeads, busy, onSave, onTry, onRemove }: {
+  code: string
+  person: QtPerson | undefined
+  teamLeads: QtPerson[]
+  busy: boolean
+  onSave: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null; observes?: string | null }) => void
+  /** Saved as an engineer with the reporting manager as Team Lead (BEMMP 0045); false when the manager is not one. */
+  onTry: (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null }) => Promise<boolean>
+  onRemove: (employeeId: string) => void
+}) {
+  // Engineer: the reporting manager is the Team Lead when the manager is one (the user, 12 Nov);
+  // otherwise it waits here until a Team Lead is chosen.
+  const [pending, setPending] = useState<string | null>(null)
+  const role = pending ?? person?.role ?? ''
+  const lead = person?.lead ?? false
+  return (
+    <div className="grid min-w-44 grid-cols-1 gap-1.5 sm:grid-cols-2">
+      <select
+        className="input h-8 py-0 text-sm"
+        value={role}
+        disabled={busy}
+        onChange={e => {
+          const v = e.target.value
+          if (!v) { setPending(null); if (person) onRemove(person.employee_id); return }
+          if (v === 'engineer' && !person?.team_lead_ecode) {
+            setPending('engineer')
+            void onTry({ ecode: code, role: 'engineer', lead, team_lead_ecode: null }).then(ok => { if (ok) setPending(null) })
+            return
+          }
+          setPending(null)
+          onSave({ ecode: code, role: v, lead, team_lead_ecode: v === 'engineer' ? person?.team_lead_ecode ?? null : null })
+        }}
+      >
+        {QT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+      </select>
+      {role === 'engineer' && (
+        <select
+          className={clsx('input h-8 py-0 text-sm', pending && 'border-cyrixRed-600')}
+          value={pending ? '' : person?.team_lead_ecode ?? ''}
+          disabled={busy}
+          onChange={e => {
+            if (!e.target.value) return
+            setPending(null)
+            onSave({ ecode: code, role: 'engineer', lead, team_lead_ecode: e.target.value })
+          }}
+        >
+          <option value="">Team Lead…</option>
+          {teamLeads.map(t => <option key={t.ecode} value={t.ecode}>{t.name} ({t.ecode})</option>)}
+        </select>
+      )}
+      {/* An observer watches one team's dashboard (BEMMP 0037; the user, 11 Nov). */}
+      {role === 'observer' && person && (
+        <select className="input h-8 py-0 text-sm" value={person.observes ?? ''} disabled={busy}
+          onChange={e => onSave({ ecode: code, role: 'observer', lead, team_lead_ecode: null, observes: e.target.value || null })}>
+          <option value="">Observes every team</option>
+          {QT_ROLES.filter(r => r.value && r.value !== 'observer').map(r => <option key={r.value} value={r.value}>Observes {r.label}</option>)}
+        </select>
+      )}
+      {person && !pending && (
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-500">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-[color:var(--score-accent)]"
+            checked={lead}
+            disabled={busy}
+            onChange={e => onSave({ ecode: code, role: person.role, lead: e.target.checked, team_lead_ecode: person.team_lead_ecode, observes: person.observes ?? null })}
+          />
+          Lead
+        </label>
+      )}
+    </div>
+  )
+}
 
 function BemmpTab() {
   const qc = useQueryClient()
@@ -1532,6 +1470,34 @@ function BemmpTab() {
       }
     },
   })
+
+  /*
+   * Only the people given the BEMMP tile (the user, 31 Oct): nobody else has
+   * anything here to set. Under module_grants, so a tile given or taken on
+   * the Logins tab refreshes this list too.
+   */
+  const { data: holders, isLoading: holdersLoading } = useQuery({
+    queryKey: ['module_grants', 'bemmp'],
+    queryFn: async () => {
+      const codes = new Set<string>()
+      for (let from = 0; ; from += 1000) {
+        const page = await supabase
+          .from('employee_modules')
+          // Named: employee_modules points at employees twice (the person, and granted_by).
+          .select('employees!employee_modules_employee_id_fkey(ecode)')
+          .eq('module_code', 'bemmp')
+          .order('employee_id')
+          .range(from, from + 999)
+        if (page.error) throw page.error
+        const rows = (page.data ?? []) as unknown as Array<{ employees: { ecode: string } }>
+        rows.forEach(r => codes.add(r.employees.ecode))
+        if (rows.length < 1000) return codes
+      }
+    },
+  })
+  const people = useMemo(
+    () => (data ?? []).filter(r => holders?.has(r.code)),
+    [data, holders])
 
   /** What the published exports say the zones are. */
   const { data: datasets } = useQuery({
@@ -1565,6 +1531,8 @@ function BemmpTab() {
    * does it this way.
    */
   const [picking, setPicking] = useState<BemmpProfile | null>(null)
+  // Modules in a pop-up (the user, 11 Nov): the column stays one button however many modules there are.
+  const [modsFor, setModsFor] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>([])
 
   const update = useMutation({
@@ -1578,54 +1546,272 @@ function BemmpTab() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = data ?? []
-    if (!q) return rows
-    return rows.filter(r =>
+    if (!q) return people
+    return people.filter(r =>
       r.code.toLowerCase().includes(q) ||
       (r.full_name ?? '').toLowerCase().includes(q))
-  }, [data, search])
+  }, [people, search])
 
-  const cyraOn = useMemo(() => (data ?? []).filter(r => r.cyra).length, [data])
+  const cyraOn = useMemo(() => people.filter(r => r.cyra).length, [people])
 
-  if (isLoading) return <PageLoader />
+  const { data: qtPeople } = useQuery({
+    queryKey: ['qt_people'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('qt_people_list')
+      if (error) throw error
+      return (data ?? []) as QtPerson[]
+    },
+  })
+  const qtByCode = useMemo(() => new Map((qtPeople ?? []).map(p => [p.ecode, p])), [qtPeople])
+  const teamLeads = useMemo(() => (qtPeople ?? []).filter(p => p.role === 'team_lead'), [qtPeople])
+  const qtSave = useMutation({
+    mutationFn: async (p: { ecode: string; role: string; lead: boolean; team_lead_ecode: string | null; observes?: string | null }) => {
+      const { error } = await supabase.rpc('qt_save_person', { p })
+      if (error) throw error
+    },
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ['qt_people'] }) },
+    onError: (e) => setError(friendlyError(e)),
+  })
+  const qtRemove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('qt_remove_person', { p_employee: id })
+      if (error) throw error
+    },
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ['qt_people'] }) },
+    onError: (e) => setError(friendlyError(e)),
+  })
+
+  // Sub-tabs (the user, 11 Nov): BEMMP's own access, then each sub-module's settings.
+  // The sub-tab is in the address too, so a reload stays on it (the user, 25 Nov).
+  type BemmpSub = 'access' | 'qt' | 'makers' | 'templates'
+  const [sub, setSubState] = useState<BemmpSub>(() => {
+    const v = new URLSearchParams(window.location.search).get('sub')
+    return (['access', 'qt', 'makers', 'templates'].includes(v ?? '') ? v : 'access') as BemmpSub
+  })
+  const setSub = (v: BemmpSub) => {
+    setSubState(v)
+    const u = new URL(window.location.href)
+    u.searchParams.set('sub', v)
+    window.history.replaceState(window.history.state, '', u)
+  }
+  const [makerCode, setMakerCode] = useState('')
+  const [makerOff, setMakerOff] = useState<string | null>(null)
+  const [qtRole, setQtRole] = useState('all')
+  const [qtSort, setQtSort] = useState<{ key: 'name' | 'role' | 'tl'; asc: boolean }>({ key: 'role', asc: true })
+
+  if (isLoading || holdersLoading) return <PageLoader />
+
+  const subTabs = (
+    <div className="flex gap-1.5 overflow-x-auto">
+      {([['access', 'Access'], ['qt', 'Quotation tracker'], ['makers', 'Quotation makers'], ['templates', 'Templates']] as const).map(([id, label]) => (
+        <button key={id} type="button" aria-pressed={sub === id} onClick={() => setSub(id)}
+          className={clsx('badge shrink-0 cursor-pointer px-3 py-1.5 text-sm transition-colors',
+            sub === id ? 'bg-ink-900 text-onInk' : 'bg-ink-100 text-ink-500 hover:bg-ink-200')}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  /*
+   * Quotation makers (BEMMP 0060/0061; the user, 16 Nov: "only sw admin need that access, move to sw admin"): people who
+   * only make quotations, not in the tracker's workflow. Given here by E-code; they get BEMMP with the Quotations page.
+   */
+  if (sub === 'templates') return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
+        <p className="mt-0.5 text-sm text-ink-500">Quotation templates</p>
+      </div>
+      {subTabs}
+      <QtTemplatesLog />
+    </div>
+  )
+
+  if (sub === 'makers') {
+    const q = search.trim().toLowerCase()
+    const makers = (qtPeople ?? []).filter(p => p.role === 'maker')
+      .filter(p => !q || p.ecode.toLowerCase().includes(q) || (p.name ?? '').toLowerCase().includes(q))
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+    const typed = makerCode.trim().toLowerCase()
+    const everyone = data ?? []
+    const exact = everyone.some(r => r.code.toLowerCase() === typed)
+    const suggest = typed.length < 2 || exact ? [] : everyone
+      .filter(r => r.code.toLowerCase().includes(typed) || (r.full_name ?? '').toLowerCase().includes(typed))
+      .slice(0, 8)
+    const add = () => {
+      const code = makerCode.trim().toUpperCase()
+      if (!code) { setError('Write the E-code.'); return }
+      const was = qtByCode.get(code)
+      if (was && was.role !== 'maker') { setError(`${was.name} (${code}) is ${QT_ROLES.find(r => r.value === was.role)?.label ?? was.role} in the tracker. Change the role on the Quotation tracker tab.`); return }
+      qtSave.mutate({ ecode: code, role: 'maker', lead: false, team_lead_ecode: null }, { onSuccess: () => setMakerCode('') })
+    }
+    return (
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
+          <p className="mt-0.5 text-sm text-ink-500">Quotation makers {(qtPeople ?? []).filter(p => p.role === 'maker').length}</p>
+        </div>
+        {subTabs}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_14rem_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+            <input className="input pl-9" placeholder="Search by name or employee code" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {/* Name or E-code, with suggestions (the user, 16 Nov: "need option to type name also, suggestions"). */}
+          <div className="relative">
+            <input className="input" placeholder="Name or E-code" value={makerCode}
+              onChange={e => { setMakerCode(e.target.value); setError(null) }}
+              onKeyDown={e => { if (e.key === 'Enter') { if (suggest.length === 1) setMakerCode(suggest[0].code); else add() } }}
+              aria-label="Name or E-code" autoComplete="off" />
+            {suggest.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-ink-200 bg-white py-1 shadow-lg dark:bg-ink-50">
+                {suggest.map(r => (
+                  <li key={r.id}>
+                    <button type="button" className="flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-ink-100"
+                      onClick={() => { setMakerCode(r.code); setError(null) }}>
+                      <span className="truncate font-medium text-ink-900">{r.full_name}</span>
+                      <span className="shrink-0 text-ink-400">{r.code}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button type="button" className="btn-primary" onClick={add} disabled={qtSave.isPending}>
+            {qtSave.isPending ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="overflow-x-auto rounded-xl border border-ink-200">
+          <table className="w-full text-sm">
+            <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+              <tr><th className="px-3 py-2.5">Employee</th><th className="px-3 py-2.5" /></tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {!makers.length && <tr><td className="px-3 py-4 text-ink-400" colSpan={2}>No Quotation maker.</td></tr>}
+              {makers.map(p => (
+                <tr key={p.employee_id}>
+                  <td className="px-3 py-2.5"><span className="font-medium text-ink-900">{p.name}</span><span className="ml-2 text-ink-400">{p.ecode}</span></td>
+                  <td className="px-3 py-2.5 text-right">
+                    {makerOff === p.employee_id ? (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <span className="text-ink-600">Remove {p.name}?</span>
+                        <button type="button" className="btn-danger !py-1.5 text-sm" disabled={qtRemove.isPending}
+                          onClick={() => qtRemove.mutate(p.employee_id, { onSuccess: () => setMakerOff(null) })}>Remove</button>
+                        <button type="button" className="btn-secondary !py-1.5 text-sm" onClick={() => setMakerOff(null)}>Cancel</button>
+                      </span>
+                    ) : (
+                      <button type="button" className="btn-secondary !py-1.5 text-sm" onClick={() => setMakerOff(p.employee_id)}>Remove</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  if (sub === 'qt') {
+    const roleLabel = (v: string) => QT_ROLES.find(r => r.value === v)?.label ?? ''
+    const tlName = (c: string | null) => (c && qtByCode.get(c)?.name) || ''
+    const q = search.trim().toLowerCase()
+    const rows = people
+      .filter(r => (r.scope ?? []).includes('qt'))
+      .map(r => ({ r, p: qtByCode.get(r.code) }))
+      .filter(({ r, p }) => (qtRole === 'all' || (qtRole === '' ? !p : p?.role === qtRole))
+        && (!q || r.code.toLowerCase().includes(q) || (r.full_name ?? '').toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const v = (x: typeof a) => qtSort.key === 'name' ? (x.r.full_name ?? '')
+          : qtSort.key === 'role' ? (x.p ? String(QT_ROLES.findIndex(t => t.value === x.p!.role)) : '9')
+          : tlName(x.p?.team_lead_ecode ?? null) || '~'
+        return (qtSort.asc ? 1 : -1) * (v(a).localeCompare(v(b)) || (a.r.full_name ?? '').localeCompare(b.r.full_name ?? ''))
+      })
+    const count = (v: string) => people.filter(r => (r.scope ?? []).includes('qt') && qtByCode.get(r.code)?.role === v).length
+    const QTh = ({ k, label }: { k: 'name' | 'role' | 'tl'; label: string }) => (
+      <th className="px-3 py-2.5">
+        <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-ink-900"
+          onClick={() => setQtSort(s => s.key === k ? { key: k, asc: !s.asc } : { key: k, asc: true })}>
+          {label}<span className="text-[10px]">{qtSort.key === k ? (qtSort.asc ? '▲' : '▼') : '↕'}</span>
+        </button>
+      </th>
+    )
+    return (
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            {QT_ROLES.filter(r => r.value).map(r => `${r.label} ${count(r.value)}`).join(' · ')}
+          </p>
+        </div>
+        {subTabs}
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+            <input className="input pl-9" placeholder="Search by name or employee code"
+              value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <select className="input" value={qtRole} onChange={e => setQtRole(e.target.value)}>
+            <option value="all">All roles</option>
+            {QT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-ink-200">
+          <table className="w-full text-sm">
+            <thead className="bg-ink-50 text-left text-xs uppercase tracking-label text-ink-400">
+              <tr>
+                <QTh k="name" label="Employee" />
+                <QTh k="role" label="Role" />
+                <QTh k="tl" label="Team Lead" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {rows.slice(0, 300).map(({ r, p }) => (
+                <tr key={r.id}>
+                  <td className="px-3 py-2.5 align-top">
+                    <span className="font-medium text-ink-900">{r.full_name}</span>
+                    <span className="ml-2 text-ink-400">{r.code}</span>
+                    {p && <span className="sr-only">{roleLabel(p.role)}</span>}
+                  </td>
+                  <td className="px-3 py-2.5 align-top" colSpan={2}>
+                    <QuotationCell
+                      code={r.code}
+                      person={p}
+                      teamLeads={teamLeads}
+                      busy={qtSave.isPending || qtRemove.isPending}
+                      onSave={x => qtSave.mutate(x)}
+                      onTry={async x => {
+                        try { await supabase.rpc('qt_save_person', { p: x }).then(({ error }) => { if (error) throw error }) }
+                        catch { return false }
+                        qc.invalidateQueries({ queryKey: ['qt_people'] })
+                        return true
+                      }}
+                      onRemove={id => qtRemove.mutate(id)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-ink-900">BEMMP access</h2>
+        <h2 className="text-lg font-semibold text-ink-900">BEMMP</h2>
         <p className="mt-0.5 text-sm text-ink-500">
-          {filtered.length} of {data?.length ?? 0} people · Cyra on for {cyraOn}
+          {filtered.length} of {people.length} people · Cyra on for {cyraOn}
         </p>
       </div>
 
-      <div className="flex gap-3 rounded-xl border border-ink-200/70 bg-ink-50 p-4 text-sm text-ink-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-        <div>
-          <p className="font-medium text-ink-900">Role, contract and area are three questions</p>
-          <p className="mt-1">
-            The role is what somebody can do. The contracts are which of them
-            they see at all. The area narrows a contract for people who work
-            one zone — leave it on <strong>Everything</strong> and they get the
-            whole contract, which is right for most.
-          </p>
-          <p className="mt-1.5">
-            Cyra, the assistant, is off for everybody until it is ticked
-            here. Without it BEMMP shows no Cyra button, and asking it
-            anyway is refused.
-          </p>
-          <p className="mt-1.5">
-            Whether the tile is offered at all is the Modules column on the
-            Logins tab. Names and employee codes come from the HR record.
-          </p>
-          {zoneOptions.length === 0 && (
-            <p className="mt-1.5">
-              No zones are listed yet — they are read from the published
-              ticket export, so they appear here once somebody publishes one
-              in BEMMP.
-            </p>
-          )}
-        </div>
-      </div>
+      {subTabs}
+
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -1645,7 +1831,7 @@ function BemmpTab() {
             <tr>
               <th className="px-3 py-2.5">Employee</th>
               <th className="px-3 py-2.5">Role</th>
-              <th className="px-3 py-2.5">Contracts</th>
+              <th className="px-3 py-2.5">BEMMP modules</th>
               <th className="px-3 py-2.5">Area</th>
               <th className="px-3 py-2.5">Cyra</th>
             </tr>
@@ -1676,39 +1862,20 @@ function BemmpTab() {
                   </td>
 
                   <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {CONTRACTS.map(c => {
-                        const on = scope.includes(c.id)
-                        return (
-                          <button
-                            key={c.id}
-                            aria-pressed={on}
-                            disabled={update.isPending}
-                            onClick={() => update.mutate({
-                              id: r.id,
-                              patch: {
-                                scope: on
-                                  ? scope.filter(s => s !== c.id)
-                                  : [...scope, c.id],
-                              },
-                            })}
-                            className={clsx(
-                              'badge cursor-pointer transition-colors disabled:opacity-50',
-                              on ? 'bg-ink-900 text-onInk hover:bg-cyrixRed-700 hover:text-white'
-                                 : 'bg-ink-100 text-ink-400 hover:bg-ink-200',
-                            )}
-                          >
-                            {c.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {scope.length === 0 && (
-                      // Empty means none here, not everything — the opposite of
-                      // what it means for the area below, which is exactly the
-                      // confusion that once left everybody locked out.
-                      <p className="mt-1 text-xs text-cyrixRed-600">Sees nothing</p>
-                    )}
+                    {(() => {
+                      const held = CONTRACTS.filter(c => scope.includes(c.id))
+                      return (
+                        <button type="button" onClick={() => setModsFor(r.id)}
+                          title={held.map(c => c.label).join(', ') || 'No modules'}
+                          className={clsx('flex w-52 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs hover:border-ink-400',
+                            held.length ? 'border-ink-200 text-ink-700' : 'border-cyrixRed-600/60 text-cyrixRed-600')}>
+                          <span className="min-w-0 flex-1 truncate">
+                            {held.length ? <><span className="font-semibold text-ink-900">{held.length}</span> · {held.map(c => c.label).join(', ')}</> : 'Sees nothing'}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                        </button>
+                      )
+                    })()}
                   </td>
 
                   <td className="px-3 py-2.5">
@@ -1783,6 +1950,46 @@ function BemmpTab() {
         </p>
       )}
       {/* The whole set, saved once. */}
+      {modsFor && (() => {
+        const r = people.find(x => x.id === modsFor)
+        if (!r) return null
+        const scope = r.scope ?? []
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) setModsFor(null) }}>
+            <div className="card w-full max-w-sm p-4" role="dialog" aria-modal="true" aria-label={`BEMMP modules for ${r.full_name ?? r.code}`}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="font-medium text-ink-900">BEMMP modules · {r.full_name ?? r.code}</p>
+                <button type="button" className="btn-icon" onClick={() => setModsFor(null)} aria-label="Close"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="space-y-1">
+                {CONTRACTS.map(c => {
+                  const on = scope.includes(c.id)
+                  return (
+                    <label key={c.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-ink-800 hover:bg-ink-100">
+                      <input type="checkbox" className="h-4 w-4 rounded border-ink-300" checked={on}
+                        disabled={update.isPending || qtRemove.isPending}
+                        onChange={async () => {
+                          // Taking the tracker away takes the tracker role too; refused while the person holds open requests.
+                          const qp = qtByCode.get(r.code)
+                          if (on && c.id === 'qt' && qp) {
+                            try { await qtRemove.mutateAsync(qp.employee_id) } catch { return }
+                          }
+                          update.mutate({ id: r.id, patch: { scope: on ? scope.filter(x => x !== c.id) : [...scope, c.id] } })
+                        }} />
+                      {c.label}
+                    </label>
+                  )
+                })}
+              </div>
+              {error && <p className="mt-2 text-xs text-cyrixRed-600">{error}</p>}
+              <div className="mt-3 flex justify-end">
+                <button type="button" className="btn-primary" onClick={() => setModsFor(null)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {picking && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-shade/60 p-0 sm:items-center sm:p-4"
@@ -1795,7 +2002,7 @@ function BemmpTab() {
             <h3 className="text-base font-semibold text-ink-900">
               Districts for {picking.full_name}
             </h3>
-            <p className="mt-1 text-sm text-ink-500">
+            <p className="mt-1 hidden text-sm text-ink-500 sm:block">
               Choosing districts clears any zone. Ticking none is the same as
               Everything.
             </p>
@@ -2409,7 +2616,7 @@ export function SummaryTab() {
       {/* Five across on a wide screen, so the rollout reads as one row:
           who is here, who has signed in, which managers, who has a KPI,
           and who has been assessed on it. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
         <StatTile label="Active employees" value={stats.total.toLocaleString()} />
         <StatTile
           label="Have signed in"
@@ -2499,12 +2706,18 @@ export function SummaryTab() {
 
 const ADMIN_TABS = [
   { id: 'logins', label: 'Logins', short: 'Logins', icon: ShieldAlert, render: () => <LoginsTab /> },
+  // Who holds a desk role, and for which modules (the user, 2 Nov).
+  { id: 'admins', label: 'Admins', short: 'Admins', icon: ShieldCheck, render: () => <AdminsTab /> },
   // Beside Logins because it reads the same rows: one is the list, the
   // other is what the list adds up to.
   { id: 'summary', label: 'Summary Report', short: 'Summary', icon: BarChart3, render: () => <SummaryTab /> },
+  // Each module: assigned, live, used from a date, used % (the user, 26 Nov; 0312).
+  { id: 'modules', label: 'Module summary', short: 'Modules', icon: PieChart, render: () => <ModuleSummary /> },
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
+  // The portal home (app.cyrix.in): the Rank 1s bar on or off (the user, 10 Nov, 0277).
+  { id: 'platform', label: 'Platform', short: 'Platform', icon: LayoutGrid, render: () => <PlatformAdmin /> },
   { id: 'kpi', label: 'KPI', short: 'KPI', icon: Timer, render: () => <KpiTab /> },
   { id: 'spare', label: 'Spare Mapping', short: 'Spare', icon: QrCode, render: () => <SpareTab /> },
   { id: 'bemmp', label: 'BEMMP', short: 'BEMMP', icon: Activity, render: () => <BemmpTab /> },
@@ -2524,6 +2737,9 @@ const ADMIN_TABS = [
   // Whether photographs are required, what each mode pays, and deleting a
   // claim by its number — the module's own settings, also on its Rates page.
   { id: 'travel', label: 'Travel Expense', short: 'Travel', icon: Navigation, render: () => <TravelAdmin /> },
+  // Workplace keeps its settings in its own app; this says what is set where and opens it
+  // (the user, 13 Nov: "why workspace is not available here on this tabs section").
+  { id: 'workplace', label: 'Workplace', short: 'Workplace', icon: Building2, render: () => <WorkplaceAdmin /> },
   // A message to people's phones and desktops; HR has the same page (0154).
   { id: 'notify', label: 'Send notification', short: 'Notify', icon: BellRing, render: () => <SendNotification desk="sw" /> },
   // IT posts to Cyrix Digest from here; HR has it in its own menu (0163).
@@ -2594,11 +2810,13 @@ function BuildStamp() {
  */
 export default function SwAdmin() {
   // IT_ADMIN (0151): the Logins tab, and (0152) Support with IT's own queue.
-  const { isSwAdmin, isItAdmin } = useAuth()
-  // SW Admin does not post to Cyrix Digest; IT does (0163).
+  const { isSwAdmin, isItAdmin, desks } = useAuth()
+  // IT posts to Cyrix Digest from its own page now, opened from the portal (the user, 2 Nov).
   const TABS = isSwAdmin
-    ? ADMIN_TABS.filter(t => t.id !== 'digest' || isItAdmin)
-    : ADMIN_TABS.filter(t => t.id === 'logins' || ((t.id === 'support' || t.id === 'digest') && isItAdmin))
+    ? ADMIN_TABS.filter(t => t.id !== 'digest')
+    // IT sees the modules SW Admin ticked for it (0246): Logins, Support, or both.
+    : ADMIN_TABS.filter(t => (t.id === 'logins' && (!isItAdmin || desks.it?.includes('Logins')))
+      || (t.id === 'support' && isItAdmin && desks.it?.includes('Support')))
   const deskHere = isSwAdmin ? 'software' : 'it'
   // The open tab is in the address, so a reload stays on it (the user, 12 Oct: "on reload im
   // going to logins tab").
@@ -2614,6 +2832,10 @@ export default function SwAdmin() {
     window.history.replaceState(window.history.state, '', u)
   }
   const active = TABS.find(t => t.id === tab) ?? TABS[0]
+  const stackRef = useStackLabels()
+  // Posts and notifications waiting for SW Admin, on the Digest tab (0299).
+  const { data: digestWaiting = 0 } = useQuery({ queryKey: ['digest_waiting_count'], enabled: isSwAdmin, refetchInterval: 60_000,
+    queryFn: async () => ((await supabase.rpc('digest_waiting_count')).data as number | null) ?? 0 })
 
   /*
     How many people are waiting, on the tab rather than only inside it.
@@ -2623,10 +2845,15 @@ export default function SwAdmin() {
     an administrator who did not think to look did not answer.
   */
   const { data: waiting } = useOpenTicketCount(deskHere, isSwAdmin || isItAdmin)
+  // New feedback on Travel Expense, as waiting tickets on Support (the user, 14 Nov: "anything is new, show a counter").
+  const newFeedback = useNewFeedbackCount(isSwAdmin)
+  const counts: Record<string, number> = { support: waiting ?? 0, travel: newFeedback, 'digest-history': digestWaiting }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    <div className="space-y-5 lg:space-y-0">
+      {/* Phone: the heading row. A computer puts it at the head of the side list, so the section starts at the top
+          (the user, 13 Nov: "this much are wasted"). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:hidden">
         <h1 className="flex items-center gap-2 text-xl font-semibold text-ink-900">
           <ShieldAlert className="h-5 w-5 text-cyrixRed-600" />
           Administration
@@ -2634,83 +2861,225 @@ export default function SwAdmin() {
         <BuildStamp />
       </div>
 
-      {/* Desktop: a row under the heading, where tabs belong on a wide
-          screen. */}
-      <div className="hidden gap-1 overflow-x-auto border-b border-ink-200 lg:flex">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            aria-current={t.id === tab ? 'page' : undefined}
-            className={clsx(
-              'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              t.id === tab
-                ? 'border-cyrixRed-600 text-ink-900'
-                : 'border-transparent text-ink-400 hover:text-ink-700',
-            )}
-          >
-            {t.label}
-            {t.id === 'support' && !!waiting && (
-              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
-                {waiting > 99 ? '99+' : waiting}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* pb for the bar below, which is fixed and would otherwise sit over
-          the last row of whichever table is open. */}
-      <div className="pb-16 lg:pb-0">
-        {active.id === 'support' ? <SupportDeskQueue key={deskHere} desk={deskHere} enabled /> : active.render()}
-      </div>
-
       {/*
-        Phone: the same tabs as a bar along the bottom.
-
-        These are the only navigation an administrator has — the module bar
-        is gone, because with one destination it was a bar of one tab. So
-        they belong where every other module puts navigation on a phone,
-        under the thumb rather than at the top of a scrolling page you have
-        to return to in order to move.
-
-        No Modules cell. In the other modules that cell is how you leave for
-        a different one, but an administrator arrives here from the portal
-        and has no second module to leave for — it offered a round trip to
-        the page they just came from, and cost every real tab a fifth of
-        the bar to do it. The wordmark in the header still goes back.
+        Desktop: the sections down the side, as BEMMP (the user, 13 Nov: "should we make sw admin ... like bemmp?",
+        then "wow nice, build it"): fifteen names no longer scroll sideways under the heading.
       */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface lg:hidden">
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}
-        >
+      <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <nav className="nav-scroll sticky top-20 hidden max-h-[calc(100vh-6rem)] flex-col gap-0.5 self-start overflow-y-auto border-r border-ink-200 py-1 pr-3 lg:flex" aria-label="Sections">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               aria-current={t.id === tab ? 'page' : undefined}
               className={clsx(
-                'flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors',
-                t.id === tab ? 'text-[color:var(--page-strong)]' : 'text-ink-400',
+                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm font-medium transition-colors',
+                t.id === tab ? 'text-ink-900' : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800',
               )}
+              style={t.id === tab ? { background: `rgb(${tintOf(t.id)} / 0.14)` } : undefined}
             >
-              {/* The badge rides the icon here rather than the label:
-                  the cell is a fifth of a phone screen, and a number
-                  after "Support" is what pushes it to an ellipsis. */}
-              <span className="relative">
-                <t.icon className={clsx('h-5 w-5', t.id === tab ? '' : 'text-ink-400')} />
-                {t.id === 'support' && !!waiting && (
-                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">
-                    {waiting > 99 ? '99+' : waiting}
-                  </span>
-                )}
-              </span>
-              <span className="w-full truncate px-0.5 text-center">{t.short}</span>
+              <t.icon className="h-4.5 w-4.5 shrink-0" style={{ color: `rgb(${tintOf(t.id)})` }} />
+              <span className="min-w-0 flex-1 truncate">{t.label}</span>
+              {!!counts[t.id] && (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">
+                  {counts[t.id] > 99 ? '99+' : counts[t.id]}
+                </span>
+              )}
             </button>
           ))}
+          <div className="mt-4 px-3 [&_p]:!text-left"><BuildStamp /></div>
+        </nav>
+
+        {/* pb for the bar below, which is fixed and would otherwise sit over the last row of whichever table is open. */}
+        <div ref={stackRef} className="stack-phone min-w-0 pb-20 lg:pb-0">
+          {active.id === 'support' ? <SupportDeskQueue key={deskHere} desk={deskHere} enabled /> : active.render()}
         </div>
+      </div>
+
+      <PhoneSections tabs={TABS} tab={active.id} counts={counts} onPick={id => setTab(id as TabId)} />
+    </div>
+  )
+}
+
+/*
+  Phone: one bar at the bottom naming the open section; pressing it opens every section as a grid of named tiles
+  (the user, 13 Nov: fifteen icons in a row had become "L… A… S…"). A tile closes it; so does a press outside, or Escape.
+*/
+function PhoneSections({ tabs, tab, counts, onPick }: {
+  tabs: ReadonlyArray<(typeof ADMIN_TABS)[number]>; tab: string; counts: Record<string, number>; onPick: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const out = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', out)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', out); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const cur = tabs.find(t => t.id === tab) ?? tabs[0]
+  if (!cur) return null
+  const Badge = ({ id }: { id: string }) => (counts[id] ?? 0) > 0
+    ? <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyrixRed-600 px-1 text-[10px] font-bold text-white">{counts[id] > 99 ? '99+' : counts[id]}</span>
+    : null
+  const elsewhere = Object.entries(counts).some(([id, n]) => id !== cur.id && n > 0)
+  return (
+    <>
+      {open && <div className="fixed inset-0 z-20 bg-black/40 lg:hidden" aria-hidden="true" />}
+      <nav ref={box} className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-surface px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 lg:hidden" aria-label="Sections">
+        {open && (
+          <div className="mb-2 grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto pb-1">
+            {tabs.map(t => (
+              <button key={t.id} type="button" onClick={() => { onPick(t.id); setOpen(false) }}
+                aria-current={t.id === tab ? 'page' : undefined}
+                className={clsx('flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-xs font-medium',
+                  t.id === tab ? 'text-ink-900' : 'border-ink-200 text-ink-600 active:bg-ink-100')}
+                style={t.id === tab ? { borderColor: `rgb(${tintOf(t.id)})`, background: `rgb(${tintOf(t.id)} / 0.14)` } : undefined}>
+                <span className="relative"><t.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(t.id)})` }} /><Badge id={t.id} /></span>
+                <span className="w-full truncate text-center">{t.short}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="flex w-full items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-semibold text-ink-900"
+          style={{ background: `rgb(${tintOf(cur.id)} / 0.14)` }}>
+          <span className="relative"><cur.icon className="h-5 w-5" style={{ color: `rgb(${tintOf(cur.id)})` }} />{!open && elsewhere && <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-cyrixRed-600" />}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{cur.label}</span>
+          {(counts[cur.id] ?? 0) > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-cyrixRed-600 px-1.5 text-[11px] font-bold text-white">{counts[cur.id] > 99 ? '99+' : counts[cur.id]}</span>}
+          <ChevronDown className={clsx('h-5 w-5 transition-transform', open && 'rotate-180')} />
+        </button>
       </nav>
+    </>
+  )
+}
+
+/** Each section's colour: the portal tile's for a module (Platform index.css), its own for the rest (the user, 13 Nov). */
+const TINT: Record<string, string> = {
+  logins: '225 29 72', admins: '2 132 199', summary: '5 150 105', platform: '71 85 105', kpi: '217 119 6', spare: '147 51 234',
+  bemmp: '13 148 136', revive: '37 99 235', 'digest-history': '124 58 237', digest: '124 58 237', cyra: '220 38 38',
+  pulse: '8 145 178', travel: '219 39 119', workplace: '161 98 7', notify: '234 88 12', support: '79 70 229',
+}
+const tintOf = (id: string) => TINT[id] ?? '113 113 122'
+
+/**
+ * On a phone each table row is a box (.stack-phone in index.css); this writes each column's name onto its cells so
+ * the box can say what each value is. Watches the section, as its tables load and change after it opens.
+ */
+function useStackLabels() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    const label = () => {
+      root.querySelectorAll('table').forEach(t => {
+        const heads = [...t.querySelectorAll('thead th')].map(h => (h as HTMLElement).innerText.replace(/[↑↓↕⇅]/g, '').trim())
+        t.querySelectorAll('tbody > tr').forEach(tr => {
+          [...tr.children].forEach((td, i) => {
+            const want = heads[i] ?? ''
+            if (td.getAttribute('data-label') !== want) td.setAttribute('data-label', want)
+            // Dates are left to a computer (the user, 13 Nov: "in mobile that date columns not needed").
+            const dated = /^(added$|date$|when$|last |.*(updated|changed|sign-in|signed in|set on|created))/i.test(want)
+            if (dated !== td.hasAttribute('data-dated')) td.toggleAttribute('data-dated', dated)
+          })
+        })
+      })
+    }
+    label()
+    const mo = new MutationObserver(label)
+    mo.observe(root, { childList: true, subtree: true })
+    return () => mo.disconnect()
+  }, [])
+  return ref
+}
+
+// Gemini's long refusals in one short line (the user, 25 Nov: "too much"): "no free quota: 3.1-pro · busy: 3.8-flash, 3.7-flash".
+function shortAi(ai: string): { model: string; why: string } {
+  const ok = ai.startsWith('ok')
+  const [head, tried = ''] = ai.replace(/^ok\s*/, '').split(' · tried ')
+  const failed = ok ? tried : ai
+  const groups = new Map<string, Set<string>>()
+  for (const m of failed.matchAll(/((?:gemini-|openai\/)[\w.-]+):\s*([^·]*)/g)) {
+    const why = /quota/i.test(m[2]) ? 'no free quota' : /demand|overload|busy|unavailable/i.test(m[2]) ? 'busy' : /timeout|abort/i.test(m[2]) ? 'too slow' : 'failed'
+    const name = m[1].replace(/^gemini-|^openai\//, '').replace(/-preview.*$/, '')
+    if (!groups.has(why)) groups.set(why, new Set())
+    groups.get(why)!.add(name)
+  }
+  const why = [...groups].map(([w, s]) => `${w}: ${[...s].join(', ')}`).join(' · ')
+  return { model: ok ? head : '', why: why || (ok ? '' : ai.slice(0, 80)) }
+}
+
+/*
+ * BEMMP → Templates (KPI 0311; the user, 25 Nov): each quotation template, who uploaded it, and whether Gemini read it
+ * — the model that answered, or every reason it did not. SW Admin only; the people uploading never see this.
+ */
+type QtTemplateRow = { id: string; name: string; kind: string; by_name: string | null; by_ecode: string | null; created_at: string; updated_at: string; ai: string | null }
+function QtTemplatesLog() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['qt_templates_log'],
+    queryFn: async () => { const { data, error } = await supabase.rpc('qt_templates_log'); if (error) throw error; return (data ?? []) as QtTemplateRow[] },
+  })
+  const [q, setQ] = useState('')
+  const [gem, setGem] = useState<'all' | 'read' | 'not'>('all')
+  const [sort, setSort] = useState<{ key: 'name' | 'by' | 'at'; asc: boolean }>({ key: 'at', asc: false })
+  if (isLoading) return <PageLoader />
+  if (error) return <p className="text-sm text-cyrixRed-600">{friendlyError(error)}</p>
+  const read = (r: QtTemplateRow) => !!r.ai && r.ai.startsWith('ok')
+  const s = q.trim().toLowerCase()
+  const rows = (data ?? [])
+    .filter(r => !s || r.name.toLowerCase().includes(s) || (r.by_name ?? '').toLowerCase().includes(s) || (r.by_ecode ?? '').toLowerCase().includes(s))
+    .filter(r => gem === 'all' || (gem === 'read') === read(r))
+    .sort((a, b) => {
+      const v = (x: QtTemplateRow) => sort.key === 'name' ? x.name : sort.key === 'by' ? (x.by_name ?? '') : x.updated_at
+      return (sort.asc ? 1 : -1) * v(a).localeCompare(v(b))
+    })
+  const head = (k: typeof sort.key, label: string) => (
+    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort(o => ({ key: k, asc: o.key === k ? !o.asc : k !== 'at' }))}>
+      {label}<span className="text-[10px]">{sort.key === k ? (sort.asc ? '▲' : '▼') : '↕'}</span>
+    </button>
+  )
+  const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+          <input className="input pl-9" placeholder="Search by template, name or employee code" value={q} onChange={e => setQ(e.target.value)} />
+        </div>
+        <select className="input" value={gem} onChange={e => setGem(e.target.value as typeof gem)} aria-label="Gemini">
+          <option value="all">Gemini: all</option>
+          <option value="read">Read by Gemini</option>
+          <option value="not">Not read</option>
+        </select>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-ink-200">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-left text-xs font-semibold uppercase tracking-wider text-ink-500">
+            <tr>
+              <th className="px-4 py-3">{head('name', 'Template')}</th>
+              <th className="px-4 py-3">{head('by', 'Uploaded by')}</th>
+              <th className="px-4 py-3">{head('at', 'Uploaded')}</th>
+              <th className="px-4 py-3">Gemini</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id} className="border-t border-ink-100 align-top">
+                <td className="px-4 py-3 font-medium text-ink-900">{r.name}</td>
+                <td className="px-4 py-3 text-ink-700">{r.by_name ?? '—'}{r.by_ecode && <span className="text-ink-400"> ({r.by_ecode})</span>}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-ink-600">{when(r.updated_at)}</td>
+                <td className="px-4 py-3">
+                  {read(r) ? <><span className="badge bg-green-100 text-green-800">{shortAi(r.ai!).model || 'Read'}</span>{shortAi(r.ai!).why && <div className="mt-1 text-xs text-ink-400">{shortAi(r.ai!).why}</div>}</>
+                    : r.ai ? <span className="text-xs text-cyrixRed-700">{shortAi(r.ai).why}</span>
+                    : <span className="text-xs text-ink-400">Before Gemini</span>}
+                </td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan={4} className="px-4 py-6 text-center text-ink-400">No templates</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

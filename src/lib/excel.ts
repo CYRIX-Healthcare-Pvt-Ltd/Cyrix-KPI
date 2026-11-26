@@ -322,10 +322,9 @@ export function parseKpiWorkbook(data: ArrayBuffer, sheetName?: string): ParseRe
     }
 
     const targetCell = colOf.target !== undefined ? cellAt(ws, r, colOf.target) : null
-    const target =
-      typeof targetCell?.v === 'number' && Number.isFinite(targetCell.v)
-        ? targetCell.v
-        : null
+    // A target written as 100% is stored by Excel as 1: read it as the 100 it shows (the user, 5 Nov: "target is
+    // 100% but on uploading in our s/w it is coming as 1"). Only the cell's own % format converts, as for perUnit.
+    const target = toPercentPoints(targetCell?.v, targetCell?.z ?? null)
 
     const formula =
       colOf.formula !== undefined ? cellAt(ws, r, colOf.formula).f : null

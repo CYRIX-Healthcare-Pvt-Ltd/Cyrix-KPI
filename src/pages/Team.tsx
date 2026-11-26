@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Users, ChevronRight, Download, BarChart3, UserMinus, Spline, X, ImageOff, AlertCircle,
@@ -19,7 +19,8 @@ import {
   PageLoader, ScorePill, StatusBadge, StatTile, EmptyState, Alert, Spinner,
 } from '@/components/ui'
 import { ScoreHeader, ActionRequired } from '@/components/analysis'
-import { teamAverages } from '@/lib/bands'
+import { teamAverages, bandFor } from '@/lib/bands'
+import { useIsDark } from '@/lib/isDark'
 import { rankScore, ratingLabel } from '@/lib/rating'
 import { JOB_ROLE_TOTAL, REMAINDER_TOTAL } from '@/lib/sections'
 import Avatar from '@/components/Avatar'
@@ -59,8 +60,20 @@ const STATUS_FILTERS: { key: StatusKey; label: string; activeCls: string }[] = [
   { key: 'scored',      label: 'Scored',          activeCls: 'bg-emerald-200 text-emerald-900' },
 ]
 
+/** The arrow on a hovered row takes the colours of that person's score pill (the user, 12 Nov). Written out so
+ *  Tailwind sees every class. */
+const ARROW_HOVER: Record<string, string> = {
+  excellent: 'group-hover:bg-emerald-100 group-hover:text-emerald-900',
+  veryGood: 'group-hover:bg-green-100 group-hover:text-green-800',
+  good: 'group-hover:bg-lime-100 group-hover:text-lime-900',
+  satisfactory: 'group-hover:bg-amber-100 group-hover:text-amber-800',
+  poor: 'group-hover:bg-cyrixRed-100 group-hover:text-cyrixRed-800',
+}
+
 export default function Team() {
   const { employee } = useAuth()
+  const navigate = useNavigate()
+  const dark = useIsDark()
   const fy = currentFy()
   /*
     The month people are reporting on, and no picker to change it.
@@ -420,10 +433,8 @@ export default function Team() {
     <div className="space-y-5">
       <ScoreHeader
         title="My team"
-        subtitle={
-          `${team.length} member${team.length === 1 ? '' : 's'} · FY ${fy}` +
-          ` · reporting on ${monthLabel(month)}`
-        }
+        // Just the count (the user, 12 Nov).
+        subtitle={`${team.length} member${team.length === 1 ? '' : 's'}`}
         score={teamAvg}
         scoreLabel="Team average"
       />
@@ -493,7 +504,13 @@ export default function Team() {
         {/* Only asks when the two answers differ. A manager whose reports
             manage nobody would be answering a question with one possible
             answer. */}
-        <div className="relative col-span-2 sm:col-span-1">
+        {/* On a phone, Waiting for my score takes the other half of the Export row, always there (the user, 12 Nov). */}
+        <div className={clsx('flex items-center justify-between gap-2 rounded-xl border px-3 py-2 sm:hidden',
+          allSubs && waitingOnMe.people > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-ink-200 text-ink-600')}>
+          <span className="text-xs font-medium leading-tight">Waiting for my score</span>
+          <span className="text-lg font-semibold tabular-nums">{allSubs ? waitingOnMe.people : '—'}</span>
+        </div>
+        <div className="relative">
           <button
             onClick={() => setExportMenu(v => !v)}
             className="btn-excel w-full"
@@ -520,7 +537,9 @@ export default function Team() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
+      {/* On a phone no tiles: the band is on the team card, the counts are the chips below, the waiting count beside
+          Export (the user, 12 Nov). */}
+      <div className="hidden grid-cols-2 gap-3 grid-pairs sm:grid sm:grid-cols-4">
         {/*
           The team's average band — seven tenths of this manager's own
           standing, so it is the single number they are most measured by
@@ -639,7 +658,8 @@ export default function Team() {
         a marking on the row itself are what answer that; the count only
         ever raised the question.
       */}
-      <div className="card divide-y divide-ink-100 overflow-hidden">
+      {/* Each person their own box, as the KRAs on the month page (the user, 12 Nov). */}
+      <div className="space-y-2">
         {[...team]
           .filter(m => inFilter(m.id, statusFilter))
           .sort((a, b) => {
@@ -672,27 +692,51 @@ export default function Team() {
           return (
             <div
               key={member.id}
+              // The face and the name open the quick look; anywhere else on the row is the arrow (the user, 12 Nov).
+              onClick={e => {
+                if ((e.target as HTMLElement).closest('button, a, select, input')) return
+                navigate(`/team/${member.id}`)
+              }}
               className={clsx(
-                'flex flex-col gap-2.5 p-4 sm:flex-row sm:items-center sm:gap-3',
+                'group cursor-pointer',
+                // One line on a phone too: the score beside the name, the split under the name (the user, 12 Nov).
+                'card flex items-center gap-2 overflow-hidden px-3 py-3 sm:gap-3 sm:p-4',
                 // Tinted and edged where the manager is the one holding
                 // things up, so the row is findable while scrolling rather
                 // than only once it is read.
                 waitingSubs.length > 0
                   ? 'border-l-4 border-amber-500 bg-amber-50/60 pl-3 hover:bg-amber-50'
-                  : 'hover:bg-ink-50',
+                  : sub?.final_total_score != null ? '' : 'hover:bg-ink-100',
+                'relative isolate transition-colors',
               )}
             >
+              {/* A light wash of the score's own colour at the score's end; fainter in dark mode, where it was too much
+                  (the user, 12 Nov). */}
+              {waitingSubs.length === 0 && sub?.final_total_score != null && (
+                // Under the pointer the wash deepens across the row in the same colour (the user, 12 Nov: "darken means
+                // their score based one").
+                <span aria-hidden
+                  className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-l ${bandFor(Number(sub.final_total_score))?.wash ?? ''} to-transparent opacity-[var(--w)] transition-opacity duration-200 group-hover:opacity-[var(--wh)]`}
+                  style={{ '--w': dark ? 0.35 : 0.8, '--wh': 1 } as React.CSSProperties} />
+              )}
               {/* The face and the name are one target, opening a quick
                   look rather than a page. The chevron beside them still
                   goes to the full record — a peek and a visit are
                   different intentions and deserve different buttons. */}
-              <div className="min-w-0 sm:flex-1">
+              <div className="min-w-0 flex-1">
                 <button
-                  onClick={() => setPeek(member.id)}
-                  className="btn-press flex w-full min-w-0 items-center gap-3 text-left"
+                  onClick={e => {
+                    // On a phone only the photo opens the quick look; the name opens the record (the user, 12 Nov).
+                    if (window.matchMedia?.('(max-width: 639px)').matches && !(e.target as HTMLElement).closest('[data-avatar]')) {
+                      navigate(`/team/${member.id}`)
+                      return
+                    }
+                    setPeek(member.id)
+                  }}
+                  className="btn-press inline-flex max-w-full min-w-0 items-center gap-3 text-left"
                   aria-label={`Quick look at ${member.full_name}`}
                 >
-                  <Avatar name={member.full_name} src={member.avatar} size="sm" />
+                  <span data-avatar className="shrink-0"><Avatar name={member.full_name} src={member.avatar} size="sm" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="truncate font-medium text-ink-900">
@@ -708,6 +752,9 @@ export default function Team() {
                     <span className="block truncate text-xs text-ink-500">
                       {member.ecode}
                       {member.designation && ` · ${member.designation}`}
+                    </span>
+                    <span className="block sm:hidden">
+                      <SectionSplit sub={sub} hasEsms={Number(assign?.esms_weight ?? 0) > 0} align="start" />
                     </span>
                     {assign?.status !== 'active' && (
                       <span className="mt-1 block text-xs text-amber-700">
@@ -757,7 +804,7 @@ export default function Team() {
                 over three lines. From 640px up this wrapper steps aside
                 (display: contents) and the row is one line, as before.
               */}
-              <div className="flex items-center justify-end gap-3 sm:contents">
+              <div className="flex shrink-0 items-center gap-1 sm:contents">
                 {/* Narrow and icon-only on a phone rather than hidden: a
                     manager reading this on the road still needs to get into
                     a report's team, and the count is the part that has to
@@ -800,10 +847,12 @@ export default function Team() {
                       alone now, so the fallback showed a figure that was
                       neither their score nor out of the same 100. */}
                   <ScorePill value={sub?.final_total_score ?? null} size="sm" />
-                  <SectionSplit
-                    sub={sub}
-                    hasEsms={Number(assign?.esms_weight ?? 0) > 0}
-                  />
+                  <span className="hidden sm:block">
+                    <SectionSplit
+                      sub={sub}
+                      hasEsms={Number(assign?.esms_weight ?? 0) > 0}
+                    />
+                  </span>
                 </div>
 
                 {/* Score whenever any month is waiting, not only the month
@@ -834,7 +883,7 @@ export default function Team() {
                   ) : (
                     <Link
                       to={`/team/${member.id}`}
-                      className="shrink-0 btn-icon"
+                      className={clsx('shrink-0 btn-icon', ARROW_HOVER[bandFor(sub?.final_total_score ?? null)?.key ?? ''] ?? 'group-hover:bg-ink-100 group-hover:text-ink-900')}
                       aria-label={`View ${member.full_name}`}
                     >
                       <ChevronRight className="h-4 w-4" />
@@ -1318,10 +1367,11 @@ function PhotoRemovalForm({
  * than the row silently changing shape the month their first one lands.
  */
 function SectionSplit({
-  sub, hasEsms,
+  sub, hasEsms, align = 'end',
 }: {
   sub: KpiSubmission | undefined
   hasEsms: boolean
+  align?: 'start' | 'end'
 }) {
   if (!sub) return null
 
@@ -1337,7 +1387,7 @@ function SectionSplit({
 
   return (
     <p
-      className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5 text-[10px] leading-tight"
+      className={clsx('mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-tight', align === 'end' ? 'justify-end' : 'justify-start')}
       title={final ? 'Final scores by band' : 'Self assessment by band'}
     >
       {parts.map(([label, v]) => (

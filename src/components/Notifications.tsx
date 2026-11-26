@@ -386,6 +386,8 @@ export default function Notifications({ enabled }: { enabled: boolean }) {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-ink-900">{m.title}</p>
                     <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-ink-600">{m.body}</p>
+                    {/* A message's picture under its text, as in Travel's bell (0271; the user, 10 Nov: "why no pic?"). */}
+                    {m.image && <img src={m.image} alt="" loading="lazy" className="mt-2 block w-full max-w-xs rounded-lg border border-ink-200" />}
                     <p className="mt-1 text-[11px] text-ink-400">
                       {new Date(m.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </p>

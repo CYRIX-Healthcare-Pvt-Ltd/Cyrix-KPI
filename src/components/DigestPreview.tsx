@@ -12,7 +12,7 @@ import { X } from 'lucide-react'
 export interface PreviewPost {
   kind: string; title: string; body: string; image_url: string | null; color: string
   meet_at: string | null; meet_minutes: number | null; meet_link: string | null; meet_place: string | null
-  posted_as: 'hr' | 'it' | 'mkt'; author: string | null; created_at: string
+  posted_as: 'hr' | 'it' | 'mkt' | 'mgmt' | 'sw'; author: string | null; created_at: string
   likes: number; liked: boolean; comments: number
   vac_location: string | null; apply_by: string | null; apply_link: string | null
   /** Minutes before the start that Join opens, and a Video post's YouTube id (0185). */
@@ -22,18 +22,24 @@ export interface PreviewPost {
 /** The portal: the same site in production; its dev server locally (the KPI one is a different origin). */
 const PORTAL = import.meta.env.DEV ? 'http://localhost:5176' : ''
 
-export default function DigestPreview({ post, options, multi, closes, questions = [], onClose }: {
+export default function DigestPreview({ post, options, multi, closes, questions = [], anonymous = false, again = false, quiz, onClose }: {
   post: PreviewPost
   options: string[]
   /** A form's questions (0181). */
-  questions?: Array<{ label: string; qtype: string; options: string[]; required: boolean }>
+  questions?: Array<{ label: string; qtype: string; options: string[]; required: boolean; right?: number[]; points?: number }>
+  /** An anonymous form (0254): the note that no name is kept. */
+  anonymous?: boolean
+  /** Allow submitting again (0256). */
+  again?: boolean
+  /** A quiz's shuffle and timer (0258). */
+  quiz?: { shuffle: boolean; seconds: number | null }
   multi: boolean
   closes: string | null
   onClose: () => void
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const send = () => frame.current?.contentWindow?.postMessage(
-    { type: 'cyrix-digest-preview', post: { ...post, id: 'preview' }, options, multi, closes, questions }, PORTAL || window.location.origin)
+    { type: 'cyrix-digest-preview', post: { ...post, id: 'preview' }, options, multi, closes, questions, anonymous, again, quiz }, PORTAL || window.location.origin)
 
   useEffect(() => {
     const ready = (e: MessageEvent) => { if ((e.data as { type?: string } | null)?.type === 'cyrix-digest-preview-ready') send() }

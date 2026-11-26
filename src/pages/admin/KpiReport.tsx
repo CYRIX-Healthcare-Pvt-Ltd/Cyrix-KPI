@@ -392,7 +392,7 @@ export default function KpiReport() {
         </div>
       </div>
 
-      <p className="text-xs text-ink-400">
+      <p className="hidden text-xs text-ink-400 sm:block">
         Turnaround counts days from the 1st of the month after the KPI month,
         including the day it was submitted — July's KPI submitted on 5 August
         is 5 days. The second figure is what is left after the cool-off

@@ -450,12 +450,26 @@ export default function TeamAnalysis() {
 
       <ScoreHeader
         title="Team analysis"
-        subtitle={`${team.length} team members · FY ${fy}`}
+        subtitle={`${team.length} team members`}
         score={analysis.teamAvg}
         scoreLabel="Team average"
       />
 
-      <div className="grid grid-cols-2 gap-3 grid-pairs sm:grid-cols-4">
+      {/* A phone: the four counts in one short row, the words under each number (the user, 12 Nov). */}
+      <div className="grid grid-cols-4 gap-2 sm:hidden">
+        {([
+          ['Performing well', analysis.people.filter(p => (p.total ?? 0) >= 80).length],
+          ['Need support', analysis.struggling.length],
+          ['Declining', analysis.declining.length],
+          ['No scores yet', analysis.unscored],
+        ] as const).map(([l, v]) => (
+          <div key={l} className="card px-2 py-2.5 text-center">
+            <p className="text-xl font-semibold tabular-nums text-ink-900">{v}</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-tight text-ink-500">{l}</p>
+          </div>
+        ))}
+      </div>
+      <div className="hidden grid-cols-2 gap-3 grid-pairs sm:grid sm:grid-cols-4">
         <StatTile
           label="Performing well"
           value={analysis.people.filter(p => (p.total ?? 0) >= 80).length}
@@ -599,7 +613,7 @@ export default function TeamAnalysis() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-ink-800">Everyone</h3>
-              <p className="mt-0.5 text-xs text-ink-500">
+              <p className="mt-0.5 hidden text-xs text-ink-500 sm:block">
                 Ranked on {METRIC_LABEL[RANK_BY[metric]].toLowerCase()} across{' '}
                 {scopeLabel}.
               </p>
@@ -755,7 +769,7 @@ export default function TeamAnalysis() {
           </table>
         </div>
 
-        <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-400">
+        <p className="hidden border-t border-ink-100 px-4 py-2.5 text-xs text-ink-400 sm:block">
           Each band is scored out of its own weightage — job role out of 80,
           core values out of 20, or 15 for anyone who also carries ESMS. The
           rank and the band come from the percentage, not the raw score:

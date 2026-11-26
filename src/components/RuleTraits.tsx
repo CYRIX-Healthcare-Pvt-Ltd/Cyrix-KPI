@@ -30,15 +30,18 @@ const TONE: Record<TraitTone, { chip: string; icon: typeof ArrowUpToLine }> = {
 }
 
 export default function RuleTraits({
-  rule, weightage, params, className,
+  rule, weightage, params, className, skip,
 }: {
   rule: ScoringRule
   weightage: number
   params?: RuleParams
   className?: string
+  /** Tones shown elsewhere on the row (the month page puts the direction in the % badge). */
+  skip?: TraitTone[]
 }) {
   const dir = ruleDirection(rule)
   const traits = [...(dir ? [dir] : []), ...ruleTraits(rule, weightage, params ?? {})]
+    .filter(t => !skip?.includes(t.tone))
   if (traits.length === 0) return null
 
   return (

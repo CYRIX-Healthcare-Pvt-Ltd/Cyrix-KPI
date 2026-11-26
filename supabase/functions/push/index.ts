@@ -37,7 +37,7 @@ const admin = () => createClient(URL_, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 webpush.setVapidDetails('https://app.cyrix.in', Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
 
-type Payload = { title: string; body: string; url: string; tag?: string }
+type Payload = { title: string; body: string; url: string; tag?: string; image?: string }
 type Tally = { people: number; devices: number; delivered: number; failed: number }
 
 /** Every device of these people, sent the same payload, twenty at a time. */
@@ -60,14 +60,16 @@ async function everyone(db: ReturnType<typeof admin>): Promise<string[]> {
  * Every active person's device, each with words carrying their own first name (the user, 15 Oct:
  * "hey Kevin, today is the townhall meeting"). Names and devices are read in pages past 1,000.
  */
-async function deliverNamed(db: ReturnType<typeof admin>, make: (first: string) => Payload): Promise<Tally> {
+// `only`: a Digest post sent to chosen people (0242) reaches them alone.
+async function deliverNamed(db: ReturnType<typeof admin>, make: (first: string) => Payload, only?: string[] | null): Promise<Tally> {
+  const keep = only ? new Set(only) : null
   const first = new Map<string, string>()
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db.from('employees').select('id, full_name').eq('is_active', true).order('id').range(from, from + 999)
     if (error) throw new Error(error.message)
     for (const e of (data ?? []) as Array<{ id: string; full_name: string | null }>) {
       const w = (e.full_name ?? '').trim().split(/\s+/)[0] ?? ''
-      first.set(e.id, w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '')
+      if (!keep || keep.has(e.id)) first.set(e.id, w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '')
     }
     if (!data || data.length < 1000) break
   }
@@ -117,19 +119,21 @@ const joinWords = (m: { id: string; title: string; meet_at: string; meet_place: 
   Travel Expense (te_0027): a claim's messages — sent back, an amount changed — already in the bell of
   the people they are for, to their phones and computers, opening the claim. Each is taken once, by
   whoever marks it first: the app right after the step, or the 5-minute round if that missed it.
+  Ops alerts (0229) ride the same round: an app down or back up, already in the Ops admins' bells.
+  A new module or BEMMP project (0232) waits in the bell the same way, for the round only.
 */
-async function sendTravel(db: ReturnType<typeof admin>, by?: string): Promise<Tally> {
+async function sendQueued(db: ReturnType<typeof admin>, kinds: string[], by?: string): Promise<Tally> {
   const total: Tally = { people: 0, devices: 0, delivered: 0, failed: 0 }
-  let q = db.from('push_messages').select('id, title, body, url').eq('kind', 'travel').is('devices', null)
+  let q = db.from('push_messages').select('id, kind, title, body, url, image').in('kind', kinds).is('devices', null)
     .gt('created_at', new Date(Date.now() - 86_400_000).toISOString()).order('created_at').limit(200)
   if (by) q = q.eq('sent_by', by)
   const { data } = await q
-  for (const m of (data ?? []) as Array<{ id: string; title: string; body: string; url: string }>) {
+  for (const m of (data ?? []) as Array<{ id: string; kind: string; title: string; body: string; url: string; image: string | null }>) {
     const { data: took } = await db.from('push_messages').update({ devices: 0 }).eq('id', m.id).is('devices', null).select('id')
     if (!took?.length) continue
     const { data: to } = await db.from('push_inbox').select('employee_id').eq('message_id', m.id)
     const ids = ((to ?? []) as Array<{ employee_id: string }>).map(x => x.employee_id)
-    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: 'travel-' + m.id })
+    const t = await deliver(db, ids, { title: m.title, body: m.body, url: m.url, tag: m.kind + '-' + m.id, ...(m.image ? { image: m.image } : {}) })
     await db.from('push_messages').update(t).eq('id', m.id)
     total.people += t.people; total.devices += t.devices; total.delivered += t.delivered; total.failed += t.failed
   }
@@ -191,6 +195,23 @@ Deno.serve(async req => {
   try { input = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   const db = admin()
 
+  // SW Admin sends what a desk asked for (0299; the user, 19 Nov: "notification also need approval"): the request's
+  // own words, as that desk, from whoever asked. Taken first, so a second press sends nothing.
+  let approved: { asked_by: string | null; sent_as: string } | null = null
+  if (input.action === 'approve_request') {
+    const user = createClient(URL_, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    })
+    const { data: sw } = await user.rpc('is_sw_admin')
+    if (!sw) return json({ error: 'Only SW Admin approves' }, 403)
+    const { data: me } = await user.rpc('current_employee_id')
+    const { data: r } = await db.from('push_requests').update({ status: 'sent', decided_by: me ?? null, decided_at: new Date().toISOString() })
+      .eq('id', String(input.request_id ?? '')).eq('status', 'pending').select('*').maybeSingle()
+    if (!r) return json({ error: 'It is not waiting for approval' }, 404)
+    approved = { asked_by: r.asked_by, sent_as: r.sent_as }
+    input = { ...(r.payload as Record<string, unknown>), action: r.kind }
+  }
+
   // Switched off by SW Admin (0161): nothing reaches a phone or desktop.
   // The app itself carries on — a message still lands in the bell (the
   // user: "when disabled means only device notification, not in app").
@@ -200,8 +221,11 @@ Deno.serve(async req => {
   if (!devicesOn && input.action !== 'send' && input.action !== 'digest' && input.action !== 'reminders') return json({ off: true })
 
   // ---- the timers ----
-  if (input.action === 'bell' || input.action === 'reminders') {
+  if (input.action === 'bell' || input.action === 'reminders' || input.action === 'queued') {
     if (req.headers.get('x-push-key') !== Deno.env.get('PUSH_REMINDER_KEY')) return json({ error: 'Not allowed' }, 403)
+
+    // A module or BEMMP project just given (0233), or a Quotation tracker step (BEMMP 0049): sent the moment it is, not on the next round.
+    if (input.action === 'queued') return json(await sendQueued(db, ['travel', 'ops', 'module', 'bemmp']))
 
     if (input.action === 'bell') {
       const { data, error } = await db.rpc('push_bell_due')
@@ -234,10 +258,11 @@ Deno.serve(async req => {
         }).select('id').single()
         if (dup || !claim) continue
         // With each person's name (the user, 15 Oct).
-        const t = await deliverNamed(db, joinWords(m))
+        const { data: a } = await db.from('digest_posts').select('audience_ids').eq('id', m.id).maybeSingle()
+        const t = await deliverNamed(db, joinWords(m), a?.audience_ids ?? null)
         await db.from('push_messages').update(t).eq('id', claim.id)
       }
-      const travel = await sendTravel(db)
+      const travel = await sendQueued(db, ['travel', 'ops', 'module', 'bemmp'])
       total.people += travel.people; total.devices += travel.devices; total.delivered += travel.delivered; total.failed += travel.failed
       return json(total)
     }
@@ -252,7 +277,8 @@ Deno.serve(async req => {
         url: '/', target: { kind: 'reminder', side: 'meeting-day' }, dedupe_key: 'digest-morning:' + m.id,
       }).select('id').single()
       if (dup || !claim) continue
-      const t = devicesOn ? await deliverNamed(db, morningWords(m)) : { people: 0, devices: 0, delivered: 0, failed: 0 }
+      const { data: a } = await db.from('digest_posts').select('audience_ids').eq('id', m.id).maybeSingle()
+      const t = devicesOn ? await deliverNamed(db, morningWords(m), a?.audience_ids ?? null) : { people: 0, devices: 0, delivered: 0, failed: 0 }
       await db.from('push_messages').update(t).eq('id', claim.id)
     }
 
@@ -294,7 +320,7 @@ Deno.serve(async req => {
     })
     const { data: me } = await user.rpc('current_employee_id')
     if (!me) return json({ error: 'Not allowed' }, 403)
-    return json(await sendTravel(db, me as string))
+    return json(await sendQueued(db, ['travel', 'ops'], me as string))
   }
 
   // ---- a draft sent as a test (0187): only to the people it was sent to, on their devices ----
@@ -321,7 +347,7 @@ Deno.serve(async req => {
     const { data: ok } = await user.rpc('digest_can_edit', { p_id: c.post_id })
     if (!ok) return json({ error: 'Only a desk that can edit it' }, 403)
     const { data: post } = await db.from('digest_posts').select('id, title').eq('id', c.post_id).maybeSingle()
-    const desk = ({ hr: 'HR', it: 'IT', mkt: 'Marketing' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Cyrix Digest'
+    const desk = ({ hr: 'HR', it: 'IT', mkt: 'Marketing', mgmt: 'Management' } as Record<string, string>)[c.reply_desk ?? ''] ?? 'Cyrix Digest'
     const t = await deliver(db, [c.employee_id], {
       title: `${desk} replied · ${post?.title ?? 'Cyrix Digest'}`,
       body: String(c.reply).slice(0, 180),
@@ -336,9 +362,11 @@ Deno.serve(async req => {
       auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     })
     const { data: desk } = await user.rpc('digest_can_post')
-    if (!desk) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
+    if (!desk && !approved) return json({ error: 'Only HR Admin or IT Admin can post to Cyrix Digest' }, 403)
     const { data: post } = await db.from('digest_posts').select('*').eq('id', String(input.post_id ?? '')).is('deleted_at', null).maybeSingle()
     if (!post) return json({ error: 'That post is not there' }, 404)
+    // Waiting for SW Admin (0299): nobody is told until it is out.
+    if (!post.published_at) return json({ people: 0, devices: 0, delivered: 0, failed: 0, waiting: true })
     const when = post.kind === 'meeting'
       ? new Date(post.meet_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })
       : ''
@@ -352,6 +380,10 @@ Deno.serve(async req => {
     const subtitle = String(input.subtitle ?? '').trim().slice(0, 140)
     const resend = typeof input.subtitle === 'string'
     if (resend && !post.published_at) return json({ error: 'Publish it first' }, 400)
+    if (resend && !approved) {
+      const { data: sw } = await user.rpc('is_sw_admin')
+      if (!sw) return json({ error: 'SW Admin approves this first' }, 403)
+    }
     const body = subtitle ? subtitle
       : linkAdded
       ? `${when} · Join from Cyrix Digest.`
@@ -359,11 +391,13 @@ Deno.serve(async req => {
       ? `${when}${post.meet_place ? ' · ' + post.meet_place : ''}`
       : post.kind === 'poll' ? 'Have your say in Cyrix Digest.'
       : post.kind === 'form' ? 'Fill it in, in Cyrix Digest.'
+      : post.kind === 'quiz' ? 'Take the quiz in Cyrix Digest.'
       : String(post.body ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const { data: me } = await user.rpc('current_employee_id')
-    const people = await everyone(db)
+    // Sent to chosen people (0242): them alone.
+    const people: string[] = post.audience_ids ?? await everyone(db)
     const { data: row } = await db.from('push_messages').insert({
-      kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: me ?? null, sent_as: desk,
+      kind: 'manual', title, body, url: '/', target: { kind: 'digest', post: post.id }, sent_by: approved ? approved.asked_by : me ?? null, sent_as: approved?.sent_as ?? post.posted_as ?? desk,
     }).select('id').single()
     // Not into the in-app bell (0176; the user, 12 Oct: "keep digest out of kpi bell"):
     // the post is on the portal home, and goes to devices.
@@ -384,8 +418,10 @@ Deno.serve(async req => {
     const body = String(input.body ?? '').trim().slice(0, 400)
     if (!body) return json({ error: 'Type the message first' }, 400)
     // Sent as HR or as SW Admin (0159): only that desk sees it afterwards.
-    const as = input.as === 'sw' ? 'sw' : 'hr'
-    const { data: ok } = await user.rpc('push_desk_ok', { p_as: as })
+    const as = approved ? approved.sent_as : input.as === 'sw' ? 'sw' : 'hr'
+    // HR's message waits for SW Admin (0299); SW Admin's own goes at once.
+    if (!approved && as !== 'sw') return json({ error: 'SW Admin approves this first' }, 403)
+    const { data: ok } = await user.rpc('push_desk_ok', { p_as: approved ? 'sw' : as })
     if (!ok) return json({ error: as === 'sw' ? 'Only SW Admin can send from here' : 'Only HR Admin can send from here' }, 403)
     // A thousand at a time, as `everyone` reads them: "Everyone" is more than 1,000 people.
     const people: string[] = []
@@ -397,7 +433,7 @@ Deno.serve(async req => {
     }
     const { data: me } = await user.rpc('current_employee_id')
     const { data: row } = await db.from('push_messages').insert({
-      kind: 'manual', title, body, url: '/', target: input.target, sent_by: me ?? null, sent_as: as,
+      kind: 'manual', title, body, url: '/', target: input.target, sent_by: approved ? approved.asked_by : me ?? null, sent_as: as,
     }).select('id').single()
     // Into everybody's bell first (0158), devices or not.
     if (row) {
