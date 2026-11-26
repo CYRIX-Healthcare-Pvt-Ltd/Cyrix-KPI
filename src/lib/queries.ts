@@ -783,9 +783,9 @@ export function useSubmissionById(submissionId: string | undefined) {
 export function useOpenSubmission() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (args: { employeeId: string; month: string }) => {
-      const { data, error } = await supabase.rpc('open_submission', {
-        p_employee_id: args.employeeId,
+    // 0313: always the signed-in person's own month; open_submission is not callable from the browser.
+    mutationFn: async (args: { month: string }) => {
+      const { data, error } = await supabase.rpc('open_my_submission', {
         p_period_month: args.month,
       })
       if (error) throw new Error(friendlyError(error))

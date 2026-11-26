@@ -430,7 +430,7 @@ export default function MonthlySubmission() {
               className="btn-primary mt-4"
               disabled={openSub.isPending}
               onClick={() =>
-                employee && openSub.mutateAsync({ employeeId: employee.id, month })
+                employee && openSub.mutateAsync({ month })
                   .catch(e => setError(e.message))
               }
             >
