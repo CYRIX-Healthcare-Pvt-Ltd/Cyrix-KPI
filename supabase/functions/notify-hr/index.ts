@@ -131,6 +131,8 @@ interface Summary {
   who: string
   /** Whose desk it landed on. */
   desk: Desk
+  /** The person it is about: their reporting manager is copied. */
+  personId?: string | null
 }
 
 /**
@@ -159,6 +161,7 @@ async function summarise(
     return {
       who,
       desk,
+      personId: data.employee_id,
       headline: `${who} has asked ${DESK_NAME[desk]} a question`,
       detail: data.employee_note ?? '',
     }
@@ -172,6 +175,7 @@ async function summarise(
     return {
       who,
       desk: 'hr',
+      personId: data.employee_id,
       headline: `${who} has been flagged as having left`,
       detail: [data.reason, onDay(data.last_working_day) ? `Last working day: ${onDay(data.last_working_day)}` : '']
         .filter(Boolean).join('\n'),
@@ -186,6 +190,7 @@ async function summarise(
     return {
       who,
       desk: 'hr',
+      personId: data.employee_id,
       headline: `${who} wants a month removed`,
       detail: [asMonth(data.period_month) ? `Month: ${asMonth(data.period_month)}` : '', data.reason]
         .filter(Boolean).join('\n'),
@@ -199,6 +204,7 @@ async function summarise(
   return {
     who,
     desk: 'hr',
+    personId: data.employee_id,
     headline: `${who} wants their KPI reopened`,
     detail: [data.financial_year ? `Year: ${data.financial_year}` : '', data.reason]
       .filter(Boolean).join('\n'),
@@ -206,16 +212,18 @@ async function summarise(
 }
 
 /**
- * Who hears about it: every active person on that desk, their reporting
- * managers copied (the user, 2 Nov: "support mail to their id and reporting
- * managers"), and — for HR — whoever HR Admin has asked to be copied.
+ * Who hears about it: every active person on that desk; copied, the
+ * reporting manager of the person it is about (the user, 26 Nov: "only hr
+ * and his reporting" — the desk people's own managers, a director among
+ * them, were copied until then), and — for HR — whoever HR Admin has asked
+ * to be copied. The day's round-up is about many people: the desk alone.
  *
  * Every holder rather than one: desks are people now (KPI 0246), and the
  * old shared desk logins are switched off. IT counts only those with
  * Support ticked (0247).
  */
 async function recipients(
-  db: ReturnType<typeof admin>, desk: Desk,
+  db: ReturnType<typeof admin>, desk: Desk, personId?: string | null,
 ): Promise<{ to: string[]; cc: string[] }> {
   // Plain reads rather than an embedded join, so nothing can be ambiguous.
   const { data: holders } = await db.from('user_roles')
@@ -235,14 +243,17 @@ async function recipients(
     people = people.filter(p => p.account_type === 'admin' || support.has(p.id))
   }
 
-  const email = (a: string | null | undefined) => (a ?? '').trim()
+  // One address once, whatever its capitals ("Gayathri.Prem@" and "gayathri.prem@" were two copies).
+  const email = (a: string | null | undefined) => (a ?? '').trim().toLowerCase()
   const to = [...new Set(people.map(p => email(p.work_email)).filter(a => a.includes('@')))]
 
-  const managerIds = [...new Set(people.filter(p => p.account_type !== 'admin' && p.reporting_manager_id).map(p => p.reporting_manager_id as string))]
-  let cc: string[] = []
-  if (managerIds.length) {
-    const { data } = await db.from('employees').select('work_email').in('id', managerIds).eq('is_active', true)
-    cc = (data ?? []).map(m => email(m.work_email as string | null)).filter(a => a.includes('@'))
+  const cc: string[] = []
+  if (personId) {
+    const { data: who } = await db.from('employees').select('reporting_manager_id').eq('id', personId).maybeSingle()
+    if (who?.reporting_manager_id) {
+      const { data: m } = await db.from('employees').select('work_email').eq('id', who.reporting_manager_id).eq('is_active', true).maybeSingle()
+      if (m && email(m.work_email as string | null).includes('@')) cc.push(email(m.work_email as string | null))
+    }
   }
 
   // The copy list is HR's own setting.
@@ -250,7 +261,7 @@ async function recipients(
     const { data: setting } = await db.from('app_settings')
       .select('value').eq('key', 'hr_notify_cc').maybeSingle()
     const raw = setting?.value
-    if (Array.isArray(raw)) cc.push(...raw.filter(a => typeof a === 'string' && a.includes('@')))
+    if (Array.isArray(raw)) cc.push(...raw.filter(a => typeof a === 'string' && a.includes('@')).map(a => email(a)))
   }
 
   return { to, cc: [...new Set(cc)].filter(a => !to.includes(a)) }
@@ -472,7 +483,7 @@ Deno.serve(async req => {
   }
   if (!claim) return json({ ok: true, sent: false, reason: 'already sent' })
 
-  const { to, cc } = await recipients(db, summary.desk)
+  const { to, cc } = await recipients(db, summary.desk, summary.personId)
   if (to.length === 0) {
     await db.from('admin_notifications')
       .update({ error: `${summary.desk} admin has no work_email on their record` })
