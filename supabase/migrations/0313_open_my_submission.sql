@@ -39,5 +39,5 @@ end $function$;
 revoke all on function public.open_my_submission(date) from public, anon;
 grant execute on function public.open_my_submission(date) to authenticated, service_role;
 
--- Part 2 — applied once the app uses open_my_submission (open tabs reload onto it).
--- revoke execute on function public.open_submission(uuid, date) from public, anon, authenticated;
+-- Part 2 — applied once the app used open_my_submission (KPI e9c9635 live, 26 Nov).
+revoke execute on function public.open_submission(uuid, date) from public, anon, authenticated;
