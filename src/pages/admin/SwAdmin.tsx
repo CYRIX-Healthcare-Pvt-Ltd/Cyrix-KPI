@@ -3,13 +3,14 @@ import clsx from 'clsx'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShieldAlert, ShieldCheck, KeyRound, Download, RotateCcw, Eraser,
-  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, Wrench, Stethoscope,
+  LayoutGrid, Timer, QrCode, Activity, Upload, X, Check, LifeBuoy, BarChart3, PieChart, Wrench, Stethoscope,
   Image as ImageIcon, Gauge, Navigation, BellRing, Newspaper, ChevronDown, Building2,
 } from 'lucide-react'
 import SendNotification from './SendNotification'
 import DigestAdmin from './DigestAdmin'
 import AdminsTab from './AdminsTab'
 import PlatformAdmin from './PlatformAdmin'
+import ModuleSummary from './ModuleSummary'
 import { SortHeader } from '@/components/ui'
 import { ReviveLabAccess } from '@/pages/admin/ReviveLabAccess'
 import CyraAccess from '@/pages/admin/CyraAccess'
@@ -2710,6 +2711,8 @@ const ADMIN_TABS = [
   // Beside Logins because it reads the same rows: one is the list, the
   // other is what the list adds up to.
   { id: 'summary', label: 'Summary Report', short: 'Summary', icon: BarChart3, render: () => <SummaryTab /> },
+  // Each module: assigned, live, used from a date, used % (the user, 26 Nov; 0312).
+  { id: 'modules', label: 'Module summary', short: 'Modules', icon: PieChart, render: () => <ModuleSummary /> },
   // KPI belongs beside the other two, not a level above them. It sat in the
   // navigation as a sibling of this whole screen, which made one module's
   // settings look like a different kind of thing from the other two.
