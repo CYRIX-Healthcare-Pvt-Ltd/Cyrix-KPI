@@ -7,8 +7,10 @@ and scores it, and the blended result feeds appraisal and PIP decisions.
 This repository also carries three things every other module depends on:
 **the migrations for the shared Supabase database** (portal module registry,
 Spare, BEMMP, Digest, device check, CYRA sign-in and more), **the platform's
-edge functions** (password codes, mail, web push), and **SW Admin**, the one
-administration console for logins and modules across the platform.
+edge functions** (password codes, mail, web push, BEMP ticket lookup), and
+**SW Admin**, the one administration console for logins and modules across the
+platform. The database half of the portal's **Ops page** (`ops_*`, from 0227)
+is migrated here too.
 
 > Part of **Cyrix One**, the platform at [app.cyrix.in](https://app.cyrix.in).
 > System-wide picture: [Cyrix One Platform — System Architecture](https://claude.ai/artifact/HNYWoBqCJ6Xh3XcREuKpTu)
@@ -20,7 +22,7 @@ administration console for logins and modules across the platform.
 |---|---|
 | Served at | `app.cyrix.in/kpi` (portal rewrite to `cyrix-kpi.vercel.app`) |
 | Stack | React 18, TypeScript, Vite 5, Tailwind 3, TanStack Query, `@supabase/supabase-js`, Vitest; Supabase edge functions (Deno); Node admin scripts |
-| Database | Shared Supabase project `emuvmihfbnndhbpsndvc` (Tokyo). This repo owns its migrations |
+| Database | Shared Supabase project `cyrix-mumbai` (`ejtylrqwvxatbrifksbb`, Mumbai; moved from the Tokyo project `emuvmihfbnndhbpsndvc` on 21 Nov 2026). This repo owns its migrations |
 | Sign-in | Employee code → `<ecode>@cyrix.local` + password (Supabase Auth); the portal's session on app.cyrix.in |
 | Hosting | Vercel project `cyrix-kpi`; edge functions on Supabase, deployed by GitHub Actions |
 | Maintainers | Kevin |
@@ -41,10 +43,10 @@ cd Cyrix-KPI && npm install
 Create `.env.local` (it is gitignored — never commit it):
 
 ```
-VITE_SUPABASE_URL=https://emuvmihfbnndhbpsndvc.supabase.co
+VITE_SUPABASE_URL=https://ejtylrqwvxatbrifksbb.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
 VITE_AUTH_EMAIL_DOMAIN=cyrix.local
-SUPABASE_DB_URL=postgresql://postgres.emuvmihfbnndhbpsndvc:PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
+SUPABASE_DB_URL=postgresql://postgres.ejtylrqwvxatbrifksbb:PASSWORD@<pooler host>:5432/postgres
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 ```
 
@@ -61,8 +63,9 @@ Stop the server with `Ctrl+C`.
 
 > **Connection note.** The direct `db.<ref>.supabase.co` host no longer
 > resolves for this project — Supabase moved direct connections to IPv6-only.
-> Use the **pooler** host above (`aws-0-ap-northeast-1.pooler.supabase.com`,
-> port 5432, user `postgres.<project-ref>`). Percent-encode any `@` in the
+> Use the **pooler** host (copy it from the dashboard's **Connect** button;
+> it is an `ap-south-1` host since the move to Mumbai), port 5432, user
+> `postgres.<project-ref>`. Percent-encode any `@` in the
 > password as `%40`.
 
 ## Environment variables
@@ -82,7 +85,9 @@ is one of the three public ones.
 | `RESEND_WEBHOOK_SECRET` | Supabase function secrets | **yes** | Verifies Resend's delivery webhooks (`mail-events`) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `PUSH_REMINDER_KEY` | Supabase function secrets | **yes** (private key, reminder key) | Web push (`push`) |
 | `APP_BASE_URL`, `AUTH_EMAIL_DOMAIN` | Supabase function secrets | no | Links in mail; ecode domain |
+| `BEMP_AP_USERNAME`, `BEMP_AP_PASSWORD`, `BEMP_PVT_USERNAME`, `BEMP_PVT_PASSWORD` | Supabase function secrets | **yes** | `bemp-ticket`: Travel's BEMP ticket lookup signs in with these |
 | `SUPABASE_ACCESS_TOKEN` | GitHub Actions secret | **yes** | Deploys edge functions |
+| `SUPABASE_PROJECT_REF` | GitHub Actions variable | no | Which project the functions deploy to; defaults to the Mumbai project |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into edge functions by Supabase.
@@ -102,9 +107,22 @@ project, not only KPI's. Every module on that project reads it:
 | 0163 onward (`*digest*`) | Cyrix Digest on the portal |
 | 0171–0174, 0188, 0193 | CYRA sign-in through the portal (`cyra_whoami()`) |
 | 0220–0222 | My Task device notifications and mail |
+| 0223 | Edge functions answer signed-in callers only |
+| 0224, 0295 | CYRA people and the CYRA observer role |
+| 0227–0241, 0298, 0300–0303, 0312 (`*ops*`) | The portal's Ops page: uptime and alerts, errors, AI usage, security, database, heartbeat, active users, module usage |
+| 0231, 0234, 0279, 0311 | BEMMP projects, PM notifications and quotations |
+| 0232–0233, 0250, 0291 | Notifications when a module is added, and the bell per module |
+| 0239 | `open_submission()` checks who is calling |
+| 0242–0243, 0252–0261, 0270, 0278, 0283–0287, 0292, 0294, 0299, 0308 | Digest: who a post goes to, quizzes, forms, comment threads, SW approval |
+| 0246–0249, 0297 | Desk admins, IT logins and support, the management and software admin desks |
+| 0262–0268, 0274–0277, 0280–0282, 0300, 0307 | Team standing and the Rank 1s list on the portal |
+| 0303–0305 | The maintenance switch for every app |
+| 0306 | Directors |
+| 0309–0310 | Tile order and tile status on the portal |
+| everything else from 0225 | KPI itself (core values, recalls, last days, timing, settling) |
 
-Revive Lab, Travel, My Task and Inventory keep their own prefixed migrations
-(`rl_`, `te_`, `mt_`, `inv_`) in their own repositories; a change they need in
+Revive Lab, Travel, My Task, Workplace and Projects keep their own prefixed
+migrations (`rl_`, `te_`, `mt_`, `inv_`/`wp_`, `prj_`) in their own repositories; a change they need in
 a shared object is a migration here.
 
 ### Commands
@@ -223,7 +241,7 @@ Still worth running before go-live. `--check` shows the current state,
 
    | Name | Value |
    |---|---|
-   | `VITE_SUPABASE_URL` | `https://emuvmihfbnndhbpsndvc.supabase.co` |
+   | `VITE_SUPABASE_URL` | `https://ejtylrqwvxatbrifksbb.supabase.co` |
    | `VITE_SUPABASE_ANON_KEY` | your `sb_publishable_…` key |
    | `VITE_AUTH_EMAIL_DOMAIN` | `cyrix.local` |
 
@@ -288,8 +306,14 @@ variables → Actions**:
 |---|---|
 | `SUPABASE_ACCESS_TOKEN` | supabase.com/dashboard/account/tokens |
 
-The project ref is in the workflow rather than in a secret — it is in the
-URL of every request the browser already makes.
+The project ref is the repository variable `SUPABASE_PROJECT_REF`, falling
+back to the Mumbai project in the workflow; it is not a secret, since it is in
+the URL of every request the browser already makes. The functions called by
+webhooks, mail, push and cron are deployed with `--no-verify-jwt`.
+
+Functions under `supabase/functions/`: `password-otp`, `push`, `notify-hr`,
+`mail-events`, `create-logins`, `task-mail`, `travel-mail`, `travel-photos`,
+`place-link`, `bemp-ticket`, `qt-mail`.
 
 **Migrations are deliberately not automated.** Applying them needs
 `SUPABASE_DB_URL`, which carries the database password and full write
