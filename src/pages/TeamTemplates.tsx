@@ -8,18 +8,19 @@ import {
 import {
   useVisibleTemplates, useTemplateItems, useSaveTemplate,
   useScoringRules, useApplyTemplate, usePushTemplate, useArchiveTemplate,
-  useTeamMemberTemplates, useTeamSubtree, currentFy,
+  useTeamMemberTemplates, useTeamSubtree, currentFy, usePeopleKpis, useTemplateFromAssignment,
   type AssignOutcome, type TemplateReach,
 } from '@/lib/queries'
 import { parseEcodes } from '@/lib/ecodes'
 import { currentReportingMonth } from '@/lib/fy'
 import {
-  findDuplicate, displayTemplateName, templateLabels, type ComparableRow,
+  findDuplicate, displayTemplateName, templateLabels, freeName, type ComparableRow,
 } from '@/lib/templates'
 import { JOB_ROLE_TOTAL } from '@/lib/sections'
 import RowEditor, { blankRow, type Draft } from '@/components/KpiRowEditor'
 import ReachChoice, { ReachConfirm } from '@/components/ReachChoice'
 import { Alert, PageLoader, Spinner, EmptyState } from '@/components/ui'
+import Dialog from '@/components/Dialog'
 import type { KpiTemplateItem, VisibleTemplate } from '@/types/db'
 
 /**
@@ -98,6 +99,7 @@ export default function TeamTemplates() {
   const [notice, setNotice] = useState<string | null>(null)
 
   const { data: people, isFetching: lookingUp } = useTeamMemberTemplates(hunt, fy)
+  const { data: peopleKpis } = usePeopleKpis((people ?? []).filter(p => !p.template_name).map(p => p.employee_id), fy)
 
   /*
     Name or keeper, one box for both.
@@ -379,8 +381,15 @@ export default function TeamTemplates() {
                           >
                             {p.template_name}
                           </button>
+                        ) : peopleKpis?.get(p.employee_id) ? (
+                          <MakeTemplate
+                            assignmentId={peopleKpis.get(p.employee_id)!}
+                            suggested={p.designation || p.full_name}
+                            taken={(templates ?? []).filter(t => t.is_mine).map(t => t.name)}
+                            onMade={name => setHunt(name)}
+                          />
                         ) : (
-                          <span className="shrink-0 text-xs text-ink-400">no template</span>
+                          <span className="shrink-0 text-xs text-ink-400">{peopleKpis ? 'no KPI' : 'no template'}</span>
                         )}
                       </li>
                     ))}
@@ -1309,5 +1318,63 @@ function TemplateEditor({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Make a template from a person's own KPI (the user, 28 Nov): their Job Role rows become a template of the caller's,
+ * and they are linked to it, so Assign to can hand it to anybody else in the team.
+ */
+function MakeTemplate({ assignmentId, suggested, taken, onMade }: {
+  assignmentId: string
+  suggested: string
+  taken: string[]
+  onMade: (name: string) => void
+}) {
+  const make = useTemplateFromAssignment()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [failed, setFailed] = useState('')
+  const run = async () => {
+    if (!name.trim()) { setFailed('Write a name'); return }
+    setFailed('')
+    try {
+      await make.mutateAsync({ assignmentId, name: name.trim() })
+      setOpen(false)
+      onMade(name.trim())
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : 'Could not make that template.')
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-secondary shrink-0 !px-2.5 !py-1 text-xs"
+        onClick={() => { setFailed(''); setName(freeName(suggested, taken)); setOpen(true) }}
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5" /> Make a template
+      </button>
+      {open && (
+        <Dialog title="Make a template" icon={<FileSpreadsheet className="h-5 w-5 text-cyrixRed-600" />} onClose={() => { if (!make.isPending) setOpen(false) }}>
+          <label className="label" htmlFor={`mk-${assignmentId}`}>Template name</label>
+          <input
+            id={`mk-${assignmentId}`}
+            className="input"
+            value={name}
+            onChange={e => { setName(e.target.value.slice(0, 60)); setFailed('') }}
+            placeholder="e.g. Service Engineer"
+            autoFocus
+          />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button type="button" className="btn-secondary" disabled={make.isPending} onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={make.isPending} onClick={() => void run()}>
+              {make.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} Make it
+            </button>
+          </div>
+          {failed && <p role="alert" className="mt-2 text-sm font-medium text-cyrixRed-700">{failed}</p>}
+        </Dialog>
+      )}
+    </>
   )
 }

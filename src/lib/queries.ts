@@ -202,6 +202,25 @@ export function useTemplateFromAssignment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['visible_templates'] })
       qc.invalidateQueries({ queryKey: ['template_items'] })
+      qc.invalidateQueries({ queryKey: ['team_member_templates'] })
+      qc.invalidateQueries({ queryKey: ['people_kpis'] })
+    },
+  })
+}
+
+/**
+ * The KPI (approved, or waiting for approval) of each person in a short list, by employee id — for Make a template on
+ * a person whose KPI was not started from one (the user, 28 Nov: Vysakh could not hand E1112's KPI to E2491).
+ */
+export function usePeopleKpis(employeeIds: string[], fy: string) {
+  return useQuery({
+    enabled: employeeIds.length > 0,
+    queryKey: ['people_kpis', fy, [...employeeIds].sort().join(',')],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('kpi_assignments').select('id,employee_id')
+        .in('employee_id', employeeIds).eq('financial_year', fy).in('status', ['active', 'pending_approval'])
+      if (error) throw new Error(friendlyError(error))
+      return new Map((data ?? []).map(r => [r.employee_id as string, r.id as string]))
     },
   })
 }
