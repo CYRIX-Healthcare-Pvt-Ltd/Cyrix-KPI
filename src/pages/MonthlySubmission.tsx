@@ -420,10 +420,12 @@ export default function MonthlySubmission() {
             It was not submitted, so the month is scored 0.
           </Alert>
         )}
-        {pastLastDay ? null : !kpiActive ? (
+        {!kpiActive ? (
           // Whose move it is, by name: a draft handed back after a revision is the person's own, not the manager's.
+          // Said after the last day too: a month missed while the KPI was being changed gets its Request to open
+          // once the KPI is approved again, as the month is then opened and closed at 0 (the user, 28 Nov).
           <KpiStatusNote assignment={assignmentData?.assignment ?? null} fy={fy} where="month" />
-        ) : (
+        ) : pastLastDay ? null : (
           <EmptyState title={`${monthLabel(month)} has not been started`}>
             <p>Open the month to enter what you achieved.</p>
             <button
